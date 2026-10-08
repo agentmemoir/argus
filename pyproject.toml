@@ -1,0 +1,59 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "argus"
+version = "0.1.0"
+description = "An unattended phase driver: select work, reserve it on a shared board, launch it, watch it, publish it."
+readme = "README.md"
+requires-python = ">=3.11"
+license = "Apache-2.0"
+authors = [{ name = "Agent Memoir Developers", email = "dev@agentmemoir.com" }]
+keywords = ["pipeline", "coding-agent", "automation", "orchestration"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Software Development :: Build Tools",
+]
+dependencies = ["pyyaml>=6.0"]
+
+[project.scripts]
+argus = "argus.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/agentmemoir/argus"
+Source = "https://github.com/agentmemoir/argus"
+
+# The command is a shell driver, and it only works with the helper scripts and
+# the bundled tools that sit beside it, so the whole folder ships as the `argus`
+# package: here the project root *is* the package directory, so `packages` names
+# it and `sources` maps it to the `argus` distribution path. Selection is by
+# pattern, so a new module ships without a second edit; `exclude` keeps the
+# development files out.
+#
+# The default selection looks for an `argus/` subdirectory that this layout does
+# not have, and then builds an empty wheel with no error, so this file names the
+# mapping. This mirrors the sibling `glide` project's hatchling setup; the
+# mapping is this layout's own.
+[tool.hatch.build.targets.wheel]
+packages = ["."]
+sources = { "." = "argus" }
+ignore-vcs = true
+exclude = [
+  "/Makefile",
+  "/pyproject.toml",
+  "/README.md",
+  "/check_wheel.py",
+  "/bin",
+  "/scripts",
+  "/guard_faults.py",
+  "/exec_tempdir.py",
+  "/test_*.py",
+  "/dist",
+  "/__pycache__",
+  "/.*",
+]

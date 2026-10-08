@@ -1,0 +1,158 @@
+// Argus configuration.
+//
+//   argus --config /path/to/argus-config.jsonc
+//   argus                      // uses ./config.json when it is there
+//
+// Every relative path below is resolved against the folder that holds THIS
+// FILE - not against the working directory and not against any project folder.
+// An absolute path is used as written, so a path can point outside the project.
+// Move this file and the tree it describes together and the paths still mean
+// the same thing.
+//
+// Comments are allowed. Everything else is strict JSON, so there are no
+// trailing commas, and no value has a default: a missing required key stops
+// the tick with an error naming the key. No environment variable is read.
+//
+// A command-line flag beats this file for one run, and the readiness report
+// says which of the two supplied each value.
+
+{
+  // The project checkout. Required. Relative here, so it is this file's folder
+  // plus "project"; use "." for the folder this file sits in.
+  "repo-root": "./project",
+
+  // The pipeline file that gets run. Required. Relative to this file.
+  "pipeline": "pipeline.yaml",
+
+  // The folder holding the work-item files. Required. Relative to this file.
+  "roadmap-dir": "plans",
+
+  // The pipeline input names that carry the work-item number and file. Optional,
+  // but a pipeline that declares inputs needs them named.
+  "number-input": "phase_number",
+  "file-input": "phase_file",
+
+  "driver": {
+    // Which work source runs the queue. Required.
+    "provider": "phase",
+
+    // The work-item files to consider, as globs. Required. A list, so more than
+    // one shape can be accepted.
+    "include": ["phase-*.md"],
+
+    // File names to ignore, matched exactly. Optional.
+    "exclude": ["phase-100499.md"],
+
+    // Where run state goes: session logs, the ledger, the receipts. Required.
+    // It may sit outside the project. Run state is committed and pushed only
+    // when this folder is inside board.repo; here it is under /tmp, so nothing
+    // is written into the project.
+    "runs": "/tmp/argus/history",
+
+    // The folder inside driver.runs holding the driver's own state: the log,
+    // the lock, the halt marker, the pid file. Required. A name, not a path, so
+    // the log lands in /tmp/argus/history/driver-state here.
+    "state": "driver-state",
+
+    // Seconds without agent output before a run counts as stalled. Required.
+    "stale-after": 2700,
+
+    // The longer bound used when a merge check could not answer at all, so a
+    // host outage is not reported as a stalled phase. Required.
+    "outage-stale": 32400,
+
+    // The notification quiet window, in minutes: no more notices about the same
+    // phase inside it. Required.
+    "quiet-minutes": 45,
+
+    // Session logs older than this many days are deleted. Required.
+    "keep-logs-days": 7,
+
+    // How many published phases one tick checks for a merge before it starts
+    // more work. Required.
+    "merge-check-max": 5,
+
+    // Whether a tick may take back this host's own claim when its run died.
+    // Required. False means only an operator clears such a claim.
+    "recover-own-claim": false
+  },
+
+  // Which machine this checkout runs as. Required. The value names a file whose
+  // first non-empty line is the machine's name; the board records that name as
+  // the owner of a claim, so every machine needs its own file and the rest of
+  // this configuration can be shared by machines with the same layout.
+  "machine": {
+    "id-file": "machine.id"
+  },
+
+  // The external commands, named rather than searched for. Required, so nothing
+  // is resolved by looking along PATH or by guessing a location. Names are
+  // allowed when the caller wants PATH to decide, but they must be written
+  // down. hermes is used only when notifications are enabled, and gh only when
+  // a board is configured.
+  "commands": {
+    "glide": "glide",
+    "git": "git",
+    "tmux": "tmux",
+    "python": "/usr/bin/python3",
+    "hermes": "hermes",
+    "gh": "gh"
+  },
+
+  // The tmux session the runs happen in. Required when tmux is used to launch.
+  "tmux": {
+    // The session name. Required.
+    "session": "development",
+
+    // The pane geometry, pinned so an attached display cannot resize the agent.
+    // Required.
+    "width": 164,
+    "height": 56,
+
+    // The window that shows status, and the window a run gets. Required.
+    "idle-window": "idle",
+    "phase-window": "phase",
+
+    // The helper that draws the status window: a file name beside this
+    // program's other files, not a path. Required. It is this program's own
+    // file, so a project changes it only to replace the status view.
+    "idle-script": "phase-tmux-idle.sh",
+
+    // Seconds between status refreshes. Required.
+    "refresh": 15
+  },
+
+  // The coordination board: a git branch holding this project's claims.
+  // Optional as a whole. Omit this object when the project shares no board, and
+  // then no reservation is taken and no claim is written.
+  "board": {
+    // The checkout the board branch lives in. Required with "board". Relative
+    // here, so it is this file's folder.
+    "repo": ".",
+
+    // The board file's path inside that checkout. Required with "board".
+    "file": "claims.json",
+
+    // The branch the board lives on, and the remote it is pushed to. Required
+    // with "board". Every machine that reserves a phase has to name the same
+    // branch, because two branches are two boards.
+    "branch": "claims",
+    "remote": "origin"
+  },
+
+  // Notifications. Optional, and machine-local: these values belong to whoever
+  // receives them, so this file must not be committed to a public tree.
+  "notify": {
+    "profile": "example-profile",
+    "channel": "discord:000000000000000000",
+
+    // Whether notices are sent at all. Required when notify is present, so that
+    // turning them off is a value in the file rather than an unset variable.
+    "disabled": false,
+
+    // A second target used when the first one fails, and a heartbeat URL.
+    // Optional. An empty string means: not used.
+    "fallback": "",
+    "heartbeat": ""
+  }
+}

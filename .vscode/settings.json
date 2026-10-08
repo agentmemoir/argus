@@ -1,0 +1,17 @@
+{
+  "workbench.sideBar.location": "right",
+  "git.autofetch": true,
+  "files.exclude": {
+    "**/.git": true,
+    "**/.svn": true,
+    "**/.hg": true,
+    "**/.DS_Store": true,
+    "**/Thumbs.db": true,
+    "**/__pycache__": true,
+    ".venv": true,
+    ".ruff_cache": true,
+    ".pytest_cache": true,
+    ".pycodestyle_cache": true,
+  },
+  "python.analysis.typeCheckingMode": "strict"
+}
