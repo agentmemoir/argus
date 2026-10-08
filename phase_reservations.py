@@ -31,6 +31,7 @@ import argparse
 import contextlib
 import datetime as _datetime
 import json
+import math
 import os
 import re
 import secrets
@@ -116,6 +117,11 @@ REMOTE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 RESERVATION_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 PHASE_KEY_RE = re.compile(r"^[0-9]{6}$")
 PUBLICATION_NAME = "publication.json"
+#: The board field an expired claim carries while it waits out the cooldown
+#: before another agent may take it. Stage 2 reserves the field and the
+#: refusal path; the lifecycle that writes it lands in a later stage. A record
+#: with no field is claimable as it always was, so an old board still reads.
+COOLDOWN_UNTIL_FIELD = "cooldown_until"
 
 
 class CoordinationError(Exception):
@@ -142,6 +148,24 @@ class ReservationConflict(CoordinationError):
 
 class ReservationFenced(CoordinationError):
     """The caller's machine, reservation, or generation is stale."""
+
+
+class ReservationCooldown(CoordinationError):
+    """An expired claim is still in its cooldown window.
+
+    A released or expired group waits a short window before another agent may
+    claim it, so an agent that is still alive but stalled has time to notice it
+    lost the reservation and stop. A request during that window fails closed
+    and reports the time left; a request never shortens the window.
+    """
+
+    def __init__(self, phase, remaining_seconds, record=None):
+        self.phase = phase
+        self.remaining_seconds = int(remaining_seconds)
+        self.record = record or {}
+        super().__init__(
+            f"phase {phase} is in cooldown; "
+            f"{self.remaining_seconds} second(s) left")
 
 
 class PublicationBusy(CoordinationError):
@@ -406,6 +430,79 @@ def _reservation_from_record(record):
         "run_id": record.get("run_id"),
         "base_revisions": record.get("base_revisions"),
     }
+
+
+def _cooldown_remaining(record, number, now=None):
+    """Seconds left in a record's claim cooldown, or 0 when none is active.
+
+    Stage 3 writes ``COOLDOWN_UNTIL_FIELD`` when an expired group returns to
+    the queue. This stage reserves the field and the refusal path: a record
+    that carries a future timestamp refuses a claim, and a record without the
+    field is claimable as it always was, so an old board still reads. A
+    malformed timestamp fails closed rather than reading as expired, because a
+    board nobody can parse is not a board that permits a claim.
+    """
+    value = record.get(COOLDOWN_UNTIL_FIELD)
+    if value is None:
+        return 0
+    if not isinstance(value, str) or not value:
+        raise CoordinationUnavailable(
+            f"phase {number} has an invalid {COOLDOWN_UNTIL_FIELD}")
+    try:
+        until = _datetime.datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise CoordinationUnavailable(
+            f"phase {number} has an invalid {COOLDOWN_UNTIL_FIELD}: "
+            f"{value!r}") from exc
+    if until.tzinfo is None:
+        until = until.replace(tzinfo=_datetime.timezone.utc)
+    moment = now or _datetime.datetime.now(_datetime.timezone.utc)
+    delta = (until - moment).total_seconds()
+    if delta <= 0:
+        return 0
+    return math.ceil(delta)
+
+
+def _claim_one(state, key, machine_id, reservation_id, generation, run_id,
+               revisions, status, number, now=None):
+    """Write or refresh one claim in ``state``; return its phase record.
+
+    One helper backs both ``reserve`` and ``reserve_group`` so a single claim
+    and a group claim cannot drift apart about who may claim what. A terminal
+    record, another owner, and an active cooldown all raise. ``_transaction``
+    runs the whole mutation before it writes anything, so a raise leaves the
+    board untouched: a group is claimed atomically or not at all, and half a
+    group is never reserved.
+    """
+    existing = state["phases"].get(key)
+    if existing is not None:
+        if existing.get("status") in TERMINAL_STATUSES:
+            raise ReservationConflict(
+                number, existing,
+                f"phase is retained as {existing.get('status')}")
+        if _owner_matches(existing, machine_id, reservation_id, generation):
+            existing["status"] = status
+            existing["heartbeat_at"] = _now()
+            return existing
+        remaining = _cooldown_remaining(existing, number, now)
+        if remaining > 0:
+            raise ReservationCooldown(number, remaining, existing)
+        raise ReservationConflict(number, existing)
+    record = {
+        "status": status,
+        "machine_id": machine_id,
+        "reservation_id": reservation_id,
+        "generation": generation,
+        "claimed_at": _now(),
+        "heartbeat_at": _now(),
+        # The selected answer is no automatic expiry.  Keep the field for
+        # audit/tool compatibility, but never use it to take over a live claim.
+        "expires_at": None,
+        "run_id": run_id or f"phase-{key}",
+        "base_revisions": revisions,
+    }
+    state["phases"][key] = record
+    return record
 
 
 def _branch_setting(branch):
@@ -829,33 +926,9 @@ class ReservationStore:
             raise CoordinationError("a new reservation must start as active")
 
         def mutate(state):
-            existing = state["phases"].get(key)
-            if existing is not None:
-                if existing.get("status") in TERMINAL_STATUSES:
-                    raise ReservationConflict(
-                        number, existing,
-                        f"phase is retained as {existing.get('status')}")
-                if _owner_matches(existing, machine_id, reservation_id, generation):
-                    existing["status"] = status
-                    existing["heartbeat_at"] = _now()
-                    return _Mutation(True, _reservation_from_record(
-                        {**existing, "_phase": key}))
-                raise ReservationConflict(number, existing)
-            record = {
-                "status": status,
-                "machine_id": machine_id,
-                "reservation_id": reservation_id,
-                "generation": generation,
-                "claimed_at": _now(),
-                "heartbeat_at": _now(),
-                # The selected answer is no automatic expiry.  Keep the
-                # field for audit/tool compatibility, but never use it to
-                # take over a live claim.
-                "expires_at": None,
-                "run_id": run_id or f"phase-{key}",
-                "base_revisions": revisions,
-            }
-            state["phases"][key] = record
+            record = _claim_one(
+                state, key, machine_id, reservation_id, generation,
+                run_id or f"phase-{key}", revisions, status, number)
             return _Mutation(True, _reservation_from_record(
                 {**record, "_phase": key}))
 
@@ -876,6 +949,57 @@ class ReservationStore:
         return _transaction(
             self.private, self.remote, self.branch, mutate,
             f"phase coordination: reserve {key} for {machine_id}")
+
+    def reserve_group(self, phases, machine_id, *, reservation_id=None,
+                      generation=None, run_ids=None, base_revisions=None,
+                      status="claimed", now=None):
+        """Claim every phase in ``phases`` in one board write, or claim none.
+
+        The members share one reservation id, so the driver fences the whole
+        group from a single token. ``_transaction`` runs the whole mutation
+        before it writes, commits, and pushes, so a conflict on any member
+        raises and the board is left untouched: half a group is never
+        reserved. A member already held by this same reservation id is
+        refreshed rather than refused, which makes a retried request
+        idempotent.
+
+        Returns one reservation dict per member, in the order given.
+        """
+        keys = []
+        for phase in phases:
+            key, _number = _phase_key(phase)
+            if key in keys:
+                raise CoordinationError(
+                    f"phase {key} appears twice in one group claim")
+            keys.append(key)
+        if not keys:
+            raise CoordinationError("a group claim needs at least one phase")
+        machine_id = _validate_machine_id(machine_id)
+        reservation_id = reservation_id or f"rsv-{secrets.token_hex(12)}"
+        _validate_reservation_id(reservation_id)
+        generation = generation if generation is not None else 1
+        _validate_generation(generation)
+        _validate_status(status)
+        if status not in ACTIVE_STATUSES:
+            raise CoordinationError("a new reservation must start as active")
+        revisions = base_revisions or _base_revisions(self.root, self.private)
+        run_ids = run_ids or {}
+
+        def mutate(state):
+            records = []
+            for key in keys:
+                number = int(key)
+                record = _claim_one(
+                    state, key, machine_id, reservation_id, generation,
+                    run_ids.get(key), revisions, status, number, now)
+                records.append(_reservation_from_record(
+                    {**record, "_phase": key}))
+            return _Mutation(True, records)
+
+        return _transaction(
+            self.private, self.remote, self.branch, mutate,
+            f"phase coordination: reserve group "
+            f"[{','.join(keys)}] for {machine_id}")
 
     def _owned_mutation(self, reservation, next_status=None,
                         evidence_path=None, accepted_reason=None):

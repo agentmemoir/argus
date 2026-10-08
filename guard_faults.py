@@ -154,13 +154,39 @@ FAULTS = (
         "breaks": "a phase with no together declaration is handed a group of "
                   "itself instead of being refused",
         "file": "roadmap_source.py",
-        "find": "        raise ReservationGroupError(f\"{path} has no "
-                "'### Reservation Group' section\", document=path)",
+        "find": "        raise ReservationGroupMissing(\n"
+                "            f\"{path} has no '### Reservation Group' section\", document=path)",
         "replace": "        return [f\"{number:06d}\"]  # FAULT: a missing "
                    "declaration is invented",
         "check": "next_phase",
         "verdict": "next_phase self-test:",
         "expect": "a phase with no together declaration is refused by name",
+    },
+    {
+        "name": "group-claim-not-atomic",
+        "breaks": "only the first member of a group is reserved, so half a "
+                  "group can be claimed",
+        "file": "phase_reservations.py",
+        "find": "            records = []\n"
+                "            for key in keys:",
+        "replace": "            records = []\n"
+                   "            for key in keys[:1]:  # FAULT: half a group "
+                   "is reserved",
+        "check": "phase_group",
+        "verdict": "phase_group self-test:",
+        "expect": "a group claim writes every member or none",
+    },
+    {
+        "name": "group-already-completed-swallowed",
+        "breaks": "a group whose every member is completed is claimed instead "
+                  "of being refused, so a finished group is reserved anew",
+        "file": "phase_group.py",
+        "find": "    if not remainder:",
+        "replace": "    if False:  # FAULT: an all-completed group is not "
+                   "refused",
+        "check": "phase_group",
+        "verdict": "phase_group self-test:",
+        "expect": "an all-completed group is refused as already completed",
     },
     {
         "name": "selector-refusal-swallowed",
@@ -270,6 +296,9 @@ def run_selftest(driver, check="driver"):
     """
     command = ([sys.executable, str(driver.parent / "test_entrypoint.py")]
                if check == "entrypoint"
+               else [sys.executable, str(driver.parent / "phase_group.py"),
+                     "--self-test"]
+               if check == "phase_group"
                else [sys.executable, str(driver.parent / "next_phase.py"),
                      "--self-test"]
                if check == "next_phase"

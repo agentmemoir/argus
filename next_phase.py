@@ -24,6 +24,8 @@ reserves the item, and prints a JSON result:
   NO_PHASE                    nothing left to do
   WAIT_FOR_CLAIM              owned by another live reservation; do not jump it
   BLOCKED_ON_GATE             the plan owes the owner a decision
+  COOLDOWN                    an expired claim is still in its cooldown window
+  GROUP_UNAVAILABLE           a declared group could not be resolved
   COORDINATION_INCONSISTENT   the board and the evidence disagree
   COORDINATION_UNAVAILABLE    the board could not be reached
 
@@ -31,7 +33,10 @@ Exit codes: 0 for RESERVED and AVAILABLE, 1 for NO_PHASE, 3 for
 WAIT_FOR_CLAIM, 4 for BLOCKED_ON_GATE, 2 for everything else. A result may
 carry ``awaiting_review``: items skipped because a pull request of theirs is
 open and unmerged. They are finished work rather than queue work, and the
-driver runs the merge check on them.
+driver runs the merge check on them. A result for a phase that declares a
+reservation group also carries ``group`` and ``members``: the whole group in
+declaration order and the reservation records claimed for it, all sharing one
+reservation id.
 
 ``--resolve-group PHASE`` is a read-only query, not a selection. It prints the
 reservation group the phase belongs to and the members still unfinished, and it
@@ -80,6 +85,8 @@ STATE_EXIT = {
     "NO_PHASE": 1,
     "WAIT_FOR_CLAIM": 3,
     "BLOCKED_ON_GATE": 4,
+    "COOLDOWN": 2,
+    "GROUP_UNAVAILABLE": 2,
     "COORDINATION_INCONSISTENT": 2,
 }
 
