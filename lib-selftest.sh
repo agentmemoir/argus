@@ -37,7 +37,7 @@ selftest_tmpdir() {
   # directory from one another run is using right now, and a fresh one is
   # indistinguishable from that. The age is what tells them apart.
   for leftover in /tmp/argus-selftest-* /dev/shm/argus-selftest-* \
-                  "$REPO/target"/argus-selftest-*; do
+                  "$(dirname "$ARGUS")"/target/argus-selftest-*; do
     [ -d "$leftover" ] || continue
     # `find` prints the directory only when it is older than the age asked for, so
     # an empty answer means too young to be abandoned.
