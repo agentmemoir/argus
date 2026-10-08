@@ -25,13 +25,13 @@ _drive() {
     flock -n 9 || { log "another driver instance holds the lock; skip"; return 0; }
   fi
 
+  # The tick is the renewer of the claim this machine holds. The board measures a
+  # claim from its newest heartbeat once work has begun, so a claim nobody renews
+  # expires under a live run and another machine may take the work away.
+  claim_renew
+
   if tmux_busy; then
     check_stall
-    # The tick loop is the renewer of the group this run belongs to. The board
-    # measures a running group from its newest heartbeat, so a claim nobody
-    # renews expires under a live run and another machine may take the group
-    # away from a run that is still working on it.
-    group_renew
     log "phase window is running; skip"
     return 0
   fi
@@ -84,6 +84,12 @@ _drive() {
   [ -z "$_DRIVE_RC" ] || return "$_DRIVE_RC"
 
   log "next phase: $number ($rel)"
+
+  # The fence goes down with the claim, not at the launch. A tick that refuses
+  # after this point, at the branch cut or the sync gate, still leaves the claim
+  # releasable by `--release` instead of stranded on the board until its window
+  # closes.
+  record_claim "$number" "$reservation_id" "$reservation_generation"
 
   _drive_cut_branch || return $?
   [ -z "$_DRIVE_RC" ] || return "$_DRIVE_RC"
@@ -269,7 +275,12 @@ release() {
   fi
   wait_phase_window_gone
   # Partial work first, so the next owner resumes instead of starting over. A
-  # failure is logged, never a halt.
+  # failure is logged, never a halt. gitsync_clean lands the private run state;
+  # the checkpoint lands the public checkout's unfinished work on the branch the
+  # next owner resumes from, which is the handoff the requirement promises.
+  "$PYTHON" "$ARGUS/gitsync.py" "${ARGUS_CONFIG_ARGS[@]}" --root "$REPO" \
+    --mode checkpoint >"$RUN_DIR/release-checkpoint.json" 2>/dev/null \
+    || log "release: could not push the work in progress; the next owner starts from what is already on the branch (see $RUN_DIR/release-checkpoint.json)"
   [ -z "$number" ] || gitsync_clean "$number"
   # The array the run covered, for the log line below. Read before the board
   # write, because the write is what ends the group on this machine.

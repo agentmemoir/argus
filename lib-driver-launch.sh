@@ -46,7 +46,8 @@ _drive_launch() {
   9>&- tmux_phase_window_open "$launch" "$RUN_DIR/session-$number.log" \
     || { notify "phase $number failed to launch in tmux"; { _DRIVE_RC=1; return 0; }; }
   printf '%s\n' "$number" >"$CURRENT"
-  record_claim "$number" "$reservation_id" "$reservation_generation"
+  # The claim fence was written by the tick, with the claim itself, so a refusal
+  # between the two cannot strand the reservation.
   # The array this run covers. Written on every launch, stubbed or not, so a
   # later tick's release log can say which group went back and a reader can see
   # what the run was for. A launch outside a group clears it.

@@ -235,8 +235,8 @@ selftest_case_release() {
     fail=1
   fi
   [ -s "$CLAIM" ] \
-    && echo "ok: the launch recorded the claim fence a release needs" \
-    || { echo "FAIL: the launch recorded no claim fence"; fail=1; }
+    && echo "ok: the tick recorded the claim fence a release needs" \
+    || { echo "FAIL: the tick recorded no claim fence"; fail=1; }
   local before_stopped before_stalled before_orphan
   before_stopped="$(grep -c 'stopped by signal\|needs attention' "$LOG" || true)"
   before_stalled="$(grep -c 'looks stalled\|stalled:' "$LOG" || true)"

@@ -19,13 +19,23 @@ Every refusal fails closed and reserves nothing:
 
 Usage:
     python3 phase_group.py --phase 100420 --machine-id macbook [--config FILE]
+    python3 phase_group.py --release --phase 100420
+    python3 phase_group.py --renew --phase 100420
     python3 phase_group.py --self-test
 
+The request is the claim. ``--release`` and ``--renew`` act on the reservation
+this machine already holds and read the token a request or the driver wrote
+beside the phase, so they can be run for a group claimed before a launch. A
+request makes two board writes, the expiry sweep and then the claim, so a group
+that already returned to the queue refuses on its cooldown rather than reading
+as live.
+
 Output: on success, a JSON array of the claimed members, each carrying the
-shared ``reservation_id``. On refusal, a JSON object with ``state`` and
+shared ``reservation_id``. A release or renew answers an object with ``state``
+and the members it moved. On refusal, a JSON object with ``state`` and
 ``error``. Exit 0 on success, 1 for an all-completed group, 2 for a group that
-cannot be resolved or a board failure, 3 for a group held elsewhere, and 6 for
-a cooldown.
+cannot be resolved or a board failure, 3 for a group held elsewhere, 4 for a
+token that is fenced or expired, and 6 for a cooldown.
 """
 
 from __future__ import annotations
@@ -44,9 +54,11 @@ from argus.config import ConfigError
 from argus.roadmap_source import resolve_group
 from argus.work_source import WorkSourceError
 from argus.phase_reservations import (  # noqa: E402 - path set just above
+    ACTIVE_STATUSES,
     CoordinationError,
     ReservationConflict,
     ReservationCooldown,
+    ReservationFenced,
     ReservationStore,
     load_reservation_file,
     reservation_file,
@@ -57,12 +69,44 @@ from argus.phase_reservations import (  # noqa: E402 - path set just above
 #: cannot be mistaken for a successful claim.
 REQUEST_EXIT = {
     "RESERVED": 0,
+    "RELEASED": 0,
+    "RENEWED": 0,
     "ALREADY_COMPLETED": 1,
     "GROUP_UNAVAILABLE": 2,
     "COORDINATION_UNAVAILABLE": 2,
     "WAIT_FOR_CLAIM": 3,
+    "FENCED": 4,
     "COOLDOWN": 6,
 }
+
+
+def _held_group(store, key, remainder, machine_id):
+    """The reservation this machine already holds over ``remainder``, or ``None``.
+
+    Returns the keyword arguments that re-claim the same group: one shared
+    reservation id, its generation, and the status the hold already carries, so a
+    refresh cannot quietly change the window the claim is measured by. Only an
+    exact hold of the whole remainder takes this path, so no member of the group
+    is left behind and no second reservation id is minted for one group.
+    """
+    try:
+        state, _commit = store.read()
+    except CoordinationError:
+        return None
+    records = state.get("phases", {})
+    mine = records.get(key) or {}
+    if (mine.get("machine_id") != machine_id
+            or mine.get("status") not in ACTIVE_STATUSES):
+        return None
+    reservation_id = mine.get("reservation_id")
+    if not reservation_id:
+        return None
+    if any((records.get(member) or {}).get("reservation_id") != reservation_id
+           for member in remainder):
+        return None
+    return {"reservation_id": reservation_id,
+            "generation": mine.get("generation"),
+            "status": mine.get("status")}
 
 
 def _request(repo, roadmap, phase, machine_id, *, store=None):
@@ -96,7 +140,12 @@ def _request(repo, roadmap, phase, machine_id, *, store=None):
         }, REQUEST_EXIT["ALREADY_COMPLETED"]
     try:
         store = store or ReservationStore(repo)
-        records = store.reserve_group(remainder, machine_id)
+        # A request from the machine that already holds the whole group is the
+        # same claim, so answer the hold it has rather than refusing the owner
+        # its own reservation. The store's idempotency only covers an identical
+        # reservation id, and this program mints a fresh one per request.
+        held = _held_group(store, key, remainder, machine_id)
+        records = store.reserve_group(remainder, machine_id, **(held or {}))
         for record in records:
             try:
                 save_reservation_file(
@@ -130,12 +179,78 @@ def _request(repo, roadmap, phase, machine_id, *, store=None):
     return records, REQUEST_EXIT["RESERVED"]
 
 
+def _held_token(repo, phase, args):
+    """The fence a release or renew acts on, or raise a clear error.
+
+    The token beside the phase is the fence a request or the driver wrote, so a
+    group claimed by a selector that never launched can still be given back.
+    Explicit flags win, which is what rescues a machine whose token is gone.
+    """
+    key = f"{int(phase):06d}"
+    token = load_reservation_file(reservation_file(repo, key)) or {}
+    machine_id = args.machine_id or token.get("machine_id")
+    reservation_id = args.reservation_id or token.get("reservation_id")
+    generation = (args.generation if args.generation is not None
+                  else token.get("generation"))
+    if not machine_id or not reservation_id or generation is None:
+        raise CoordinationError(
+            f"phase {key} has no reservation token; pass --machine-id, "
+            "--reservation-id and --generation, or request the group first")
+    return {"machine_id": machine_id, "reservation_id": reservation_id,
+            "generation": generation}
+
+
+def _release(repo, phase, args, *, store=None):
+    """Give this machine's whole group back, and report the members it returned."""
+    key = f"{int(phase):06d}"
+    store = store or ReservationStore(repo)
+    try:
+        reservation = _held_token(repo, key, args)
+        released = store.release_group(reservation)
+    except ReservationFenced as exc:
+        return {"state": "FENCED", "phase": key, "error": str(exc)}, \
+            REQUEST_EXIT["FENCED"]
+    except CoordinationError as exc:
+        return {"state": "COORDINATION_UNAVAILABLE", "phase": key,
+                "error": str(exc)}, REQUEST_EXIT["COORDINATION_UNAVAILABLE"]
+    return {"state": "RELEASED", "phase": key, "released": released}, \
+        REQUEST_EXIT["RELEASED"]
+
+
+def _renew(repo, phase, args, *, store=None):
+    """Refresh this machine's whole group, and report the members it moved."""
+    key = f"{int(phase):06d}"
+    store = store or ReservationStore(repo)
+    try:
+        reservation = _held_token(repo, key, args)
+        records = store.renew_group(reservation, args.status)
+    except ReservationFenced as exc:
+        return {"state": "FENCED", "phase": key, "error": str(exc)}, \
+            REQUEST_EXIT["FENCED"]
+    except CoordinationError as exc:
+        return {"state": "COORDINATION_UNAVAILABLE", "phase": key,
+                "error": str(exc)}, REQUEST_EXIT["COORDINATION_UNAVAILABLE"]
+    return {"state": "RENEWED", "phase": key,
+            "members": [record["phase"] for record in records]}, \
+        REQUEST_EXIT["RENEWED"]
+
+
 def build_parser():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--phase", default=None,
-                        help="one phase in the group to request")
+                        help="one phase in the group to request, release or renew")
     parser.add_argument("--machine-id", default=None,
                         help="the requesting agent's machine id")
+    parser.add_argument("--release", action="store_true",
+                        help="give this machine's whole group back")
+    parser.add_argument("--renew", action="store_true",
+                        help="refresh this machine's whole group")
+    parser.add_argument("--status", default=None,
+                        help="the status a renewal sets, for --renew")
+    parser.add_argument("--reservation-id", dest="reservation_id", default=None,
+                        help="the fence to act on when no token is present")
+    parser.add_argument("--generation", type=int, default=None,
+                        help="the fence generation when no token is present")
     parser.add_argument("--repo-root", dest="config_repo_root")
     parser.add_argument("--roadmap-dir", dest="config_roadmap_dir")
     parser.add_argument("--phase-glob", dest="config_phase_glob", action="append")
@@ -148,10 +263,22 @@ def build_parser():
 def main(argv=None):
     args = build_parser().parse_args(argv)
     if args.self_test:
+        # Imported here so the program does not carry its own test fixtures, and
+        # so `--self-test` still runs the checks the Makefile and the fault
+        # harness expect from this file.
+        from argus.phase_group_selftest import self_test
         return self_test()
-    if not args.phase or not args.machine_id:
-        print("phase_group: --phase and --machine-id are required",
+    if not args.phase:
+        print("phase_group: --phase is required", file=sys.stderr)
+        return 2
+    if not (args.release or args.renew) and not args.machine_id:
+        print("phase_group: --machine-id is required for a request",
               file=sys.stderr)
+        return 2
+    try:
+        phase = f"{int(args.phase):06d}"
+    except (TypeError, ValueError):
+        print("phase_group: --phase must be a phase number", file=sys.stderr)
         return 2
     try:
         conventions.configure_from_args(args)
@@ -160,204 +287,14 @@ def main(argv=None):
         return 2
     repo = Path(conventions.setting("repo-root")).resolve()
     roadmap = conventions.setting("roadmap-dir")
-    result, code = _request(repo, roadmap, args.phase, args.machine_id)
+    if args.release:
+        result, code = _release(repo, phase, args)
+    elif args.renew:
+        result, code = _renew(repo, phase, args)
+    else:
+        result, code = _request(repo, roadmap, phase, args.machine_id)
     print(json.dumps(result, sort_keys=True))
     return code
-
-
-def _check(checks, name, ok, detail=""):
-    checks.append({"check": name, "ok": bool(ok), "detail": detail})
-
-
-def _configure(repo, *, board=None):
-    settings = {
-        "repo-root": repo,
-        "pipeline": None,
-        "roadmap-dir": repo / "roadmap",
-        "driver.include": ["phase-*.md"],
-        "driver.exclude": [],
-        "driver.runs": repo / "runs",
-        "machine.id": "self-test",
-        "commands.git": "git",
-        "commands.gh": "gh",
-    }
-    if board is not None:
-        settings.update(board)
-    conventions.configure(settings)
-
-
-def _write_group(roadmap, members):
-    """Write one symmetric together declaration into every member file."""
-    text = "### Reservation Group\n\n`together: " + ", ".join(members) + "`\n"
-    for member in members:
-        (roadmap / f"phase-{member}-x.md").write_text(text)
-
-
-def _self_test_missing_declaration(checks):
-    with tempfile.TemporaryDirectory() as tmp:
-        repo = Path(tmp).resolve()
-        roadmap = repo / "roadmap"
-        roadmap.mkdir()
-        (roadmap / "phase-100010-a.md").write_text("## 1. Objective\n")
-        _configure(repo)
-        result, code = _request(repo, roadmap, "100010", "server-01")
-        _check(
-            checks,
-            "a phase with no declaration is refused and names the document",
-            code == 2 and result.get("state") == "GROUP_UNAVAILABLE"
-            and result.get("document", "").endswith("phase-100010-a.md"),
-            result)
-
-
-def _self_test_already_completed(checks):
-    with tempfile.TemporaryDirectory() as tmp:
-        repo = Path(tmp).resolve()
-        roadmap = repo / "roadmap"
-        roadmap.mkdir()
-        _write_group(roadmap, ["100010", "100020"])
-        for member in ("100010", "100020"):
-            run = repo / "runs" / f"phase-{member}"
-            run.mkdir(parents=True)
-            (run / "run.json").write_text(json.dumps({"state": "completed"}))
-        _configure(repo)
-        result, code = _request(repo, roadmap, "100010", "server-01")
-        _check(
-            checks,
-            "an all-completed group is refused as already completed",
-            code == 1 and result.get("state") == "ALREADY_COMPLETED",
-            result)
-
-
-def _self_test_group_claim(checks):
-    from argus.phase_reservations import SELF_TEST_BRANCH, _git_test_repo
-    from argus.exec_tempdir import make_exec_dir
-
-    base = Path(make_exec_dir()
-                or tempfile.mkdtemp(prefix="phase-group-selftest-"))
-    try:
-        root = base / "root"
-        root.mkdir()
-        # The board checkout is a real git clone, so it is built first and the
-        # configured board checkout is pointed at it. A machine names the same
-        # checkout in production; here the fixture names the client clone.
-        _configure(root)
-        _remote, clients = _git_test_repo(base, "phase-group")
-        _configure(root, board={
-            "board.repo": clients[0],
-            "board.file": Path("claims.json"),
-            "board.branch": SELF_TEST_BRANCH,
-            "board.remote": "origin",
-        })
-        repo = root
-        roadmap = root / "roadmap"
-        roadmap.mkdir()
-        _write_group(roadmap, ["100010", "100020", "100030"])
-        _write_group(roadmap, ["100050", "100060"])
-        _write_group(roadmap, ["100070", "100080"])
-        _write_group(roadmap, ["100090", "100100"])
-        done_run = root / "runs" / "phase-100100"
-        done_run.mkdir(parents=True)
-        (done_run / "run.json").write_text(json.dumps({"state": "completed"}))
-        store = ReservationStore(repo, private_repo=clients[0])
-        other = ReservationStore(repo, private_repo=clients[1])
-
-        records = store.reserve_group(["100010", "100020", "100030"],
-                                      "server-01")
-        state, _commit = store.read()
-        claimed = [state["phases"].get(k) for k in
-                   ("100010", "100020", "100030")]
-        shared = {record.get("reservation_id") for record in claimed if record}
-        _check(
-            checks,
-            "a group claim writes every member or none",
-            len(records) == 3 and len(claimed) == 3
-            and all(claimed) and len(shared) == 1,
-            f"records={records} claimed={claimed}")
-
-        try:
-            other.reserve_group(["100040", "100020", "100030"], "server-02")
-            refused = False
-            holder = None
-        except ReservationConflict as exc:
-            refused = True
-            holder = exc.record.get("machine_id")
-        after, _commit = store.read()
-        _check(
-            checks,
-            "a conflict on one member refuses the whole claim",
-            refused and "100040" not in after["phases"]
-            and holder == "server-01",
-            f"refused={refused} holder={holder} after={after['phases']}")
-
-        result, code = _request(repo, roadmap, "100050", "server-03")
-        array_ok = (code == 0 and isinstance(result, list)
-                    and [record["phase"] for record in result]
-                    == ["100050", "100060"]
-                    and result[0]["reservation_id"] == result[1]["reservation_id"])
-        _check(checks,
-               "a request answers the group's unfinished remainder as an array",
-               array_ok, result)
-
-        tokens_ok = array_ok
-        if array_ok:
-            for record in result:
-                token = load_reservation_file(
-                    reservation_file(repo, record["phase"]))
-                tokens_ok = tokens_ok and token is not None \
-                    and token["reservation_id"] == record["reservation_id"]
-        _check(checks,
-               "each member's reservation token is written under the shared id",
-               tokens_ok, result)
-
-        held, held_code = _request(repo, roadmap, "100060", "server-05",
-                                   store=other)
-        _check(checks,
-               "a group another agent holds names the holding agent",
-               held_code == 3 and held.get("state") == "WAIT_FOR_CLAIM"
-               and held.get("owner") == "server-03", held)
-
-        # A member already completed is never re-reserved, so the answer is
-        # the remainder alone.
-        partial, partial_code = _request(repo, roadmap, "100090", "server-07",
-                                         store=other)
-        _check(checks,
-               "a completed member is dropped from the requested remainder",
-               partial_code == 0 and isinstance(partial, list)
-               and [record["phase"] for record in partial] == ["100090"],
-               partial)
-
-        # The cooldown lifecycle lands later; this proves the refusal path a
-        # request uses while a claim waits it out.
-        class _CooldownStore:
-            def reserve_group(self, phases, machine_id, **kwargs):
-                raise ReservationCooldown(phases[0], 17, {})
-
-        cooling, cold_code = _request(repo, roadmap, "100070", "server-06",
-                                      store=_CooldownStore())
-        _check(checks,
-               "a request during the cooldown reports the time left",
-               cold_code == 6 and cooling.get("state") == "COOLDOWN"
-               and cooling.get("remaining_seconds") == 17, cooling)
-    finally:
-        from argus.phase_reservations import drop_checkouts_under
-        drop_checkouts_under(base)
-        shutil.rmtree(base, ignore_errors=True)
-
-
-def self_test():
-    """Exercise the request rules and the atomic group claim; needs no network."""
-    checks = []
-    _self_test_missing_declaration(checks)
-    _self_test_already_completed(checks)
-    _self_test_group_claim(checks)
-    failed = [check for check in checks if not check["ok"]]
-    for check in failed:
-        print(f"FAIL: {check['check']} ({check['detail']})")
-    if failed:
-        print("phase_group self-test: FAIL")
-        return 1
-    print(f"phase_group self-test: pass ({len(checks)} checks)")
-    return 0
 
 
 if __name__ == "__main__":

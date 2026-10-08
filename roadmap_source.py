@@ -711,6 +711,22 @@ def _parse_group_members(path, number):
     return members
 
 
+def declared_group_members(path, number):
+    """The members one phase document declares, or ``None`` when it declares none.
+
+    ``resolve_group`` answers the *resolved* group, which also reads the index to
+    work out the remainder. A caller that only needs to know which group a
+    document declares, such as the branch-collision scan, wants the declaration
+    on its own: one file, no index, and no work spent on a remainder it will not
+    use. A malformed declaration still raises, because a document whose group
+    nobody can read is not a document that declares none.
+    """
+    try:
+        return _parse_group_members(path, number)
+    except ReservationGroupMissing:
+        return None
+
+
 def _phase_number(value):
     """Return ``value`` as a phase number in ``0..999999``, or raise.
 

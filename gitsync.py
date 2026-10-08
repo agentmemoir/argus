@@ -299,9 +299,9 @@ def assert_phase_branch_unique(root, phase, roadmap_name, roadmap_dir=None,
 
     ``branch`` is the name to check, and defaults to the name derived from the
     phase's own file. A group passes its own single branch name instead, because
-    the group has no one file to derive a name from; that name is still compared
-    against every phase file in the folder, so a group branch that collides with
-    a phase branch is refused here exactly as two phase branches are.
+    the group has no one file to derive a name from. A group branch carries the
+    group marker, so it can never equal a phase branch's name; a collision
+    between two groups is checked separately, by ``assert_group_branch_unique``.
 
     Returns a result dict; ok is the success flag.
     """
@@ -321,6 +321,51 @@ def assert_phase_branch_unique(root, phase, roadmap_name, roadmap_dir=None,
                  "the behaviour part differs")
     return dict(info, ok=True, action="phase-branch-name-unique",
                 branch=branch)
+
+
+def assert_group_branch_unique(root, branch, members, roadmap_dir=None):
+    """Refuse a group branch another declared group would also earn.
+
+    Two groups whose lowest member shares a behaviour word derive the same branch
+    name, and the second group would resume the first one's commits and publish
+    them under one pull request. ``assert_phase_branch_unique`` cannot catch it: a
+    group branch carries the group marker and a phase branch does not, so the two
+    names never compare equal. The comparison here is group against group, which
+    is where the collision actually lives.
+
+    ``members`` are the declared members of the group whose branch is being cut.
+    A document whose declaration cannot be read is left to the launch that will
+    refuse on it, rather than stopping a branch name this group does not share.
+
+    Returns a result dict; ok is the success flag.
+    """
+    from argus import roadmap_source
+
+    root = Path(root).resolve()
+    wanted = sorted(f"{int(member):06d}" for member in members or ())
+    info = {"repo": str(root), "branch": branch, "group": wanted}
+    folder = roadmap_folder(root, roadmap_dir)
+    for path in phase_paths(folder):
+        parts = phase_file_parts(path)
+        if parts is None:
+            continue
+        try:
+            other = roadmap_source.declared_group_members(path, int(parts[0]))
+        except roadmap_source.ReservationGroupError:
+            continue
+        if not other:
+            continue
+        if sorted(f"{int(member):06d}" for member in other) == wanted:
+            continue
+        if group_branch(root, other, roadmap_dir) != branch:
+            continue
+        other_members = [f"{int(member):06d}" for member in other]
+        return blocked(
+            info, f"{branch!r} is also the branch for group {other_members!r} "
+                  f"in {path.name!r}",
+            hint="two groups cannot share a branch; rename a member file so the "
+                 "lowest member's behaviour part differs")
+    return dict(info, ok=True, action="group-branch-name-unique")
 
 
 class ConfigError(Exception):
@@ -4836,7 +4881,96 @@ def _self_test_checks():
     portable_ok, portable_detail = _portable_publication_check(base)
     _check(checks, "publish: custom project conventions", portable_ok, portable_detail)
 
+    for name, ok, detail in _handoff_checks(base):
+        _check(checks, f"handoff: {name}", ok, detail)
+    for name, ok, detail in _group_branch_collision_checks(base):
+        _check(checks, f"group name: {name}", ok, detail)
+
     return checks
+
+
+def _handoff_checks(base):
+    """A release handoff pushes the work in progress, and not onto the integration branch.
+
+    Both halves matter. An owner who releases with nothing pushed hands over an
+    empty branch, and one who pushes unfinished work onto the integration branch
+    puts unreviewed code where everyone pulls.
+    """
+    d = base / "handoff"
+    d.mkdir()
+    _public_remote, pub = _init_remote(d, "handoff")
+    _configure_self_test(pub, pub / BOARD_REL)
+    (pub / "unfinished.txt").write_text("half a phase\n", encoding="utf-8")
+    on_integration = mode_checkpoint(pub)
+    branch = "feature/group-cache-warm"
+    made = ensure_phase_branch(pub, branch)
+    if not made.get("ok"):
+        return [("the handoff fixture could not cut a phase branch", False,
+                 str(made))]
+    (pub / "unfinished.txt").write_text("half a phase\n", encoding="utf-8")
+    pushed = mode_checkpoint(pub)
+    head = git(pub, "rev-parse", "HEAD")[1]
+    remote_head = git(pub, "rev-parse", f"origin/{branch}")[1]
+    return [
+        ("the integration branch is refused",
+         not on_integration.get("ok")
+         and "work in progress" in json.dumps(on_integration),
+         f"state={on_integration.get('state')} "
+         f"{on_integration.get('summary')}"),
+        ("work in progress is committed and pushed on the phase branch",
+         pushed.get("ok") and pushed.get("action") == "committed-and-pushed"
+         and remote_head == head,
+         f"ok={pushed.get('ok')} action={pushed.get('action')} "
+         f"remote={remote_head[:8]} head={head[:8]}"),
+    ]
+
+
+def _write_group_phases(roadmap, members, behaviour):
+    """Two phase documents declaring one symmetric group, in a fixture roadmap."""
+    declaration = f"`together: {members[0]:06d}, {members[1]:06d}`"
+    for number in members:
+        (roadmap / f"phase-{number:06d}-{behaviour}.md").write_text(
+            f"# {number}. Group member\n\n- [ ] Work to do.\n\n"
+            f"### Reservation Group\n\n{declaration}\n", encoding="utf-8")
+
+
+def _group_branch_collision_checks(base):
+    """Two groups that derive one branch name are refused, and one group is not.
+
+    A group branch carries no phase number, so the lowest member's behaviour word
+    is all that separates one group's branch from another's.
+    """
+    results = []
+    mine = ["100020", "100021"]
+    d = base / "group-name"
+    d.mkdir()
+    _public_remote, pub = _init_remote(d, "group-name")
+    roadmap = pub / "roadmap"
+    roadmap.mkdir()
+    _write_group_phases(roadmap, (100020, 100021), "cache-warm")
+    _write_group_phases(roadmap, (100040, 100041), "warm-cache")
+    _configure_self_test(pub, pub / BOARD_REL, roadmap=roadmap)
+    branch = group_branch(pub, mine)
+    same = assert_group_branch_unique(pub, branch, mine)
+    results.append((
+        "a group is not its own collision, and its branch comes from its lowest member",
+        same.get("ok") and branch == "feature/group-cache-warm",
+        f"ok={same.get('ok')} branch={branch} {same.get('summary')}"))
+
+    d = base / "group-name-clash"
+    d.mkdir()
+    _public_remote, pub = _init_remote(d, "group-name-clash")
+    roadmap = pub / "roadmap"
+    roadmap.mkdir()
+    _write_group_phases(roadmap, (100020, 100021), "cache-warm")
+    _write_group_phases(roadmap, (100040, 100041), "cache-warm")
+    _configure_self_test(pub, pub / BOARD_REL, roadmap=roadmap)
+    clash = assert_group_branch_unique(pub, branch, ["100040", "100041"])
+    results.append((
+        "two groups deriving one branch are refused",
+        not clash.get("ok") and "also the branch for group" in json.dumps(clash),
+        f"{clash.get('summary')} {json.dumps(clash)}"))
+    return results
 
 
 def self_test():
@@ -4883,6 +5017,14 @@ def mode_branch(root, phase, roadmap, roadmap_dir=None, group=None):
                 "branch": unique["branch"], "repos": [unique],
                 "summary": summarize([unique], "branch")}
     branch = unique["branch"]
+    if group:
+        # A group branch comes from the group's lowest member, so two groups can
+        # derive one name even when no phase branch collides with it.
+        shared = assert_group_branch_unique(root, branch, group, roadmap_dir)
+        if not shared["ok"]:
+            return {"ok": False, "mode": "branch", "branch": branch,
+                    "repos": [unique, shared],
+                    "summary": summarize([shared], "branch")}
     # The base is the open predecessor's branch when there is one. Without this
     # the phase starts from the integration branch, which does not contain the
     # previous phase's code, and the phase fails on a symbol that is not there.
@@ -5134,6 +5276,50 @@ def mode_clean(root, phase=None):
             "pathspec": pathspec, "summary": summarize([res], "clean")}
 
 
+def mode_checkpoint(root):
+    """Commit and push a checkout's work in progress on the branch it is on.
+
+    This is the handoff half of a release. The owner is giving the reservation
+    back, so the work it did has to reach the branch before the next owner picks
+    the group up; otherwise the handoff is a restart. The integration branch is
+    refused, because pushing unfinished product code onto the branch everyone
+    pulls is the thing the phase branch exists to prevent. A checkout with
+    nothing to commit is a no-op, not a failure, so an owner with nothing to push
+    still releases.
+
+    Returns a result dict; ok is the success flag.
+    """
+    root = Path(root).resolve()
+    info = {"repo": str(root)}
+    if not is_git_repo(root):
+        return dict(info, ok=True, action="checkpoint-skipped",
+                    hint="not a git working tree")
+    branch, remote, _remote_branch, why = resolve_upstream(root)
+    if why:
+        return blocked(info, why)
+    if branch == integration_branch(root):
+        return blocked(info, f"refusing to push work in progress on {branch!r}",
+                       hint="a handoff is the phase branch, not the integration "
+                            "branch")
+    rc, out, err = git(root, "add", "-A")
+    if rc != 0:
+        return blocked(info, f"could not stage the checkout: {err or out}")
+    rc, out, err = git(root, "commit", "-q", "-m",
+                       f"checkpoint: work in progress on {branch}")
+    action = "committed-and-pushed"
+    if rc != 0:
+        combined = err or out
+        if "nothing to commit" in combined.lower():
+            action = "pushed"
+        else:
+            return blocked(info, f"checkpoint commit failed: {combined}")
+    rc, out, err = git(root, "push", remote, branch)
+    if rc != 0:
+        return blocked(info, f"checkpoint push failed: {err or out}")
+    head = git(root, "rev-parse", "HEAD")[1]
+    return dict(info, ok=True, action=action, branch=branch, head=head)
+
+
 def main():
     ap = argparse.ArgumentParser(description="Fail-closed git sync.")
     ap.add_argument("--root", "--repo-root", dest="config_repo_root",
@@ -5146,7 +5332,7 @@ def main():
                     help="sync one checkout instead of --root")
     ap.add_argument("--mode",
                     choices=["start", "push", "publish", "branch", "published",
-                             "resync", "tidy", "clean"],
+                             "resync", "tidy", "clean", "checkpoint"],
                     default="start",
                     help="start: sync before a phase; push: verify a "
                          "fast-forward; publish: claim-check and push a phase's "
@@ -5159,7 +5345,9 @@ def main():
                          "return a checkout to the integration branch when the "
                          "phase it is on is already recorded as published; "
                          "clean: commit and push leftover private run state, "
-                         "for one --phase or for every phase when it is omitted")
+                         "for one --phase or for every phase when it is omitted; "
+                         "checkpoint: commit and push a checkout's work in "
+                         "progress on the branch it is on, for a release handoff")
     ap.add_argument("--phase", default=None,
                     help="phase number for --mode publish or --mode clean")
     ap.add_argument("--reservation-file", default=None,
@@ -5213,6 +5401,8 @@ def main():
             out = mode_resync(args.root)
         elif args.mode == "tidy":
             out = mode_tidy(args.root)
+        elif args.mode == "checkpoint":
+            out = mode_checkpoint(args.root)
         elif args.repo:
             res = sync_one(Path(args.repo).resolve(), args.mode,
                            branch=args.branch)

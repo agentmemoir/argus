@@ -148,25 +148,30 @@ sync_branch_args() {
   return 0
 }
 
-# Renew the group's claim while its run is alive.
+# Renew the claim this machine holds, while it still owes that claim work.
 #
-# A running group is measured from its newest heartbeat rather than from a fixed
-# deadline, so a claim that is never renewed expires under a live run and another
-# machine may take the whole group. The tick loop is the renewer: it runs every
-# few minutes and it is the only thing awake between launches.
+# A claim is measured from its newest heartbeat once work has begun, rather than
+# from a fixed deadline, so a claim nobody renews expires under a live run and
+# another machine may take it away. Two things keep it alive: a live phase
+# window, which is a run in progress, and a recorded group, because a group's
+# members chain across ticks and a group waiting on a merge is still this
+# machine's to finish. A single phase with no live window is not renewed: nothing
+# is working on it, so it should go back to the queue.
 #
-# The group is read from what this machine recorded, not from this tick's
-# selection, because this runs before the selection is asked: a tick that finds a
-# window already open skips the selection entirely. The record is the same pair
-# the launch wrote, so the renewal uses the same fence the run holds.
+# The fence is read from what the launch wrote, not from this tick's selection,
+# because this runs before the selection is asked: a tick that finds a window
+# already open skips the selection entirely. The record is the same pair the
+# launch wrote, so the renewal uses the same fence the run holds.
 #
 # A failure is logged and never halts. A board that cannot be reached is reported
 # by the next write that needs it, and stopping a run that is still doing its work
 # would lose more than it saves. Both paths log, so a reader can tell "renewed"
 # from "tried and could not".
-group_renew() {
-  [ -s "$GROUPFILE" ] || return 0
+claim_renew() {
   [ -s "$CLAIM" ] || return 0
+  if ! tmux_busy && [ ! -s "$GROUPFILE" ]; then
+    return 0
+  fi
   local claim_number reservation_id generation rc=0
   IFS=$'\t' read -r claim_number reservation_id generation <"$CLAIM" || true
   [ -n "$reservation_id" ] && [ -n "$generation" ] || return 0
@@ -175,11 +180,13 @@ group_renew() {
     --machine-id "$PHASE_MACHINE_ID" \
     --reservation-id "$reservation_id" \
     --generation "$generation" --status running \
-    >"$RUN_DIR/group-renew${claim_number:+-$claim_number}.json" 2>&1 || rc=$?
+    >"$RUN_DIR/claim-renew${claim_number:+-$claim_number}.json" 2>&1 || rc=$?
   if [ "$rc" -ne 0 ]; then
-    log "group renew: could not renew the group for phase $claim_number (rc=$rc; see $RUN_DIR/group-renew${claim_number:+-$claim_number}.json)"
-  else
+    log "claim renew: could not renew the claim for phase $claim_number (rc=$rc; see $RUN_DIR/claim-renew${claim_number:+-$claim_number}.json)"
+  elif [ -s "$GROUPFILE" ]; then
     log "group renew: renewed the group for phase $claim_number under reservation $reservation_id"
+  else
+    log "claim renew: renewed the claim for phase $claim_number under reservation $reservation_id"
   fi
   return 0
 }

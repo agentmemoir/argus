@@ -248,12 +248,12 @@ FAULTS = (
     },
     {
         "name": "group-renewal-removed",
-        "breaks": "the tick loop never renews a running group, so the board "
+        "breaks": "the tick loop never renews a running claim, so the board "
                   "expires a live run's claim and another machine may take the "
-                  "group",
+                  "work",
         "file": "lib-driver-drive.sh",
-        "find": "    group_renew\n",
-        "replace": "    true  # FAULT: the group's claim is never renewed\n",
+        "find": "  claim_renew\n",
+        "replace": "  true  # FAULT: the claim is never renewed\n",
         "check": "driver",
         "verdict": "driver self-test:",
         "expect": "the tick renewed the group's claim while its run was alive",
@@ -330,6 +330,23 @@ _SCRUBBED_NAMES = frozenset({
 })
 
 
+#: Where one fault's scratch space is made. The path has to be short: a tmux
+#: server puts its socket under `TMUX_TMPDIR`, and a unix socket path is capped
+#: (104 bytes on macOS, 108 on Linux). A caller's own `TMPDIR` can be deep enough
+#: that the socket path overflows, and then the driver self-test dies before it
+#: prints a verdict, so every driver-checked fault is reported inconclusive. That
+#: reads as an uncovered guard, and it is not one.
+SHORT_TEMP = "/tmp"
+
+
+def _scratch_parent():
+    """A short parent for one fault's scratch space, or ``None`` for the default."""
+    candidate = Path(SHORT_TEMP)
+    if candidate.is_dir() and os.access(candidate, os.W_OK):
+        return str(candidate)
+    return None
+
+
 def _isolated_env(scratch):
     """This process's environment, with one fault's own scratch space.
 
@@ -376,7 +393,7 @@ def run_selftest(driver, check="driver"):
                      "--self-test"]
                if check == "next_phase"
                else ["bash", str(driver), "--self-test"])
-    with tempfile.TemporaryDirectory(prefix="argus-guard-") as scratch:
+    with tempfile.TemporaryDirectory(prefix="ag-", dir=_scratch_parent()) as scratch:
         env = _isolated_env(scratch)
         try:
             proc = subprocess.run(

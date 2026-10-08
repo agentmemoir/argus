@@ -298,14 +298,18 @@ selftest_case_group_release() {
     echo "FAIL: the launch recorded no group array to release"; fail=1
   fi
   [ -s "$CLAIM" ] \
-    && echo "ok: the launch recorded the claim fence the release needs" \
-    || { echo "FAIL: the launch recorded no claim fence"; fail=1; }
+    && echo "ok: the tick recorded the claim fence the release needs" \
+    || { echo "FAIL: the tick recorded no claim fence"; fail=1; }
   release || true
   : >"$wait_file"
   sleep 0.3
   [ -f "$HALT" ] \
     && { echo "FAIL: releasing a group wrote the halt marker"; fail=1; } \
     || echo "ok: releasing a group did not write the halt marker"
+  "$PYTHON" -c 'import json,sys; sys.exit(0 if json.load(open(sys.argv[1])).get("ok") else 1)' \
+    "$RUN_DIR/release-checkpoint.json" \
+    && echo "ok: the release pushed the work in progress before the board write" \
+    || { echo "FAIL: the release did not push the work in progress"; fail=1; }
   if [ ! -f "$CURRENT" ] && [ ! -f "$PIDFILE" ]; then
     echo "ok: releasing a group cleared the current-phase and pid files"
   else

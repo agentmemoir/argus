@@ -1075,6 +1075,14 @@ class ReservationStore:
         refreshed rather than refused, which makes a retried request
         idempotent.
 
+        A request makes two board writes, not one: the expiry sweep, then this
+        claim. They are deliberately separate, because the sweep has to land
+        even when the claim refuses. A request that arrives after a window has
+        closed must leave the stale claim expired and then fail on the cooldown;
+        rolling the sweep back with the refused claim would leave the group
+        reading as live and report a conflict instead of the cooldown the
+        request rules promise.
+
         Returns one reservation dict per member, in the order given.
         """
         keys = []
@@ -1218,6 +1226,7 @@ class ReservationStore:
                 raise ReservationFenced(
                     "reservation has no current members to renew")
             records = []
+            refreshed = False
             for key in keys:
                 record = state["phases"][key]
                 if not _owner_matches(
@@ -1231,8 +1240,12 @@ class ReservationStore:
                     if status is not None:
                         record["status"] = status
                     record["heartbeat_at"] = moment
+                    refreshed = True
                 records.append(_reservation_from_record({**record, "_phase": key}))
-            return _Mutation(True, records)
+            # A group whose every member is published has nothing to refresh, so
+            # the tick that still holds it writes nothing rather than a board
+            # commit per tick for a claim that is already finished.
+            return _Mutation(refreshed, records)
 
         return _transaction(
             self.private, self.remote, self.branch, mutate,

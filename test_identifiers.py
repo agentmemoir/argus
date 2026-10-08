@@ -114,10 +114,18 @@ def scan(name: str, text: str) -> list[str]:
 def _shipped_paths() -> set[Path] | None:
     """The paths git would ship, or ``None`` when git cannot answer.
 
-    A file git ignores is a machine-local artifact, not part of the package, so
-    a scan of "every file the package ships" must not read it. An unpacked
-    source tree has no git to ask, and there the folder really is all there is,
-    so the caller falls back to reading every file.
+    A file git ignores is a machine-local artifact, not part of the package, so a
+    scan of "every file the package ships" must not read it. The skills tooling
+    writes ``skills-lock.json`` and ``.agents/`` into the checkout, and a machine
+    that keeps them out of git puts them in its global ignore file; both are
+    local, and both carry ids and machine paths this gate must not read as
+    published content. An unpacked source tree has no git to ask, and there the
+    folder really is all there is, so the caller falls back to reading every file.
+
+    The cost is that the gate trusts the ignore rules: a broad rule added to
+    ``.gitignore`` or the global ignore file stops the scan reading the files it
+    matches, and nothing here can fail on that. The alternative, reading local
+    artifacts as shipped content, fails on a working machine, which is worse.
     """
     try:
         result = subprocess.run(
@@ -135,9 +143,9 @@ def published_files() -> list[Path]:
     """Every file the package ships, this scanner excepted.
 
     This file names the shapes it forbids, so it is the one file the scan skips.
-    Nothing else is skipped, because the package ships the folder as a whole;
-    the one exception is a path git ignores, which is a local artifact and not
-    part of the package.
+    Nothing else is skipped, because the package ships the folder as a whole; the
+    one exception is a path git ignores, which is a local artifact and not part
+    of the package.
     """
     shipped = _shipped_paths()
     files: list[Path] = []

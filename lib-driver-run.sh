@@ -41,9 +41,10 @@ terminal_state_of_file() {
   esac
 }
 
-# Record the launch fence beside the run, so a later `--release` invocation can
-# release the board group. The parent that launches the run owns the token for
-# the life of the run; the release mode is a separate process and reads it here.
+# Record the claim fence beside the run, so a later `--release` invocation can
+# release the board group. The tick writes it as soon as the selection hands it a
+# claim, so a tick that refuses before the launch still leaves the group
+# releasable; the launch that follows reads the same pair back.
 record_claim() {
   local number="$1" reservation_id="${2:-}" generation="${3:-}"
   if [ -z "$reservation_id" ] || [ -z "$generation" ]; then
