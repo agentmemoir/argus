@@ -13,6 +13,7 @@
 #   phase-driver.sh --check                      # report environment readiness
 #   phase-driver.sh --self-test                  # hermetic guard/halt/notify test
 #   phase-driver.sh --stop                       # stop the live run (halt + Ctrl-C)
+#   phase-driver.sh --release                    # stop the live run and give its group back
 #   phase-driver.sh --session <N> <phase-file>   # one phase, run inside tmux
 #
 # The server reserves the selected phase in the private coordination branch
@@ -83,7 +84,7 @@ while [ "$#" -gt 0 ]; do
       esac
       shift 2 ;;
     --help|-h)
-      echo 'usage: argus [--config FILE] [--driver phase] [--repo-root PATH] [--roadmap-dir PATH] [--phase-glob GLOB] [--dry-run|--check|--self-test|--stop]'
+      echo 'usage: argus [--config FILE] [--driver phase] [--repo-root PATH] [--roadmap-dir PATH] [--phase-glob GLOB] [--dry-run|--check|--self-test|--stop|--release]'
       echo '       argus --session NUMBER PHASE_FILE'
       echo 'A tick reads one configuration file: --config FILE, or ./config.json when it is there.'
       echo 'The file names every value the tick uses, including the pipeline and the board checkout;'
@@ -233,10 +234,11 @@ case "${1:-}" in
   --check)     check ;;
   --self-test) driver_self_test ;;
   --stop)      stop ;;
+  --release)   release ;;
   --dry-run)   DRY_RUN=1; drive ;;
   ""|--drive)  drive ;;
   *)
-    echo "usage: phase-driver.sh [--dry-run|--check|--self-test|--stop] | --session <N> <phase-file>" >&2
+    echo "usage: phase-driver.sh [--dry-run|--check|--self-test|--stop|--release] | --session <N> <phase-file>" >&2
     exit 2
     ;;
 esac

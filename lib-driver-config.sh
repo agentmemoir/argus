@@ -271,6 +271,12 @@ argus_init() {
     STALL="$RUN_DIR/stalled"
     CURRENT="$RUN_DIR/current"
     PIDFILE="$RUN_DIR/pid"
+    # The fence the running phase was launched with, so a later `--release`
+    # invocation can release the board group without the parent process. And
+    # the marker `--release` leaves for the child's signal trap: when it is
+    # present, the trap stops the run without writing a halt marker.
+    CLAIM="$RUN_DIR/claim"
+    RELEASE="$RUN_DIR/release"
     NOTIFY_BROKEN="$RUN_DIR/notify-broken"
     LOG="$RUN_DIR/driver.log"
 

@@ -291,7 +291,7 @@ PROBE
   RUN_DIR="$DRIVER_RUN_DIR"
   LOCK="$RUN_DIR/driver.lock"; HALT="$RUN_DIR/halted"
   STALL="$RUN_DIR/stalled"; CURRENT="$RUN_DIR/current"
-  PIDFILE="$RUN_DIR/pid"
+  PIDFILE="$RUN_DIR/pid"; CLAIM="$RUN_DIR/claim"; RELEASE="$RUN_DIR/release"
   NOTIFY_BROKEN="$RUN_DIR/notify-broken"; LOG="$RUN_DIR/driver.log"
   mkdir -p "$RUN_DIR"
   echo "self-test session: $SESSION  state dir: $RUN_DIR"
@@ -301,6 +301,7 @@ PROBE
   selftest_case_launch
   selftest_case_locks_stall
   selftest_case_flow
+  selftest_case_release
   selftest_case_unavailable
   selftest_case_reasons
   selftest_case_recovery_sources

@@ -46,6 +46,7 @@ _drive_launch() {
   9>&- tmux_phase_window_open "$launch" "$RUN_DIR/session-$number.log" \
     || { notify "phase $number failed to launch in tmux"; { _DRIVE_RC=1; return 0; }; }
   printf '%s\n' "$number" >"$CURRENT"
+  record_claim "$number" "$reservation_id" "$reservation_generation"
   # The window stays named 'phase'. Renaming it to carry the phase number would
   # break every target string in phase-tmux.sh that looks it up by name, and
   # the phase number is already in the title and the log. The stage hook

@@ -168,10 +168,12 @@ FAULTS = (
                   "group can be claimed",
         "file": "phase_reservations.py",
         "find": "            records = []\n"
-                "            for key in keys:",
+                "            for key in keys:\n"
+                "                number = int(key)",
         "replace": "            records = []\n"
                    "            for key in keys[:1]:  # FAULT: half a group "
-                   "is reserved",
+                   "is reserved\n"
+                   "                number = int(key)",
         "check": "phase_group",
         "verdict": "phase_group self-test:",
         "expect": "a group claim writes every member or none",
@@ -187,6 +189,34 @@ FAULTS = (
         "check": "phase_group",
         "verdict": "phase_group self-test:",
         "expect": "an all-completed group is refused as already completed",
+    },
+    {
+        "name": "cooldown-refusal-swallowed",
+        "breaks": "an expired claim in its cooldown is claimed instead of "
+                  "being refused, so two agents can run the same group",
+        "file": "phase_reservations.py",
+        "find": "        if existing.get(\"status\") == EXPIRED_STATUS:\n"
+                "            remaining = _cooldown_remaining(existing, number, now)\n"
+                "            if remaining > 0:\n"
+                "                raise ReservationCooldown(number, remaining, existing)",
+        "replace": "        if existing.get(\"status\") == EXPIRED_STATUS:\n"
+                   "            remaining = 0  # FAULT: the cooldown is not refused",
+        "check": "phase_reservations",
+        "verdict": "coordination self-test:",
+        "expect": "an expired group is refused during the cooldown",
+    },
+    {
+        "name": "release-writes-halt-marker",
+        "breaks": "a release stops the run through the halt path, so it writes "
+                  "the halt marker instead of returning the group to the queue",
+        "file": "lib-driver-run.sh",
+        "find": "  if [ -f \"$RELEASE\" ]; then\n    rm -f \"$RELEASE\"\n"
+                "  elif [ -n \"$CUR_PHASE\" ]; then",
+        "replace": "  if false; then\n    rm -f \"$RELEASE\"\n"
+                   "  elif [ -n \"$CUR_PHASE\" ]; then",
+        "check": "driver",
+        "verdict": "driver self-test:",
+        "expect": "release wrote the halt marker",
     },
     {
         "name": "selector-refusal-swallowed",
@@ -299,6 +329,9 @@ def run_selftest(driver, check="driver"):
                else [sys.executable, str(driver.parent / "phase_group.py"),
                      "--self-test"]
                if check == "phase_group"
+               else [sys.executable, str(driver.parent / "phase_reservations.py"),
+                     "--self-test"]
+               if check == "phase_reservations"
                else [sys.executable, str(driver.parent / "next_phase.py"),
                      "--self-test"]
                if check == "next_phase"

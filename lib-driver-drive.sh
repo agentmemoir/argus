@@ -221,6 +221,56 @@ stop() {
   fi
 }
 
+# Give the current phase's group back without halting the line.
+#
+# This is deliberately not `stop()`. stop() writes the halt marker before it
+# does anything else; a release is the opposite. Nothing here writes the halt
+# marker, triggers the orphan or stall check, or sends a halt notification. It
+# interrupts only the phase window, waits for that window to close, clears the
+# same run-state files the signal path clears, and returns 0. The board group is
+# released after partial work is pushed, so the next owner resumes from the
+# branch. A failure to push or to release is logged and never halts.
+release() {
+  mkdir -p "$RUN_DIR"
+  local number="" claim_number="" reservation_id="" generation="" rc=0
+  number="$(cat "$CURRENT" 2>/dev/null || true)"
+  if [ -f "$CLAIM" ]; then
+    IFS=$'\t' read -r claim_number reservation_id generation <"$CLAIM" || true
+    [ -n "$claim_number" ] && number="${number:-$claim_number}"
+  fi
+  # Written before the interrupt: the child's signal trap reads it and stops
+  # without writing a halt marker. The parent removes it on every path.
+  : >"$RELEASE"
+  if tmux_phase_window_alive; then
+    tmux_phase_window_interrupt
+    log "release: sent Ctrl-C to '$SESSION:phase'${number:+ for phase $number}"
+  else
+    log "release: no live phase window${number:+ for phase $number}"
+  fi
+  wait_phase_window_gone
+  # Partial work first, so the next owner resumes instead of starting over. A
+  # failure is logged, never a halt.
+  [ -z "$number" ] || gitsync_clean "$number"
+  if [ -n "$reservation_id" ] && [ -n "$generation" ]; then
+    if "$PYTHON" "$ARGUS/phase_reservations.py" release-group \
+        "${ARGUS_CONFIG_ARGS[@]}" --repo-root "$REPO" \
+        --machine-id "$PHASE_MACHINE_ID" \
+        --reservation-id "$reservation_id" \
+        --generation "$generation" \
+        >"$RUN_DIR/release${number:+-$number}.json" 2>&1; then
+      log "release: returned the group for phase $number to the queue"
+      rm -f "$CLAIM"
+    else
+      rc=$?
+      log "release: could not return the group for phase $number (rc=$rc; see $RUN_DIR/release${number:+-$number}.json)"
+    fi
+  else
+    log "release: no board token was recorded; the run was stopped without a board write"
+  fi
+  rm -f "$CURRENT" "$PIDFILE" "$RELEASE"
+  return 0
+}
+
 # Wait for the phase window to disappear. The session itself is persistent and
 # is never waited on.
 wait_phase_window_gone() {

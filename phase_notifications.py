@@ -157,6 +157,23 @@ def _safe_reason(reason: str | None) -> str | None:
     return first_line[:180] if first_line else None
 
 
+def _group_phrase(group) -> str:
+    """A trailing clause naming the reservation group, or nothing.
+
+    The group is optional because a phase with no declaration runs alone and its
+    messages must read exactly as they always did.
+    """
+    if not group:
+        return ""
+    if isinstance(group, str):
+        members = [part.strip() for part in group.split(",") if part.strip()]
+    else:
+        members = [str(part).strip() for part in group if str(part).strip()]
+    if not members:
+        return ""
+    return f" (group: {', '.join(members)})"
+
+
 def format_notification(
     phase_file: str | Path,
     event: str,
@@ -165,20 +182,27 @@ def format_notification(
     exit_code: int | None = None,
     quiet_minutes: int = 45,
     run_json: Path | None = None,
+    group=None,
 ) -> str:
     """Format one phase event as a short, user-facing notification."""
     label = phase_label(phase_file)
     safe_reason = _safe_reason(reason)
+    suffix = _group_phrase(group)
     if event == "started":
-        return f"{label} has started."
+        return f"{label}{suffix} has started."
+    if event == "released":
+        return (
+            f"{label}{suffix} was released. Its group returned to the queue; "
+            "another agent may pick it up."
+        )
     if event == "completed":
         details = completion_details(run_json or default_run_json(phase_file))
         if details:
-            return f"{label} has completed.\n\n{details}"
-        return f"{label} has completed."
+            return f"{label}{suffix} has completed.\n\n{details}"
+        return f"{label}{suffix} has completed."
     if event == "interrupted":
         detail = f" because {safe_reason}." if safe_reason else "."
-        return f"{label} was interrupted{detail} The work will resume on the next driver tick."
+        return f"{label}{suffix} was interrupted{detail} The work will resume on the next driver tick."
     if event in {"stopped", "stopped-signal"}:
         if event == "stopped-signal":
             return (
@@ -218,12 +242,17 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--event",
         required=True,
-        choices=["started", "completed", "interrupted", "stopped", "stopped-signal",
-                 "stalled", "escalated"],
+        choices=["started", "completed", "interrupted", "released", "stopped",
+                 "stopped-signal", "stalled", "escalated"],
     )
     parser.add_argument("--reason")
     parser.add_argument("--exit-code", type=int)
     parser.add_argument("--quiet-minutes", type=int)
+    parser.add_argument(
+        "--group",
+        action="append",
+        default=None,
+        help="a phase in the reservation group, repeatable; adds a group clause")
     parser.add_argument("--config")
     parser.add_argument("--driver", dest="config_driver")
     parser.add_argument("--repo-root", dest="config_repo_root")
@@ -247,6 +276,7 @@ def main(argv: list[str] | None = None) -> int:
             exit_code=args.exit_code,
             quiet_minutes=(args.quiet_minutes if args.quiet_minutes is not None
                            else conventions.setting("driver.quiet-minutes")),
+            group=args.group,
         )
     )
     return 0

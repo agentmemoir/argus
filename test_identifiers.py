@@ -49,6 +49,7 @@ green scan means "no identifiers" and not "no rules".
 from __future__ import annotations
 
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -110,17 +111,42 @@ def scan(name: str, text: str) -> list[str]:
     return findings
 
 
+def _shipped_paths() -> set[Path] | None:
+    """The paths git would ship, or ``None`` when git cannot answer.
+
+    A file git ignores is a machine-local artifact, not part of the package, so
+    a scan of "every file the package ships" must not read it. An unpacked
+    source tree has no git to ask, and there the folder really is all there is,
+    so the caller falls back to reading every file.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(HERE), "ls-files", "--cached", "--others",
+             "--exclude-standard"],
+            capture_output=True, text=True, timeout=30)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if result.returncode != 0:
+        return None
+    return {HERE / line for line in result.stdout.splitlines() if line}
+
+
 def published_files() -> list[Path]:
     """Every file the package ships, this scanner excepted.
 
     This file names the shapes it forbids, so it is the one file the scan skips.
-    Nothing else is skipped, because the package ships the folder as a whole.
+    Nothing else is skipped, because the package ships the folder as a whole;
+    the one exception is a path git ignores, which is a local artifact and not
+    part of the package.
     """
+    shipped = _shipped_paths()
     files: list[Path] = []
     for path in sorted(HERE.rglob("*")):
         if not path.is_file() or path == SELF:
             continue
         if any(part in SKIP_DIRS for part in path.relative_to(HERE).parts):
+            continue
+        if shipped is not None and path not in shipped:
             continue
         files.append(path)
     return files

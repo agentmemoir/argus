@@ -91,9 +91,12 @@ INTEGRATION_FALLBACK = "master"
 COORDINATION_VERSION = 1
 STATUSES = frozenset({
     "claimed", "running", "paused", "blocked", "completed", "rejected",
-    "accepted",
+    "accepted", "expired",
 })
 ACTIVE_STATUSES = frozenset({"claimed", "running", "paused", "blocked"})
+#: A claim a window closed on. It is neither active nor terminal: the old owner
+#: is fenced, and after the cooldown the group can be claimed again.
+EXPIRED_STATUS = "expired"
 # "completed" means the pipeline's finalize step published the phase.
 # "accepted" means an operator closed it deliberately, without a passing
 # checker, and recorded that decision in the phase file. It is terminal for
@@ -122,6 +125,18 @@ PUBLICATION_NAME = "publication.json"
 #: refusal path; the lifecycle that writes it lands in a later stage. A record
 #: with no field is claimable as it always was, so an old board still reads.
 COOLDOWN_UNTIL_FIELD = "cooldown_until"
+#: Before any work starts, a claimed group expires once it has sat this long
+#: without being renewed. The value is provisional and has not been measured
+#: against real queue behaviour, so it lives here as one named constant.
+GROUP_START_WINDOW_S = 48 * 3600
+#: After work begins, a group expires when its newest heartbeat is older than
+#: this. Expiry keys off the heartbeat rather than a fixed deadline, so a long
+#: run is not cut off while its driver keeps renewing. Provisional.
+GROUP_HEARTBEAT_WINDOW_S = 30 * 60
+#: After an expiry, a group waits this long before another agent may claim it.
+#: The window lets a stalled but still-live owner notice it lost the claim and
+#: stop. An explicit release has no cooldown. Provisional.
+GROUP_COOLDOWN_S = 60
 
 
 class CoordinationError(Exception):
@@ -178,9 +193,45 @@ class _Mutation:
         self.value = value
 
 
+def _iso(moment=None):
+    """Format a moment (or now) as the board's Zulu millisecond stamp."""
+    moment = moment or _datetime.datetime.now(_datetime.timezone.utc)
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=_datetime.timezone.utc)
+    return moment.isoformat(timespec="milliseconds").replace("+00:00", "Z")
+
+
+def _as_moment(value):
+    """Normalize an optional injected clock to an aware UTC datetime.
+
+    ``None`` means the caller did not inject a clock, and the caller then reads
+    the real one where it needs it. A string is parsed the same way the board
+    writes stamps, so a test can pass either a datetime or a stamp.
+    """
+    if value is None:
+        return None
+    if isinstance(value, _datetime.datetime):
+        if value.tzinfo is None:
+            return value.replace(tzinfo=_datetime.timezone.utc)
+        return value
+    return _parse_moment(value, what="time")
+
+
+def _parse_moment(value, *, what="timestamp"):
+    """Parse a board stamp; a value nobody can parse fails closed."""
+    if not isinstance(value, str) or not value:
+        raise CoordinationUnavailable(f"invalid {what}: {value!r}")
+    try:
+        moment = _datetime.datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise CoordinationUnavailable(f"invalid {what}: {value!r}") from exc
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=_datetime.timezone.utc)
+    return moment
+
+
 def _now():
-    return _datetime.datetime.now(_datetime.timezone.utc).isoformat(
-        timespec="milliseconds").replace("+00:00", "Z")
+    return _iso()
 
 
 def _phase_key(phase):
@@ -445,22 +496,76 @@ def _cooldown_remaining(record, number, now=None):
     value = record.get(COOLDOWN_UNTIL_FIELD)
     if value is None:
         return 0
-    if not isinstance(value, str) or not value:
-        raise CoordinationUnavailable(
-            f"phase {number} has an invalid {COOLDOWN_UNTIL_FIELD}")
-    try:
-        until = _datetime.datetime.fromisoformat(value.replace("Z", "+00:00"))
-    except ValueError as exc:
-        raise CoordinationUnavailable(
-            f"phase {number} has an invalid {COOLDOWN_UNTIL_FIELD}: "
-            f"{value!r}") from exc
-    if until.tzinfo is None:
-        until = until.replace(tzinfo=_datetime.timezone.utc)
-    moment = now or _datetime.datetime.now(_datetime.timezone.utc)
+    until = _parse_moment(value, what=COOLDOWN_UNTIL_FIELD)
+    moment = _as_moment(now) or _datetime.datetime.now(_datetime.timezone.utc)
     delta = (until - moment).total_seconds()
     if delta <= 0:
         return 0
     return math.ceil(delta)
+
+
+def _claim_window(record):
+    """The moment and length a claim is measured against, or ``None``.
+
+    Before any work starts the claim is measured from ``claimed_at`` against the
+    start window; once work has begun it is measured from ``heartbeat_at``
+    against the heartbeat window. A record whose stamp is missing or malformed
+    returns ``None`` and is left alone, because expiring a possibly-live claim on
+    a stamp nobody can read would take work away from its owner.
+    """
+    status = record.get("status")
+    if status == "claimed":
+        field, window = "claimed_at", GROUP_START_WINDOW_S
+    elif status in ACTIVE_STATUSES:
+        field, window = "heartbeat_at", GROUP_HEARTBEAT_WINDOW_S
+    else:
+        return None
+    try:
+        reference = _parse_moment(record.get(field), what=field)
+    except CoordinationUnavailable:
+        return None
+    return reference, window
+
+
+def _claim_window_passed(record, moment):
+    measured = _claim_window(record)
+    if measured is None:
+        return False
+    reference, window = measured
+    return (moment - reference).total_seconds() > window
+
+
+def _expire_records(state, moment):
+    """Move every stale group to ``EXPIRED_STATUS`` under one cooldown stamp.
+
+    The members of one reservation share a reservation id, so the group is
+    expired as a unit: one member past its window expires all of them, and the
+    old owner is fenced for every member at once. Returns the expired records,
+    each with its phase key, so the caller can report what moved.
+    """
+    groups = {}
+    for key, record in state["phases"].items():
+        if record.get("status") not in ACTIVE_STATUSES:
+            continue
+        reservation_id = record.get("reservation_id")
+        if not reservation_id:
+            continue
+        groups.setdefault(
+            (record.get("machine_id"), reservation_id), []).append((key, record))
+    expired = []
+    for members in groups.values():
+        if not any(_claim_window_passed(record, moment) for _key, record in members):
+            continue
+        until = _iso(moment + _datetime.timedelta(seconds=GROUP_COOLDOWN_S))
+        for key, record in members:
+            record["status"] = EXPIRED_STATUS
+            record[COOLDOWN_UNTIL_FIELD] = until
+            expired.append({
+                "phase": key,
+                "machine_id": record.get("machine_id"),
+                "reservation_id": record.get("reservation_id"),
+            })
+    return expired
 
 
 def _claim_one(state, key, machine_id, reservation_id, generation, run_id,
@@ -476,27 +581,34 @@ def _claim_one(state, key, machine_id, reservation_id, generation, run_id,
     """
     existing = state["phases"].get(key)
     if existing is not None:
-        if existing.get("status") in TERMINAL_STATUSES:
+        if existing.get("status") == EXPIRED_STATUS:
+            remaining = _cooldown_remaining(existing, number, now)
+            if remaining > 0:
+                raise ReservationCooldown(number, remaining, existing)
+            # The cooldown has passed, so the expired record is claimable again
+            # and is overwritten below with a fresh reservation.
+        elif existing.get("status") in TERMINAL_STATUSES:
             raise ReservationConflict(
                 number, existing,
                 f"phase is retained as {existing.get('status')}")
-        if _owner_matches(existing, machine_id, reservation_id, generation):
+        elif _owner_matches(existing, machine_id, reservation_id, generation):
             existing["status"] = status
-            existing["heartbeat_at"] = _now()
+            existing["heartbeat_at"] = _iso(now)
             return existing
-        remaining = _cooldown_remaining(existing, number, now)
-        if remaining > 0:
-            raise ReservationCooldown(number, remaining, existing)
-        raise ReservationConflict(number, existing)
+        else:
+            remaining = _cooldown_remaining(existing, number, now)
+            if remaining > 0:
+                raise ReservationCooldown(number, remaining, existing)
+            raise ReservationConflict(number, existing)
     record = {
         "status": status,
         "machine_id": machine_id,
         "reservation_id": reservation_id,
         "generation": generation,
-        "claimed_at": _now(),
-        "heartbeat_at": _now(),
-        # The selected answer is no automatic expiry.  Keep the field for
-        # audit/tool compatibility, but never use it to take over a live claim.
+        "claimed_at": _iso(now),
+        "heartbeat_at": _iso(now),
+        # Expiry keys off the start and heartbeat windows, not this field, which
+        # is kept for audit and tool compatibility.
         "expires_at": None,
         "run_id": run_id or f"phase-{key}",
         "base_revisions": revisions,
@@ -982,6 +1094,12 @@ class ReservationStore:
         _validate_status(status)
         if status not in ACTIVE_STATUSES:
             raise CoordinationError("a new reservation must start as active")
+        moment = _as_moment(now)
+        # Sweep first so a request that arrives after a window closed returns the
+        # stale group to the queue and then fails closed on the cooldown, rather
+        # than reading a dead claim as live. The sweep is its own bookkeeping
+        # write; the claim below is a separate one.
+        self.expire_stale(now=moment)
         revisions = base_revisions or _base_revisions(self.root, self.private)
         run_ids = run_ids or {}
 
@@ -991,7 +1109,7 @@ class ReservationStore:
                 number = int(key)
                 record = _claim_one(
                     state, key, machine_id, reservation_id, generation,
-                    run_ids.get(key), revisions, status, number, now)
+                    run_ids.get(key), revisions, status, number, moment)
                 records.append(_reservation_from_record(
                     {**record, "_phase": key}))
             return _Mutation(True, records)
@@ -1001,8 +1119,127 @@ class ReservationStore:
             f"phase coordination: reserve group "
             f"[{','.join(keys)}] for {machine_id}")
 
+    def expire_stale(self, now=None):
+        """Return every stale group to the queue under a cooldown stamp.
+
+        A claim is stale when no work started inside the start window, or, once
+        work has begun, when its newest heartbeat is older than the heartbeat
+        window. Every member of one reservation moves in a single board write,
+        so a group is never half expired. The window is measured from an
+        injected clock when a test passes one. Returns the expired members as
+        ``{"phase", "machine_id", "reservation_id"}`` dicts; an empty list means
+        nothing was stale and no write was made.
+        """
+        moment = _as_moment(now) or _datetime.datetime.now(_datetime.timezone.utc)
+
+        def mutate(state):
+            expired = _expire_records(state, moment)
+            return _Mutation(bool(expired), expired)
+
+        return _transaction(
+            self.private, self.remote, self.branch, mutate,
+            "phase coordination: expire stale claims")
+
+    def release_group(self, reservation, *, now=None):
+        """Give one owner's whole group back, atomically, with no cooldown.
+
+        The members of a group share one reservation id, so the release finds
+        every member from that single token and removes them in one board write.
+        A member already terminal (published) is left untouched: release never
+        undoes published work. An explicit release writes no cooldown, so the
+        next request may claim the group at once. Returns the released phase
+        keys; a group with every member published releases nothing.
+
+        Raises ``ReservationFenced`` when the token no longer owns an active
+        member, including after an expiry, so a late release is rejected rather
+        than reviving a group that already returned to the queue.
+        """
+        if not isinstance(reservation, dict):
+            raise CoordinationError("reservation must be an object")
+        machine_id = _validate_machine_id(reservation.get("machine_id"))
+        reservation_id = _validate_reservation_id(
+            reservation.get("reservation_id"))
+        generation = _validate_generation(reservation.get("generation"))
+        moment = _iso(_as_moment(now))
+
+        def mutate(state):
+            keys = sorted(
+                key for key, record in state["phases"].items()
+                if record.get("reservation_id") == reservation_id)
+            if not keys:
+                raise ReservationFenced(
+                    "reservation has no current members to release")
+            released = []
+            for key in keys:
+                record = state["phases"][key]
+                if not _owner_matches(
+                        record, machine_id, reservation_id, generation):
+                    raise ReservationFenced(
+                        f"phase {key} reservation is fenced by a newer owner")
+                if record.get("status") == EXPIRED_STATUS:
+                    raise ReservationFenced(
+                        f"phase {key} reservation expired")
+                if record.get("status") in TERMINAL_STATUSES:
+                    continue
+                del state["phases"][key]
+                released.append(key)
+            return _Mutation(bool(released), released)
+
+        return _transaction(
+            self.private, self.remote, self.branch, mutate,
+            f"phase coordination: release group "
+            f"[{reservation_id}] for {machine_id} at {moment}")
+
+    def renew_group(self, reservation, status=None, *, now=None):
+        """Renew every member of one group under its shared reservation id.
+
+        One board write refreshes each active member's heartbeat; the group is
+        renewed as a unit exactly as it was claimed. A published member is
+        reported unchanged rather than refused, so a partial group can be
+        renewed while its finished members stay completed. A member fenced by a
+        newer owner, or one whose window already closed, raises
+        ``ReservationFenced`` and renews nothing.
+        """
+        if not isinstance(reservation, dict):
+            raise CoordinationError("reservation must be an object")
+        machine_id = _validate_machine_id(reservation.get("machine_id"))
+        reservation_id = _validate_reservation_id(
+            reservation.get("reservation_id"))
+        generation = _validate_generation(reservation.get("generation"))
+        if status is not None:
+            status = _validate_status(status)
+        moment = _iso(_as_moment(now))
+
+        def mutate(state):
+            keys = sorted(
+                key for key, record in state["phases"].items()
+                if record.get("reservation_id") == reservation_id)
+            if not keys:
+                raise ReservationFenced(
+                    "reservation has no current members to renew")
+            records = []
+            for key in keys:
+                record = state["phases"][key]
+                if not _owner_matches(
+                        record, machine_id, reservation_id, generation):
+                    raise ReservationFenced(
+                        f"phase {key} reservation is fenced by a newer owner")
+                if record.get("status") == EXPIRED_STATUS:
+                    raise ReservationFenced(
+                        f"phase {key} reservation expired")
+                if record.get("status") not in TERMINAL_STATUSES:
+                    if status is not None:
+                        record["status"] = status
+                    record["heartbeat_at"] = moment
+                records.append(_reservation_from_record({**record, "_phase": key}))
+            return _Mutation(True, records)
+
+        return _transaction(
+            self.private, self.remote, self.branch, mutate,
+            f"phase coordination: renew group [{reservation_id}] for {machine_id}")
+
     def _owned_mutation(self, reservation, next_status=None,
-                        evidence_path=None, accepted_reason=None):
+                        evidence_path=None, accepted_reason=None, now=None):
         if not isinstance(reservation, dict):
             raise CoordinationError("reservation must be an object")
         machine_id = _validate_machine_id(reservation.get("machine_id"))
@@ -1045,6 +1282,12 @@ class ReservationStore:
             if not _owner_matches(record, machine_id, reservation_id, generation):
                 raise ReservationFenced(
                     f"phase {key} reservation is fenced by a newer owner")
+            if record.get("status") == EXPIRED_STATUS:
+                # The window closed and the group returned to the queue; a late
+                # write from the old owner must not revive it. This is the
+                # generation fence applied to expiry, not a separate mechanism.
+                raise ReservationFenced(
+                    f"phase {key} reservation expired")
             if record.get("status") in TERMINAL_STATUSES:
                 if next_status == record.get("status"):
                     return _Mutation(False, _reservation_from_record(
@@ -1058,7 +1301,7 @@ class ReservationStore:
                 record["accepted_at"] = _now()
             if receipt is not None:
                 record["completion_receipt"] = receipt
-            record["heartbeat_at"] = _now()
+            record["heartbeat_at"] = _iso(now)
             return _Mutation(True, _reservation_from_record(
                 {**record, "_phase": key}))
 
@@ -1386,6 +1629,166 @@ def _git_test_repo(base, name, initial_state=None):
     return remote, clients
 
 
+def _group_lifecycle_checks(checks, base):
+    """Prove release, expiry, cooldown and fencing on a two-machine fixture.
+
+    Time is injected through the stores rather than slept through, so the
+    start window, the heartbeat window and the cooldown are all exercised in a
+    single run. Machine A claims and works; machine B is the second owner.
+    """
+    import datetime as _dt
+
+    _remote, clients = _git_test_repo(base, "groups")
+    root_a = base / "groups-root-a"
+    root_b = base / "groups-root-b"
+    root_a.mkdir()
+    root_b.mkdir()
+    store_a = ReservationStore(root_a, private_repo=clients[0])
+    store_b = ReservationStore(root_b, private_repo=clients[1])
+    epoch = _dt.datetime(2026, 10, 8, 12, 0, tzinfo=_dt.timezone.utc)
+
+    def at(seconds):
+        return epoch + _dt.timedelta(seconds=seconds)
+
+    members = ["100200", "100201", "100202"]
+
+    # A group claimed before its start window is live: another machine is
+    # refused with a plain conflict, not a cooldown.
+    records = store_a.reserve_group(members, "server-01", now=at(0))
+    shared = {record["reservation_id"] for record in records}
+    _self_test_check(
+        checks, "a group is claimed under one shared reservation id",
+        len(records) == 3 and len(shared) == 1, str(records))
+    try:
+        store_b.reserve_group(members, "server-02",
+                              now=at(GROUP_START_WINDOW_S - 1))
+        early = None
+    except ReservationConflict as exc:
+        early = exc
+    except ReservationCooldown as exc:  # pragma: no cover - clearer failure
+        early = exc
+    _self_test_check(
+        checks, "a live group cannot be claimed by a second machine",
+        isinstance(early, ReservationConflict), f"early={early!r}")
+
+    # Past the start window the whole group expires in one sweep, and the
+    # request that found it is refused during the cooldown.
+    try:
+        store_b.reserve_group(members, "server-02",
+                              now=at(GROUP_START_WINDOW_S + 1))
+        cooled = None
+    except ReservationCooldown as exc:
+        cooled = exc
+    state, _commit = store_a.read()
+    statuses = [state["phases"].get(key, {}).get("status") for key in members]
+    _self_test_check(
+        checks, "an expired group is refused during the cooldown",
+        cooled is not None and cooled.remaining_seconds > 0
+        and statuses == [EXPIRED_STATUS] * 3,
+        f"cooled={cooled!r} statuses={statuses}")
+    until = state["phases"][members[0]].get(COOLDOWN_UNTIL_FIELD)
+    _self_test_check(
+        checks, "every member of the expired group shares one cooldown stamp",
+        len({state["phases"][key].get(COOLDOWN_UNTIL_FIELD) for key in members}) == 1,
+        f"cooldown_until={until!r}")
+
+    # A request never shortens or extends the cooldown.
+    try:
+        store_b.reserve_group(members, "server-02",
+                              now=at(GROUP_START_WINDOW_S + 2))
+        cooled_again = None
+    except ReservationCooldown as exc:
+        cooled_again = exc
+    state_again, _commit = store_a.read()
+    until_again = state_again["phases"][members[0]].get(COOLDOWN_UNTIL_FIELD)
+    _self_test_check(
+        checks, "a request during cooldown never moves the deadline",
+        cooled_again is not None and until_again == until, f"{until!r} -> {until_again!r}")
+
+    # A late write from the old owner is fenced after expiry.
+    late = {"machine_id": "server-01", "reservation_id": records[0]["reservation_id"],
+            "generation": records[0]["generation"]}
+    try:
+        store_a.renew_group(late, now=at(GROUP_START_WINDOW_S + 2))
+        late_fenced = False
+    except ReservationFenced:
+        late_fenced = True
+    _self_test_check(checks, "a late renew after expiry is fenced",
+                     late_fenced, "expected ReservationFenced")
+
+    # Once the cooldown passes the second machine claims the group.
+    later = at(GROUP_START_WINDOW_S + GROUP_COOLDOWN_S + 1)
+    after = store_b.reserve_group(members, "server-02", now=later)
+    _self_test_check(
+        checks, "the group is claimable once its cooldown passes",
+        [record["phase"] for record in after] == members
+        and {record["reservation_id"] for record in after}.isdisjoint(shared),
+        str(after))
+
+    # A running group is measured from its heartbeat. renew_group moves the
+    # heartbeat for every member at once, which keeps the group alive past the
+    # point its original stamp would have expired it.
+    running = ["100210", "100211"]
+    running_records = store_a.reserve_group(
+        running, "server-03", status="running", now=at(0))
+    running_token = {"machine_id": "server-03",
+                     "reservation_id": running_records[0]["reservation_id"],
+                     "generation": running_records[0]["generation"]}
+    store_a.renew_group(running_token, now=at(GROUP_HEARTBEAT_WINDOW_S - 100))
+    refreshed, _commit = store_a.read()
+    _self_test_check(
+        checks, "renew_group refreshes every member's heartbeat",
+        len({refreshed["phases"][key]["heartbeat_at"] for key in running}) == 1,
+        f"heartbeats={[refreshed['phases'][key]['heartbeat_at'] for key in running]}")
+    try:
+        store_b.reserve_group(running, "server-04",
+                              now=at(GROUP_HEARTBEAT_WINDOW_S + 1))
+        still_live = None
+    except ReservationCooldown as exc:
+        still_live = exc
+    except ReservationConflict as exc:
+        still_live = exc
+    _self_test_check(
+        checks, "a renewed running group is still live past its first window",
+        isinstance(still_live, ReservationConflict), f"result={still_live!r}")
+    try:
+        store_b.reserve_group(
+            running, "server-04",
+            now=at(2 * GROUP_HEARTBEAT_WINDOW_S - 99))
+        heartbeat_expired = None
+    except ReservationCooldown as exc:
+        heartbeat_expired = exc
+    _self_test_check(
+        checks, "a running group expires from its heartbeat, not a fixed deadline",
+        heartbeat_expired is not None and heartbeat_expired.remaining_seconds > 0,
+        f"expired={heartbeat_expired!r}")
+
+    # An explicit release has no cooldown and leaves published work alone.
+    published = ["100220", "100221"]
+    owned = store_a.reserve_group(published, "server-05", now=at(0))
+    token = {"machine_id": "server-05", "reservation_id": owned[0]["reservation_id"],
+             "generation": owned[0]["generation"]}
+    old_runs = conventions.override({"driver.runs": store_a.private / "runs"})
+    try:
+        receipt = _self_test_receipt(store_a, owned[1])
+        store_a.set_status(owned[1], "completed", evidence_path=receipt)
+    finally:
+        conventions.configure(old_runs)
+    released = store_a.release_group(token, now=at(0))
+    after_release, _commit = store_a.read()
+    _self_test_check(
+        checks, "release returns the unfinished member and keeps the published one",
+        released == ["100220"]
+        and after_release["phases"]["100221"]["status"] == "completed"
+        and "100220" not in after_release["phases"],
+        f"released={released} phases={sorted(after_release['phases'])}")
+    immediate = store_b.reserve_group(["100220"], "server-06", now=at(0))
+    _self_test_check(
+        checks, "an explicit release has no cooldown",
+        [record["phase"] for record in immediate] == ["100220"],
+        str(immediate))
+
+
 def self_test_checks():
     """Exercise the shared board with two local clients; no network or repo state."""
     import threading
@@ -1543,6 +1946,17 @@ def self_test_checks():
         _self_test_check(checks, "publication lock blocks a valid second phase",
                          _publication_lock_check(
                              store_a, other, lock_contender), "claim-scoped")
+        try:
+            _group_lifecycle_checks(checks, base)
+        except CoordinationError:
+            # The shared ``checks`` list already holds whatever the lifecycle
+            # proved before it raised, so the named failure survives; this only
+            # keeps a fault injected into the lifecycle from aborting the whole
+            # self-test before it prints its verdict. A test harness cannot tell
+            # a caught guard from a passing one if the run dies first.
+            _self_test_check(
+                checks, "the group lifecycle fixture ran to the end", False,
+                "the lifecycle raised before it finished")
         _checkout_hygiene_checks(checks, base)
     finally:
         drop_checkouts_under(base)
@@ -1987,6 +2401,14 @@ def _publication_lock_check(store, reservation, contender):
 def self_test():
     checks = self_test_checks()
     ok = all(item["ok"] for item in checks)
+    # The named FAIL lines and the verdict go to stderr and the JSON record to
+    # stdout, so a harness can look for a named failure without the machine
+    # record changing shape for its own callers.
+    for item in checks:
+        if not item["ok"]:
+            print(f"FAIL: {item['check']} ({item['detail']})", file=sys.stderr)
+    print(f"coordination self-test: {'pass' if ok else 'FAIL'}",
+          file=sys.stderr)
     _print_json({"coordination_self_test": "pass" if ok else "fail",
                  "checks": checks})
     return 0 if ok else 1
@@ -2002,6 +2424,12 @@ def _add_store_args(parser):
 
 def _add_reservation_args(parser):
     parser.add_argument("--phase", required=True)
+    parser.add_argument("--machine-id", required=True)
+    parser.add_argument("--reservation-id", required=True)
+    parser.add_argument("--generation", required=True, type=int)
+
+
+def _add_token_args(parser):
     parser.add_argument("--machine-id", required=True)
     parser.add_argument("--reservation-id", required=True)
     parser.add_argument("--generation", required=True, type=int)
@@ -2057,6 +2485,22 @@ def main(argv=None):
     _add_store_args(release)
     _add_reservation_args(release)
     release.add_argument("--confirm", action="store_true")
+
+    release_group = sub.add_parser(
+        "release-group",
+        help="give one owner's whole group back at once, with no cooldown")
+    _add_store_args(release_group)
+    _add_token_args(release_group)
+
+    renew_group = sub.add_parser(
+        "renew-group", help="renew every member of one owned group at once")
+    _add_store_args(renew_group)
+    _add_token_args(renew_group)
+    renew_group.add_argument("--status", choices=sorted(ACTIVE_STATUSES))
+
+    expire = sub.add_parser(
+        "expire-stale", help="return every stale group to the queue under cooldown")
+    _add_store_args(expire)
 
     show = sub.add_parser("show", help="fetch and print the coordination state")
     _add_store_args(show)
@@ -2117,6 +2561,20 @@ def main(argv=None):
                 "reservation_id": args.reservation_id,
                 "generation": args.generation,
             })
+        elif args.command == "release-group":
+            result = store.release_group({
+                "machine_id": args.machine_id,
+                "reservation_id": args.reservation_id,
+                "generation": args.generation,
+            })
+        elif args.command == "renew-group":
+            result = store.renew_group({
+                "machine_id": args.machine_id,
+                "reservation_id": args.reservation_id,
+                "generation": args.generation,
+            }, args.status)
+        elif args.command == "expire-stale":
+            result = store.expire_stale()
         else:
             result, _commit = store.read()
         _print_json({"state": "OK", "reservation": result}
