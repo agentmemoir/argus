@@ -277,6 +277,11 @@ argus_init() {
     # present, the trap stops the run without writing a halt marker.
     CLAIM="$RUN_DIR/claim"
     RELEASE="$RUN_DIR/release"
+    # The reservation group this machine is running, and the one branch its work
+    # lives on. Read on every later tick: the renewal needs the group, and the
+    # launch needs the branch the earlier tick already cut.
+    GROUPFILE="$RUN_DIR/group"
+    GROUPBRANCH="$RUN_DIR/group-branch"
     NOTIFY_BROKEN="$RUN_DIR/notify-broken"
     LOG="$RUN_DIR/driver.log"
 

@@ -27,6 +27,11 @@ _drive() {
 
   if tmux_busy; then
     check_stall
+    # The tick loop is the renewer of the group this run belongs to. The board
+    # measures a running group from its newest heartbeat, so a claim nobody
+    # renews expires under a live run and another machine may take the group
+    # away from a run that is still working on it.
+    group_renew
     log "phase window is running; skip"
     return 0
   fi
@@ -132,14 +137,26 @@ _drive_cut_branch() {
     # gitsync's branch mode scans that folder to refuse a branch name another
     # phase in it would also earn, so without it the check runs against the
     # derived folder and a collision inside a configured one goes unseen.
+    #
+    # A group passes its members as well, so the one branch the whole group
+    # publishes is what the helper cuts and what the collision scan checks. The
+    # name is derived from the group's lowest member, so every tick of the group
+    # asks for the same branch whichever member it is launching.
     "$PYTHON" "$ARGUS/gitsync.py" "${ARGUS_CONFIG_ARGS[@]}" --root "$REPO" \
       --mode branch --phase "$number" --roadmap "$roadmap_name" \
       --roadmap-dir "$(roadmap_dir)" \
+      "${GROUP_ARGS[@]+"${GROUP_ARGS[@]}"}" \
       >"$RUN_DIR/phase-branch.json" 2>/dev/null
     local branch_rc=$?
     if [ "$branch_rc" -ne 0 ]; then
       log "could not put phase $number on its own branch; refusing to launch (see $RUN_DIR/phase-branch.json)"
       { _DRIVE_RC=1; return 0; }
+    fi
+    # Only a group records a branch of its own. A single phase's branch is not a
+    # group branch, and writing it here would leave a group's own record naming
+    # a branch no group ever had.
+    if group_active; then
+      group_record_branch "$(selection_value branch <"$RUN_DIR/phase-branch.json")"
     fi
     # The two branches are read per checkout by role, from the action each one
     # reported. The receipt's top-level "branch" is the name that was asked
@@ -147,6 +164,9 @@ _drive_cut_branch() {
     # though it were the public checkout's branch reported a phase branch for a
     # checkout that was still sitting on master.
     log "phase $number: $(branch_state_line "$RUN_DIR/phase-branch.json")"
+    if group_active; then
+      log "group $number: one branch $(group_branch_of) covers [$(printf '%s' "$GROUP_MEMBERS" | tr '\n' ' ')]"
+    fi
     # The branch may have been cut from an open predecessor rather than from the
     # integration branch, and the integration branch may have moved since the
     # launch-time sync. Pull it in now so the phase starts from a base that
@@ -251,6 +271,10 @@ release() {
   # Partial work first, so the next owner resumes instead of starting over. A
   # failure is logged, never a halt.
   [ -z "$number" ] || gitsync_clean "$number"
+  # The array the run covered, for the log line below. Read before the board
+  # write, because the write is what ends the group on this machine.
+  local group_members=""
+  [ -s "$GROUPFILE" ] && group_members="$(tr '\n' ' ' <"$GROUPFILE")"
   if [ -n "$reservation_id" ] && [ -n "$generation" ]; then
     if "$PYTHON" "$ARGUS/phase_reservations.py" release-group \
         "${ARGUS_CONFIG_ARGS[@]}" --repo-root "$REPO" \
@@ -258,7 +282,11 @@ release() {
         --reservation-id "$reservation_id" \
         --generation "$generation" \
         >"$RUN_DIR/release${number:+-$number}.json" 2>&1; then
-      log "release: returned the group for phase $number to the queue"
+      if [ -n "$group_members" ]; then
+        log "release: returned the group for phase $number to the queue [$group_members]"
+      else
+        log "release: returned the group for phase $number to the queue"
+      fi
       rm -f "$CLAIM"
     else
       rc=$?
@@ -267,7 +295,7 @@ release() {
   else
     log "release: no board token was recorded; the run was stopped without a board write"
   fi
-  rm -f "$CURRENT" "$PIDFILE" "$RELEASE"
+  rm -f "$CURRENT" "$PIDFILE" "$RELEASE" "$GROUPFILE" "$GROUPBRANCH"
   return 0
 }
 

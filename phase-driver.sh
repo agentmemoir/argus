@@ -163,6 +163,9 @@ done
 # The work selector, reservation results, and the merge check.
 # shellcheck disable=SC1091
 . "$ARGUS_DIR/lib-driver-select.sh"
+# The reservation group: its member array, its one branch, and its renewal.
+# shellcheck disable=SC1091
+. "$ARGUS_DIR/lib-driver-group.sh"
 # The readiness report (`--check`).
 # shellcheck disable=SC1091
 . "$ARGUS_DIR/lib-driver-check.sh"
@@ -196,6 +199,8 @@ done
 . "$ARGUS_DIR/lib-selftest-cases-6.sh"
 # shellcheck disable=SC1091
 . "$ARGUS_DIR/lib-selftest-cases-7.sh"
+# shellcheck disable=SC1091
+. "$ARGUS_DIR/lib-selftest-cases-8.sh"
 
 argus_init "${1:-}"
 

@@ -80,7 +80,14 @@ _drive_real_selection() {
       # The gate, after the steps that recover from a dead branch. This is the
       # same fail-closed check as before, on a checkout that is no longer
       # stranded on one.
+      #
+      # A group names its one branch here once that branch exists, so a checkout
+      # that drifted off the branch a half-run group is working on is refused
+      # rather than quietly synced on the wrong one. The first tick of a group
+      # has no branch yet, and sync_branch_args names none until it does.
+      sync_branch_args
       if ! "$PYTHON" "$ARGUS/gitsync.py" "${ARGUS_CONFIG_ARGS[@]}" --root "$REPO" --mode start \
+          "${SYNC_BRANCH_ARGS[@]+"${SYNC_BRANCH_ARGS[@]}"}" \
           >"$RUN_DIR/coordination-sync.json" 2>/dev/null; then
         log "coordination checkout sync failed; refusing to launch (see $RUN_DIR/coordination-sync.json)"
         { _DRIVE_RC=1; return 0; }

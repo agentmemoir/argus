@@ -168,6 +168,11 @@ driver_self_test() {
     # path, so a case that aborts before that leaves it running. It belongs in
     # the trap for the same reason the others do.
     tmux kill-session -t "ar-driver-dead-branch-$$" 2>/dev/null || true
+    # The group cases name their sessions after the case and this process, so a
+    # case that stops before its own cleanup leaves one running.
+    tmux kill-session -t "ar-driver-group-$$" 2>/dev/null || true
+    tmux kill-session -t "ar-driver-group-partial-$$" 2>/dev/null || true
+    tmux kill-session -t "ar-driver-group-release-$$" 2>/dev/null || true
     # A failing run keeps its fixture when asked, because the reason a case
     # failed is usually in a file the fixture owned and the teardown deletes.
     if [ "${SELFTEST_KEEP_TMP:-0}" = "1" ] && [ "$rc" -ne 0 ]; then
@@ -292,6 +297,7 @@ PROBE
   LOCK="$RUN_DIR/driver.lock"; HALT="$RUN_DIR/halted"
   STALL="$RUN_DIR/stalled"; CURRENT="$RUN_DIR/current"
   PIDFILE="$RUN_DIR/pid"; CLAIM="$RUN_DIR/claim"; RELEASE="$RUN_DIR/release"
+  GROUPFILE="$RUN_DIR/group"; GROUPBRANCH="$RUN_DIR/group-branch"
   NOTIFY_BROKEN="$RUN_DIR/notify-broken"; LOG="$RUN_DIR/driver.log"
   mkdir -p "$RUN_DIR"
   echo "self-test session: $SESSION  state dir: $RUN_DIR"
@@ -307,6 +313,11 @@ PROBE
   selftest_case_recovery_sources
   selftest_case_merge_orphan
   selftest_case_stranding
+  # The group cases last: they build their own sub-fixtures, so they are the
+  # cases that would notice a suite-level setting another case left behind.
+  selftest_case_group_run
+  selftest_case_group_partial
+  selftest_case_group_release
 
 
   tmux kill-session -t "$SESSION" 2>/dev/null || true

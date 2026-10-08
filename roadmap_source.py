@@ -863,7 +863,10 @@ def _select_group(repo, number, path, group, machine_id, store, *, reserve,
             "error": str(exc),
         }
     except ReservationConflict as exc:
-        # The push race lost. Read the winner rather than force the claim.
+        # The push race lost. Read the winner rather than force the claim. The
+        # declared group travels with the refusal, because the tick that
+        # continues this group — or takes it over from a dead owner — has to
+        # know which array and which one branch it is running.
         latest, _latest_commit = store.read()
         winner = latest.get("phases", {}).get(exc.phase, exc.record) or {}
         return {
@@ -874,6 +877,7 @@ def _select_group(repo, number, path, group, machine_id, store, *, reserve,
             "status": winner.get("status"),
             "reservation_id": winner.get("reservation_id"),
             "generation": winner.get("generation"),
+            "group": list(group["group"]),
         }
     for record in records:
         token_path = reservation_file(repo, record["phase"])
@@ -945,6 +949,41 @@ def select_server_phase(repo, machine_id, *, reserve=True, store=None, roadmap=N
         # person can see what the line moved past.
         if decisions:
             result["needs_decision"] = list(decisions)
+        return result
+
+    def held_answer(error=None):
+        """The answer for a phase the board already holds.
+
+        A held phase may be one member of a declared reservation group. The tick
+        that continues that group — or takes it over from a dead owner — reaches
+        this answer rather than the group path below, because this is where a
+        phase the board already holds is answered. It needs the whole array and
+        the group's one branch, so the declaration travels with the refusal as it
+        does on the group path. A malformed declaration fails the selection closed
+        here too, for the same reason it does below.
+        """
+        result = {
+            "state": "WAIT_FOR_CLAIM",
+            "phase": key,
+            "path": reported_path(repo, path),
+            "owner": record.get("machine_id"),
+            "status": record.get("status"),
+            "reservation_id": record.get("reservation_id"),
+            "generation": record.get("generation"),
+        }
+        if error is not None:
+            result["error"] = error
+        try:
+            declared = resolve_group_or_none(repo, roadmap, number)
+        except WorkSourceError as exc:
+            return {
+                "state": "GROUP_UNAVAILABLE",
+                "phase": key,
+                "path": reported_path(repo, path),
+                "error": str(exc),
+            }
+        if declared is not None:
+            result["group"] = list(declared["group"])
         return result
 
     for number, path in candidates(repo, roadmap):
@@ -1026,25 +1065,8 @@ def select_server_phase(repo, machine_id, *, reserve=True, store=None, roadmap=N
                 })
                 continue
             if status in {"claimed", "running", "paused", "blocked"}:
-                return finish({
-                    "state": "WAIT_FOR_CLAIM",
-                    "phase": key,
-                    "path": reported_path(repo, path),
-                    "owner": record.get("machine_id"),
-                    "status": status,
-                    "reservation_id": record.get("reservation_id"),
-                    "generation": record.get("generation"),
-                })
-            return finish({
-                "state": "WAIT_FOR_CLAIM",
-                "phase": key,
-                "path": reported_path(repo, path),
-                "owner": record.get("machine_id"),
-                "status": status,
-                "reservation_id": record.get("reservation_id"),
-                "generation": record.get("generation"),
-                "error": "explicit operator takeover is required",
-            })
+                return finish(held_answer())
+            return finish(held_answer("explicit operator takeover is required"))
         if done:
             continue
         if ended:

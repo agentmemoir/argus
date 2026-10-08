@@ -1341,6 +1341,14 @@ class ReservationStore:
     def takeover(self, phase, machine_id, *, confirm=False, run_id=None,
                  base_revisions=None, expected_reservation_id=None,
                  expected_generation=None):
+        """Take one claim over under a new reservation id, for a whole group.
+
+        A reservation id covers a whole group, so the takeover moves every member
+        that shares it: one new reservation id and one new generation for all of
+        them, and the previous owner is fenced for every member at once. A member
+        that is already finished keeps its record. The named phase is the entry
+        point of the takeover and the record this returns.
+        """
         if not confirm:
             raise CoordinationError(
                 "explicit operator takeover requires confirm=true")
@@ -1368,6 +1376,15 @@ class ReservationStore:
                 f"phase {key} changed; inspect the current owner before retrying")
         expected_generation = _validate_generation(current.get("generation"))
         expected_reservation_id = current.get("reservation_id")
+        # One reservation id covers a whole group, so the group is taken over as
+        # a unit. The named phase is the entry point; every member under the same
+        # id moves with it. Rewriting the named one alone would give the group two
+        # reservation ids, and release, renewal and expiry all move a group by its
+        # shared id, so the members left behind would hold a claim nobody renews
+        # and a release nobody returns.
+        members = sorted(
+            member for member, record in current_state["phases"].items()
+            if record.get("reservation_id") == expected_reservation_id)
 
         def mutate(state):
             old = state["phases"].get(key)
@@ -1388,24 +1405,50 @@ class ReservationStore:
             if old.get("status") == "completed":
                 raise ReservationConflict(
                     number, old, "completed reservations cannot be taken over")
-            new = {
-                "status": "claimed",
-                "machine_id": machine_id,
-                "reservation_id": new_id,
-                "generation": _validate_generation(old.get("generation")) + 1,
-                "claimed_at": _now(),
-                "heartbeat_at": _now(),
-                "expires_at": None,
-                "run_id": run_id or f"phase-{key}",
-                "base_revisions": revisions,
-            }
-            state["phases"][key] = new
-            return _Mutation(True, _reservation_from_record(
-                {**new, "_phase": key}))
+            result = None
+            for member in members:
+                record = state["phases"].get(member)
+                if record is None:
+                    raise ReservationFenced(
+                        f"phase {member} changed before takeover could commit")
+                if (record.get("machine_id") != old.get("machine_id")
+                        or record.get("generation") != expected_generation):
+                    raise ReservationFenced(
+                        f"phase {member} changed before takeover could commit")
+                if member != key and record.get("status") in TERMINAL_STATUSES:
+                    # A member that is already finished keeps its record, so a
+                    # takeover never undoes published work. The phase the caller
+                    # named is the exception: naming it is the decision, and the
+                    # check above refuses a completed one before this point.
+                    continue
+                new = {
+                    "status": "claimed",
+                    "machine_id": machine_id,
+                    "reservation_id": new_id,
+                    "generation": expected_generation + 1,
+                    "claimed_at": _now(),
+                    "heartbeat_at": _now(),
+                    "expires_at": None,
+                    # The member's own run id where it has one, so a group keeps
+                    # each member's run directory rather than renaming them all to
+                    # the phase the takeover was asked about. A run id the caller
+                    # named applies to the phase it named.
+                    "run_id": (run_id if member == key and run_id
+                               else record.get("run_id") or f"phase-{member}"),
+                    "base_revisions": revisions,
+                }
+                state["phases"][member] = new
+                if member == key:
+                    result = _reservation_from_record({**new, "_phase": key})
+            if result is None:
+                raise ReservationConflict(
+                    number, old, "completed reservations cannot be taken over")
+            return _Mutation(True, result)
 
         return _transaction(
             self.private, self.remote, self.branch, mutate,
-            f"phase coordination: explicit takeover {key} by {machine_id}")
+            f"phase coordination: explicit takeover "
+            f"[{','.join(members)}] by {machine_id}")
 
     def register_running(self, phase, machine_id, *, confirm=False, run_id=None):
         """Register a pre-coordination run as an active server claim."""
@@ -1787,6 +1830,28 @@ def _group_lifecycle_checks(checks, base):
         checks, "an explicit release has no cooldown",
         [record["phase"] for record in immediate] == ["100220"],
         str(immediate))
+
+    # A takeover moves the whole group. One reservation id covers every member,
+    # so taking over a single member and leaving the others under the old id
+    # would split the group, and release, renewal and expiry all move a group by
+    # that shared id.
+    takers = ["100230", "100231"]
+    taken = store_a.reserve_group(takers, "server-08", now=at(0))
+    takeover = store_a.takeover(
+        takers[1], "server-09", confirm=True,
+        expected_reservation_id=taken[0]["reservation_id"],
+        expected_generation=taken[0]["generation"])
+    after_takeover, _commit = store_a.read()
+    _self_test_check(
+        checks, "a takeover moves the whole group under one new reservation id",
+        {after_takeover["phases"][key]["reservation_id"] for key in takers}
+        == {takeover["reservation_id"]}
+        and all(after_takeover["phases"][key]["machine_id"] == "server-09"
+                for key in takers)
+        and takeover["generation"] == taken[0]["generation"] + 1
+        and takeover["reservation_id"] != taken[0]["reservation_id"],
+        str({key: after_takeover["phases"][key]["reservation_id"]
+             for key in takers}))
 
 
 def self_test_checks():

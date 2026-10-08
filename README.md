@@ -50,6 +50,8 @@ Publication commits run state in the configured board checkout, so a publishing 
 
 The board branch is never checked out. Reading the board does not create it; an explicit migration or the first write creates it from the remote integration branch. A board is shared: every machine that reserves work on it names the same `board.file` and `board.branch`.
 
+A phase document may declare a reservation group: several phases one owner runs as one unit. The whole group is claimed in one board write under one reservation id, its members run one per tick on one branch, and one pull request covers them all, while each member keeps its own receipt under its own run directory. The tick renews the group while a member runs, `--release` gives the whole group back, and a member that is already published is never undone by a release or an expiry.
+
 The configured `glide` command runs the pipeline as `glide run --pipeline <file> --input <name>=<value>`. A missing command stops the tick before a claim. Argus names no Glide source tree, sets no `PYTHONPATH`, and keeps no fallback copy. The pipeline's stages and hooks are project content, so Argus needs no project `scripts/` folder.
 
 Argus does not search for project folders. The config file names every project path, so a missing path stops the tick with that path in the error.
@@ -58,7 +60,9 @@ Work-item files end in `.md`. The first number separated by `-` or `_` is the ph
 
 ## Program files
 
-`bin/argus` is the development command and `cli.py` is the installed one. Both call the same shell driver. `next_phase.py`, `work_source.py`, and `roadmap_source.py` select work. `config.py` reads settings, and `conventions.py` shares them across tools. `phase_reservations.py` owns the board. `gitsync.py` syncs checkouts and checks publication. `phase_notifications.py` formats notices. `remedy_escalation.py` records open findings and releases a claim.
+`bin/argus` is the development command and `cli.py` is the installed one. Both call the same shell driver. `next_phase.py`, `work_source.py`, and `roadmap_source.py` select work. `config.py` reads settings, and `conventions.py` shares them across tools. `phase_reservations.py` owns the board. `gitsync.py` syncs checkouts and checks publication. `phase_notifications.py` formats notices. `remedy_escalation.py` records open findings and releases a claim. `phase_group.py` requests a reservation group and answers with the array its owner now holds.
+
+The driver is split across `lib-driver-*.sh`, one module per concern. `lib-driver-group.sh` holds the group side of a tick: the member array a selection carries, the one branch the group publishes on, and the renewal the tick loop owes a running group.
 
 `exec_tempdir.py` is a copy of a shared test helper. It differs from that copy by the fixture-name prefix and by one behavior: this copy creates its build-tree fallback on first use, so a hardened host that mounts its temporary directories `noexec` still has somewhere to run a fixture. Re-copy it when the shared helper changes, and keep that difference.
 
@@ -72,6 +76,8 @@ make guard-faults
 ```
 
 `make self-test` builds temporary checkouts and a board. The entry point check uses a config file with paths outside the source tree. It compares selection, halt markers, and notices across both commands. `test_identifiers.py` checks that account IDs and local paths do not reach the package. The guard suite changes each guard on purpose, requires a named failure, restores the file, and checks its digest. It includes an entry point fault, and `--order reverse` or `--order shuffle` checks that the result does not depend on the order.
+
+Three group cases run a reservation group on their own throwaway checkout: one group that runs, one released with a member already finished, and one released while a member is running.
 
 The readiness report runs Argus's own self-tests and prints the loaded configuration.
 

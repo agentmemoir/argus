@@ -219,6 +219,46 @@ FAULTS = (
         "expect": "release wrote the halt marker",
     },
     {
+        "name": "group-branch-ignored",
+        "breaks": "a group's one branch is not asked for, so each member gets a "
+                  "branch of its own and the group publishes several",
+        "file": "gitsync.py",
+        "find": "        branch=group_branch(root, group, roadmap_dir) if group "
+                "else None)",
+        "replace": "        branch=None)  # FAULT: the group's one branch is "
+                   "not used",
+        "check": "driver",
+        "verdict": "driver self-test:",
+        "expect": "the group's one branch covers every member",
+    },
+    {
+        "name": "group-array-ignored",
+        "breaks": "the group the board reports is not taken from the selection, so "
+                  "a member of a held group is run as a single phase on a branch "
+                  "of its own",
+        "file": "lib-driver-select-flow.sh",
+        "find": "        group_take_selection \"$selection\"\n"
+                "        if [ \"$RECOVER_OWN_CLAIM\" = 1 ] \\\n",
+        "replace": "        true  # FAULT: the group the board reports is not "
+                   "taken\n"
+                   "        if [ \"$RECOVER_OWN_CLAIM\" = 1 ] \\\n",
+        "check": "driver",
+        "verdict": "driver self-test:",
+        "expect": "the tick recorded the group's whole array",
+    },
+    {
+        "name": "group-renewal-removed",
+        "breaks": "the tick loop never renews a running group, so the board "
+                  "expires a live run's claim and another machine may take the "
+                  "group",
+        "file": "lib-driver-drive.sh",
+        "find": "    group_renew\n",
+        "replace": "    true  # FAULT: the group's claim is never renewed\n",
+        "check": "driver",
+        "verdict": "driver self-test:",
+        "expect": "the tick renewed the group's claim while its run was alive",
+    },
+    {
         "name": "selector-refusal-swallowed",
         "breaks": "a refusal with no JSON result reports a Python traceback instead of nothing",
         "file": "lib-driver-select.sh",
