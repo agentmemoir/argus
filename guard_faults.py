@@ -43,6 +43,10 @@ which is precisely what this does not do.
     python3 scripts/guard_faults.py --only NAME
     python3 scripts/guard_faults.py --order reverse
 
+A driver fault names the self-test cases that catch it, in its ``cases`` key,
+so it runs those cases and not the whole twelve-case suite. The Python checks
+are already scoped by their check name.
+
 ``--order`` runs the same faults in reverse or shuffled order. A guard suite
 that only passes in one order is order-dependent, and the fault that failed in
 declared order and passed alone is what that costs: the run has to be probeable
@@ -73,6 +77,11 @@ from argus.config import SHELL_VARS
 
 DRIVER = Path("phase-driver.sh")
 
+#: One hard stop for a single fault's check. The checks carry their own smaller
+#: timeouts; this catches a hang. It is a cap, not a budget: the slowest
+#: measured fault runs far below it.
+SELFTEST_TIMEOUT = 600
+
 #: Every fault: what it breaks, the exact text the patch must find, the
 #: replacement, and the self-test line that proves it was caught.
 #:
@@ -96,6 +105,7 @@ FAULTS = (
         "find": 'roadmap_preflight() {\n  PREFLIGHT_REASON=""',
         "replace": 'roadmap_preflight() {\n  PREFLIGHT_REASON=""\n'
                    '  return 0  # FAULT: guard disabled',
+        "cases": "recovery_sources",
         "expect": "FAIL: a folder outside the checkout was allowed to launch",
     },
     {
@@ -116,6 +126,7 @@ FAULTS = (
             '    log "$PREFLIGHT_REASON; refusing to launch"\n'
             "    return 1\n  fi\n"
             "  # The public checkout is put on the phase's own branch before the launch, from"),
+        "cases": "stranding",
         # The distinguishing line. With the guard late, the tick claims first and
         # refuses second, so the board check is what fires — and that check
         # exists for exactly this ordering, which is why it is the one named here
@@ -138,6 +149,7 @@ FAULTS = (
         "file": "lib-driver-notify.sh",
         "find": '  local args=("${ARGUS_CONFIG_ARGS[@]}" --phase-file "$phase_file" --event "$event" --quiet-minutes "$quiet_minutes")',
         "replace": '  local args=(--phase-file "$phase_file" --event "$event" --quiet-minutes "$quiet_minutes")  # FAULT: config not passed',
+        "cases": "launch",
         # The self-test checks the notifier's real start and completion messages.
         "expect": "expected one start notification",
     },
@@ -147,6 +159,7 @@ FAULTS = (
         "file": "roadmap_source.py",
         "find": "        from argus.gitsync import awaiting_review",
         "replace": "        return None  # FAULT: publisher unavailable but lookup succeeds\n        from argus.gitsync import awaiting_review",
+        "cases": "recovery_sources",
         "expect": "--check failed on an unconfigured machine",
     },
     {
@@ -215,6 +228,7 @@ FAULTS = (
         "replace": "  if false; then\n    rm -f \"$RELEASE\"\n"
                    "  elif [ -n \"$CUR_PHASE\" ]; then",
         "check": "driver",
+        "cases": "release",
         "verdict": "driver self-test:",
         "expect": "release wrote the halt marker",
     },
@@ -228,6 +242,7 @@ FAULTS = (
         "replace": "        branch=None)  # FAULT: the group's one branch is "
                    "not used",
         "check": "driver",
+        "cases": "group_run",
         "verdict": "driver self-test:",
         "expect": "the group's one branch covers every member",
     },
@@ -243,6 +258,7 @@ FAULTS = (
                    "taken\n"
                    "        if [ \"$RECOVER_OWN_CLAIM\" = 1 ] \\\n",
         "check": "driver",
+        "cases": "group_run",
         "verdict": "driver self-test:",
         "expect": "the tick recorded the group's whole array",
     },
@@ -255,6 +271,7 @@ FAULTS = (
         "find": "  claim_renew\n",
         "replace": "  true  # FAULT: the claim is never renewed\n",
         "check": "driver",
+        "cases": "group_run",
         "verdict": "driver self-test:",
         "expect": "the tick renewed the group's claim while its run was alive",
     },
@@ -265,6 +282,7 @@ FAULTS = (
         "find": 'try:\n    print(json.load(sys.stdin).get(sys.argv[1], ""))\n'
                 "except ValueError:\n    pass",
         "replace": 'print(json.load(sys.stdin).get(sys.argv[1], ""))',
+        "cases": "launch",
         # No FAIL line is expected, and that is the honest position: nothing
         # asserts that the driver's stderr stays free of tracebacks, because the
         # traceback is cosmetic and the log line that matters is unaffected. This
@@ -374,12 +392,13 @@ def _kill_isolated_tmux(env):
                    capture_output=True, text=True, timeout=30)
 
 
-def run_selftest(driver, check="driver"):
+def run_selftest(driver, check="driver", cases=None):
     """Run the self-test in a one-fault scratch space and return its output.
 
     Returns ``(lines, exit status)``. The self-test never sees this machine's
     Argus settings, and its fixtures and tmux sessions are its own, so the same
-    fault produces the same result whatever ran before it.
+    fault produces the same result whatever ran before it. ``cases`` names the
+    driver self-test cases to run; the driver check reads it, the others do not.
     """
     command = ([sys.executable, str(driver.parent / "test_entrypoint.py")]
                if check == "entrypoint"
@@ -395,10 +414,12 @@ def run_selftest(driver, check="driver"):
                else ["bash", str(driver), "--self-test"])
     with tempfile.TemporaryDirectory(prefix="ag-", dir=_scratch_parent()) as scratch:
         env = _isolated_env(scratch)
+        if cases:
+            env["SELFTEST_CASES"] = cases
         try:
             proc = subprocess.run(
                 command, cwd=driver.parent.parent, env=env,
-                capture_output=True, text=True, timeout=3600)
+                capture_output=True, text=True, timeout=SELFTEST_TIMEOUT)
         finally:
             _kill_isolated_tmux(env)
     return proc.stdout.splitlines() + proc.stderr.splitlines(), proc.returncode
@@ -469,7 +490,8 @@ def check_fault(repo, driver, fault):
     except FaultError as exc:
         return False, f"fault not applied: {exc}"
     try:
-        lines, rc = run_selftest(driver, fault.get("check", "driver"))
+        lines, rc = run_selftest(driver, fault.get("check", "driver"),
+                                 fault.get("cases"))
         return judge(lines, rc, fault)
     finally:
         target.write_bytes(original)

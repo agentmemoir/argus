@@ -70,8 +70,37 @@ print(directory)
 PY
 }
 
+# Run one named case unless SELFTEST_CASES names a subset. Unset or empty runs
+# every case, so the default suite is unchanged. The fault harness sets it so a
+# fault runs only the case that catches it instead of all twelve. A name typo
+# skips a case, which shows up as the missing FAIL line, not as a pass.
+selftest_run_case() {
+  local name="$1"
+  if [ -n "${SELFTEST_CASES:-}" ]; then
+    case " $SELFTEST_CASES " in
+      *" $name "*) ;;
+      *)
+        echo "case skipped: $name (SELFTEST_CASES)"
+        return 0
+        ;;
+    esac
+  fi
+  "selftest_case_$name"
+}
+
 driver_self_test() {
   local fail=0 tmp selftest_wf
+  # Refuse a name that matches no case: a case skipped by a typo would
+  # otherwise read as a pass.
+  if [ -n "${SELFTEST_CASES:-}" ]; then
+    local wanted
+    for wanted in $SELFTEST_CASES; do
+      if ! declare -F "selftest_case_$wanted" >/dev/null; then
+        echo "FAIL: SELFTEST_CASES names an unknown case: $wanted" >&2
+        return 1
+      fi
+    done
+  fi
   if ! tmp="$(selftest_tmpdir)"; then
     echo "skip: no fixture directory could be built, so no check ran"
     echo "      (a directory has to permit running a shell script; a home directory is not"
@@ -304,20 +333,20 @@ PROBE
 
   title_of() { tmux show-option -t "$SESSION" -v set-titles-string 2>/dev/null || true; }
 
-  selftest_case_launch
-  selftest_case_locks_stall
-  selftest_case_flow
-  selftest_case_release
-  selftest_case_unavailable
-  selftest_case_reasons
-  selftest_case_recovery_sources
-  selftest_case_merge_orphan
-  selftest_case_stranding
+  selftest_run_case launch
+  selftest_run_case locks_stall
+  selftest_run_case flow
+  selftest_run_case release
+  selftest_run_case unavailable
+  selftest_run_case reasons
+  selftest_run_case recovery_sources
+  selftest_run_case merge_orphan
+  selftest_run_case stranding
   # The group cases last: they build their own sub-fixtures, so they are the
   # cases that would notice a suite-level setting another case left behind.
-  selftest_case_group_run
-  selftest_case_group_partial
-  selftest_case_group_release
+  selftest_run_case group_run
+  selftest_run_case group_partial
+  selftest_run_case group_release
 
 
   tmux kill-session -t "$SESSION" 2>/dev/null || true
