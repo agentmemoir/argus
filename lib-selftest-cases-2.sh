@@ -1,0 +1,206 @@
+#!/usr/bin/env bash
+# Copyright 2026 Agent Memoir Developers (https://agentmemoir.com/)
+# SPDX-License-Identifier: Apache-2.0
+#
+# Self-test cases: halt, escalation, terminal state, signal stop, and coordination failure.
+#
+selftest_case_flow() {
+  # Exhausting the remedy rounds is not a verdict: a run that ends
+  # remedy_escalated records its open findings, releases the claim, and writes
+  # no halt marker, so the next tick runs the next phase. This exercises the
+  # real handler, not a stubbed exit code.
+  rm -f "$HALT"
+  escalate_phase=100010
+  escalate_dir="$WF/phase-$(printf '%06d' "$escalate_phase")"
+  mkdir -p "$escalate_dir"
+  printf '{"state":"remedy_escalated","events":[{"step":"approver","signal":"REMEDY_REJECTED: F-01 abc12345"}]}\n' \
+    >"$escalate_dir/run.json"
+  handle_escalation "$escalate_phase" "phase-$escalate_phase-escalation.md"
+  [ -f "$escalate_dir/remedy-escalated.json" ] && [ ! -f "$HALT" ] \
+    && echo "ok: escalation recorded without a halt marker" \
+    || { echo "FAIL: escalation record or halt state wrong"; fail=1; }
+  grep -q "exhausted its remedy rounds" "$LOG" \
+    && echo "ok: escalation notification logged" \
+    || { echo "FAIL: escalation notification missing"; fail=1; }
+  rm -f "$HALT"
+
+  # A terminal run the selector hands back must be restarted, not wedged: glide
+  # refuses to rerun a finished run without --fresh, so the driver reads the
+  # prior state and asks for a fresh start. A blocked run is resumable, and only
+  # an absent marker has nothing to archive.
+  terminal_probe="$RUN_DIR/terminal-state-probe.json"
+  printf '{"state":"rejected"}\n' >"$terminal_probe"
+  [ "$(terminal_state_of_file "$terminal_probe")" = "rejected" ] \
+    && echo "ok: a rejected run is read as terminal and asks for --fresh" \
+    || { echo "FAIL: a rejected run did not ask for --fresh"; fail=1; }
+  printf '{"state":"blocked"}\n' >"$terminal_probe"
+  [ -z "$(terminal_state_of_file "$terminal_probe")" ] \
+    && echo "ok: a blocked run is left to resume, not restarted" \
+    || { echo "FAIL: a blocked run was restarted"; fail=1; }
+  printf 'not json\n' >"$terminal_probe"
+  [ "$(terminal_state_of_file "$terminal_probe")" = "unreadable" ] \
+    && echo "ok: an unreadable run marker still asks for --fresh" \
+    || { echo "FAIL: an unreadable run marker did not ask for --fresh"; fail=1; }
+  printf '{"other": 1}\n' >"$terminal_probe"
+  [ "$(terminal_state_of_file "$terminal_probe")" = "unreadable" ] \
+    && echo "ok: a marker with no state still asks for --fresh" \
+    || { echo "FAIL: a marker with no state did not ask for --fresh"; fail=1; }
+  rm -f "$terminal_probe"
+  [ -z "$(terminal_state_of_file "$terminal_probe")" ] \
+    && echo "ok: a phase with no run marker asks for no --fresh" \
+    || { echo "FAIL: a missing marker asked for --fresh"; fail=1; }
+
+  # Signal stop: Ctrl-C reaches the trap, which halts and notifies. This is the
+  # case that proves Ctrl-C is aimed at the phase window: the idle window is
+  # still there, and a session-scoped send-keys would have hit it instead.
+  rm -f "$HALT"
+  DRIVER_STUB_RC=0; DRIVER_STUB_SLEEP=20; export DRIVER_STUB_RC DRIVER_STUB_SLEEP
+  drive --self-test || true
+  sleep 0.5
+  stop || true
+  wait_phase_window_gone
+  [ -f "$HALT" ] \
+    && echo "ok: stop wrote halt marker" || { echo "FAIL: stop marker missing"; fail=1; }
+  grep -q "Phase .* stopped by signal\." "$LOG" \
+    && echo "ok: stop notification logged" || { echo "FAIL: stop notification missing"; fail=1; }
+  tmux_session_exists \
+    && echo "ok: session survives an operator stop" \
+    || { echo "FAIL: session died on operator stop"; fail=1; }
+
+  # The next case is about the real path refusing, so the stub comes off first: it
+  # runs a tick with no stub precisely so the coordination sync is attempted, and a
+  # stub would make the case pass without reaching the refusal it is written for.
+  # The recovery flag goes back with it, so the cases after this one start from the
+  # state they would have started from before the stub was introduced.
+  unset DRIVER_STUB_COORDINATION
+  RECOVER_OWN_CLAIM=0; export RECOVER_OWN_CLAIM
+
+  # Coordination failure: the normal driver path must refuse before tmux launch.
+  old_repo="$REPO"; old_board_dir="$BOARD_DIR"; old_wf="$WF"
+  old_argus="$ARGUS"; old_notifier="$NOTIFIER"
+  old_run_dir="$RUN_DIR"; old_lock="$LOCK"; old_halt="$HALT"; old_stall="$STALL"
+  old_current="$CURRENT"; old_pid="$PIDFILE"; old_notify_broken="$NOTIFY_BROKEN"
+  old_log="$LOG"; old_session="$SESSION"
+  coord_root="$tmp/coordination-failure-root"
+  coord_config="$tmp/coordination-failure-config.json"
+  mkdir -p "$coord_root/$BOARD_DIR/plans" "$coord_root/$BOARD_DIR/history"
+  cp "$PIPELINE" "$coord_root/$BOARD_DIR/flow.yaml"
+  REPO="$coord_root"
+  selftest_write_config "$coord_root" "$coord_config" "$BOARD_DIR" \
+    "$tmp/absent-board-checkout"
+  load_fixture_config "$coord_config"
+  WORK_SOURCE_FLAGS=(--source roadmap)
+  # Use the bundled publisher so this case reaches the coordination sync.
+  ARGUS="$old_argus"; NOTIFIER="$old_notifier"
+  set_config_args
+  RUN_DIR="$WF/$DRIVER_STATE"
+  mkdir -p "$RUN_DIR"
+  LOCK="$RUN_DIR/driver.lock"; HALT="$RUN_DIR/halted"; STALL="$RUN_DIR/stalled"
+  CURRENT="$RUN_DIR/current"; PIDFILE="$RUN_DIR/pid"
+  NOTIFY_BROKEN="$RUN_DIR/notify-broken"; LOG="$RUN_DIR/driver.log"
+  SESSION="ar-driver-coord-failure-$$"
+  drive || true
+  if grep -q "coordination checkout sync failed" "$LOG" \
+      && ! tmux_window_exists 2>/dev/null; then
+    echo "ok: coordination failure refuses launch"; coord_fail_ok=1
+  else
+    echo "FAIL: coordination failure did not refuse launch"; coord_fail_ok=0; fail=1
+  fi
+  tmux kill-session -t "$SESSION" 2>/dev/null || true
+  REPO="$old_repo"; BOARD_DIR="$old_board_dir"; WF="$old_wf"
+  ARGUS="$old_argus"; NOTIFIER="$old_notifier"
+  load_fixture_config "$selftest_config"
+  RUN_DIR="$old_run_dir"; LOCK="$old_lock"; HALT="$old_halt"; STALL="$old_stall"
+  CURRENT="$old_current"; PIDFILE="$old_pid"; NOTIFY_BROKEN="$old_notify_broken"
+  LOG="$old_log"; SESSION="$old_session"
+
+  # A merged phase whose branch was deleted on the remote, with the checkout
+  # still sitting on it. This is the stall: the sync gate refused because the
+  # branch had no upstream left, and both steps that would have moved the
+  # checkout back ran after that refusal. The fixture is asserted to have the
+  # shape before the tick runs, because a fixture that failed to build the dead
+  # branch would make every assertion below pass for the wrong reason — and the
+  # case before this one proved that a green check can come from a fixture that
+  # is not the state it claims to be.
+  dead_root="$tmp/dead-branch-root"
+  dead_run="$tmp/dead-branch-run"
+  if selftest_fixture_root "$dead_root" "$tmp/dead-branch-base" \
+      && selftest_fixture_strand_on_published_branch "$dead_root" \
+          "$tmp/dead-branch-base" "feature/dead-branch-fixture"; then
+    REPO="$dead_root"; BOARD_DIR=board-data
+    ARGUS_CONFIG_FILE="$tmp/dead-branch-config.jsonc"
+    selftest_write_config "$dead_root" "$ARGUS_CONFIG_FILE" "$BOARD_DIR"
+    load_fixture_config "$ARGUS_CONFIG_FILE"
+    WORK_SOURCE_FLAGS=(--source roadmap)
+    ARGUS="$dead_root/$BOARD_DIR/argus"
+    NOTIFIER="$ARGUS/phase_notifications.py"
+    RUN_DIR="$WF/$DRIVER_STATE"; mkdir -p "$RUN_DIR"
+    LOCK="$RUN_DIR/driver.lock"; HALT="$RUN_DIR/halted"; STALL="$RUN_DIR/stalled"
+    CURRENT="$RUN_DIR/current"; PIDFILE="$RUN_DIR/pid"
+    NOTIFY_BROKEN="$RUN_DIR/notify-broken"; LOG="$RUN_DIR/driver.log"
+    SESSION="ar-driver-dead-branch-$$"
+    # A configuration file for this sub-fixture, so the child tick it launches
+    # reads the dead-branch checkout rather than the suite's.
+
+    # What the tick is about to find, read from the fixture rather than assumed.
+    # All three halves matter, because the reported stall was the shape where all
+    # three held: the checkout on the phase branch, the remote copy deleted, and
+    # the local tracking ref still present so the sync reached its own fetch
+    # rather than stopping at "no upstream".
+    dead_branch="$(git -C "$REPO" rev-parse --abbrev-ref HEAD)"
+    dead_remote="$(git -C "$REPO" ls-remote --heads origin \
+      'refs/heads/feature/dead-branch-fixture' | wc -l | tr -d ' ')"
+    dead_tracking=gone
+    git -C "$REPO" rev-parse --verify --quiet \
+      origin/feature/dead-branch-fixture >/dev/null 2>&1 || dead_tracking=absent
+    if [ "$dead_branch" = "feature/dead-branch-fixture" ] \
+        && [ "$dead_remote" = 0 ] && [ "$dead_tracking" = gone ]; then
+      echo "ok: the fixture has a phase branch whose remote copy is deleted"
+    else
+      echo "FAIL: the dead-branch fixture is not stranded (branch '$dead_branch', remote copy count $dead_remote, tracking ref $dead_tracking)"
+      fail=1
+    fi
+
+    rm -f "$HALT" "$RUN_DIR/coordination-outage"
+    rm -f "$RUN_DIR/coordination-outage-first-seen"
+    # A plain tick, not `--self-test`. That flag routes the tick down the stubbed
+    # selection, which is the path where the sync gate is skipped altogether — so
+    # a case written against it would pass with the gate in either order, and
+    # would have passed before the fix too. This is the whole case: the gate is
+    # the code under test, so the case has to reach it.
+    dead_rc=0
+    drive >/dev/null 2>&1 || dead_rc=$?
+    dead_now="$(git -C "$REPO" rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)"
+    # The line carried on, rather than merely moving the branch. Asserting the
+    # branch alone would pass on a tick that tidied and then refused for another
+    # reason, which is the shape of a partial fix; and asserting a launch alone
+    # would pass on a tick that launched without recovering, which would leave
+    # the next phase built on a dead branch. Both are checked.
+    dead_refusals="$(grep -c 'coordination checkout sync failed\|could not return a published phase' "$LOG" || true)"
+    dead_launched="$(grep -c 'launched phase' "$LOG" || true)"
+    # `|| true` on the pipeline, and not only on each stage: a `grep` that matches
+    # nothing exits non-zero, `pipefail` carries that out of the pipeline, and the
+    # case aborts on the very tick the fix is supposed to have changed. The run
+    # would then report the fixture as untested rather than as unrecovered.
+    dead_next_phase="$( { grep -m1 -o 'launched phase [0-9]*' "$LOG" || true; } | head -1 | tr -d ' ')"
+    if [ "$dead_refusals" = 0 ] && [ "$dead_launched" -gt 0 ] \
+        && [ -n "$dead_next_phase" ] \
+        && [ "$dead_now" != "feature/dead-branch-fixture" ]; then
+      echo "ok: a merged phase whose branch was deleted no longer stops the line (exit $dead_rc, on '$dead_now', '$dead_next_phase' launched)"
+    else
+      echo "FAIL: the dead branch was not recovered (exit $dead_rc, now on '$dead_now', refusals $dead_refusals, launches $dead_launched, next phase '$dead_next_phase')"
+      fail=1
+    fi
+    tmux kill-session -t "$SESSION" 2>/dev/null || true
+  else
+    echo "FAIL: the dead-branch fixture could not be built, so the stall was not tested"
+    fail=1
+  fi
+  REPO="$old_repo"; BOARD_DIR="$old_board_dir"; WF="$old_wf"
+  ARGUS="$old_argus"; NOTIFIER="$old_notifier"
+  load_fixture_config "$selftest_config"
+  RUN_DIR="$old_run_dir"; LOCK="$old_lock"; HALT="$old_halt"; STALL="$old_stall"
+  CURRENT="$old_current"; PIDFILE="$old_pid"; NOTIFY_BROKEN="$old_notify_broken"
+  LOG="$old_log"; SESSION="$old_session"
+
+}

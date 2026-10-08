@@ -92,6 +92,7 @@ FAULTS = (
     {
         "name": "launchability-guard-removed",
         "breaks": "the folder cannot be read and cannot be launched from",
+        "file": "lib-driver-config.sh",
         "find": 'roadmap_preflight() {\n  PREFLIGHT_REASON=""',
         "replace": 'roadmap_preflight() {\n  PREFLIGHT_REASON=""\n'
                    '  return 0  # FAULT: guard disabled',
@@ -100,6 +101,7 @@ FAULTS = (
     {
         "name": "launchability-guard-below-reservation",
         "breaks": "the guard runs, but only after the phase is already claimed",
+        "file": "lib-driver-drive.sh",
         "find": "  if ! roadmap_preflight; then\n"
                 '    log "$PREFLIGHT_REASON; refusing to launch"\n'
                 "    return 1\n  fi\n",
@@ -133,6 +135,7 @@ FAULTS = (
     {
         "name": "fixture-config-not-passed-to-tools",
         "breaks": "the phase notifier does not receive the fixture config",
+        "file": "lib-driver-notify.sh",
         "find": '  local args=("${ARGUS_CONFIG_ARGS[@]}" --phase-file "$phase_file" --event "$event" --quiet-minutes "$quiet_minutes")',
         "replace": '  local args=(--phase-file "$phase_file" --event "$event" --quiet-minutes "$quiet_minutes")  # FAULT: config not passed',
         # The self-test checks the notifier's real start and completion messages.
@@ -149,6 +152,7 @@ FAULTS = (
     {
         "name": "selector-refusal-swallowed",
         "breaks": "a refusal with no JSON result reports a Python traceback instead of nothing",
+        "file": "lib-driver-select.sh",
         "find": 'try:\n    print(json.load(sys.stdin).get(sys.argv[1], ""))\n'
                 "except ValueError:\n    pass",
         "replace": 'print(json.load(sys.stdin).get(sys.argv[1], ""))',
