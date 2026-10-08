@@ -150,6 +150,19 @@ FAULTS = (
         "expect": "--check failed on an unconfigured machine",
     },
     {
+        "name": "group-declaration-missing-swallowed",
+        "breaks": "a phase with no together declaration is handed a group of "
+                  "itself instead of being refused",
+        "file": "roadmap_source.py",
+        "find": "        raise ReservationGroupError(f\"{path} has no "
+                "'### Reservation Group' section\", document=path)",
+        "replace": "        return [f\"{number:06d}\"]  # FAULT: a missing "
+                   "declaration is invented",
+        "check": "next_phase",
+        "verdict": "next_phase self-test:",
+        "expect": "a phase with no together declaration is refused by name",
+    },
+    {
         "name": "selector-refusal-swallowed",
         "breaks": "a refusal with no JSON result reports a Python traceback instead of nothing",
         "file": "lib-driver-select.sh",
@@ -256,7 +269,11 @@ def run_selftest(driver, check="driver"):
     fault produces the same result whatever ran before it.
     """
     command = ([sys.executable, str(driver.parent / "test_entrypoint.py")]
-               if check == "entrypoint" else ["bash", str(driver), "--self-test"])
+               if check == "entrypoint"
+               else [sys.executable, str(driver.parent / "next_phase.py"),
+                     "--self-test"]
+               if check == "next_phase"
+               else ["bash", str(driver), "--self-test"])
     with tempfile.TemporaryDirectory(prefix="argus-guard-") as scratch:
         env = _isolated_env(scratch)
         try:
