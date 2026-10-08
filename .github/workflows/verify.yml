@@ -2,8 +2,12 @@ name: verify
 
 # The full checks run here, off every developer machine. Local runs stay
 # scoped: `make guard-faults --only NAME` or one self-test case.
+#
+# Branch pushes run through pull_request; a branch with no pull request runs
+# nothing until one opens. Listing both events would run every commit twice.
 on:
   push:
+    branches: [main]
   pull_request:
   workflow_dispatch:
 
