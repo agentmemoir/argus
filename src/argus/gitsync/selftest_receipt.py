@@ -14,7 +14,13 @@ from argus.gitsync.paths import group_branch, phase_branch
 from argus.gitsync.publish_phase import publish_phase
 from argus.gitsync.receipts import phase_receipt, receipt_for_branch
 from argus.gitsync.review import open_predecessor
-from argus.gitsync.selftest_fixture import BOARD_REL, _configure_self_test, _init_remote
+from argus.gitsync.selftest_fixture import (
+    BOARD_REL,
+    _configure_self_test,
+    _gh_says,
+    _init_remote,
+    _StubGH,
+)
 from argus.gitsync.selftest_publish import _publish_fixture
 
 
@@ -134,11 +140,35 @@ def _group_publication_check(base: Path) -> tuple[bool, str]:
         first = publish_phase(pub, 100020, pull_request=url)
         if not first.get("ok"):
             return False, f"the group's first member did not publish: {first}"
+        # The first member is not the group's last: the second has not published,
+        # so nothing is marked ready yet.
+        if first.get("group_last_unfinished") is not False:
+            return False, f"the first member claimed to be the group's last: {first}"
+        if first.get("group_pending") != ["100030"]:
+            return False, f"the first member did not name the member to come: {first}"
+        if "pull_request_ready" in first:
+            return False, f"the first member marked the pull request ready: {first}"
         # No pull request is passed for the second member. One branch can carry
-        # one pull request, so the group's own record is the only answer.
-        second = publish_phase(pub, 100030)
+        # one pull request, so the group's own record is the only answer, and the
+        # member that finishes the group marks it ready. gh is stubbed, so the
+        # answers are fixed and no network is touched.
+        with _StubGH(_gh_says("OPEN")):
+            second = publish_phase(pub, 100030)
         if not second.get("ok"):
             return False, f"the group's second member did not publish: {second}"
+        if second.get("group_last_unfinished") is not True:
+            return False, f"the group's last member was not reported as last: {second}"
+        if second.get("group_pending") != []:
+            return False, f"the last member reported members left to run: {second}"
+        ready_value = second.get("pull_request_ready")
+        ready = (
+            cast("dict[str, Any]", ready_value) if isinstance(ready_value, dict) else {}
+        )
+        if ready.get("ok") is not True:
+            return (
+                False,
+                f"the last member did not mark the pull request ready: {ready_value}",
+            )
         receipts = {
             number: cast("dict[str, Any]", phase_receipt(pub, number))
             for number in (100020, 100030)

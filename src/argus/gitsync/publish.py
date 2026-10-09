@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, cast
 
 from argus.conventions import board_repo, phase_run_dir
+from argus.gitsync.gh import gh_pull_request_state
 from argus.gitsync.git import (
     FETCH_TIMEOUT_S,
     blocked,
@@ -17,7 +18,6 @@ from argus.gitsync.git import (
 )
 from argus.gitsync.receipts import (
     _head_carried_locally,
-    gh_pull_request_state,
     phase_receipt,
     pull_request_ref,
 )

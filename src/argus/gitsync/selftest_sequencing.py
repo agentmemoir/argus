@@ -9,11 +9,11 @@ from typing import Any, cast
 
 from argus import conventions
 from argus.gitsync.branch import ensure_phase_branch
+from argus.gitsync.gh import gh_pull_request_state
 from argus.gitsync.git import GH_TIMEOUT_S, git, integration_branch
 from argus.gitsync.publish import mark_phase_published
 from argus.gitsync.publish_phase import publish_phase
 from argus.gitsync.receipts import (
-    gh_pull_request_state,
     phase_receipt,
     pull_request_ref,
 )

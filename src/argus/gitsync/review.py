@@ -5,11 +5,11 @@
 from pathlib import Path
 from typing import Any, cast
 
+from argus.gitsync.gh import gh_pull_request_state
 from argus.gitsync.git import integration_branch, is_git_repo
 from argus.gitsync.receipts import (
     _head_carried_locally,
     _phase_run_entries,
-    gh_pull_request_state,
     head_tree_on_integration,
     phase_receipt,
     pull_request_ref,

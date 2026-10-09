@@ -16,9 +16,9 @@ from argus.gitsync.git import (
     integration_branch,
     resolve_upstream,
 )
+from argus.gitsync.group_review import _group_pull_request
 from argus.gitsync.paths import roadmap_folder
 from argus.gitsync.receipts import (
-    _phase_run_entries,
     _published_head,
     phase_receipt,
     pull_request_ref,
@@ -71,34 +71,6 @@ def _group_all_published(root: str | Path, members: Iterable[Any] | None) -> boo
     """
     members = list(members or ())
     return bool(members) and all(_member_published(root, member) for member in members)
-
-
-def _group_pull_request(
-    root: str | Path, group: Iterable[Any], branch: str | None, phase: int
-) -> Any:
-    """The pull request another member of this group already recorded.
-
-    One branch and one pull request cover a group, so every member's receipt
-    names the pull request the group already has. The join key is the group
-    branch, and the member list is checked with it: once one branch carries
-    several receipts, the branch name alone no longer names one phase. The
-    member being published is skipped, so republishing it cannot answer with its
-    own earlier record.
-    """
-    if not branch:
-        return None
-    wanted = {f"{int(member):06d}" for member in group}
-    mine = f"{int(phase):06d}"
-    for number, _entry in _phase_run_entries(root):
-        if f"{int(number):06d}" == mine:
-            continue
-        receipt = phase_receipt(root, number)
-        if not isinstance(receipt, dict) or receipt.get("branch") != branch:
-            continue
-        recorded: list[Any] = receipt.get("group") or []
-        if {f"{int(member):06d}" for member in recorded} == wanted:
-            return receipt.get("pull_request")
-    return None
 
 
 def _write_publication_receipt(

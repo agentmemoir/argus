@@ -4,7 +4,6 @@
 
 import json
 import re
-import subprocess
 from collections.abc import Iterable, Iterator
 from pathlib import Path
 from typing import Any, cast
@@ -16,7 +15,7 @@ from argus.conventions import (
     runs_dir,
     setting,
 )
-from argus.gitsync.git import GH_TIMEOUT_S, gh_binary, git
+from argus.gitsync.git import git
 from argus.gitsync.paths import roadmap_folder
 
 
@@ -151,89 +150,6 @@ def pull_request_ref(url: object) -> dict[str, Any] | None:
         "repo": match.group("repo"),
         "number": int(match.group("number")),
     }
-
-
-def gh_pull_request_state(
-    number: int | str,
-    owner: str | None,
-    repo: str | None,
-    host: str | None = None,
-) -> tuple[str, str]:
-    """Ask GitHub whether a pull request is merged.
-
-    Returns ``(state, detail)`` where state is ``merged``, ``not-merged``, or
-    ``unknown``. Three states, not two: a pipeline whose answer is binary
-    cannot tell "GitHub says not merged" from "GitHub could not be reached",
-    and only one of those is an answer. ``unknown`` must never be read as
-    merged, so every caller falls back to the commit-id test, which fails
-    closed.
-
-    ``gh`` is invoked rather than a hand-rolled HTTP call because ``gh`` already
-    holds the credential in the host keychain and keeps it out of every log,
-    file, and command line, which is the whole reason ``github_issues.py``
-    exists. A second token path is a second thing to audit.
-
-    Its stderr is captured and discarded rather than reported. An
-    unauthenticated call prints the host account name into the message, and run
-    logs are copied into issues; the exit status is what this needs and the
-    status alone is enough to separate "not merged" from "could not ask".
-    """
-    target = f"{owner}/{repo}"
-    if host and host not in ("github.com",):
-        target = f"{host}/{target}"
-    argv = [
-        gh_binary(),
-        "pr",
-        "view",
-        str(int(number)),
-        "--repo",
-        target,
-        "--json",
-        "state,mergedAt,mergeCommit",
-    ]
-    try:
-        done = subprocess.run(
-            argv, capture_output=True, text=True, timeout=GH_TIMEOUT_S
-        )
-    except FileNotFoundError:
-        return "unknown", "gh is not installed"
-    except subprocess.TimeoutExpired:
-        return "unknown", f"gh did not answer within {GH_TIMEOUT_S}s"
-    if done.returncode != 0:
-        # Exit status only, never the message. 1 is a general failure and 4 is
-        # "authentication required"; both mean the same thing here, and neither
-        # may be reported as a merge.
-        return "unknown", f"gh exited {done.returncode}"
-    try:
-        raw = json.loads(done.stdout)
-    except ValueError:
-        return "unknown", "gh did not return JSON"
-    if not isinstance(raw, dict):
-        return "unknown", "gh returned JSON that is not an object"
-    data = cast("dict[str, Any]", raw)
-    state = str(data.get("state") or "")
-    if state == "MERGED":
-        # mergeCommit, not mergedAt, is the durable record: it names the commit
-        # GitHub created, and it is populated for a rebase merge where mergedAt
-        # is not. Both are read defensively because a field's shape in gh's JSON
-        # is gh's, not GitHub's, and this pipeline cannot exercise it against a
-        # live pull request without a token it must not reach for.
-        commit = data.get("mergeCommit")
-        oid = (
-            commit
-            if isinstance(commit, str)
-            else (
-                cast("dict[str, Any]", commit).get("oid")
-                if isinstance(commit, dict)
-                else None
-            )
-        )
-        return "merged", oid or str(data.get("mergedAt") or "")
-    if state in {"OPEN", "CLOSED"}:
-        # CLOSED is a closed-without-merging pull request, which is a real
-        # answer and not a pending one. Either way it is not merged.
-        return "not-merged", state
-    return "unknown", f"unrecognised state {state!r}"
 
 
 def _head_carried_locally(

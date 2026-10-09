@@ -19,6 +19,7 @@ from argus.gitsync.group_publication import (
     _push_one,
     _write_publication_receipt,
 )
+from argus.gitsync.group_review import _group_pending, mark_group_pull_request_ready
 from argus.gitsync.review import open_predecessor
 from argus.gitsync.runstate import commit_leftover_run_state, publish_dirt
 from argus.gitsync.sync import mode_resync, sync_all
@@ -231,6 +232,24 @@ def publish_phase(
             )
             results.append(receipt_result)
             outcome["receipt"] = receipt
+            # The group's own answer, for the caller: the shared pull request
+            # that covers these members, which members have not published yet,
+            # and whether this publication was the group's last. The ready
+            # transition sits beside it, in the one place that knows the group
+            # is finished, so a shared pull request is taken out of draft
+            # exactly once even though every member publishes through here.
+            group: list[Any] = receipt.get("group") or []
+            members = [str(member) for member in group]
+            if members:
+                pending = _group_pending(root, members, phase)
+                outcome["group"] = members
+                outcome["group_pending"] = pending
+                outcome["group_last_unfinished"] = not pending
+                ready = mark_group_pull_request_ready(
+                    phase, pending, receipt.get("pull_request")
+                )
+                if ready is not None:
+                    outcome["pull_request_ready"] = ready
             outcome["repos"] = results
             outcome["summary"] = summarize(
                 [
