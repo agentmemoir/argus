@@ -120,7 +120,7 @@ sys.exit(2)
     migrate = run(
         [
             sys.executable,
-            str(package / "src/argus/next_phase.py"),
+            str(package / "src/argus/select/next_phase.py"),
             "--config",
             str(config),
             "--migrate-board",
@@ -198,7 +198,7 @@ sys.exit(2)
     # Both entry points select the same work. The config names a relative folder
     # the layout cannot infer.
     commands = [
-        ["bash", str(package / "src/argus/phase-driver.sh")],
+        ["bash", str(package / "src/argus/driver/phase-driver.sh")],
         ["argus"],
     ]
     selections = []

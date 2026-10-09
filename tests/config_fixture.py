@@ -7,7 +7,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from argus import config as cfgmod
+from argus.config import cli as cfgmod
 
 HERE = Path(__file__).resolve().parent
 SAMPLE = HERE.parent / "config.sample.jsonc"
@@ -91,7 +91,7 @@ def expect_error(call, needle):
 
 def run_cli(args, cwd):
     return subprocess.run(
-        [sys.executable, "-m", "argus.config", *args],
+        [sys.executable, "-m", "argus.config.cli", *args],
         cwd=cwd,
         text=True,
         capture_output=True,

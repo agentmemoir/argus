@@ -35,17 +35,27 @@ EXAMPLES = ROOT / "examples"
 #: shell driver shipped beside the package. Importing every module is safe:
 #: each does only in-memory work at import time, and the `_bootstrap` branch
 #: fires only in direct script mode.
+#:
+#: The walk is over the files, not over `pkgutil.iter_modules`: the role
+#: folders (`board/`, `gitsync/`, ...) are PEP 420 namespace packages with no
+#: `__init__.py`, and `iter_modules` skips a directory that has none, so a walk
+#: built on it would import four files and call the package checked.
 IMPORT_CHECK = """\
 import importlib
-import pkgutil
 from pathlib import Path
 
 import argus
 
-names = sorted(m.name for m in pkgutil.iter_modules(argus.__path__))
+root = Path(argus.__file__).resolve().parent
+names = []
+for path in sorted(root.rglob("*.py")):
+    rel = path.relative_to(root).with_suffix("")
+    if rel.name == "__init__" or "__pycache__" in rel.parts:
+        continue
+    names.append(".".join(("argus", *rel.parts)))
 for name in names:
-    importlib.import_module(f"argus.{name}")
-driver = Path(argus.__file__).resolve().parent / "phase-driver.sh"
+    importlib.import_module(name)
+driver = root / "driver" / "phase-driver.sh"
 if not driver.is_file():
     raise SystemExit(f"the driver did not ship beside the package: {driver}")
 print(f"imported {len(names)} modules; driver: {driver.name}")

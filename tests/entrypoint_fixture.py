@@ -6,7 +6,7 @@ import re
 import subprocess
 from pathlib import Path
 
-from argus.config import SHELL_VARS
+from argus.config.schema import SHELL_VARS
 
 ARGUS = Path(__file__).resolve().parents[1]
 CONFIG_ENV_NAMES = frozenset(SHELL_VARS.values())

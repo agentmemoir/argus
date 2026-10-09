@@ -7,7 +7,7 @@ import shlex
 import tempfile
 from pathlib import Path
 
-from argus import config as cfgmod
+from argus.config import cli as cfgmod
 from config_fixture import BASE, check, run_cli, sample_in, write
 
 

@@ -10,9 +10,9 @@ import sys
 import tempfile
 from pathlib import Path
 
-from argus.config import SHELL_VARS
+from argus.config.schema import SHELL_VARS
 
-DRIVER = Path("src/argus/phase-driver.sh")
+DRIVER = Path("src/argus/driver/phase-driver.sh")
 
 #: One hard stop for a single fault's check. The checks carry their own smaller
 #: timeouts; this catches a hang. It is a cap, not a budget: the slowest
@@ -135,18 +135,21 @@ def run_selftest(repo, driver, check="driver", cases=None):
     fault produces the same result whatever ran before it. ``cases`` names the
     driver self-test cases to run; the driver check reads it, the others do not.
     """
+    # The tools live in the package above the driver's own folder, in the role
+    # packages: `driver.parent` is the shell folder, not the package.
+    package = driver.parent.parent
     command = (
         [sys.executable, str(repo / "tests/test_entrypoint.py")]
         if check == "entrypoint"
-        else [sys.executable, str(driver.parent / "phase_group.py"), "--self-test"]
+        else [sys.executable, str(package / "select/group.py"), "--self-test"]
         if check == "phase_group"
         else [
             sys.executable,
-            str(driver.parent / "phase_reservations.py"),
+            str(package / "board/reservations.py"),
             "--self-test",
         ]
         if check == "phase_reservations"
-        else [sys.executable, str(driver.parent / "next_phase.py"), "--self-test"]
+        else [sys.executable, str(package / "select/next_phase.py"), "--self-test"]
         if check == "next_phase"
         else ["bash", str(driver), "--self-test"]
     )

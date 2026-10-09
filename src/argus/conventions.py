@@ -31,7 +31,7 @@ def settings_from_config(config):
 
 def configure_from_file(config_path=None, overrides=None):
     """Load one config file and publish its values to shared settings."""
-    from argus.config import load
+    from argus.config.loader import load
 
     config = load(config_path, overrides)
     configure(settings_from_config(config))

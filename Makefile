@@ -81,8 +81,8 @@ self-test:
 	$(RUN) python tests/test_conventions.py
 	$(RUN) python tests/test_phase_notifications.py
 	$(RUN) python tests/test_identifiers.py
-	$(RUN) python -m argus.phase_group --self-test
-	$(RUN) python -m argus.gitsync --self-test
+	$(RUN) python -m argus.select.group --self-test
+	$(RUN) python -m argus.gitsync.main --self-test
 
 # The published folder must carry no identifier: no home path, no numeric
 # account or channel id, and no notification default or literal that is not a

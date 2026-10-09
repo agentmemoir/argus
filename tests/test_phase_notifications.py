@@ -11,7 +11,7 @@ import unittest
 from pathlib import Path
 
 from argus import conventions
-from argus.phase_notifications import (
+from argus.notify.notifications import (
     default_run_json,
     display_title,
     format_duration,

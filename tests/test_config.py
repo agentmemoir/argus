@@ -10,7 +10,7 @@ import tempfile
 from pathlib import Path
 
 import test_config_cli
-from argus import config as cfgmod
+from argus.config import cli as cfgmod
 from config_fixture import BASE, check, commented, expect_error, sample_in, write
 
 

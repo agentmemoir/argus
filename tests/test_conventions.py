@@ -8,14 +8,11 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from argus import (
-    conventions,
-    phase_notifications,
-    phase_policy,
-    phase_reservations,
-    roadmap_source,
-    work_source,
-)
+from argus import conventions
+from argus.board import reservations as board
+from argus.notify import notifications as notify
+from argus.roadmap import source as roadmap_source
+from argus.select import policy, work_source
 
 
 class ConventionTests(unittest.TestCase):
@@ -85,7 +82,7 @@ class ConventionTests(unittest.TestCase):
             "### Decision Gates\nnone\n", encoding="utf-8"
         )
         conventions.configure({**self.settings, "driver.include": ["phase-*.md"]})
-        self.assertEqual(list(phase_policy.scan_gates(roadmap)), ["100042"])
+        self.assertEqual(list(policy.scan_gates(roadmap)), ["100042"])
 
     def test_pipeline_controls_typed_inputs_and_every_run_path(self):
         self.pipeline.write_text(
@@ -113,16 +110,14 @@ class ConventionTests(unittest.TestCase):
         )
         self.assertEqual(conventions.phase_run_dir(self.repo, 42, phase), expected)
         self.assertEqual(
-            phase_reservations.reservation_file(self.repo, 42),
+            board.reservation_file(self.repo, 42),
             expected / "reservation.json",
         )
         self.assertEqual(
-            phase_reservations.publication_file(self.repo, 42),
+            board.publication_file(self.repo, 42),
             expected / "publication.json",
         )
-        self.assertEqual(
-            phase_notifications.default_run_json(phase), expected / "run.json"
-        )
+        self.assertEqual(notify.default_run_json(phase), expected / "run.json")
         expected.mkdir(parents=True)
         (expected / "run.json").write_text(
             json.dumps({"state": "completed"}), encoding="utf-8"
@@ -135,20 +130,20 @@ class ConventionTests(unittest.TestCase):
             conventions.phase_run_dir(self.repo, 42)
 
     def test_board_path_is_configured_and_must_stay_inside_board(self):
-        self.assertEqual(phase_reservations.state_rel(), Path("claims.json"))
+        self.assertEqual(board.state_rel(), Path("claims.json"))
         for path in ("../outside.json", "/tmp/outside.json", ".git/config", ""):
             with self.subTest(path=path):
                 conventions.configure({**self.settings, "board.file": Path(path)})
-                with self.assertRaises(phase_reservations.CoordinationError):
-                    phase_reservations.state_rel()
+                with self.assertRaises(board.CoordinationError):
+                    board.state_rel()
         outside = self.repo.parent / "outside"
         outside.mkdir()
         (self.board / "linked").symlink_to(outside, target_is_directory=True)
         conventions.configure(
             {**self.settings, "board.file": Path("linked/state.json")}
         )
-        with self.assertRaises(phase_reservations.CoordinationError):
-            phase_reservations.state_path(self.board)
+        with self.assertRaises(board.CoordinationError):
+            board.state_path(self.board)
 
     def test_settings_override_is_explicit_and_reversible(self):
         previous = conventions.override({"machine.id": "fixture-host"})

@@ -1,0 +1,170 @@
+# Copyright 2026 Agent Memoir Developers (https://agentmemoir.com/)
+# SPDX-License-Identifier: Apache-2.0
+"""Claim windows: cooldown, expiry, and the single claim writer."""
+
+import datetime as _datetime
+import math
+
+from argus.board.core import (
+    ACTIVE_STATUSES,
+    COOLDOWN_UNTIL_FIELD,
+    EXPIRED_STATUS,
+    GROUP_COOLDOWN_S,
+    GROUP_HEARTBEAT_WINDOW_S,
+    GROUP_START_WINDOW_S,
+    TERMINAL_STATUSES,
+    CoordinationUnavailable,
+    ReservationConflict,
+    ReservationCooldown,
+    _as_moment,
+    _iso,
+    _parse_moment,
+)
+from argus.board.state import _owner_matches
+
+
+def _cooldown_remaining(record, _number, now=None):
+    """Seconds left in a record's claim cooldown, or 0 when none is active.
+
+    Stage 3 writes ``COOLDOWN_UNTIL_FIELD`` when an expired group returns to
+    the queue. This stage reserves the field and the refusal path: a record
+    that carries a future timestamp refuses a claim, and a record without the
+    field is claimable as it always was, so an old board still reads. A
+    malformed timestamp fails closed rather than reading as expired, because a
+    board nobody can parse is not a board that permits a claim.
+    """
+    value = record.get(COOLDOWN_UNTIL_FIELD)
+    if value is None:
+        return 0
+    until = _parse_moment(value, what=COOLDOWN_UNTIL_FIELD)
+    moment = _as_moment(now) or _datetime.datetime.now(_datetime.UTC)
+    delta = (until - moment).total_seconds()
+    if delta <= 0:
+        return 0
+    return math.ceil(delta)
+
+
+def _claim_window(record):
+    """The moment and length a claim is measured against, or ``None``.
+
+    Before any work starts the claim is measured from ``claimed_at`` against the
+    start window; once work has begun it is measured from ``heartbeat_at``
+    against the heartbeat window. A record whose stamp is missing or malformed
+    returns ``None`` and is left alone, because expiring a possibly-live claim on
+    a stamp nobody can read would take work away from its owner.
+    """
+    status = record.get("status")
+    if status == "claimed":
+        field, window = "claimed_at", GROUP_START_WINDOW_S
+    elif status in ACTIVE_STATUSES:
+        field, window = "heartbeat_at", GROUP_HEARTBEAT_WINDOW_S
+    else:
+        return None
+    try:
+        reference = _parse_moment(record.get(field), what=field)
+    except CoordinationUnavailable:
+        return None
+    return reference, window
+
+
+def _claim_window_passed(record, moment):
+    measured = _claim_window(record)
+    if measured is None:
+        return False
+    reference, window = measured
+    return (moment - reference).total_seconds() > window
+
+
+def _expire_records(state, moment):
+    """Move every stale group to ``EXPIRED_STATUS`` under one cooldown stamp.
+
+    The members of one reservation share a reservation id, so the group is
+    expired as a unit: one member past its window expires all of them, and the
+    old owner is fenced for every member at once. Returns the expired records,
+    each with its phase key, so the caller can report what moved.
+    """
+    groups = {}
+    for key, record in state["phases"].items():
+        if record.get("status") not in ACTIVE_STATUSES:
+            continue
+        reservation_id = record.get("reservation_id")
+        if not reservation_id:
+            continue
+        groups.setdefault((record.get("machine_id"), reservation_id), []).append(
+            (key, record)
+        )
+    expired = []
+    for members in groups.values():
+        if not any(_claim_window_passed(record, moment) for _key, record in members):
+            continue
+        until = _iso(moment + _datetime.timedelta(seconds=GROUP_COOLDOWN_S))
+        for key, record in members:
+            record["status"] = EXPIRED_STATUS
+            record[COOLDOWN_UNTIL_FIELD] = until
+            expired.append(
+                {
+                    "phase": key,
+                    "machine_id": record.get("machine_id"),
+                    "reservation_id": record.get("reservation_id"),
+                }
+            )
+    return expired
+
+
+def _claim_one(
+    state,
+    key,
+    machine_id,
+    reservation_id,
+    generation,
+    run_id,
+    revisions,
+    status,
+    number,
+    now=None,
+):
+    """Write or refresh one claim in ``state``; return its phase record.
+
+    One helper backs both ``reserve`` and ``reserve_group`` so a single claim
+    and a group claim cannot drift apart about who may claim what. A terminal
+    record, another owner, and an active cooldown all raise. ``_transaction``
+    runs the whole mutation before it writes anything, so a raise leaves the
+    board untouched: a group is claimed atomically or not at all, and half a
+    group is never reserved.
+    """
+    existing = state["phases"].get(key)
+    if existing is not None:
+        if existing.get("status") == EXPIRED_STATUS:
+            remaining = _cooldown_remaining(existing, number, now)
+            if remaining > 0:
+                raise ReservationCooldown(number, remaining, existing)
+            # The cooldown has passed, so the expired record is claimable again
+            # and is overwritten below with a fresh reservation.
+        elif existing.get("status") in TERMINAL_STATUSES:
+            raise ReservationConflict(
+                number, existing, f"phase is retained as {existing.get('status')}"
+            )
+        elif _owner_matches(existing, machine_id, reservation_id, generation):
+            existing["status"] = status
+            existing["heartbeat_at"] = _iso(now)
+            return existing
+        else:
+            remaining = _cooldown_remaining(existing, number, now)
+            if remaining > 0:
+                raise ReservationCooldown(number, remaining, existing)
+            raise ReservationConflict(number, existing)
+    record = {
+        "status": status,
+        "machine_id": machine_id,
+        "reservation_id": reservation_id,
+        "generation": generation,
+        "claimed_at": _iso(now),
+        "heartbeat_at": _iso(now),
+        # Expiry keys off the start and heartbeat windows, not this field, which
+        # is kept for audit and tool compatibility.
+        "expires_at": None,
+        "run_id": run_id or f"phase-{key}",
+        "base_revisions": revisions,
+    }
+    state["phases"][key] = record
+    return record
