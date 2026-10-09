@@ -14,7 +14,7 @@ A gate, not a one-off sweep. It reads every file the package ships, and it runs
 from ``make self-test``, so an identifier added to the published folder fails the
 checks instead of shipping. The same scan runs on its own:
 
-    python3 test_identifiers.py
+    python3 tests/test_identifiers.py
 
 What it matches
 ---------------
@@ -53,12 +53,12 @@ import subprocess
 import sys
 from pathlib import Path
 
-#: This file and the folder that holds it.
+#: This file and the repository root its scan covers.
 SELF = Path(__file__).resolve()
-HERE = SELF.parent
+HERE = SELF.parents[1]
 
 #: Directories that are not part of the published package.
-SKIP_DIRS = frozenset({"__pycache__", ".git", ".pytest_cache", "dist", "build"})
+SKIP_DIRS = frozenset({"__pycache__", ".git", ".pytest_cache", "dist", "build", ".venv", "target"})
 
 #: The only notification targets a shipped file may name. A real one belongs to
 #: the machine that receives the notices, in a file that is not part of the

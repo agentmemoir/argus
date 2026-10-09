@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "argus"
 version = "0.1.0"
-description = "An unattended phase driver: select work, reserve it on a shared board, launch it, watch it, publish it."
+description = "An unattended phase driver: select work, reserve it on a shared board, launch it, watch it, and publish it."
 readme = "README.md"
 requires-python = ">=3.11"
 license = "Apache-2.0"
@@ -21,6 +21,12 @@ classifiers = [
 ]
 dependencies = ["pyyaml>=6.0"]
 
+[dependency-groups]
+dev = ["pytest>=8.0"]
+
+[tool.uv]
+package = true
+
 [project.scripts]
 argus = "argus.cli:main"
 
@@ -28,32 +34,13 @@ argus = "argus.cli:main"
 Homepage = "https://github.com/agentmemoir/argus"
 Source = "https://github.com/agentmemoir/argus"
 
-# The command is a shell driver, and it only works with the helper scripts and
-# the bundled tools that sit beside it, so the whole folder ships as the `argus`
-# package: here the project root *is* the package directory, so `packages` names
-# it and `sources` maps it to the `argus` distribution path. Selection is by
-# pattern, so a new module ships without a second edit; `exclude` keeps the
-# development files out.
-#
-# The default selection looks for an `argus/` subdirectory that this layout does
-# not have, and then builds an empty wheel with no error, so this file names the
-# mapping. This mirrors the sibling `glide` project's hatchling setup; the
-# mapping is this layout's own.
+# The command is a shell driver, so the wheel ships the whole `src/argus`
+# folder: the Python tools and the shell driver that sources the helpers beside
+# it. Hatchling writes it to the distribution path `argus/`, and the default
+# VCS rules keep caches and local files out.
 [tool.hatch.build.targets.wheel]
-packages = ["."]
-sources = { "." = "argus" }
-ignore-vcs = true
-exclude = [
-  "/Makefile",
-  "/pyproject.toml",
-  "/README.md",
-  "/check_wheel.py",
-  "/bin",
-  "/scripts",
-  "/guard_faults.py",
-  "/exec_tempdir.py",
-  "/test_*.py",
-  "/dist",
-  "/__pycache__",
-  "/.*",
-]
+packages = ["src/argus"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"

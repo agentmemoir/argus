@@ -17,11 +17,11 @@ import subprocess
 import sys
 from pathlib import Path
 
-from exec_tempdir import exec_tempdir
-from config import SHELL_VARS
+from argus.config import SHELL_VARS
+from argus.exec_tempdir import exec_tempdir
 
 
-ARGUS = Path(__file__).resolve().parent
+ARGUS = Path(__file__).resolve().parents[1]
 CONFIG_ENV_NAMES = frozenset(SHELL_VARS.values())
 
 
@@ -178,7 +178,7 @@ sys.exit(2)
                  runs=runs, pipeline=pipeline, python=sys.executable)
     # The board migration is a direct tool call, so it loads the same file as
     # the driver.
-    migrate = run([sys.executable, str(package / "next_phase.py"),
+    migrate = run([sys.executable, str(package / "src/argus/next_phase.py"),
                    "--config", str(config), "--migrate-board"], base, env)
     require(migrate.returncode == 0, "fixture board migration", migrate.stderr)
 
@@ -223,7 +223,7 @@ sys.exit(2)
     # Both entry points select the same work. The config names a relative folder
     # the layout cannot infer.
     commands = [
-        ["bash", str(package / "phase-driver.sh")],
+        ["bash", str(package / "src/argus/phase-driver.sh")],
         ["argus"],
     ]
     selections = []
@@ -292,7 +292,7 @@ def main():
             # Nothing beside this copy is a project tool or a vendored engine.
             package = base / "tools/source-checkout"
             shutil.copytree(ARGUS, package,
-                            ignore=shutil.ignore_patterns("__pycache__", ".git"))
+                            ignore=shutil.ignore_patterns("__pycache__", ".git", ".venv", "dist", "target"))
             exercise(package, base)
     except (AssertionError, OSError, subprocess.TimeoutExpired) as exc:
         print(f"FAIL: {exc}")

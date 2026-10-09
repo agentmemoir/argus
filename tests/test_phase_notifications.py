@@ -10,10 +10,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-if not __package__:
-    import _bootstrap  # noqa: F401 - register the source package
-
-from argus.phase_notifications import (  # noqa: E402 - path set just above
+from argus.phase_notifications import (
     default_run_json,
     display_title,
     format_duration,

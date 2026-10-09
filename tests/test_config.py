@@ -11,12 +11,10 @@ import sys
 import tempfile
 from pathlib import Path
 
-if not __package__:
-    import _bootstrap  # noqa: F401 - register the source package
 from argus import config as cfgmod
 
 HERE = Path(__file__).resolve().parent
-SAMPLE = HERE / "config.sample.jsonc"
+SAMPLE = HERE.parent / "config.sample.jsonc"
 
 BASE = {
     "repo-root": "project",
@@ -89,7 +87,7 @@ def expect_error(call, needle):
 
 def run_cli(args, cwd):
     return subprocess.run(
-        [sys.executable, str(HERE / "config.py"), *args],
+        [sys.executable, "-m", "argus.config", *args],
         cwd=cwd, text=True, capture_output=True)
 
 

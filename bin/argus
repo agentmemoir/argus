@@ -8,5 +8,5 @@ import sys
 from pathlib import Path
 
 args = sys.argv[1:]
-driver = Path(__file__).resolve().parents[1] / "phase-driver.sh"
+driver = Path(__file__).resolve().parents[1] / "src/argus/phase-driver.sh"
 os.execvp("bash", ["bash", str(driver), *args])

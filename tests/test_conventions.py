@@ -8,8 +8,6 @@ import tempfile
 import unittest
 from pathlib import Path
 
-if not __package__:
-    import _bootstrap  # noqa: F401 - register the source package
 from argus import conventions, phase_notifications, phase_policy, phase_reservations, roadmap_source, work_source
 
 

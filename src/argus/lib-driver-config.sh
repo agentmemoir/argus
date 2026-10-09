@@ -234,7 +234,7 @@ argus_init() {
     PHASE_MACHINE_ID=argus-selftest
     BOARD_DIR=board-data
     ARGUS_CONFIG_FILE=""
-    REPO="$(cd "$ARGUS_DIR/.." && pwd)"
+    REPO="$(cd "$ARGUS_DIR/../../.." && pwd)"
     # The tripwire's baseline reads these before the fixture is built; an empty
     # private checkout and run-state folder are captured as absent, which is what
     # the throwaway run needs so it never reaches a real one.
