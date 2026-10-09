@@ -1,0 +1,23 @@
+# Changelog
+
+Notable changes to this project are documented here. The format follows
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/). This project intends to
+follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html); no version has
+been released yet.
+
+## [Unreleased]
+
+- `argus` ticks an unattended work queue: select a phase, reserve it on a shared
+  Git board, launch its pipeline in tmux, watch the run, and check publication
+  before the next tick.
+- One JSONC configuration file names every path and command; a missing required
+  key stops the tick and names the key.
+- Reservation groups: several phases claimed in one board write, run on one
+  branch, and published under one pull request, with the claim renewed while a
+  member runs.
+- Halt markers on blocked or failed runs, claim cooldown and expiry handling,
+  and a remedy escalation that records open findings and releases the claim.
+- Modes: `--check`, `--dry-run`, `--self-test`, `--stop`, and
+  `--session <NUMBER> <PHASE-FILE>`.
+- Checks: the driver self-test, the guard-faults harness, and a wheel that
+  ships the shell driver.
