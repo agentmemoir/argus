@@ -32,7 +32,7 @@ _drive() {
 
   if tmux_busy; then
     check_stall
-    log "phase window is running; skip"
+    log "${work_kind:-phase} window is running; skip"
     return 0
   fi
 
@@ -60,7 +60,7 @@ _drive() {
   if [ -f "$HALT" ]; then
     tmux_set_title "HALTED - $(tr '\n' ' ' <"$HALT" | cut -c1-60)"
   else
-    tmux_set_title "idle - waiting for next phase"
+    tmux_set_title "idle - waiting for next ${work_kind:-phase}"
   fi
 
 
@@ -76,14 +76,14 @@ _drive() {
   # result with exit 2, which this script reads as "nothing to do"; without these
   # checks a typo in a settings file looks exactly like a queue that has run dry,
   # and a folder outside the checkout looks like a phase that launched and died.
-  if ! roadmap_preflight; then
+  if ! work_preflight; then
     log "$PREFLIGHT_REASON; refusing to launch"
     return 1
   fi
   _drive_choose_selection "${1:-}" || return $?
   [ -z "$_DRIVE_RC" ] || return "$_DRIVE_RC"
 
-  log "next phase: $number ($rel)"
+  log "next ${work_kind:-phase}: $number ($rel)"
 
   # The fence goes down with the claim, not at the launch. A tick that refuses
   # after this point, at the branch cut or the sync gate, still leaves the claim
@@ -150,12 +150,13 @@ _drive_cut_branch() {
     # asks for the same branch whichever member it is launching.
     "$PYTHON" "$ARGUS/gitsync/main.py" "${ARGUS_CONFIG_ARGS[@]}" --root "$REPO" \
       --mode branch --phase "$number" --roadmap "$roadmap_name" \
+      "${GITSYNC_KIND_ARGS[@]+"${GITSYNC_KIND_ARGS[@]}"}" \
       --roadmap-dir "$(roadmap_dir)" \
       "${GROUP_ARGS[@]+"${GROUP_ARGS[@]}"}" \
       >"$RUN_DIR/phase-branch.json" 2>/dev/null
     local branch_rc=$?
     if [ "$branch_rc" -ne 0 ]; then
-      log "could not put phase $number on its own branch; refusing to launch (see $RUN_DIR/phase-branch.json)"
+      log "could not put ${work_kind:-phase} $number on its own branch; refusing to launch (see $RUN_DIR/phase-branch.json)"
       { _DRIVE_RC=1; return 0; }
     fi
     # Only a group records a branch of its own. A single phase's branch is not a
@@ -169,7 +170,7 @@ _drive_cut_branch() {
     # for, which is the same string for both checkouts, so printing it as
     # though it were the public checkout's branch reported a phase branch for a
     # checkout that was still sitting on master.
-    log "phase $number: $(branch_state_line "$RUN_DIR/phase-branch.json")"
+    log "${work_kind:-phase} $number: $(branch_state_line "$RUN_DIR/phase-branch.json")"
     if group_active; then
       log "group $number: one branch $(group_branch_of) covers [$(printf '%s' "$GROUP_MEMBERS" | tr '\n' ' ')]"
     fi
@@ -183,9 +184,9 @@ _drive_cut_branch() {
     "$PYTHON" "$ARGUS/gitsync/main.py" "${ARGUS_CONFIG_ARGS[@]}" --root "$REPO" --mode resync \
       >"$RUN_DIR/phase-resync.json" 2>/dev/null
     local resync_rc=$?
-    log "phase $number: $(resync_state_line "$RUN_DIR/phase-resync.json")"
+    log "${work_kind:-phase} $number: $(resync_state_line "$RUN_DIR/phase-resync.json")"
     if [ "$resync_rc" -ne 0 ]; then
-      log "the integration branch did not merge cleanly into phase $number; the phase agent finishes it (see $RUN_DIR/phase-resync.json)"
+      log "the integration branch did not merge cleanly into ${work_kind:-phase} $number; the phase agent finishes it (see $RUN_DIR/phase-resync.json)"
     fi
   fi
   return 0
@@ -269,9 +270,9 @@ release() {
   : >"$RELEASE"
   if tmux_phase_window_alive; then
     tmux_phase_window_interrupt
-    log "release: sent Ctrl-C to '$SESSION:phase'${number:+ for phase $number}"
+    log "release: sent Ctrl-C to '$SESSION:phase'${number:+ for ${work_kind:-phase} $number}"
   else
-    log "release: no live phase window${number:+ for phase $number}"
+    log "release: no live phase window${number:+ for ${work_kind:-phase} $number}"
   fi
   wait_phase_window_gone
   # Partial work first, so the next owner resumes instead of starting over. A
@@ -279,6 +280,7 @@ release() {
   # the checkpoint lands the public checkout's unfinished work on the branch the
   # next owner resumes from, which is the handoff the requirement promises.
   "$PYTHON" "$ARGUS/gitsync/main.py" "${ARGUS_CONFIG_ARGS[@]}" --root "$REPO" \
+    "${GITSYNC_KIND_ARGS[@]+"${GITSYNC_KIND_ARGS[@]}"}" \
     --mode checkpoint >"$RUN_DIR/release-checkpoint.json" 2>/dev/null \
     || log "release: could not push the work in progress; the next owner starts from what is already on the branch (see $RUN_DIR/release-checkpoint.json)"
   [ -z "$number" ] || gitsync_clean "$number"
@@ -288,20 +290,21 @@ release() {
   [ -s "$GROUPFILE" ] && group_members="$(tr '\n' ' ' <"$GROUPFILE")"
   if [ -n "$reservation_id" ] && [ -n "$generation" ]; then
     if "$PYTHON" "$ARGUS/board/reservations.py" release-group \
-        "${ARGUS_CONFIG_ARGS[@]}" --repo-root "$REPO" \
+        "${ARGUS_CONFIG_ARGS[@]}" "${BOARD_KIND_ARGS[@]+"${BOARD_KIND_ARGS[@]}"}" --repo-root "$REPO" \
         --machine-id "$PHASE_MACHINE_ID" \
         --reservation-id "$reservation_id" \
         --generation "$generation" \
         >"$RUN_DIR/release${number:+-$number}.json" 2>&1; then
       if [ -n "$group_members" ]; then
-        log "release: returned the group for phase $number to the queue [$group_members]"
+        log "release: returned the group for ${work_kind:-phase} $number to the queue [$group_members]"
       else
-        log "release: returned the group for phase $number to the queue"
+        log "release: returned the group for ${work_kind:-phase} $number to the queue"
       fi
       rm -f "$CLAIM"
+      issue_announce "$number" released
     else
       rc=$?
-      log "release: could not return the group for phase $number (rc=$rc; see $RUN_DIR/release${number:+-$number}.json)"
+      log "release: could not return the group for ${work_kind:-phase} $number (rc=$rc; see $RUN_DIR/release${number:+-$number}.json)"
     fi
   else
     log "release: no board token was recorded; the run was stopped without a board write"

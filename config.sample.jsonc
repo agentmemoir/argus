@@ -33,7 +33,8 @@
   "file-input": "phase_file",
 
   "driver": {
-    // Which work source runs the queue. Required.
+    // Which work source runs the queue. Required: "phase" for a roadmap, or
+    // "issues" for a GitHub issue backlog (see docs/issues.md).
     "provider": "phase",
 
     // The work-item files to consider, as globs. Required. A list, so more than
@@ -83,6 +84,8 @@
   // this configuration can be shared by machines with the same layout.
   "machine": {
     "id-file": "machine.id"
+    // Optional: "settings-file" names a small per-machine overlay whose keys
+    // replace this file's values (see docs/issues.md).
   },
 
   // The external commands, named rather than searched for. Required, so nothing
@@ -130,7 +133,8 @@
     // here, so it is this file's folder.
     "repo": ".",
 
-    // The board file's path inside that checkout. Required with "board".
+    // The board file's path inside that checkout. Required with "board". An
+    // issue machine also names "issues-file", a second file on the same branch.
     "file": "claims.json",
 
     // The branch the board lives on, and the remote it is pushed to. Required

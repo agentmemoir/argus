@@ -176,17 +176,17 @@ claim_renew() {
   IFS=$'\t' read -r claim_number reservation_id generation <"$CLAIM" || true
   [ -n "$reservation_id" ] && [ -n "$generation" ] || return 0
   "$PYTHON" "$ARGUS/board/reservations.py" renew-group \
-    "${ARGUS_CONFIG_ARGS[@]}" --repo-root "$REPO" \
+    "${ARGUS_CONFIG_ARGS[@]}" "${BOARD_KIND_ARGS[@]+"${BOARD_KIND_ARGS[@]}"}" --repo-root "$REPO" \
     --machine-id "$PHASE_MACHINE_ID" \
     --reservation-id "$reservation_id" \
     --generation "$generation" --status running \
     >"$RUN_DIR/claim-renew${claim_number:+-$claim_number}.json" 2>&1 || rc=$?
   if [ "$rc" -ne 0 ]; then
-    log "claim renew: could not renew the claim for phase $claim_number (rc=$rc; see $RUN_DIR/claim-renew${claim_number:+-$claim_number}.json)"
+    log "claim renew: could not renew the claim for ${work_kind:-phase} $claim_number (rc=$rc; see $RUN_DIR/claim-renew${claim_number:+-$claim_number}.json)"
   elif [ -s "$GROUPFILE" ]; then
-    log "group renew: renewed the group for phase $claim_number under reservation $reservation_id"
+    log "group renew: renewed the group for ${work_kind:-phase} $claim_number under reservation $reservation_id"
   else
-    log "claim renew: renewed the claim for phase $claim_number under reservation $reservation_id"
+    log "claim renew: renewed the claim for ${work_kind:-phase} $claim_number under reservation $reservation_id"
   fi
   return 0
 }

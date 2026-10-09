@@ -71,9 +71,10 @@ on_stop() {
   if [ -f "$RELEASE" ]; then
     rm -f "$RELEASE"
   elif [ -n "$CUR_PHASE" ]; then
-    printf 'phase %s stopped by signal (rc=%s) at %s\n' \
-      "$CUR_PHASE" "$rc" "$(ts)" >"$HALT"
+    printf '%s %s stopped by signal (rc=%s) at %s\n' \
+      "${work_kind:-phase}" "$CUR_PHASE" "$rc" "$(ts)" >"$HALT"
     notify_phase "$CUR_PHASE_FILE" stopped-signal
+    issue_announce "$CUR_PHASE" halted
   fi
   rm -f "$CURRENT" "$PIDFILE"
   exit "$rc"
@@ -90,9 +91,10 @@ on_stop() {
 gitsync_clean() {
   local number="$1" rc=0
   "$PYTHON" "$ARGUS/gitsync/main.py" "${ARGUS_CONFIG_ARGS[@]}" --root "$REPO" --mode clean \
+    "${GITSYNC_KIND_ARGS[@]+"${GITSYNC_KIND_ARGS[@]}"}" \
     --phase "$number" >"$RUN_DIR/phase-$number-run-state.json" 2>/dev/null || rc=$?
   if [ "$rc" -ne 0 ]; then
-    log "could not commit phase $number closing run state (rc=$rc; see $RUN_DIR/phase-$number-run-state.json)"
+    log "could not commit ${work_kind:-phase} $number closing run state (rc=$rc; see $RUN_DIR/phase-$number-run-state.json)"
   fi
   return 0
 }
@@ -110,6 +112,7 @@ gitsync_clean() {
 gitsync_land_leftovers() {
   local rc=0
   "$PYTHON" "$ARGUS/gitsync/main.py" "${ARGUS_CONFIG_ARGS[@]}" --root "$REPO" --mode clean \
+    "${GITSYNC_KIND_ARGS[@]+"${GITSYNC_KIND_ARGS[@]}"}" \
     >"$RUN_DIR/run-state-leftovers.json" 2>/dev/null || rc=$?
   if [ "$rc" -ne 0 ]; then
     log "could not land leftover run state before launch (rc=$rc; see $RUN_DIR/run-state-leftovers.json)"
@@ -127,6 +130,17 @@ gitsync_land_leftovers() {
 # phase is skipped either way.
 handle_escalation() {
   local number="$1" rel="$2" phase_dir out rc=0
+  if [ "${work_kind:-phase}" = issue ]; then
+    "$PYTHON" "$ARGUS/issues/lifecycle.py" escalate \
+      "${ARGUS_CONFIG_ARGS[@]}" --issue "$number" \
+      --reservation-id "$CLIO_RESERVATION_ID" --generation "$CLIO_RESERVATION_GENERATION" \
+      >"$RUN_DIR/escalation-$number.json" 2>&1 \
+      || log "issue $number escalation could not be recorded; claim kept"
+    gitsync_clean "$number"
+    tmux_set_title "issue $number escalated"
+    notify_phase "$rel" escalated
+    return 0
+  fi
   phase_dir="$WF/phase-$(printf '%06d' "$number")"
   out="$RUN_DIR/escalation-$number.json"
   local args=("${ARGUS_CONFIG_ARGS[@]}" --run-dir "$phase_dir" --phase "$number" --repo-root "$REPO")
@@ -134,11 +148,11 @@ handle_escalation() {
   [ -z "${CLIO_RESERVATION_ID:-}" ] || args+=(--reservation-id "$CLIO_RESERVATION_ID")
   [ -z "${CLIO_RESERVATION_GENERATION:-}" ] || args+=(--generation "$CLIO_RESERVATION_GENERATION")
   "$PYTHON" "$ARGUS/board/remedy.py" "${args[@]}" \
-    >"$out" 2>/dev/null || { rc=$?; log "escalation record for phase $number could not be completed (rc=$rc; see $out)"; }
+    >"$out" 2>/dev/null || { rc=$?; log "escalation record for ${work_kind:-phase} $number could not be completed (rc=$rc; see $out)"; }
   # Land the record and release the claim before saying so, so a person reading
   # the notification finds the evidence where it points.
   gitsync_clean "$number"
-  tmux_set_title "phase $number escalated"
+  tmux_set_title "${work_kind:-phase} $number escalated"
   notify_phase "$rel" escalated
   return 0
 }
@@ -153,7 +167,7 @@ run_session() {
   trap 'on_stop 143' TERM
   printf '%s\n' "$$" >"$PIDFILE"
   cd "$REPO"
-  tmux_set_title "phase $number running"
+  tmux_set_title "${work_kind:-phase} $number running"
   notify_phase "$rel" started
   if [ -n "${DRIVER_STUB_RC:-}" ]; then
     log "STUB mode: simulating glide (rc=$DRIVER_STUB_RC)"
@@ -217,7 +231,7 @@ PY
       prior_state="$(terminal_state_of_file "$(phase_run_dir "$number" "$rel")/run.json")"
       if [ -n "$prior_state" ]; then
         fresh_args+=(--fresh)
-        log "phase $number run is terminal ($prior_state); restarting it with --fresh"
+        log "${work_kind:-phase} $number run is terminal ($prior_state); restarting it with --fresh"
       fi
       "$CMD_GLIDE" run --pipeline "$PIPELINE" \
         "${fresh_args[@]+"${fresh_args[@]}"}" "${glide_inputs[@]}" || rc=$?
@@ -227,6 +241,13 @@ PY
     fi
   fi
   state="$(phase_state "$number" "$rel")"
+  if [ "${work_kind:-phase}" = issue ] && [ "$state" = writeback_pending ]; then
+    gitsync_clean "$number"
+    tmux_set_title "issue $number report pending"
+    log "issue $number report is pending; claim kept for the next tick"
+    rm -f "$CURRENT" "$PIDFILE"
+    exit 0
+  fi
   if [ "$state" = "remedy_escalated" ]; then
     # The remedy approver used every round and findings are still open. That is
     # a budget fact, not a verdict: record the residue, release the claim, and
@@ -240,17 +261,18 @@ PY
     0)   # Land the closing run-state writes before the next phase's publish
          # has to look at them; see gitsync_clean.
          gitsync_clean "$number"
-         tmux_set_title "phase $number done"
+         tmux_set_title "${work_kind:-phase} $number done"
          notify_phase "$rel" completed ;;
     3)   : ;;
-    130) tmux_set_title "HALTED phase $number (interrupted)"
+    130) tmux_set_title "HALTED ${work_kind:-phase} $number (interrupted)"
          notify_phase "$rel" interrupted "the process received an interrupt signal" ;;
-    *)   printf 'phase %s rc=%s state=%s at %s\n' \
-           "$number" "$rc" "${state:-unknown}" "$(ts)" >"$HALT"
+    *)   printf '%s %s rc=%s state=%s at %s\n' \
+           "${work_kind:-phase}" "$number" "$rc" "${state:-unknown}" "$(ts)" >"$HALT"
           # The title is set before the window closes, so the halt survives the
           # phase window going away and the idle display taking over.
-          tmux_set_title "HALTED phase $number (rc=$rc)"
-          notify_phase "$rel" stopped "" "$rc" ;;
+          tmux_set_title "HALTED ${work_kind:-phase} $number (rc=$rc)"
+          notify_phase "$rel" stopped "" "$rc"
+          issue_announce "$number" halted ;;
   esac
   rm -f "$CURRENT" "$PIDFILE"
   exit "$rc"
@@ -289,8 +311,12 @@ check_stall() {
   [ "$newest" -gt 0 ] || return 0
   now="$(date +%s)"; age=$((now - newest))
   if [ "$age" -gt "$STALE_AFTER_SEC" ]; then
-    printf 'stalled: phase %s no agent output for %ss at %s\n' \
-      "$n" "$age" "$(ts)" >"$STALL"
+    printf 'stalled: %s %s no agent output for %ss at %s\n' \
+      "${work_kind:-phase}" "$n" "$age" "$(ts)" >"$STALL"
+    if [ "${work_kind:-phase}" = issue ]; then
+      notify "Issue $n looks stalled. There has been no agent output for $STALE_AFTER_SEC seconds. Inspect the run at $phase_dir."
+      return 0
+    fi
     phase_file="$("$PYTHON" - "$ARGUS" "$REPO" "$n" "${ARGUS_CONFIG_ARGS[@]}" <<'PY'
 import sys
 from pathlib import Path

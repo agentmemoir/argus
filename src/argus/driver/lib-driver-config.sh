@@ -96,7 +96,7 @@ roadmap_dir_readable() {
 # only an operator takeover can restart it. Asking here costs two filesystem
 # checks and cannot strand anything.
 
-roadmap_preflight() {
+work_preflight() {
   PREFLIGHT_REASON=""
   # A missing private folder is not refused here. This function runs inside
   # fixtures that point the driver at a throwaway root holding only a run-state
@@ -137,6 +137,10 @@ PY
   )"; then
     PREFLIGHT_REASON="invalid pipeline configuration: $pipeline_error"
     return 1
+  fi
+  if [ "${WORK_SOURCE:-roadmap}" = issues ]; then
+    issue_preflight
+    return $?
   fi
   if [ -z "$ROADMAP_DIR" ]; then
     return 0
@@ -246,15 +250,26 @@ argus_init() {
   # variables for its children; it does not take them from a caller.
   case "$DRIVER" in
     phase|roadmap) DRIVER=phase; WORK_SOURCE=roadmap ;;
-    *) printf 'argus: unknown driver %s; known drivers: phase\n' "$DRIVER" >&2; exit 2 ;;
+    issues) DRIVER=issues; WORK_SOURCE=issues ;;
+    *) printf 'argus: unknown driver %s; known drivers: phase, issues\n' "$DRIVER" >&2; exit 2 ;;
   esac
+  work_kind=phase
+  item_key=phase
+  BOARD_KIND_ARGS=()
+  GITSYNC_KIND_ARGS=()
+  if [ "$WORK_SOURCE" = issues ]; then
+    work_kind=issue
+    item_key=issue
+    BOARD_KIND_ARGS=(--issues)
+    GITSYNC_KIND_ARGS=(--kind issue)
+  fi
 
   # The board's own branch. The self-test pins each fixture's own branch, so the
   # warning below stays quiet for that invocation rather than printing per case.
   PHASE_COORDINATION_BRANCH="${BOARD_BRANCH:-}"
 
   if [ "$SELF_TEST_MODE" = 0 ]; then
-    WORK_SOURCE_FLAGS=(--source roadmap)
+    WORK_SOURCE_FLAGS=(--source "$WORK_SOURCE")
 
     # The run-state folder must exist, and is asked for rather than created. A
     # tick that makes the folder it was told to use is not a tick that noticed the

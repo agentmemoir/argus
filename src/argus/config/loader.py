@@ -2,76 +2,23 @@
 # SPDX-License-Identifier: Apache-2.0
 """Read, clean, resolve, and validate one configuration file."""
 
-import json
+import copy
 from pathlib import Path
 from typing import Any, cast
 
+from argus.config.document import read_document
+from argus.config.document import strip_comments as strip_comments
+from argus.config.errors import ConfigError
+from argus.config.issue_validation import validate_issues, validate_presence
+from argus.config.overlay import apply_overlay
 from argus.config.schema import (
     _OBJECT_KEYS,
     _OVERRIDES,
     _REPORT_KEY,
+    ISSUES_DEFAULTS,
     SCHEMA,
     Field,
 )
-
-
-class ConfigError(Exception):
-    """Any problem with the configuration file or one of its values."""
-
-
-def strip_comments(text: str) -> str:
-    """Remove `//` and `/* */` comments, keeping string literals intact.
-
-    The scanner follows RFC 8259, section 7 for escapes: inside a string a
-    reverse solidus escapes the character after it, so an escaped quote does
-    not close the string. Newlines inside a block comment are kept so a parse
-    error still points at roughly the original line.
-    """
-    out: list[str] = []
-    index = 0
-    length = len(text)
-    in_string = False
-    escaped = False
-    while index < length:
-        char = text[index]
-        if in_string:
-            out.append(char)
-            if escaped:
-                escaped = False
-            elif char == "\\":
-                escaped = True
-            elif char == '"':
-                in_string = False
-            index += 1
-        elif char == '"':
-            in_string = True
-            out.append(char)
-            index += 1
-        elif char == "/" and index + 1 < length and text[index + 1] == "/":
-            index += 2
-            while index < length and text[index] != "\n":
-                index += 1
-        elif char == "/" and index + 1 < length and text[index + 1] == "*":
-            index += 2
-            closed = False
-            while index < length:
-                if text[index] == "\n":
-                    out.append("\n")
-                    index += 1
-                elif (
-                    text[index] == "*" and index + 1 < length and text[index + 1] == "/"
-                ):
-                    index += 2
-                    closed = True
-                    break
-                else:
-                    index += 1
-            if not closed:
-                raise ConfigError("unterminated block comment")
-        else:
-            out.append(char)
-            index += 1
-    return "".join(out)
 
 
 class Config:
@@ -114,34 +61,19 @@ def load(
             raise ConfigError(f"cannot read config file '{path}': not a file")
         path = path.resolve()
 
-    try:
-        text = path.read_text(encoding="utf-8")
-    except OSError as exc:
-        raise ConfigError(
-            f"cannot read config file '{path}': {exc.strerror or exc}"
-        ) from exc
-
-    try:
-        cleaned = strip_comments(text)
-    except ConfigError as exc:
-        raise ConfigError(f"cannot parse config file '{path}': {exc}") from exc
-
-    try:
-        raw = json.loads(cleaned)
-    except json.JSONDecodeError as exc:
-        raise ConfigError(
-            f"cannot parse config file '{path}' at line {exc.lineno} "
-            f"column {exc.colno}: {exc.msg}"
-        ) from exc
-
-    if not isinstance(raw, dict):
-        raise ConfigError(f"config file '{path}' must hold a JSON object")
+    raw = read_document(path)
 
     supplied_overrides: dict[str, object] = overrides or {}
-    return _build(path, cast("dict[str, Any]", raw), supplied_overrides)
+    raw, origins = apply_overlay(path, raw)
+    return _build(path, raw, supplied_overrides, origins)
 
 
-def _build(path: Path, raw: dict[str, Any], overrides: dict[str, object]) -> Config:
+def _build(
+    path: Path,
+    raw: dict[str, Any],
+    overrides: dict[str, object],
+    origins: dict[str, Path],
+) -> Config:
     for name in _OBJECT_KEYS:
         if name in raw and raw[name] is not None and not isinstance(raw[name], dict):
             raise ConfigError(f"invalid type for key '{name}': expected object")
@@ -155,11 +87,23 @@ def _build(path: Path, raw: dict[str, Any], overrides: dict[str, object]) -> Con
         cast("dict[str, Any]", notify_value) if isinstance(notify_value, dict) else None
     )
 
+    issue_value = raw.get("issues")
+    issues = (
+        cast("dict[str, Any]", issue_value) if isinstance(issue_value, dict) else None
+    )
+    provider = overrides.get("driver")
+    if provider is None:
+        provider = _lookup(raw, "driver.provider")[1]
+    validate_presence(provider, issues, board)
+
     supplied: dict[str, tuple[object, str]] = {}
     for field in SCHEMA:
         found, value = _lookup(raw, field.key)
         if found and value is not None:
-            supplied[field.key] = (value, "file")
+            supplied[field.key] = (value, "overlay" if field.key in origins else "file")
+    if issues is not None:
+        for key, default in ISSUES_DEFAULTS.items():
+            supplied.setdefault(key, (copy.deepcopy(default), "default"))
 
     for flag, value in overrides.items():
         if value is None:
@@ -174,22 +118,30 @@ def _build(path: Path, raw: dict[str, Any], overrides: dict[str, object]) -> Con
     values: dict[str, object] = {}
     sources: dict[str, str] = {}
     for field in SCHEMA:
-        required = _is_required(field, board, notify)
+        required = _is_required(field, board, notify, issues)
         if field.key in supplied:
             raw_value, source = supplied[field.key]
             _check_type(field, raw_value)
-            value = _convert(field, raw_value, path.parent)
-            _check_value(field, value, required)
+            _check_value(field, raw_value, required)
+            config_dir = (
+                path if source == "flag" else origins.get(field.key, path)
+            ).parent
+            value = _convert(field, raw_value, config_dir)
             key = _REPORT_KEY.get(field.key, field.key)
             values[key] = value
             sources[key] = source
         elif required:
             raise ConfigError(f"missing required key '{field.key}'")
+    if issues is not None:
+        validate_issues(values)
     return Config(path, values, sources)
 
 
 def _is_required(
-    field: Field, board: dict[str, Any] | None, notify: dict[str, Any] | None
+    field: Field,
+    board: dict[str, Any] | None,
+    notify: dict[str, Any] | None,
+    issues: dict[str, Any] | None,
 ) -> bool:
     if field.required == "required":
         return True
@@ -197,6 +149,8 @@ def _is_required(
         return board is not None
     if field.required == "notify":
         return notify is not None
+    if field.required == "issues":
+        return issues is not None
     return False
 
 
@@ -222,6 +176,8 @@ def _check_type(field: Field, value: object) -> None:
         ok = isinstance(value, bool)
     elif kind in ("path", "id-file"):
         ok = isinstance(value, str)
+    elif kind == "object":
+        ok = isinstance(value, dict)
     elif kind == "str-list":
         ok = isinstance(value, list) and all(
             isinstance(item, str) for item in cast("list[object]", value)

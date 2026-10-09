@@ -17,7 +17,8 @@ class Field(NamedTuple):
 #   "required" - always needed;
 #   "optional" - never required;
 #   "board"    - required only when the `board` object is present;
-#   "notify"   - required only when the `notify` object is present.
+#   "notify"   - required only when the `notify` object is present;
+#   "issues"   - required only when the `issues` object is present.
 SCHEMA = (
     Field("repo-root", "path", "required"),
     Field("pipeline", "path", "required"),
@@ -36,6 +37,7 @@ SCHEMA = (
     Field("driver.merge-check-max", "int", "required"),
     Field("driver.recover-own-claim", "bool", "required"),
     Field("machine.id-file", "id-file", "required"),
+    Field("machine.settings-file", "path", "optional"),
     Field("commands.glide", "str", "required"),
     Field("commands.git", "str", "required"),
     Field("commands.tmux", "str", "required"),
@@ -52,6 +54,7 @@ SCHEMA = (
     Field("board.repo", "path", "board"),
     # A path inside the board repository, so it stays repository-relative.
     Field("board.file", "str", "board"),
+    Field("board.issues-file", "str", "issues"),
     Field("board.branch", "str", "board"),
     Field("board.remote", "str", "board"),
     Field("notify.profile", "str", "notify"),
@@ -59,6 +62,27 @@ SCHEMA = (
     Field("notify.disabled", "bool", "notify"),
     Field("notify.fallback", "str", "optional"),
     Field("notify.heartbeat", "str", "optional"),
+    Field("issues.repo", "str", "issues"),
+    Field("issues.label-groups", "object", "issues"),
+    Field("issues.difficulty-order", "str-list", "issues"),
+    Field("issues.preference", "str", "issues"),
+    Field("issues.category", "str", "optional"),
+    Field("issues.search", "str", "optional"),
+    Field("issues.task-dir", "path", "issues"),
+    Field("issues.trusted-authors", "str-list", "optional"),
+    Field("issues.trusted-apps", "str-list", "optional"),
+    Field("issues.trusted-associations", "str-list", "optional"),
+    Field("issues.codeowners-file", "path", "optional"),
+    Field("issues.resolve-teams", "bool", "optional"),
+    Field("issues.comment-trust", "object", "optional"),
+    Field("issues.untrusted-comments", "str", "optional"),
+    Field("issues.max-comments", "int", "optional"),
+    Field("issues.max-text-bytes", "int", "optional"),
+    Field("issues.list-limit", "int", "optional"),
+    Field("issues.pr-check-max", "int", "optional"),
+    Field("issues.timeout", "int", "optional"),
+    Field("issues.claim-attempts", "int", "optional"),
+    Field("issues.announce", "bool", "optional"),
 )
 
 # Dotted key -> shell variable, in the same order as SCHEMA. The shell format
@@ -81,6 +105,7 @@ SHELL_VARS = {
     "driver.merge-check-max": "MERGE_CHECK_MAX",
     "driver.recover-own-claim": "RECOVER_OWN_CLAIM",
     "machine.id": "PHASE_MACHINE_ID",
+    "machine.settings-file": "MACHINE_SETTINGS_FILE",
     "commands.glide": "CMD_GLIDE",
     "commands.git": "CMD_GIT",
     "commands.tmux": "CMD_TMUX",
@@ -96,6 +121,7 @@ SHELL_VARS = {
     "tmux.refresh": "TMUX_REFRESH",
     "board.repo": "BOARD_REPO",
     "board.file": "BOARD_FILE",
+    "board.issues-file": "BOARD_ISSUES_FILE",
     "board.branch": "BOARD_BRANCH",
     "board.remote": "BOARD_REMOTE",
     "notify.profile": "HERMES_PROFILE_NAME",
@@ -103,6 +129,28 @@ SHELL_VARS = {
     "notify.disabled": "NOTIFY_DISABLED",
     "notify.fallback": "DISCORD_FALLBACK_CHANNEL",
     "notify.heartbeat": "HEARTBEAT_URL",
+}
+SHELL_VARS.update(
+    {
+        field.key: field.key.replace(".", "_").replace("-", "_").upper()
+        for field in SCHEMA
+        if field.key.startswith("issues.")
+    }
+)
+
+ISSUES_DEFAULTS: dict[str, object] = {
+    "issues.trusted-authors": [],
+    "issues.trusted-apps": [],
+    "issues.trusted-associations": ["OWNER", "MEMBER", "COLLABORATOR"],
+    "issues.resolve-teams": False,
+    "issues.untrusted-comments": "ignore",
+    "issues.max-comments": 50,
+    "issues.max-text-bytes": 60000,
+    "issues.list-limit": 200,
+    "issues.pr-check-max": 5,
+    "issues.timeout": 30,
+    "issues.claim-attempts": 3,
+    "issues.announce": True,
 }
 
 # The four flag overrides: flag name -> (dotted key, wrap scalar in a list).
@@ -114,7 +162,7 @@ _OVERRIDES = {
     "driver": ("driver.provider", False),
 }
 
-_OBJECT_KEYS = ("driver", "machine", "commands", "tmux", "board", "notify")
+_OBJECT_KEYS = ("driver", "machine", "commands", "tmux", "board", "notify", "issues")
 
 # Two keys name one value: the file a machine reads its own name from, and the
 # name it reads. Only the name is stored, reported and passed to the shell.

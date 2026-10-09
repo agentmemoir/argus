@@ -1,0 +1,15 @@
+version: 1
+run_dir: board/runs/issue-{issue_number:06d}
+inputs:
+  issue_number: {type: int, required: true}
+  issue_file: {required: true}
+start: implement
+ends: [completed, blocked]
+steps:
+  implement:
+    stage: issue-stage.md
+    bindings:
+      ISSUE_NUMBER: "{issue_number}"
+      ISSUE_FILE: "{issue_file}"
+      LOG_PATH: "{run_dir}/implement-task-r{round}.log"
+    end: completed

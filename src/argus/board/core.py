@@ -88,6 +88,7 @@ RESERVATION_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 
 
 PHASE_KEY_RE = re.compile(r"^[0-9]{6}$")
+ISSUE_KEY_RE = re.compile(r"^[0-9]{1,10}$")
 
 
 PUBLICATION_NAME = "publication.json"
@@ -134,6 +135,8 @@ class ReservationConflict(CoordinationError):
         phase: str | int,
         record: dict[str, Any] | None = None,
         reason: str = "phase is already reserved",
+        *,
+        kind: str = "phase",
     ) -> None:
         self.phase = phase
         self.record = record or {}
@@ -141,7 +144,7 @@ class ReservationConflict(CoordinationError):
         owner = self.record.get("machine_id", "unknown")
         status = self.record.get("status", "unknown")
         super().__init__(
-            f"phase {phase} is unavailable ({self.reason}; "
+            f"{kind} {phase} is unavailable ({self.reason}; "
             f"owner={owner}, status={status})"
         )
 
@@ -164,12 +167,14 @@ class ReservationCooldown(CoordinationError):
         phase: str | int,
         remaining_seconds: int | float,
         record: dict[str, Any] | None = None,
+        *,
+        kind: str = "phase",
     ) -> None:
         self.phase = phase
         self.remaining_seconds = int(remaining_seconds)
         self.record = record or {}
         super().__init__(
-            f"phase {phase} is in cooldown; {self.remaining_seconds} second(s) left"
+            f"{kind} {phase} is in cooldown; {self.remaining_seconds} second(s) left"
         )
 
 
@@ -224,6 +229,17 @@ def _parse_moment(value: object, *, what: str = "timestamp") -> _datetime.dateti
 
 def _now() -> str:
     return _iso()
+
+
+def _issue_key(value: object) -> tuple[str, int]:
+    if isinstance(value, bool) or not isinstance(value, (int, str)):
+        raise CoordinationError(f"invalid issue number: {value!r}")
+    if isinstance(value, str) and not ISSUE_KEY_RE.fullmatch(value):
+        raise CoordinationError(f"invalid issue number: {value!r}")
+    number = int(value)
+    if not 1 <= number <= 9999999999:
+        raise CoordinationError(f"issue number is out of range: {value!r}")
+    return f"{number:06d}", number
 
 
 def _phase_key(phase: Any) -> tuple[str, int]:
@@ -307,6 +323,7 @@ __all__ = [
     "_Mutation",
     "_as_moment",
     "_iso",
+    "_issue_key",
     "_now",
     "_parse_moment",
     "_phase_key",

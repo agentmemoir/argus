@@ -16,14 +16,13 @@ from argus.board.core import (
     _iso,
     _Mutation,
     _now,
-    _phase_key,
     _validate_generation,
     _validate_machine_id,
     _validate_reservation_id,
     _validate_status,
 )
 from argus.board.files import _validate_publication_receipt
-from argus.board.state import _owner_matches, _reservation_from_record
+from argus.board.state import _owner_matches, _receipt_of
 from argus.board.store_base import _StoreBase
 from argus.board.worktree import _transaction
 
@@ -69,13 +68,22 @@ class _LifecycleOps(_StoreBase):
                 record = state["phases"][key]
                 if not _owner_matches(record, machine_id, reservation_id, generation):
                     raise ReservationFenced(
-                        f"phase {key} reservation is fenced by a newer owner"
+                        f"{self.kind} {key} reservation is fenced by a newer owner"
                     )
                 if record.get("status") == EXPIRED_STATUS:
-                    raise ReservationFenced(f"phase {key} reservation expired")
+                    raise ReservationFenced(f"{self.kind} {key} reservation expired")
                 if record.get("status") in TERMINAL_STATUSES:
                     continue
-                del state["phases"][key]
+                reason = (
+                    _receipt_of(record).get("state_reason") if self.issues else None
+                )
+                if reason == "writeback_pending":
+                    continue
+                if reason == "remedy_escalated":
+                    record["status"] = EXPIRED_STATUS
+                    record.pop("cooldown_until", None)
+                else:
+                    del state["phases"][key]
                 released.append(key)
             return _Mutation(bool(released), released)
 
@@ -84,8 +92,9 @@ class _LifecycleOps(_StoreBase):
             self.remote,
             self.branch,
             mutate,
-            f"phase coordination: release group "
+            f"{self.kind} coordination: release group "
             f"[{reservation_id}] for {machine_id} at {moment}",
+            issues=self.issues,
         )
 
     def renew_group(
@@ -128,16 +137,16 @@ class _LifecycleOps(_StoreBase):
                 record = state["phases"][key]
                 if not _owner_matches(record, machine_id, reservation_id, generation):
                     raise ReservationFenced(
-                        f"phase {key} reservation is fenced by a newer owner"
+                        f"{self.kind} {key} reservation is fenced by a newer owner"
                     )
                 if record.get("status") == EXPIRED_STATUS:
-                    raise ReservationFenced(f"phase {key} reservation expired")
+                    raise ReservationFenced(f"{self.kind} {key} reservation expired")
                 if record.get("status") not in TERMINAL_STATUSES:
                     if status is not None:
                         record["status"] = status
                     record["heartbeat_at"] = moment
                     refreshed = True
-                records.append(_reservation_from_record({**record, "_phase": key}))
+                records.append(self._reservation(record, key))
             # A group whose every member is published has nothing to refresh, so
             # the tick that still holds it writes nothing rather than a board
             # commit per tick for a claim that is already finished.
@@ -148,7 +157,8 @@ class _LifecycleOps(_StoreBase):
             self.remote,
             self.branch,
             mutate,
-            f"phase coordination: renew group [{reservation_id}] for {machine_id}",
+            f"{self.kind} coordination: renew group [{reservation_id}] for {machine_id}",
+            issues=self.issues,
         )
 
     def _owned_mutation(
@@ -165,8 +175,8 @@ class _LifecycleOps(_StoreBase):
         machine_id = _validate_machine_id(reservation.get("machine_id"))
         reservation_id = _validate_reservation_id(reservation.get("reservation_id"))
         generation = _validate_generation(reservation.get("generation"))
-        phase = reservation.get("phase")
-        key, _number = _phase_key(phase)
+        phase = reservation.get(self.kind)
+        key, _number = self._key(phase)
         if next_status is not None:
             next_status = _validate_status(next_status)
         if next_status == "accepted":
@@ -187,6 +197,8 @@ class _LifecycleOps(_StoreBase):
                 "an acceptance reason is only valid for accepted status"
             )
         receipt: dict[str, Any] | None = None
+        if next_status == "completed" and self.issues:
+            raise CoordinationError("issue completion is read from GitHub")
         if next_status == "completed":
             if evidence_path is None:
                 raise CoordinationError(
@@ -208,23 +220,21 @@ class _LifecycleOps(_StoreBase):
         def mutate(state: dict[str, Any]) -> _Mutation:
             record = state["phases"].get(key)
             if record is None:
-                raise ReservationFenced(f"phase {key} has no current reservation")
+                raise ReservationFenced(f"{self.kind} {key} has no current reservation")
             if not _owner_matches(record, machine_id, reservation_id, generation):
                 raise ReservationFenced(
-                    f"phase {key} reservation is fenced by a newer owner"
+                    f"{self.kind} {key} reservation is fenced by a newer owner"
                 )
             if record.get("status") == EXPIRED_STATUS:
                 # The window closed and the group returned to the queue; a late
                 # write from the old owner must not revive it. This is the
                 # generation fence applied to expiry, not a separate mechanism.
-                raise ReservationFenced(f"phase {key} reservation expired")
+                raise ReservationFenced(f"{self.kind} {key} reservation expired")
             if record.get("status") in TERMINAL_STATUSES:
                 if next_status == record.get("status"):
-                    return _Mutation(
-                        False, _reservation_from_record({**record, "_phase": key})
-                    )
+                    return _Mutation(False, self._reservation(record, key))
                 raise ReservationFenced(
-                    f"phase {key} is already {record.get('status')}"
+                    f"{self.kind} {key} is already {record.get('status')}"
                 )
             if next_status is not None:
                 record["status"] = next_status
@@ -235,7 +245,7 @@ class _LifecycleOps(_StoreBase):
             if receipt is not None:
                 record["completion_receipt"] = receipt
             record["heartbeat_at"] = _iso(now)
-            return _Mutation(True, _reservation_from_record({**record, "_phase": key}))
+            return _Mutation(True, self._reservation(record, key))
 
         return mutate
 
@@ -246,7 +256,8 @@ class _LifecycleOps(_StoreBase):
             self.remote,
             self.branch,
             mutate,
-            f"phase coordination: renew {reservation['phase']}",
+            f"{self.kind} coordination: renew {reservation[self.kind]}",
+            issues=self.issues,
         )
 
     def set_status(
@@ -268,7 +279,8 @@ class _LifecycleOps(_StoreBase):
             self.remote,
             self.branch,
             mutate,
-            f"phase coordination: {status} {reservation['phase']}",
+            f"{self.kind} coordination: {status} {reservation[self.kind]}",
+            issues=self.issues,
         )
 
     def assert_owner(self, reservation: Any) -> dict[str, Any]:
@@ -276,7 +288,7 @@ class _LifecycleOps(_StoreBase):
         if not isinstance(reservation, dict):
             raise CoordinationError("reservation must be an object")
         reservation = cast("dict[str, Any]", reservation)
-        key, _number = _phase_key(reservation.get("phase"))
+        key, _number = self._key(reservation.get(self.kind))
         state, _commit = self.read()
         record: dict[str, Any] | None = state["phases"].get(key)
         if record is None or not _owner_matches(
@@ -286,8 +298,10 @@ class _LifecycleOps(_StoreBase):
             reservation.get("generation"),
         ):
             raise ReservationFenced(
-                f"phase {key} is no longer owned by this reservation"
+                f"{self.kind} {key} is no longer owned by this reservation"
             )
+        if self.issues and record.get("status") == EXPIRED_STATUS:
+            raise ReservationFenced(f"issue {key} reservation expired")
         if record.get("status") in TERMINAL_STATUSES:
             return dict(record)
         return dict(record)

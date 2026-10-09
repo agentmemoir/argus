@@ -6,8 +6,8 @@
 This file is the entry point the driver calls. It resolves the configured work
 source and asks it what to run next. It knows nothing about phases, roadmaps,
 labels or issues: those belong to the source that answers. The roadmap source
-is the only source today and lives in roadmap_source.py; the contract it
-satisfies, and the registry of sources, live in work_source.py.
+and the issue source are registered in work_source.py, beside the contract
+they satisfy.
 
 Run the source tool by path, e.g.:
   python3 /path/to/argus/next_phase.py --repo /path/to/project
@@ -37,6 +37,14 @@ driver runs the merge check on them. A result for a phase that declares a
 reservation group also carries ``group`` and ``members``: the whole group in
 declaration order and the reservation records claimed for it, all sharing one
 reservation id.
+
+A result from the issue source always carries ``kind: "issue"``, ``skipped``
+(a count per skip reason), ``preference`` and ``truncated`` (true when the
+candidate list may have been capped), and ``issue`` (the bare issue number)
+when it names an item; it never carries ``phase``, ``group`` or ``members``.
+Its open linked pull requests are reported in ``watching`` and never in
+``awaiting_review``, so the phase merge check never sees an issue. A result
+with no ``kind`` is a phase result.
 
 ``--resolve-group PHASE`` is a read-only query, not a selection. It prints the
 reservation group the phase belongs to and the members still unfinished, and it
@@ -224,7 +232,9 @@ def main(
     # roadmap folder is unreadable, and the two failures are unrelated.
     if args.migrate_board:
         try:
-            created = ReservationStore(repo).migrate_board()
+            created = ReservationStore(
+                repo, issues=args.source == "issues"
+            ).migrate_board()
         except CoordinationError as exc:
             print(
                 json.dumps(
@@ -240,31 +250,43 @@ def main(
     except WorkSourceError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
-    if args.server:
-        try:
-            result = source.select(
-                args.machine_id or conventions.setting("machine.id"),
-                reserve=not args.read_only,
-            )
-        except CoordinationError as exc:
+    try:
+        return _select(args, source, repo)
+    except (WorkSourceError, CoordinationError) as exc:
+        if args.server:
             result = {"state": "COORDINATION_UNAVAILABLE", "error": str(exc)}
+            if source.name == "issues":
+                result["kind"] = "issue"
             print(json.dumps(result, sort_keys=True))
-            return 2
+        else:
+            print(f"error: {exc}", file=sys.stderr)
+        return 2
+
+
+def _select(args: argparse.Namespace, source: Any, repo: Path) -> int:
+    if args.server:
+        result = source.select(
+            args.machine_id or conventions.setting("machine.id"),
+            reserve=not args.read_only,
+        )
         print(json.dumps(result, sort_keys=True))
         return STATE_EXIT.get(result["state"], 2)
     if args.audit:
         return 0 if source.audit(apply_index=args.fix_index) == 0 else 1
     if args.verbose:
-        for item in source.candidates():
-            s = source.signals(item)
-            print(
-                f"{item[0]}\t{item[1].name}\trun={int(s['run'])} "
-                f"ledger={int(s['ledger'])} log={int(s['finalize_log'])} "
-                f"publication={int(s['publication'])} "
-                f"box={int(s['approval'])} index={int(s['index'])} "
-                f"decision={int(s['needs_decision'])}",
-                file=sys.stderr,
-            )
+        if source.name == "issues":
+            source.verbose()
+        else:
+            for item in source.candidates():
+                s = source.signals(item)
+                print(
+                    f"{item[0]}\t{item[1].name}\trun={int(s['run'])} "
+                    f"ledger={int(s['ledger'])} log={int(s['finalize_log'])} "
+                    f"publication={int(s['publication'])} "
+                    f"box={int(s['approval'])} index={int(s['index'])} "
+                    f"decision={int(s['needs_decision'])}",
+                    file=sys.stderr,
+                )
     nxt = source.select_next()
     if nxt is None:
         return 1

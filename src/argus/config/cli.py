@@ -8,9 +8,10 @@ small scanner that respects JSON string literals and backslash escapes, so a
 section 7: a reverse solidus escapes the next character, so `\\"` does not end
 the string and `\\\\` leaves the scanner ready to end it.
 
-Every relative path is resolved against the folder that holds the file. A flag
-beats the file for one run, and `sources` records which one supplied each value.
-No value has a default: a missing required key stops the load and names the key.
+Every relative path is resolved against the folder that supplied the value.
+Machine settings replace named values, and flags win for one run. `sources`
+records file, overlay, flag, or optional issue default for each value.
+A missing required key stops the load and names the key.
 `machine.id-file` names a file whose first non-empty line is the machine's name,
 so machines with the same layout can share one configuration file.
 """

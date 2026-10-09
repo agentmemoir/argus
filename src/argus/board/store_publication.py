@@ -6,6 +6,7 @@ from typing import Any
 
 from argus.board.core import (
     TERMINAL_STATUSES,
+    CoordinationError,
     PublicationBusy,
     ReservationFenced,
     _Mutation,
@@ -22,6 +23,8 @@ from argus.board.worktree import _transaction
 
 class _PublicationOps(_StoreBase):
     def acquire_publication(self, reservation: dict[str, Any]) -> Any:
+        if self.issues:
+            raise CoordinationError("publication locks only apply to phases")
         key, _number = _phase_key(reservation.get("phase"))
         machine_id = _validate_machine_id(reservation.get("machine_id"))
         reservation_id = _validate_reservation_id(reservation.get("reservation_id"))
@@ -68,9 +71,12 @@ class _PublicationOps(_StoreBase):
             self.branch,
             mutate,
             f"phase coordination: publication lock {key}",
+            issues=self.issues,
         )
 
     def release_publication(self, reservation: dict[str, Any]) -> Any:
+        if self.issues:
+            raise CoordinationError("publication locks only apply to phases")
         key, _number = _phase_key(reservation.get("phase"))
         machine_id = _validate_machine_id(reservation.get("machine_id"))
         reservation_id = _validate_reservation_id(reservation.get("reservation_id"))
@@ -97,6 +103,7 @@ class _PublicationOps(_StoreBase):
             self.branch,
             mutate,
             f"phase coordination: release publication lock {key}",
+            issues=self.issues,
         )
 
 

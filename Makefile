@@ -88,6 +88,8 @@ self-test:
 	$(RUN) python tests/test_identifiers.py
 	$(RUN) python -m argus.select.group --self-test
 	$(RUN) python -m argus.gitsync.main --self-test
+	$(RUN) python -m argus.issues.selftest
+	$(RUN) pytest -q tests/test_config_issues.py tests/test_config_overlay.py tests/test_issue_board.py tests/test_issue_driver.py tests/test_issue_tick.py tests/test_issues_*.py tests/test_issue_publication*.py
 
 # The published folder must carry no identifier: no home path, no numeric
 # account or channel id, and no notification default or literal that is not a

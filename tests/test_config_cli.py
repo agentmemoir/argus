@@ -60,7 +60,8 @@ def test_report_format():
         result = run_cli(["--config", str(path), "--format", "report"], tmp)
         check(result.returncode == 0, result.stderr)
         lines = [line for line in result.stdout.splitlines() if line]
-        check(len(lines) == len(cfgmod.SCHEMA), (len(lines), len(cfgmod.SCHEMA)))
+        present = cfgmod.load(path).values
+        check({line.split("\t")[0] for line in lines} == set(present), lines)
         check(lines[0].split("\t")[:2] == ["repo-root", "file"], lines[0])
         check(all(len(line.split("\t")) == 3 for line in lines), lines)
 

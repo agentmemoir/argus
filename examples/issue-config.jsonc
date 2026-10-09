@@ -1,0 +1,87 @@
+// Set issues.repo and create the separate board checkout before use.
+{
+  "repo-root": "./project",
+  "pipeline": "./project/issue-pipeline.yaml",
+  "roadmap-dir": "./project/plans",
+  "number-input": "issue_number",
+  "file-input": "issue_file",
+  "driver": {
+    "provider": "issues",
+    "include": [
+      "phase-*.md"
+    ],
+    "runs": "./project/board/runs",
+    "state": "state",
+    "stale-after": 2700,
+    "outage-stale": 32400,
+    "quiet-minutes": 45,
+    "keep-logs-days": 7,
+    "merge-check-max": 5,
+    "recover-own-claim": false
+  },
+  "machine": {
+    "id-file": "machine.id"
+  },
+  "commands": {
+    "glide": "glide",
+    "git": "git",
+    "tmux": "tmux",
+    "python": "python3",
+    "hermes": "hermes",
+    "gh": "gh"
+  },
+  "tmux": {
+    "session": "example",
+    "width": 164,
+    "height": 56,
+    "idle-window": "idle",
+    "phase-window": "phase",
+    "idle-script": "phase-tmux-idle.sh",
+    "refresh": 15
+  },
+  "board": {
+    "repo": "./project/board",
+    "file": "coordination/phases.json",
+    "issues-file": "coordination/issues.json",
+    "branch": "claims",
+    "remote": "origin"
+  },
+  "issues": {
+    "repo": "example/project",
+    "label-groups": {
+      "type": {
+        "labels": [
+          "bug",
+          "enhancement",
+          "documentation"
+        ],
+        "cardinality": "one"
+      },
+      "area": {
+        "labels": [
+          "area:cli",
+          "area:ops"
+        ],
+        "cardinality": "many"
+      },
+      "difficulty": {
+        "labels": [
+          "difficulty:easy",
+          "difficulty:medium",
+          "difficulty:hard"
+        ],
+        "cardinality": "one"
+      }
+    },
+    "difficulty-order": [
+      "difficulty:easy",
+      "difficulty:medium",
+      "difficulty:hard"
+    ],
+    "preference": "newest",
+    "category": "area:ops",
+    "search": "is:issue",
+    "task-dir": "./project/board/tasks",
+    "untrusted-comments": "ignore"
+  }
+}

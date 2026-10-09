@@ -117,6 +117,7 @@ notify_phase() {
   local phase_file="$1" event="$2" reason="${3:-}" exit_code="${4:-}"
   local quiet_minutes="${5:-$QUIET_MINUTES}" message phase_number
   local args=("${ARGUS_CONFIG_ARGS[@]}" --phase-file "$phase_file" --event "$event" --quiet-minutes "$quiet_minutes")
+  if [ "${work_kind:-phase}" = issue ]; then args+=(--kind issue); fi
   [ -n "$reason" ] && args+=(--reason "$reason")
   [ -n "$exit_code" ] && args+=(--exit-code "$exit_code")
   message="$("$PYTHON" "$NOTIFIER" "${args[@]}" 2>/dev/null || true)"
@@ -136,7 +137,9 @@ parts = phase_file_parts(sys.argv[2])
 print(parts[0] if parts else "unknown")
 PY
   )"
-  notify "Phase ${phase_number:-unknown} needs attention."
+  local kind_label=Phase
+  [ "${work_kind:-phase}" != issue ] || kind_label=Issue
+  notify "$kind_label ${phase_number:-unknown} needs attention."
 }
 
 # Say once that the coordination board is unreachable, not once every tick.
@@ -188,7 +191,7 @@ notify_coordination_outage() {
   fi
   if mkdir "$marker" 2>/dev/null; then
     date +%s >"$seen" 2>/dev/null || true
-    notify "The coordination board cannot be reached, so no phase can start.
+    notify "The coordination board cannot be reached, so no ${work_kind:-phase} can start.
 
 The selector said: $reason
 

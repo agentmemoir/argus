@@ -20,44 +20,14 @@ if not __package__:
     )
 from argus import conventions
 from argus.config.loader import ConfigError
-from argus.conventions import phase_file_parts, phase_run_dir
+from argus.conventions import phase_run_dir
+from argus.notify.labels import display_title, parse_phase_file, phase_label
+
+__all__ = ["display_title", "parse_phase_file", "phase_label"]
 
 _SECRET = re.compile(
     r"(?i)\b(?:api[_-]?key|authorization|bearer|password|secret|token)\s*[:=]\s*\S+"
 )
-
-_ACRONYMS = {
-    "am": "AM",
-    "api": "API",
-    "cli": "CLI",
-    "db": "DB",
-    "ema": "EMA",
-    "http": "HTTP",
-    "https": "HTTPS",
-    "json": "JSON",
-    "mcp": "MCP",
-    "ops": "OPS",
-    "acl": "ACL",
-    "ann": "ANN",
-    "ast": "AST",
-    "crud": "CRUD",
-    "dag": "DAG",
-    "etl": "ETL",
-    "fts": "FTS",
-    "hnsw": "HNSW",
-    "idf": "IDF",
-    "ir": "IR",
-    "jwt": "JWT",
-    "lww": "LWW",
-    "nlp": "NLP",
-    "rag": "RAG",
-    "rbac": "RBAC",
-    "rest": "REST",
-    "rpc": "RPC",
-    "sse": "SSE",
-    "ttl": "TTL",
-    "uuid": "UUID",
-}
 
 _STEP_LABELS = {
     "developer": "Developer",
@@ -66,31 +36,6 @@ _STEP_LABELS = {
     "approver": "Approver",
     "finalize": "Finalizer",
 }
-
-
-def parse_phase_file(phase_file: str | Path) -> tuple[str, str, str]:
-    """Return the phase number, title slug, and normalized file name."""
-    name = Path(phase_file).name
-    parts = phase_file_parts(name)
-    if parts is None:
-        raise ValueError(f"not a phase file: {name}")
-    number, title = parts
-    return f"{number:06d}", title, name
-
-
-def display_title(title: str) -> str:
-    """Turn a phase slug into readable words while preserving common acronyms."""
-    return " ".join(
-        _ACRONYMS.get(word.lower(), word.capitalize())
-        for word in title.split("-")
-        if word
-    )
-
-
-def phase_label(phase_file: str | Path) -> str:
-    """Return the user-facing phase label."""
-    number, title, _ = parse_phase_file(phase_file)
-    return f"Phase {number} ({display_title(title)})"
 
 
 def format_duration(seconds: float) -> str:
@@ -193,14 +138,17 @@ def format_notification(
     quiet_minutes: int = 45,
     run_json: Path | None = None,
     group: Any = None,
+    kind: str = "phase",
 ) -> str:
     """Format one phase event as a short, user-facing notification."""
-    label = phase_label(phase_file)
+    label = phase_label(phase_file, kind=kind)
     safe_reason = _safe_reason(reason)
-    suffix = _group_phrase(group)
+    suffix = _group_phrase(group) if kind == "phase" else ""
     if event == "started":
         return f"{label}{suffix} has started."
     if event == "released":
+        if kind == "issue":
+            return f"{label} was released. Another agent may pick it up."
         return (
             f"{label}{suffix} was released. Its group returned to the queue; "
             "another agent may pick it up."
@@ -234,7 +182,7 @@ def format_notification(
         run_dir = (run_json or default_run_json(phase_file)).parent
         return (
             f"{label} exhausted its remedy rounds with findings open. "
-            "The line continues; this phase is skipped until a person decides. "
+            f"The line continues; this {kind} is skipped until a person decides. "
             f"For the open findings, run:\n\n```\ncat {run_dir / 'remedy-escalated.json'}\n```"
         )
     if event == "stalled":
@@ -250,6 +198,7 @@ def format_notification(
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--phase-file", required=True)
+    parser.add_argument("--kind", choices=("phase", "issue"), default="phase")
     parser.add_argument(
         "--event",
         required=True,
@@ -300,6 +249,7 @@ def main(argv: list[str] | None = None) -> int:
                 else conventions.setting("driver.quiet-minutes")
             ),
             group=args.group,
+            kind=args.kind,
         )
     )
     return 0
