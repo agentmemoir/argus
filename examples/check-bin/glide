@@ -1,0 +1,9 @@
+#!/bin/sh
+# A stand-in for the glide command, used only by `make example-check`.
+#
+# The example configuration names `glide` the way a real project does, but the
+# readiness report must run on a machine with no Glide installed. --check only
+# asks whether the command resolves; it never runs it. A real project points
+# `commands.glide` at its own Glide command instead of this file.
+printf '%s\n' "example stand-in for the glide command" >&2
+exit 2

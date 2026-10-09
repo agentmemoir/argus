@@ -43,6 +43,10 @@ jobs:
         run: uv sync --frozen
       - name: Install tmux
         run: sudo apt-get update -qq && sudo apt-get install -y -qq tmux
+      - name: Run the leak scan
+        run: make leakscan
+      - name: Check the example configuration
+        run: make example-check
       - name: Run make self-test
         run: |
           started=$(date +%s)

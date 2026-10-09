@@ -19,14 +19,16 @@ hand-edit `uv.lock`.
 Run the checks before opening a pull request:
 
 ```sh
-make lint         # ruff check
-make fmt-check    # formatting, 88 columns
-make self-test    # the driver, the reservation group, and the sync self-tests
-make guard-faults # break every launch guard and require a named failure
+make lint          # ruff check
+make fmt-check     # formatting, 88 columns
+make leakscan      # the published tree carries no host path, credential, or run state
+make example-check # the bundled example loads and passes the readiness report
+make self-test     # the driver, the reservation group, and the sync self-tests
+make guard-faults  # break every launch guard and require a named failure
 ```
 
 `make wheel` builds the package and checks that the driver ships inside.
-CI runs lint, `make self-test`, and `make guard-faults`.
+CI runs the lint and format checks, `make leakscan`, `make example-check`, `make self-test`, and `make guard-faults`.
 
 ## Rules That Matter Here
 
@@ -49,4 +51,5 @@ check with any behaviour change.
 
 This is a public repository. Before you push, confirm your change carries
 nothing private: no host paths, no machine names, no secrets, and no run
-state. Pushing is a separate, explicit step.
+state. `make leakscan` checks the published tree for those shapes. Pushing is
+a separate, explicit step.

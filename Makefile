@@ -11,7 +11,8 @@ PREFIX ?= $(HOME)/.local
 BINDIR ?= $(PREFIX)/bin
 CONFIG ?= config.json
 
-.PHONY: install sync lint fmt fmt-check check dry-run self-test identifiers guard-faults wheel
+.PHONY: install sync lint fmt fmt-check check dry-run example-check self-test \
+        identifiers leakscan guard-faults wheel
 install:
 	install -d "$(DESTDIR)$(BINDIR)"
 	ln -sf "$(CURDIR)/bin/argus" "$(DESTDIR)$(BINDIR)/argus"
@@ -38,6 +39,16 @@ check:
 dry-run:
 	bin/argus --config "$(CONFIG)" --dry-run
 
+# The example must load and pass the readiness report on any machine. A real
+# project names its own Glide command; `examples/check-bin` puts a stand-in
+# first on PATH, because --check only asks whether the command resolves and a
+# machine with no Glide installed must still be able to check the example. The
+# runs folder is created here: it is git-ignored, and the driver needs the
+# configured run-state folder to exist before it starts.
+example-check:
+	@mkdir -p examples/runs
+	@PATH="$(CURDIR)/examples/check-bin:$$PATH" $(RUN) bin/argus --config examples/argus-config.jsonc --check
+
 self-test:
 	$(RUN) bin/argus --self-test
 	$(RUN) python tests/test_config.py
@@ -54,6 +65,12 @@ self-test:
 # cannot be added to the package quietly.
 identifiers:
 	$(RUN) python tests/test_identifiers.py
+
+# The published tree must carry no host path, no credential assignment, and no
+# run state. The tests own the patterns; this target is how a push check and CI
+# run them.
+leakscan:
+	$(RUN) pytest -q tests/test_no_host_leak.py tests/test_leak_patterns.py
 
 guard-faults:
 	$(RUN) python tests/guard_faults.py

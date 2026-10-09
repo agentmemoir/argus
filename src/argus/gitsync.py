@@ -5634,7 +5634,8 @@ def _self_test_checks():
         res["summary"],
     )
 
-    # 9. a shared remote URL refuses both checkouts (private/public crossing).
+    # 9. a shared remote URL refuses both checkouts (a private tree and a
+    # public one).
     d = base / "shared"
     d.mkdir()
     remote, pub = _init_remote(d, "w")

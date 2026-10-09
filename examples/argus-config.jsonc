@@ -1,0 +1,71 @@
+// Argus configuration for the example project.
+//
+// Every relative path below resolves against the folder that holds THIS file.
+// Copy this file and the project/ folder together, then change the paths.
+//
+// No value has a default: a missing required key stops the tick and names the
+// key. A command-line flag beats this file for one run.
+{
+  // The project checkout. Required.
+  "repo-root": "./project",
+
+  // The pipeline a tick runs. Required. Relative to this file.
+  "pipeline": "./project/pipeline.yaml",
+
+  // The folder holding the work-item files. Required.
+  "roadmap-dir": "./project/plans",
+
+  // The pipeline input names that carry the work-item number and file. The
+  // example pipeline declares both, so both are named here.
+  "number-input": "ticket",
+  "file-input": "document",
+
+  "driver": {
+    // Which work source runs the queue. Required.
+    "provider": "phase",
+
+    // The work-item file globs to consider. Required.
+    "include": ["phase-*.md"],
+
+    // Where run state goes. Required. `make example-check` creates it.
+    "runs": "runs",
+
+    // The folder inside driver.runs holding the driver's own state: the log,
+    // the lock, the halt marker, the pid file. Required.
+    "state": "state",
+
+    "stale-after": 2700,
+    "outage-stale": 32400,
+    "quiet-minutes": 45,
+    "keep-logs-days": 7,
+    "merge-check-max": 5,
+    "recover-own-claim": false
+  },
+
+  "machine": {
+    // A file whose first non-empty line is this machine's name. Required.
+    "id-file": "machine.id"
+  },
+
+  "commands": {
+    // External commands, named rather than searched for. The readiness report
+    // checks the tmux, hermes, and glide commands and the configured Python.
+    // Replace `glide` with your own Glide command.
+    "glide": "glide",
+    "git": "git",
+    "tmux": "tmux",
+    "python": "python3",
+    "hermes": "hermes",
+    "gh": "gh"
+  },
+
+  "tmux": {
+    "session": "example",
+    "width": 164,
+    "height": 56,
+    "idle-window": "idle",
+    "phase-window": "phase",
+    "idle-script": "phase-tmux-idle.sh",
+    "refresh": 15
+  }
+}
