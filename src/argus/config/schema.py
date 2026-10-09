@@ -119,3 +119,16 @@ _OBJECT_KEYS = ("driver", "machine", "commands", "tmux", "board", "notify")
 # Two keys name one value: the file a machine reads its own name from, and the
 # name it reads. Only the name is stored, reported and passed to the shell.
 _REPORT_KEY = {"machine.id-file": "machine.id"}
+
+
+# The schema, the shell variable map, and the constants the loader, the
+# renderers, and the shell helpers read. Declared so which names other modules
+# may read is a statement rather than an accident of a leading underscore.
+__all__ = [
+    "Field",
+    "SCHEMA",
+    "SHELL_VARS",
+    "_OBJECT_KEYS",
+    "_OVERRIDES",
+    "_REPORT_KEY",
+]

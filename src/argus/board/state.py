@@ -160,8 +160,10 @@ def _reservation_from_record(record: dict[str, Any]) -> dict[str, Any]:
 
 
 __all__ = [
+    "_empty_state",
     "_owner_matches",
     "_read_state_file",
     "_reservation_from_record",
+    "_validate_state",
     "_write_state_file",
 ]

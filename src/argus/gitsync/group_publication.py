@@ -234,6 +234,7 @@ def _push_one(repo: str | Path) -> dict[str, Any]:
 __all__ = [
     "_group_all_published",
     "_load_phase_reservation",
+    "_member_published",
     "_push_one",
     "_write_publication_receipt",
 ]

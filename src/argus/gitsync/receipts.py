@@ -191,4 +191,4 @@ def receipt_for_branch(repo: str | Path, branch: str) -> dict[str, Any] | None:
     return None
 
 
-__all__ = ["_head_carried_locally", "_published_head"]
+__all__ = ["_head_carried_locally", "_phase_run_entries", "_published_head"]

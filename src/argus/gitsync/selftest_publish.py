@@ -274,4 +274,8 @@ def _publish_still_refuses_check(base: Path) -> list[tuple[str, object, str]]:
     return results
 
 
-__all__ = ["_publish_still_refuses_check", "_publish_while_writing_check"]
+__all__ = [
+    "_publish_fixture",
+    "_publish_still_refuses_check",
+    "_publish_while_writing_check",
+]

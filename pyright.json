@@ -1,6 +1,6 @@
 {
     "include": ["src", "tests"],
     "typeCheckingMode": "strict",
-    "reportMissingTypeStubs": false,
-    "reportPrivateUsage": false
+    "reportMissingTypeStubs": true,
+    "reportPrivateUsage": true
 }

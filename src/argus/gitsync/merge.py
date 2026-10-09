@@ -207,3 +207,8 @@ def sync_one(
     return _merge(
         info, repo, upstream, ahead, behind, abort_on_conflict=(mode != "push")
     )
+
+
+# The two strategies this module is split into, and the one entry point the
+# sync modes and their checks call.
+__all__ = ["_fast_forward", "_merge", "sync_one"]

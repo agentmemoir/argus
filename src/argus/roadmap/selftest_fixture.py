@@ -107,4 +107,10 @@ class _ReadOnlyStore:
         return self.state, "fake"
 
 
-__all__ = ["_EmptyStore", "_FailingStore", "_FakeGateStore", "_ReadOnlyStore"]
+__all__ = [
+    "_EmptyStore",
+    "_FailingStore",
+    "_FakeGateStore",
+    "_FakeStore",
+    "_ReadOnlyStore",
+]

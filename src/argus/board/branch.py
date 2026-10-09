@@ -222,6 +222,7 @@ def _state_initialized(private: str | Path, ref: str) -> bool:
 __all__ = [
     "_branch_setting",
     "_fetch_branch_ref",
+    "_integration_branch",
     "_remote_setting",
     "_resolve_private_repo",
     "_state_initialized",

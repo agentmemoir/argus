@@ -254,3 +254,13 @@ def commit_leftover_run_state(
         "pathspec": pathspec,
         "summary": summarize(results, "start-clean"),
     }
+
+
+# The run-state helpers the publication, the cleanup, and their checks call.
+__all__ = [
+    "_commit_and_push_run_state",
+    "_phase_run_pathspec",
+    "commit_leftover_run_state",
+    "is_engine_written_run_artifact",
+    "publish_dirt",
+]

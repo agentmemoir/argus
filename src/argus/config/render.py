@@ -68,4 +68,4 @@ def _json_view(config: "Config") -> dict[str, object]:
     }
 
 
-__all__ = ["_json_view"]
+__all__ = ["_json_view", "_render", "_shell_value"]

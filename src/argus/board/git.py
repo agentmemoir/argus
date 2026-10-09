@@ -118,4 +118,4 @@ def _head(repo: str | Path) -> str | None:
     return out if rc == 0 and out else None
 
 
-__all__ = ["_assert_private_boundary", "_head"]
+__all__ = ["_assert_private_boundary", "_git", "_head", "_is_git_repo"]
