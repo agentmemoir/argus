@@ -124,6 +124,7 @@ for entry in entries:
 tidy_published_checkout() {
   local rc=0 not_a_tree=0
   "$PYTHON" "$ARGUS/gitsync/main.py" "${ARGUS_CONFIG_ARGS[@]}" --root "$REPO" --mode tidy \
+    "${GITSYNC_KIND_ARGS[@]+"${GITSYNC_KIND_ARGS[@]}"}" \
     >"$RUN_DIR/phase-tidy.json" 2>/dev/null || rc=$?
   if [ "$rc" -eq 0 ]; then
     return 0

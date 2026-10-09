@@ -155,6 +155,8 @@ done
 # module defines argus_init, which the entrypoint calls below.
 # shellcheck disable=SC1091
 . "$ARGUS_DIR/lib-driver-config.sh"
+
+. "$ARGUS_DIR/lib-driver-issues.sh"
 # Timestamps, logging, and the log-line sanitising helpers.
 # shellcheck disable=SC1091
 . "$ARGUS_DIR/lib-driver-log.sh"

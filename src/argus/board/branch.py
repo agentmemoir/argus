@@ -193,7 +193,7 @@ def _fetch_branch_ref(private: str | Path, remote: str, branch: str) -> tuple[st
     return remote_ref, commit
 
 
-def _state_initialized(private: str | Path, ref: str) -> bool:
+def _state_initialized(private: str | Path, ref: str, *, issues: bool = False) -> bool:
     shallow_rc, shallow_out, _shallow_err = _git(
         private, "rev-parse", "--is-shallow-repository"
     )
@@ -210,7 +210,7 @@ def _state_initialized(private: str | Path, ref: str) -> bool:
         "1",
         ref,
         "--",
-        state_rel().as_posix(),
+        state_rel(issues=issues).as_posix(),
     )
     if rc != 0:
         raise CoordinationUnavailable(

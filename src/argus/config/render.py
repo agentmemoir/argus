@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Render a loaded configuration as shell, report, or JSON text."""
 
+import json
 import shlex
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
@@ -13,6 +14,8 @@ if TYPE_CHECKING:
 
 
 def _shell_value(value: object) -> str:
+    if isinstance(value, dict):
+        return shlex.quote(json.dumps(value, separators=(",", ":")))
     if isinstance(value, list):
         items = cast("list[object]", value)
         if not items:
@@ -37,6 +40,8 @@ def shell_lines(config: "Config") -> list[str]:
 
 
 def _render(value: object) -> str:
+    if isinstance(value, dict):
+        return json.dumps(value, separators=(",", ":"))
     if isinstance(value, Path):
         return str(value)
     if isinstance(value, list):

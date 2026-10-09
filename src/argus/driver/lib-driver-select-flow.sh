@@ -12,7 +12,7 @@ _drive_choose_selection() {
   if [ "${1:-}" = "--self-test" ] && [ -z "${DRIVER_STUB_COORDINATION:-}" ]; then
     out="$(selector_run)" || rc=$?
     if [ "$rc" -ne 0 ]; then
-      log "no uncompleted phase (next_phase rc=$rc)"
+      log "no uncompleted ${work_kind:-phase} (next_phase rc=$rc)"
       { _DRIVE_RC=0; return 0; }
     fi
     number="${out%%$'\t'*}"; rel="${out#*$'\t'}"
@@ -39,14 +39,16 @@ _drive_choose_selection() {
       rmdir "$RUN_DIR/coordination-outage" 2>/dev/null || true
       rm -f "$RUN_DIR/coordination-outage-first-seen"
     fi
+    bind_selection_kind "$selection"
+    report_issue_selection "$selection"
     report_needs_decision "$selection"
     case "$selection_state" in
       RESERVED)
-        number="$(printf '%s' "$selection" | selection_value phase)"
+        number="$(printf '%s' "$selection" | selection_value "$item_key")"
         rel="$(printf '%s' "$selection" | selection_value path)"
         reservation_id="$(printf '%s' "$selection" | selection_value reservation_id)"
         reservation_generation="$(printf '%s' "$selection" | selection_value generation)"
-        group_take_selection "$selection"
+        if [ "$work_kind" = issue ]; then group_take_selection ""; else group_take_selection "$selection"; fi
         if group_active; then
           # The board claimed the whole group under one reservation id, and this
           # tick runs the member the selection names. Its own roadmap file is
@@ -58,24 +60,28 @@ _drive_choose_selection() {
           rel="$GROUP_MEMBER_REL"
           log "reserved group [$(printf '%s' "$GROUP_MEMBERS" | tr '\n' ' ')] for $PHASE_MACHINE_ID; this tick runs member $number"
         fi
-        log "reserved phase $number ($rel) for $PHASE_MACHINE_ID"
+        log "reserved ${work_kind:-phase} $number ($rel) for $PHASE_MACHINE_ID"
         ;;
       WAIT_FOR_CLAIM)
-        wait_phase="$(printf '%s' "$selection" | selection_value phase)"
+        wait_phase="$(printf '%s' "$selection" | selection_value "$item_key")"
         wait_owner="$(printf '%s' "$selection" | selection_value owner)"
         wait_status="$(printf '%s' "$selection" | selection_value status)"
         # A member of a group this machine already holds. The selector reports
         # the group on this refusal too, so a tick that is continuing a group —
         # or taking one over from a dead owner — knows the array and the branch
         # without having claimed anything itself.
-        group_take_selection "$selection"
+        if [ "$work_kind" = issue ]; then group_take_selection ""; else group_take_selection "$selection"; fi
+        if [ "$work_kind" = issue ] && [ "$wait_status" = writeback_pending ]; then
+          log "issue $wait_phase report is still pending; claim kept, no launch"
+          { _DRIVE_RC=0; return 0; }
+        fi
         if [ "$RECOVER_OWN_CLAIM" = 1 ] \
             && [ "$wait_owner" = "$PHASE_MACHINE_ID" ] \
             && [ "$wait_phase" != "" ]; then
           # Our own claim, left behind by a run that crashed, was stopped, or
           # ended blocked. Take it back explicitly so the phase can finish.
           # A claim held by any other host still stops the line.
-          log "recovering own claim on phase $wait_phase (status=$wait_status) for $PHASE_MACHINE_ID"
+          log "recovering own claim on ${work_kind:-phase} $wait_phase (status=$wait_status) for $PHASE_MACHINE_ID"
           local recover_rc=0
           if [ "${DRIVER_STUB_COORDINATION:-}" = "nofence" ]; then
             # A takeover that reports success but hands back no fence.
@@ -84,7 +90,7 @@ _drive_choose_selection() {
             printf '{"state": "OK", "reservation": {"reservation_id": "rsv-recovered-stub", "generation": 8, "machine_id": "%s", "phase": "%s", "status": "claimed"}}\n' \
               "$PHASE_MACHINE_ID" "$wait_phase" >"$RUN_DIR/claim-recovery-$wait_phase.json"
           elif ! "$PYTHON" "$ARGUS/board/reservations.py" takeover \
-              "${ARGUS_CONFIG_ARGS[@]}" \
+              "${ARGUS_CONFIG_ARGS[@]}" "${BOARD_KIND_ARGS[@]+"${BOARD_KIND_ARGS[@]}"}" \
               --repo-root "$REPO" --phase "$wait_phase" \
               --machine-id "$PHASE_MACHINE_ID" \
               --expected-reservation-id "$(printf '%s' "$selection" | selection_value reservation_id)" \
@@ -113,7 +119,7 @@ _drive_choose_selection() {
                 { _DRIVE_RC=1; return 0; }
               fi
               rel="$GROUP_MEMBER_REL"
-              log "recovered group [$(printf '%s' "$GROUP_MEMBERS" | tr '\n' ' ')] on phase $wait_phase for $PHASE_MACHINE_ID"
+              log "recovered group [$(printf '%s' "$GROUP_MEMBERS" | tr '\n' ' ')] on ${work_kind:-phase} $wait_phase for $PHASE_MACHINE_ID"
             fi
             if [ -z "$rel" ]; then
               log "claim recovery for $wait_phase returned no launch path from the work source; refusing to launch"
@@ -130,13 +136,13 @@ _drive_choose_selection() {
               log "claim recovery for $wait_phase returned no new fence; refusing to launch (see $RUN_DIR/claim-recovery-$wait_phase.json)"
               { _DRIVE_RC=1; return 0; }
             fi
-            log "recovered phase $number ($rel) on $reservation_id generation $reservation_generation; continuing"
+            log "recovered ${work_kind:-phase} $number ($rel) on $reservation_id generation $reservation_generation; continuing"
           else
-            log "claim recovery for phase $wait_phase failed; see $RUN_DIR/claim-recovery-$wait_phase.json"
+            log "claim recovery for ${work_kind:-phase} $wait_phase failed; see $RUN_DIR/claim-recovery-$wait_phase.json"
             { _DRIVE_RC=1; return 0; }
           fi
         else
-          log "WAIT_FOR_CLAIM for phase $wait_phase (owner=$wait_owner status=$wait_status); no launch"
+          log "WAIT_FOR_CLAIM for ${work_kind:-phase} $wait_phase (owner=$wait_owner status=$wait_status); no launch"
           { _DRIVE_RC=0; return 0; }
         fi
         ;;
@@ -170,15 +176,15 @@ _drive_choose_selection() {
         # person recording the decision rather than on an agent discovering it
         # mid-run. Exiting 0 stops the driver without failing it: nothing is
         # broken, the queue is waiting on a human.
-        gate_phase="$(printf '%s' "$selection" | selection_value phase)"
+        gate_phase="$(printf '%s' "$selection" | selection_value "$item_key")"
         gate_error="$(printf '%s' "$selection" | selection_value error)"
         gate_rel="$(printf '%s' "$selection" | selection_value path)"
-        log "BLOCKED_ON_GATE for phase $gate_phase ($gate_error); no launch, no reservation"
+        log "BLOCKED_ON_GATE for ${work_kind:-phase} $gate_phase ($gate_error); no launch, no reservation"
         log "record the decision in $gate_rel, then re-run the driver"
         { _DRIVE_RC=0; return 0; }
         ;;
       NO_PHASE)
-        log "no uncompleted phase"
+        log "no uncompleted ${work_kind:-phase}"
         { _DRIVE_RC=0; return 0; }
         ;;
       AWAITING_REVIEW)
@@ -187,7 +193,7 @@ _drive_choose_selection() {
         # line stopping for that reason is a bug worth naming rather than
         # silently working around. The merge check has already run by the time
         # this is reached, so a phase reported here has genuinely not merged.
-        review_phase="$(printf '%s' "$selection" | selection_value phase)"
+        review_phase="$(printf '%s' "$selection" | selection_value "$item_key")"
         review_branch="$(printf '%s' "$selection" | selection_value branch)"
         review_pr="$(printf '%s' "$selection" | selection_value pull_request)"
         log "phase $review_phase is waiting for review on $review_branch, but the selector stopped on it"

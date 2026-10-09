@@ -21,7 +21,7 @@ from argus.board.core import (
     _iso,
     _parse_moment,
 )
-from argus.board.state import _owner_matches
+from argus.board.state import _owner_matches, _receipt_of
 
 
 def _cooldown_remaining(
@@ -81,7 +81,7 @@ def _claim_window_passed(record: dict[str, Any], moment: _datetime.datetime) -> 
 
 
 def _expire_records(
-    state: dict[str, Any], moment: _datetime.datetime
+    state: dict[str, Any], moment: _datetime.datetime, *, issues: bool = False
 ) -> list[dict[str, Any]]:
     """Move every stale group to ``EXPIRED_STATUS`` under one cooldown stamp.
 
@@ -92,6 +92,8 @@ def _expire_records(
     """
     groups: dict[tuple[Any, Any], list[tuple[Any, Any]]] = {}
     for key, record in state["phases"].items():
+        if issues and _receipt_of(record).get("state_reason") == "writeback_pending":
+            continue
         if record.get("status") not in ACTIVE_STATUSES:
             continue
         reservation_id = record.get("reservation_id")
@@ -110,7 +112,7 @@ def _expire_records(
             record[COOLDOWN_UNTIL_FIELD] = until
             expired.append(
                 {
-                    "phase": key,
+                    "issue" if issues else "phase": int(key) if issues else key,
                     "machine_id": record.get("machine_id"),
                     "reservation_id": record.get("reservation_id"),
                 }
@@ -129,6 +131,8 @@ def _claim_one(
     status: str,
     number: int,
     now: _datetime.datetime | None = None,
+    *,
+    issues: bool = False,
 ) -> dict[str, Any]:
     """Write or refresh one claim in ``state``; return its phase record.
 
@@ -140,16 +144,29 @@ def _claim_one(
     group is never reserved.
     """
     existing: dict[str, Any] | None = state["phases"].get(key)
+    kind = "issue" if issues else "phase"
     if existing is not None:
+        receipt = _receipt_of(existing)
+        if (
+            issues
+            and receipt.get("state_reason") == "remedy_escalated"
+            and receipt.get("cleared") is not True
+        ):
+            raise ReservationConflict(
+                number, existing, "remedy escalation needs clearance", kind=kind
+            )
         if existing.get("status") == EXPIRED_STATUS:
             remaining = _cooldown_remaining(existing, number, now)
             if remaining > 0:
-                raise ReservationCooldown(number, remaining, existing)
+                raise ReservationCooldown(number, remaining, existing, kind=kind)
             # The cooldown has passed, so the expired record is claimable again
             # and is overwritten below with a fresh reservation.
         elif existing.get("status") in TERMINAL_STATUSES:
             raise ReservationConflict(
-                number, existing, f"phase is retained as {existing.get('status')}"
+                number,
+                existing,
+                f"{kind} is retained as {existing.get('status')}",
+                kind=kind,
             )
         elif _owner_matches(existing, machine_id, reservation_id, generation):
             existing["status"] = status
@@ -158,8 +175,10 @@ def _claim_one(
         else:
             remaining = _cooldown_remaining(existing, number, now)
             if remaining > 0:
-                raise ReservationCooldown(number, remaining, existing)
-            raise ReservationConflict(number, existing)
+                raise ReservationCooldown(number, remaining, existing, kind=kind)
+            raise ReservationConflict(
+                number, existing, f"{kind} is already reserved", kind=kind
+            )
     record = {
         "status": status,
         "machine_id": machine_id,
@@ -170,7 +189,7 @@ def _claim_one(
         # Expiry keys off the start and heartbeat windows, not this field, which
         # is kept for audit and tool compatibility.
         "expires_at": None,
-        "run_id": run_id or f"phase-{key}",
+        "run_id": run_id or f"{kind}-{key}",
         "base_revisions": revisions,
     }
     state["phases"][key] = record

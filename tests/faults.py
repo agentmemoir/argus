@@ -8,6 +8,8 @@ The harness in ``guard_faults.py`` applies them; this file is only the
 data.
 """
 
+from issue_faults import ISSUE_FAULTS
+
 #: Every fault: what it breaks, the exact text the patch must find, the
 #: replacement, and the self-test line that proves it was caught.
 #:
@@ -28,8 +30,8 @@ FAULTS = (
         "name": "launchability-guard-removed",
         "breaks": "the folder cannot be read and cannot be launched from",
         "file": "src/argus/driver/lib-driver-config.sh",
-        "find": 'roadmap_preflight() {\n  PREFLIGHT_REASON=""',
-        "replace": 'roadmap_preflight() {\n  PREFLIGHT_REASON=""\n'
+        "find": 'work_preflight() {\n  PREFLIGHT_REASON=""',
+        "replace": 'work_preflight() {\n  PREFLIGHT_REASON=""\n'
         "  return 0  # FAULT: guard disabled",
         "cases": "recovery_sources",
         "expect": "FAIL: a folder outside the checkout was allowed to launch",
@@ -38,7 +40,7 @@ FAULTS = (
         "name": "launchability-guard-below-reservation",
         "breaks": "the guard runs, but only after the phase is already claimed",
         "file": "src/argus/driver/lib-driver-drive.sh",
-        "find": "  if ! roadmap_preflight; then\n"
+        "find": "  if ! work_preflight; then\n"
         '    log "$PREFLIGHT_REASON; refusing to launch"\n'
         "    return 1\n  fi\n",
         "replace": "",
@@ -48,7 +50,7 @@ FAULTS = (
         # a guard that is late are the same bug seen twice.
         "second_find": "  # The public checkout is put on the phase's own branch before the launch, from",
         "second_replace": (
-            "  if ! roadmap_preflight; then\n"
+            "  if ! work_preflight; then\n"
             '    log "$PREFLIGHT_REASON; refusing to launch"\n'
             "    return 1\n  fi\n"
             "  # The public checkout is put on the phase's own branch before the launch, from"
@@ -138,7 +140,7 @@ FAULTS = (
         "find": '        if existing.get("status") == EXPIRED_STATUS:\n'
         "            remaining = _cooldown_remaining(existing, number, now)\n"
         "            if remaining > 0:\n"
-        "                raise ReservationCooldown(number, remaining, existing)",
+        "                raise ReservationCooldown(number, remaining, existing, kind=kind)",
         "replace": '        if existing.get("status") == EXPIRED_STATUS:\n'
         "            remaining = 0  # FAULT: the cooldown is not refused",
         "check": "phase_reservations",
@@ -178,11 +180,10 @@ FAULTS = (
         "a member of a held group is run as a single phase on a branch "
         "of its own",
         "file": "src/argus/driver/lib-driver-select-flow.sh",
-        "find": '        group_take_selection "$selection"\n'
-        '        if [ "$RECOVER_OWN_CLAIM" = 1 ] \\\n',
-        "replace": "        true  # FAULT: the group the board reports is not "
-        "taken\n"
-        '        if [ "$RECOVER_OWN_CLAIM" = 1 ] \\\n',
+        "find": '        if [ "$work_kind" = issue ]; then group_take_selection ""; else group_take_selection "$selection"; fi\n'
+        '        if [ "$work_kind" = issue ] && [ "$wait_status" = writeback_pending ]; then\n',
+        "replace": "        true  # FAULT: the group array is ignored\n"
+        '        if [ "$work_kind" = issue ] && [ "$wait_status" = writeback_pending ]; then\n',
         "check": "driver",
         "cases": "group_run",
         "verdict": "driver self-test:",
@@ -217,4 +218,4 @@ FAULTS = (
         "expect": None,
         "expect_absent": "driver self-test: pass",
     },
-)
+) + ISSUE_FAULTS

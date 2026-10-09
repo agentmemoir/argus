@@ -9,7 +9,7 @@ _drive_dry_run() {
     tmux_phase_window_alive 2>/dev/null \
       && { log "dry-run: phase window is running; would skip"; { _DRIVE_RC=0; return 0; }; }
     local selection selection_rc=0 state unknown_state
-    if ! roadmap_preflight; then
+    if ! work_preflight; then
       log "dry-run: $PREFLIGHT_REASON; no launch"
       { _DRIVE_RC=0; return 0; }
     fi
@@ -20,34 +20,38 @@ _drive_dry_run() {
       { _DRIVE_RC=0; return 0; }
     fi
     state="$(printf '%s' "$selection" | selection_value state)"
+    bind_selection_kind "$selection"
+    report_issue_selection "$selection"
     report_needs_decision "$selection"
     case "$state" in
       AVAILABLE)
         local number rel
-        number="$(printf '%s' "$selection" | selection_value phase)"
+        number="$(printf '%s' "$selection" | selection_value "$item_key")"
         rel="$(printf '%s' "$selection" | selection_value path)"
         # A group is claimed as a whole array and run one member per tick, so a
         # dry run that named only the member in front of it would describe a
         # smaller claim than the tick makes. The member's own file is what the
         # launch would use, exactly as in the tick.
-        group_take_selection "$selection"
+        if [ "$work_kind" = issue ]; then group_take_selection ""; else group_take_selection "$selection"; fi
         if group_active && group_resolve_member "$number"; then
           rel="$GROUP_MEMBER_REL"
           log "dry-run: would claim the group [$(printf '%s' "$GROUP_MEMBERS" | tr '\n' ' ')] and launch member $number in tmux '$SESSION'"
         fi
-        log "dry-run: would reserve and launch phase $number in tmux '$SESSION'"
+        log "dry-run: would reserve and launch ${work_kind:-phase} $number in tmux '$SESSION'"
         printf 'would launch: tmux new-window -d -t %s -n phase -c %s "bash %s --session %s %s"\n' \
           "$SESSION" "$REPO" "$SELF" "$number" "$rel"
         ;;
       WAIT_FOR_CLAIM)
-        wait_phase="$(printf '%s' "$selection" | selection_value phase)"
+        wait_phase="$(printf '%s' "$selection" | selection_value "$item_key")"
         wait_owner="$(printf '%s' "$selection" | selection_value owner)"
-        if [ "$RECOVER_OWN_CLAIM" = 1 ] \
+        if [ "$work_kind" = issue ] && [ "$(printf '%s' "$selection" | selection_value status)" = writeback_pending ]; then
+          log "dry-run: issue $wait_phase report is pending; would retry the report, no launch"
+        elif [ "$RECOVER_OWN_CLAIM" = 1 ] \
             && [ "$wait_owner" = "$PHASE_MACHINE_ID" ] \
             && [ "$wait_phase" != "" ]; then
-          log "dry-run: would recover this host's own claim on phase $wait_phase and launch it"
+          log "dry-run: would recover this host's own claim on ${work_kind:-phase} $wait_phase and launch it"
         else
-          log "dry-run: WAIT_FOR_CLAIM (phase $wait_phase, owner $wait_owner); no launch"
+          log "dry-run: WAIT_FOR_CLAIM (${work_kind:-phase} $wait_phase, owner $wait_owner); no launch"
         fi
         ;;
       COORDINATION_INCONSISTENT)
@@ -78,12 +82,12 @@ _drive_dry_run() {
         fi
         ;;
       BLOCKED_ON_GATE)
-        gate_phase="$(printf '%s' "$selection" | selection_value phase)"
+        gate_phase="$(printf '%s' "$selection" | selection_value "$item_key")"
         gate_error="$(printf '%s' "$selection" | selection_value error)"
-        log "dry-run: BLOCKED_ON_GATE (phase $gate_phase: $gate_error); no launch"
+        log "dry-run: BLOCKED_ON_GATE (${work_kind:-phase} $gate_phase: $gate_error); no launch"
         ;;
       NO_PHASE)
-        log "dry-run: no uncompleted phase"
+        log "dry-run: no uncompleted ${work_kind:-phase}"
         ;;
       *)
         # A state nobody anticipated is the case where a reason matters most, so

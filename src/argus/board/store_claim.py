@@ -10,14 +10,12 @@ from argus.board.core import (
     ACTIVE_STATUSES,
     CoordinationError,
     _Mutation,
-    _phase_key,
     _validate_generation,
     _validate_machine_id,
     _validate_reservation_id,
     _validate_status,
 )
 from argus.board.records import _claim_one
-from argus.board.state import _reservation_from_record
 from argus.board.store_base import _StoreBase
 from argus.board.worktree import _base_revisions, _transaction
 
@@ -33,7 +31,7 @@ class _ClaimOps(_StoreBase):
         revisions: dict[str, Any],
         status: str,
     ) -> Callable[[dict[str, Any]], _Mutation]:
-        key, number = _phase_key(phase)
+        key, number = self._key(phase)
         machine_id = _validate_machine_id(machine_id)
         _validate_status(status)
         if status not in ACTIVE_STATUSES:
@@ -46,12 +44,13 @@ class _ClaimOps(_StoreBase):
                 machine_id,
                 reservation_id,
                 generation,
-                run_id or f"phase-{key}",
+                run_id or f"{self.kind}-{key}",
                 revisions,
                 status,
                 number,
+                issues=self.issues,
             )
-            return _Mutation(True, _reservation_from_record({**record, "_phase": key}))
+            return _Mutation(True, self._reservation(record, key))
 
         return mutate
 
@@ -66,7 +65,7 @@ class _ClaimOps(_StoreBase):
         base_revisions: dict[str, Any] | None = None,
         status: str = "claimed",
     ) -> Any:
-        key, number = _phase_key(phase)
+        key, number = self._key(phase)
         machine_id = _validate_machine_id(machine_id)
         reservation_id = reservation_id or f"rsv-{secrets.token_hex(12)}"
         _validate_reservation_id(reservation_id)
@@ -78,7 +77,7 @@ class _ClaimOps(_StoreBase):
             machine_id,
             reservation_id,
             generation,
-            run_id or f"phase-{key}",
+            run_id or f"{self.kind}-{key}",
             revisions,
             status,
         )
@@ -87,7 +86,8 @@ class _ClaimOps(_StoreBase):
             self.remote,
             self.branch,
             mutate,
-            f"phase coordination: reserve {key} for {machine_id}",
+            f"{self.kind} coordination: reserve {key} for {machine_id}",
+            issues=self.issues,
         )
 
     def register_running(

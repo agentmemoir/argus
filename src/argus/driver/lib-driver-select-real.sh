@@ -31,10 +31,12 @@ _drive_real_selection() {
       tidy_published_checkout || { _DRIVE_RC=1; return 0; }
       selection="$(coordination_select)" || selection_rc=$?
       if [ "$selection_rc" -ne 0 ] && [ "$selection_rc" -ne 2 ] \
-          && [ "$selection_rc" -ne 3 ]; then
+          && [ "$selection_rc" -ne 3 ] \
+          && { [ "$selection_rc" -ne 1 ] || [ "${WORK_SOURCE:-roadmap}" != issues ]; }; then
         log "coordination state unavailable; refusing to launch (next_phase rc=$selection_rc)"
         { _DRIVE_RC=1; return 0; }
       fi
+      bind_selection_kind "$selection"
       selection_state="$(printf '%s' "$selection" | selection_value state)"
       # A phase whose pull request is merged is a finished phase, and this tick's
       # selection was computed without that fact. Confirm what merged first, so
@@ -50,7 +52,8 @@ _drive_real_selection() {
       # publishing them does not move which phase is next; it moves the base the
       # phase branches from, and the branch cut at launch resolves that base
       # fresh.
-      if [ -n "$selection_state" ]; then
+      PENDING_PUBLISHED=0
+      if [ -n "$selection_state" ] && [ "$work_kind" != issue ]; then
         confirm_pending_reviews "$selection"
         if [ "$PENDING_PUBLISHED" -gt 0 ]; then
           log "$PENDING_PUBLISHED phase(s) moved to published"
@@ -61,7 +64,7 @@ _drive_real_selection() {
           # selection is recomputed.
           tidy_published_checkout || { _DRIVE_RC=1; return 0; }
           if [ "$selection_state" = "RESERVED" ]; then
-            log "keeping this tick's reservation of phase $(printf '%s' "$selection" | selection_value phase)"
+            log "keeping this tick's reservation of phase $(printf '%s' "$selection" | selection_value "$item_key")"
           else
             # Nothing is reserved yet, so a recomputation can only move the line
             # to a better phase, and there is no claim to lose.

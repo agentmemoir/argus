@@ -11,13 +11,14 @@ role's entry file is named for what it does.
   `policy.py` (the shared phase policy), `group.py` (the group request and the
   array its owner now holds), and the `*_selftest.py` files (their hermetic
   self-tests).
-- `roadmap/` is the roadmap work source, the one source that exists. `source.py`
+- `roadmap/` is the roadmap work source. `source.py`
   re-exports the module surface (declared in `__all__`). The work sits in
   `evidence.py` (the completion markers and the roadmap folder), `queue.py` (the
   candidates and the next one), `index.py` (index.md drift), `group.py`
   (reservation-group declarations), `select.py` (claiming a phase or a group on
   the board), `server.py` (`select_server_phase` and the `RoadmapSource` class),
   and the `selftest*.py` files (the self-test).
+- `issues/` is the GitHub issue source. `source.py` selects and claims work; `client.py` and `transport.py` run bounded GitHub calls; `trust.py`, `filter.py`, and `order.py` select eligible work; `task.py` freezes its input; `evidence.py` reads local and GitHub progress; `claims.py` and `lifecycle.py` keep claim fences and retry checked reports. See [Issues](issues.md).
 - `board/` is the shared board. `reservations.py` is the entry point of the
   reservation tools: it re-exports the module surface (declared in `__all__`)
   and runs `main`. The work sits in `core.py` (statuses, errors, clock stamps,
@@ -37,6 +38,7 @@ role's entry file is named for what it does.
   `publish.py`, `group_publication.py` and `publish_phase.py` (publication),
   `tidy.py` (returning a checkout to the integration branch), and the `mode*.py`
   files that dispatch the modes.
+- `gitsync/issue_*.py` and `gitsync/publish_issue.py` publish an issue branch, scope private task and run data, and return a checkout to its integration branch after GitHub review.
 - `config/` reads the settings file: `cli.py` is its command line, `schema.py`
   is the key table and the shell names, `loader.py` reads and resolves the file,
   and `render.py` prints it.

@@ -13,12 +13,11 @@ from argus.board.core import (
     ReservationFenced,
     _Mutation,
     _now,
-    _phase_key,
     _validate_generation,
     _validate_machine_id,
     _validate_reservation_id,
 )
-from argus.board.state import _reservation_from_record
+from argus.board.state import _receipt_of
 from argus.board.store_base import _StoreBase
 from argus.board.worktree import _base_revisions, _transaction
 
@@ -49,14 +48,16 @@ class _TakeoverOps(_StoreBase):
             raise CoordinationError(
                 "takeover requires the expected old reservation ID and generation"
             )
-        key, number = _phase_key(phase)
+        key, number = self._key(phase)
         machine_id = _validate_machine_id(machine_id)
         new_id = f"rsv-{secrets.token_hex(12)}"
         revisions = base_revisions or _base_revisions(self.root, self.private)
         current_state, _current_commit = self.read()
         current: dict[str, Any] | None = current_state["phases"].get(key)
         if current is None:
-            raise ReservationConflict(number, reason="phase has no claim")
+            raise ReservationConflict(
+                number, reason=f"{self.kind} has no claim", kind=self.kind
+            )
         if expected_reservation_id is not None:
             expected_reservation_id = _validate_reservation_id(expected_reservation_id)
         if expected_generation is not None:
@@ -69,7 +70,7 @@ class _TakeoverOps(_StoreBase):
             and current.get("generation") != expected_generation
         ):
             raise ReservationFenced(
-                f"phase {key} changed; inspect the current owner before retrying"
+                f"{self.kind} {key} changed; inspect the current owner before retrying"
             )
         expected_generation = _validate_generation(current.get("generation"))
         expected_reservation_id = current.get("reservation_id")
@@ -88,20 +89,20 @@ class _TakeoverOps(_StoreBase):
         def mutate(state: dict[str, Any]) -> _Mutation:
             old = state["phases"].get(key)
             if old is None:
-                raise ReservationConflict(number, reason="phase has no claim")
+                raise ReservationConflict(
+                    number, reason=f"{self.kind} has no claim", kind=self.kind
+                )
             if (
                 old.get("machine_id") == machine_id
                 and old.get("reservation_id") == new_id
             ):
-                return _Mutation(
-                    False, _reservation_from_record({**old, "_phase": key})
-                )
+                return _Mutation(False, self._reservation(old, key))
             if (
                 old.get("generation") != expected_generation
                 or old.get("reservation_id") != expected_reservation_id
             ):
                 raise ReservationFenced(
-                    f"phase {key} changed before takeover could commit"
+                    f"{self.kind} {key} changed before takeover could commit"
                 )
             publication = state.get("publication")
             if publication is not None:
@@ -112,19 +113,28 @@ class _TakeoverOps(_StoreBase):
                 raise ReservationConflict(
                     number, old, "completed reservations cannot be taken over"
                 )
+            receipt = _receipt_of(old)
+            if (
+                self.issues
+                and receipt.get("state_reason") == "remedy_escalated"
+                and receipt.get("cleared") is not True
+            ):
+                raise ReservationConflict(
+                    number, old, "remedy escalation needs clearance", kind=self.kind
+                )
             result = None
             for member in members:
                 record = state["phases"].get(member)
                 if record is None:
                     raise ReservationFenced(
-                        f"phase {member} changed before takeover could commit"
+                        f"{self.kind} {member} changed before takeover could commit"
                     )
                 if (
                     record.get("machine_id") != old.get("machine_id")
                     or record.get("generation") != expected_generation
                 ):
                     raise ReservationFenced(
-                        f"phase {member} changed before takeover could commit"
+                        f"{self.kind} {member} changed before takeover could commit"
                     )
                 if member != key and record.get("status") in TERMINAL_STATUSES:
                     # A member that is already finished keeps its record, so a
@@ -147,13 +157,15 @@ class _TakeoverOps(_StoreBase):
                     "run_id": (
                         run_id
                         if member == key and run_id
-                        else record.get("run_id") or f"phase-{member}"
+                        else record.get("run_id") or f"{self.kind}-{member}"
                     ),
                     "base_revisions": revisions,
                 }
+                if self.issues and "completion_receipt" in record:
+                    new["completion_receipt"] = record["completion_receipt"]
                 state["phases"][member] = new
                 if member == key:
-                    result = _reservation_from_record({**new, "_phase": key})
+                    result = self._reservation(new, key)
             if result is None:
                 raise ReservationConflict(
                     number, old, "completed reservations cannot be taken over"
@@ -165,8 +177,9 @@ class _TakeoverOps(_StoreBase):
             self.remote,
             self.branch,
             mutate,
-            f"phase coordination: explicit takeover "
+            f"{self.kind} coordination: explicit takeover "
             f"[{','.join(members)}] by {machine_id}",
+            issues=self.issues,
         )
 
 

@@ -38,6 +38,10 @@ The notification values belong to whoever receives the notices, so a configurati
 
 The four flags `--driver`, `--repo-root`, `--roadmap-dir`, and repeatable `--phase-glob` beat the file for one run. The readiness report prints every value with the flag-or-file source it came from.
 
+`machine.settings-file` loads one JSONC overlay before those flags. It may replace only keys already present in the base file. Paths from the overlay resolve against its own folder. The report marks these values as `overlay`.
+
 ## Worked Sample
 
 [`examples/argus-config.jsonc`](../examples/argus-config.jsonc) is a filled-in configuration, and [`examples/project/`](../examples/project/) is the small project it points at.
+
+[`examples/issue-config.jsonc`](../examples/issue-config.jsonc) shows the issue source. [Issues](issues.md) lists its keys, trust rules, separate board file, and private task path.

@@ -143,6 +143,12 @@ def test_sample_loads_with_every_schema_key():
         base = Path(tmp).resolve()
         config = cfgmod.load(str(path))
         for field in cfgmod.SCHEMA:
+            if (
+                field.key.startswith("issues.")
+                or field.required == "issues"
+                or field.key == "machine.settings-file"
+            ):
+                continue
             key = cfgmod._REPORT_KEY.get(field.key, field.key)
             check(key in config.values, f"sample missing {key}")
         check(config.get("repo-root") == base / "project", config.get("repo-root"))

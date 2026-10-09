@@ -12,6 +12,7 @@ from argus.board.core import (
     CoordinationUnavailable,
     ReservationConflict,
     ReservationFenced,
+    _issue_key,
     _phase_key,
     _print_json,
 )
@@ -21,16 +22,22 @@ from argus.board.store import ReservationStore
 from argus.config.loader import ConfigError
 
 
-def _cli_store(_args: argparse.Namespace) -> ReservationStore:
-    return ReservationStore(conventions.setting("repo-root"))
+def _cli_store(args: argparse.Namespace) -> ReservationStore:
+    return ReservationStore(conventions.setting("repo-root"), issues=args.issues)
 
 
-def _add_store_args(parser: argparse.ArgumentParser) -> None:
+def _add_store_args(parser: argparse.ArgumentParser, *, issues: bool = True) -> None:
     parser.add_argument("--config")
     parser.add_argument("--repo-root", dest="config_repo_root")
     parser.add_argument("--roadmap-dir", dest="config_roadmap_dir")
     parser.add_argument("--phase-glob", dest="config_phase_glob", action="append")
     parser.add_argument("--driver", dest="config_driver")
+    if issues:
+        parser.add_argument(
+            "--issues", action="store_true", help="use issue reservations"
+        )
+    else:
+        parser.set_defaults(issues=False)
 
 
 def _add_reservation_args(parser: argparse.ArgumentParser) -> None:
@@ -61,10 +68,13 @@ def main(argv: list[str] | None = None) -> int:
         ("renew", "renew an owned reservation"),
         ("assert-owner", "verify the three-part fence"),
         ("set-status", "change an owned reservation"),
+        ("clear-escalation", "clear a released issue escalation using its fence token"),
     ):
         command = sub.add_parser(name, help=help_text)
         _add_store_args(command)
         _add_reservation_args(command)
+        if name == "clear-escalation":
+            command.add_argument("--confirm", action="store_true")
         if name == "set-status":
             command.add_argument("--status", required=True, choices=sorted(STATUSES))
             command.add_argument(
@@ -97,7 +107,7 @@ def main(argv: list[str] | None = None) -> int:
     release = sub.add_parser(
         "release-publication", help="explicitly release a stale publication lock"
     )
-    _add_store_args(release)
+    _add_store_args(release, issues=False)
     _add_reservation_args(release)
     release.add_argument("--confirm", action="store_true")
 
@@ -142,9 +152,18 @@ def main(argv: list[str] | None = None) -> int:
             result = store.reserve(
                 args.phase, args.machine_id, run_id=args.run_id, status=args.status
             )
-        elif args.command in {"renew", "assert-owner", "set-status"}:
+        elif args.command in {
+            "renew",
+            "assert-owner",
+            "set-status",
+            "clear-escalation",
+        }:
             reservation = {
-                "phase": _phase_key(args.phase)[0],
+                "issue" if args.issues else "phase": (
+                    _issue_key(args.phase)[1]
+                    if args.issues
+                    else _phase_key(args.phase)[0]
+                ),
                 "machine_id": args.machine_id,
                 "reservation_id": args.reservation_id,
                 "generation": args.generation,
@@ -153,6 +172,8 @@ def main(argv: list[str] | None = None) -> int:
                 result = store.renew(reservation)
             elif args.command == "assert-owner":
                 result = store.assert_owner(reservation)
+            elif args.command == "clear-escalation":
+                result = store.clear_issue_escalation(reservation, confirm=args.confirm)
             else:
                 result = store.set_status(
                     reservation,
@@ -169,14 +190,24 @@ def main(argv: list[str] | None = None) -> int:
                 expected_generation=args.expected_generation,
             )
             save_reservation_file(
-                reservation_file(conventions.setting("repo-root"), args.phase), result
+                reservation_file(
+                    conventions.setting("repo-root"),
+                    args.phase,
+                    kind="issue" if args.issues else "phase",
+                ),
+                result,
             )
         elif args.command == "register-running":
             result = store.register_running(
                 args.phase, args.machine_id, run_id=args.run_id, confirm=args.confirm
             )
             save_reservation_file(
-                reservation_file(conventions.setting("repo-root"), args.phase), result
+                reservation_file(
+                    conventions.setting("repo-root"),
+                    args.phase,
+                    kind="issue" if args.issues else "phase",
+                ),
+                result,
             )
         elif args.command == "release-publication":
             if not args.confirm:
@@ -222,7 +253,7 @@ def main(argv: list[str] | None = None) -> int:
         _print_json(
             {
                 "state": "WAIT_FOR_CLAIM",
-                "phase": exc.phase,
+                "issue" if args.issues else "phase": exc.phase,
                 "owner": exc.record.get("machine_id"),
                 "status": exc.record.get("status"),
                 "error": str(exc),

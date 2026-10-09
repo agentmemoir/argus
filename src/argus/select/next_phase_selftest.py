@@ -76,7 +76,7 @@ def _self_test_configuration() -> None:
         # A name nobody recognises is refused, and the refusal names what is
         # available rather than falling back to a source that would work.
         try:
-            resolve("issues", repo)
+            resolve("unknown-source", repo)
             refused = False
         except WorkSourceError as exc:
             refused = True
@@ -98,7 +98,7 @@ def _self_test_configuration() -> None:
     # lines to the --check report that runs it.
     with tempfile.TemporaryDirectory() as tmp:
         for argv, expected in (
-            (["--repo", tmp, "--source", "issues"], "unknown work source"),
+            (["--repo", tmp, "--source", "unknown-source"], "unknown work source"),
             (
                 ["--repo", tmp, "--roadmap", str(Path(tmp) / "absent")],
                 "configured roadmap folder",

@@ -19,6 +19,12 @@ _drive_launch() {
   [ -z "$reservation_id" ] || envs="$envs CLIO_RESERVATION_ID='$reservation_id'"
   [ -z "$reservation_generation" ] || envs="$envs CLIO_RESERVATION_GENERATION='$reservation_generation'"
   local self_quoted number_quoted rel_quoted config_arg="" quoted setting
+  if [ "${work_kind:-phase}" = issue ]; then
+    printf -v quoted '%q' "$ARGUS_CONFIG_FILE"
+    envs="$envs ARGUS_CONFIG_FILE=$quoted"
+    printf -v quoted '%q' "$ISSUES_REPO"
+    envs="$envs ARGUS_ISSUES_REPO=$quoted ARGUS_WORK_KIND=issue"
+  fi
   printf -v self_quoted '%q' "$SELF"
   printf -v number_quoted '%q' "$number"
   printf -v rel_quoted '%q' "$rel"
@@ -37,14 +43,14 @@ _drive_launch() {
   # The session is ensured first and never killed, so a display attached to the
   # idle window survives the launch. 9>&- drops the flock fd, as before.
   9>&- tmux_session_ensure \
-    || { notify "phase $number failed to create tmux session '$SESSION'"; { _DRIVE_RC=1; return 0; }; }
+    || { notify "${work_kind:-phase} $number failed to create tmux session '$SESSION'"; { _DRIVE_RC=1; return 0; }; }
   # Set the title BEFORE the window opens. The child sets its own titles as it
   # runs, and anything written after the window opens races with them: a parent
   # "starting" landing after the child's "done" would leave the display showing
   # a phase that already finished.
-  tmux_set_title "phase $number starting"
+  tmux_set_title "${work_kind:-phase} $number starting"
   9>&- tmux_phase_window_open "$launch" "$RUN_DIR/session-$number.log" \
-    || { notify "phase $number failed to launch in tmux"; { _DRIVE_RC=1; return 0; }; }
+    || { notify "${work_kind:-phase} $number failed to launch in tmux"; { _DRIVE_RC=1; return 0; }; }
   printf '%s\n' "$number" >"$CURRENT"
   # The claim fence was written by the tick, with the claim itself, so a refusal
   # between the two cannot strand the reservation.
@@ -57,6 +63,6 @@ _drive_launch() {
   # the phase number is already in the title and the log. The stage hook
   # renames it per stage instead, which is the display-facing label.
   tmux_phase_window_select
-  log "launched phase $number in tmux '$SESSION' window 'phase'"
+  log "launched ${work_kind:-phase} $number in tmux '$SESSION' window 'phase'"
   return 0
 }
