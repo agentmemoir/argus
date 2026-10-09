@@ -107,7 +107,7 @@ FAULTS = (
         "name": "group-claim-not-atomic",
         "breaks": "only the first member of a group is reserved, so half a "
         "group can be claimed",
-        "file": "src/argus/phase_reservations.py",
+        "file": "src/argus/phase_reservations_store_group.py",
         "find": "            records = []\n"
         "            for key in keys:\n"
         "                number = int(key)",
@@ -134,7 +134,7 @@ FAULTS = (
         "name": "cooldown-refusal-swallowed",
         "breaks": "an expired claim in its cooldown is claimed instead of "
         "being refused, so two agents can run the same group",
-        "file": "src/argus/phase_reservations.py",
+        "file": "src/argus/phase_reservations_records.py",
         "find": '        if existing.get("status") == EXPIRED_STATUS:\n'
         "            remaining = _cooldown_remaining(existing, number, now)\n"
         "            if remaining > 0:\n"

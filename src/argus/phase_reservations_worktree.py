@@ -1,0 +1,250 @@
+# Copyright 2026 Agent Memoir Developers (https://agentmemoir.com/)
+# SPDX-License-Identifier: Apache-2.0
+"""Short-lived worktrees and the read-modify-push transaction."""
+
+import contextlib
+import datetime as _datetime
+import shutil
+import sys
+import tempfile
+from pathlib import Path
+
+from argus.phase_reservations_board import (
+    _fetch_branch_ref,
+    _state_initialized,
+    ensure_board_branch,
+)
+from argus.phase_reservations_core import (
+    FETCH_TIMEOUT_S,
+    MAX_TRANSACTION_ATTEMPTS,
+    WORKTREE_PREFIX,
+    WORKTREE_SWEEP_AGE_S,
+    CoordinationUnavailable,
+    _safe_detail,
+)
+from argus.phase_reservations_git import _git, _head, _is_git_repo
+from argus.phase_reservations_state import (
+    _read_state_file,
+    _write_state_file,
+    state_path,
+    state_rel,
+)
+
+
+class _Checkout:
+    """A disposable coordination checkout, and whether it is worth keeping.
+
+    ``keep`` is the policy switch, and it is set by the caller rather than
+    inferred here, because only the caller knows what the checkout ended up
+    holding. A checkout whose board state was committed and whose push the
+    remote rejected holds a state the remote never received, which is the one
+    case a person might want to look at. A checkout whose commit failed holds
+    nothing at all, because the commit is what would have held it.
+    """
+
+    def __init__(self, private, parent, path):
+        self.private = private
+        self.parent = parent
+        self.path = path
+        self.keep = False
+        #: Set when the checkout could not be removed, so the caller can name
+        #: the folder in whatever it reports about the failure.
+        self.stranded = None
+
+    def __fspath__(self):
+        return str(self.path)
+
+
+@contextlib.contextmanager
+def _detached_worktree(private, ref):
+    """Yield a disposable checkout without taking the phase branch."""
+    parent = Path(tempfile.mkdtemp(prefix=WORKTREE_PREFIX))
+    checkout = _Checkout(private, parent, parent / "checkout")
+    rc, _, err = _git(private, "worktree", "add", "--detach", str(checkout.path), ref)
+    if rc != 0:
+        shutil.rmtree(parent, ignore_errors=True)
+        raise CoordinationUnavailable(
+            f"cannot create coordination worktree: {_safe_detail(err)}"
+        )
+    try:
+        yield checkout
+        kept = checkout.keep
+    except BaseException:
+        # An error inside the block is what makes this leak: the board state has
+        # been written and staged, so the tree is dirty and an ordinary remove
+        # refuses. There is nothing to inspect, because the commit that would
+        # have held the state does not exist. Reset first, so the same removal
+        # that works on the happy path works here too.
+        _discard_checkout_contents(checkout)
+        _remove_checkout(checkout)
+        raise
+    if kept:
+        # Deliberate: the local commit is the only copy of a board state the
+        # remote never received, so it stays for a person to read.
+        print(
+            f"coordination checkout kept for inspection: {checkout.parent}",
+            file=sys.stderr,
+        )
+        return
+    _remove_checkout(checkout)
+
+
+def _discard_checkout_contents(checkout):
+    """Make a dirty checkout clean again, so an ordinary removal can succeed."""
+    _git(checkout.path, "reset", "--hard", "--quiet", "HEAD")
+    _git(checkout.path, "clean", "-fdq")
+
+
+def _remove_checkout(checkout):
+    """Remove the checkout and its folder, and report it if that is impossible.
+
+    The path is created and owned here. Removing it must not touch the phase
+    checkout, even when the branch is named master, so the removal always names
+    the path and never the branch.
+    """
+    rc, _, _ = _git(checkout.private, "worktree", "remove", str(checkout.path))
+    if rc == 0:
+        shutil.rmtree(checkout.parent, ignore_errors=True)
+        return
+    # The folder is still there, so prune alone would drop nothing: the
+    # registration is accurate. Force the removal, because a directory this
+    # function created and no transaction is using has no value, then prune in
+    # case the force left an entry behind.
+    forced, _, _ = _git(
+        checkout.private, "worktree", "remove", "--force", str(checkout.path)
+    )
+    _git(checkout.private, "worktree", "prune")
+    if forced == 0:
+        shutil.rmtree(checkout.parent, ignore_errors=True)
+        return
+    print(
+        f"coordination checkout could not be removed and is still at "
+        f"{checkout.parent}; the sweep clears it once it is "
+        f"{WORKTREE_SWEEP_AGE_S // 60} minutes old",
+        file=sys.stderr,
+    )
+
+
+def sweep_stale_worktrees(now=None, age_s=WORKTREE_SWEEP_AGE_S, root=None):
+    """Delete leftover coordination checkouts older than ``age_s``.
+
+    A checkout is left behind when the machine lost power mid-transaction, and
+    nothing else ever returns for it. This runs before each transaction so the
+    cost of a crash is one folder rather than one per tick for ever. It only
+    touches directories this module created, matched by prefix, and only ones
+    old enough that no live transaction can still be using them.
+
+    Returns ``(removed, bytes)`` so a caller can report the reclaim rather than
+    leaving a slow disk loss that nobody attributes.
+    """
+    parent = Path(root) if root is not None else Path(tempfile.gettempdir())
+    moment = (
+        now if now is not None else _datetime.datetime.now(_datetime.UTC).timestamp()
+    )
+    removed, reclaimed = 0, 0
+    try:
+        candidates = list(parent.glob(f"{WORKTREE_PREFIX}*"))
+    except OSError:
+        return 0, 0
+    for candidate in candidates:
+        try:
+            age = moment - candidate.stat().st_mtime
+        except OSError:
+            continue
+        if age < age_s:
+            continue
+        reclaimed += _directory_bytes(candidate)
+        shutil.rmtree(candidate, ignore_errors=True)
+        removed += 1
+    return removed, reclaimed
+
+
+def _directory_bytes(path):
+    total = 0
+    try:
+        for entry in path.rglob("*"):
+            try:
+                if entry.is_file():
+                    total += entry.stat().st_size
+            except OSError:
+                continue
+    except OSError:
+        return total
+    return total
+
+
+def _commit_state(checkout, message):
+    rc, _, err = _git(checkout, "add", "--", state_rel().as_posix())
+    if rc != 0:
+        raise CoordinationUnavailable(
+            f"cannot stage coordination state: {_safe_detail(err)}"
+        )
+    rc, out, err = _git(checkout, "commit", "-q", "-m", message)
+    if rc != 0:
+        combined = _safe_detail(f"{out} {err}")
+        if "nothing to commit" in combined.lower():
+            return None
+        raise CoordinationUnavailable(f"coordination state commit failed: {combined}")
+    rc, commit, _ = _git(checkout, "rev-parse", "HEAD")
+    if rc != 0 or not commit:
+        raise CoordinationUnavailable("coordination commit has no revision")
+    return commit
+
+
+def _transaction(private, remote, branch, mutate, message):
+    """Run a read-modify-push transaction, retrying only rejected pushes."""
+    last_error = None
+    # A transaction is a write, so it is the path allowed to create the board's
+    # branch. It is done once here rather than per attempt, because the first
+    # attempt either finds the branch or creates it and no attempt after that
+    # has anything left to decide.
+    ensure_board_branch(private, remote, branch)
+    swept, reclaimed = sweep_stale_worktrees()
+    if swept:
+        # A leak then reads as a number on the tick that found it, rather than
+        # as a disk filling up that nobody attributes to anything.
+        print(
+            f"coordination sweep removed {swept} stale checkout(s), "
+            f"{reclaimed // (1024 * 1024)} MB reclaimed",
+            file=sys.stderr,
+        )
+    for attempt in range(MAX_TRANSACTION_ATTEMPTS):
+        ref, _commit = _fetch_branch_ref(private, remote, branch)
+        initialized = _state_initialized(private, ref)
+        with _detached_worktree(private, ref) as checkout:
+            state = _read_state_file(
+                state_path(checkout.path), allow_missing=not initialized
+            )
+            mutation = mutate(state)
+            if not mutation.changed:
+                return mutation.value
+            _write_state_file(state_path(checkout.path), state)
+            new_commit = _commit_state(checkout.path, message)
+            if new_commit is None:
+                return mutation.value
+            rc, out, err = _git(
+                checkout.path,
+                "push",
+                remote,
+                f"HEAD:refs/heads/{branch}",
+                timeout=FETCH_TIMEOUT_S,
+            )
+            # The final attempt's commit exists and the remote refused it, so its
+            # folder holds the only copy of a board state nobody else has. The
+            # earlier attempts are not kept: each one holds an intermediate state
+            # the final attempt already superseded, and each is a whole checkout
+            # of the private repository, so keeping them costs four directories
+            # per rejected transaction to preserve nothing the last one lacks.
+            checkout.keep = rc != 0 and attempt == MAX_TRANSACTION_ATTEMPTS - 1
+        if rc == 0:
+            return mutation.value
+        last_error = _safe_detail(f"{out} {err}")
+    raise CoordinationUnavailable(
+        f"coordination state push failed after retries: {last_error or 'unknown error'}"
+    )
+
+
+def _base_revisions(root, private):
+    public = _head(root) if _is_git_repo(root) else None
+    private_revision = _head(private)
+    return {"public": public, "private": private_revision}

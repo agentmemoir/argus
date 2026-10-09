@@ -6,7 +6,18 @@ The Python tools:
 
 - `next_phase.py`, `work_source.py`, and `roadmap_source.py` select work.
 - `config.py` reads settings, and `conventions.py` shares them across tools.
-- `phase_reservations.py` owns the board.
+- `phase_reservations.py` is the entry point of the reservation tools: it
+  re-exports the module surface and runs `main`. The work sits in
+  `phase_reservations_core.py` (statuses, errors, clock stamps, validation),
+  `phase_reservations_state.py` (the board state file),
+  `phase_reservations_git.py` and `phase_reservations_board.py` (git primitives,
+  the public/private boundary, and the board branch),
+  `phase_reservations_worktree.py` (short-lived worktrees and the
+  read-modify-push transaction), `phase_reservations_records.py` (claim
+  windows), the `phase_reservations_store*.py` files (the store and its role
+  parts), `phase_reservations_files.py` (the reservation and publication
+  files), `phase_reservations_cli.py` (the command line), and the
+  `phase_reservations_selftest*.py` files (the self-test).
 - `gitsync.py` is the entry point of the publishing tools: it parses the command
   line and re-exports `awaiting_review`. The work sits in `gitsync_git.py` (git
   primitives), `gitsync_paths.py` (branch names), `gitsync_merge.py` and
