@@ -1,0 +1,28 @@
+# Example pipeline: one step, ended by its signal.
+#
+# Argus passes this file to the configured `glide` command as
+# `glide run --pipeline <file> --input ticket=<n> --input document=<file>`.
+# A step's `stage` path resolves relative to this file's own directory, so the
+# stages folder sits beside it.
+version: 1
+description: A worked example of an Argus-managed pipeline.
+
+# Where this run's prompts, run logs, ledger, and artifacts live.
+run_dir: "runs/example-{ticket:06d}"
+
+inputs:
+  ticket: {type: int, required: true, description: "Which work item this is"}
+  document: {type: str, required: true, description: "Path to the work item"}
+
+start: build
+ends: [completed, blocked]
+
+steps:
+  build:
+    stage: stages/build.md
+    record_as: Builder
+    bindings:
+      TASK: "{document}"
+      REPORT_DIR: "{run_dir}"
+      LOG_PATH: "{run_dir}/{agent}-task-r{round}.log"
+    end: completed

@@ -1,0 +1,54 @@
+# Program Files
+
+`bin/argus` is the development command and `cli.py` is the installed one. Both call the same shell driver.
+
+The Python tools live in role packages under `src/argus/`. Every role package is
+a PEP 420 namespace package: there is no `__init__.py` in any of them, and each
+role's entry file is named for what it does.
+
+- `select/` chooses the work: `next_phase.py` (the selector), `work_source.py`
+  (the work-source contract and the registry that resolves a configured name),
+  `policy.py` (the shared phase policy), `group.py` (the group request and the
+  array its owner now holds), and the `*_selftest.py` files (their hermetic
+  self-tests).
+- `roadmap/` is the roadmap work source, the one source that exists. `source.py`
+  re-exports the module surface (declared in `__all__`). The work sits in
+  `evidence.py` (the completion markers and the roadmap folder), `queue.py` (the
+  candidates and the next one), `index.py` (index.md drift), `group.py`
+  (reservation-group declarations), `select.py` (claiming a phase or a group on
+  the board), `server.py` (`select_server_phase` and the `RoadmapSource` class),
+  and the `selftest*.py` files (the self-test).
+- `board/` is the shared board. `reservations.py` is the entry point of the
+  reservation tools: it re-exports the module surface (declared in `__all__`)
+  and runs `main`. The work sits in `core.py` (statuses, errors, clock stamps,
+  validation), `state.py` (the board state file), `git.py` and `branch.py` (git
+  primitives, the public/private boundary, and the board branch), `worktree.py`
+  (short-lived worktrees and the read-modify-push transaction), `records.py`
+  (claim windows), the `store*.py` files (the store and its role parts),
+  `files.py` (the reservation and publication files), `cli.py` (the command
+  line), `remedy.py` (closing out a phase whose remedy approver ran out of
+  rounds), and the `selftest*.py` files (the self-test).
+- `gitsync/` is the publishing and sync tools. `main.py` is the entry point: it
+  parses the command line, dispatches the modes, and runs the self-test. The
+  work sits in `git.py` (git primitives), `paths.py` (branch names), `merge.py`
+  and `sync.py` (one sync and both checkouts), `branch.py` (placing a checkout
+  on a phase branch), `runstate.py` (leftover run state), `receipts.py` and
+  `review.py` (receipts and open predecessors, including `awaiting_review`),
+  `publish.py`, `group_publication.py` and `publish_phase.py` (publication),
+  `tidy.py` (returning a checkout to the integration branch), and the `mode*.py`
+  files that dispatch the modes.
+- `config/` reads the settings file: `cli.py` is its command line, `schema.py`
+  is the key table and the shell names, `loader.py` reads and resolves the file,
+  and `render.py` prints it.
+- `notify/` formats notices: `notifications.py`.
+- `cli.py`, `conventions.py` and `exec_tempdir.py` sit at the package root.
+  `conventions.py` shares the loaded settings across every tool.
+
+The driver and its shell helpers live in `driver/`: `driver/phase-driver.sh` is
+the entry point and `driver/lib-*.sh` is one module per concern.
+`driver/lib-driver-group.sh` holds the group side of a tick: the member array a
+selection carries, the one branch the group publishes on, and the renewal the
+tick loop owes a running group. `driver/lib-selftest-*.sh` holds the self-test
+case stages, one file per group, each named after the cases it runs.
+
+`exec_tempdir.py` is a copy of a shared test helper. It differs from that copy by the fixture-name prefix and by one behavior: this copy creates its build-tree fallback on first use, so a hardened host that mounts its temporary directories `noexec` still has somewhere to run a fixture. Re-copy it when the shared helper changes, and keep that difference.

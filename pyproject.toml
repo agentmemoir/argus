@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "argus"
 version = "0.1.0"
-description = "An unattended phase driver: select work, reserve it on a shared board, launch it, watch it, publish it."
+description = "An unattended phase driver: select work, reserve it on a shared board, launch it, watch it, and publish it."
 readme = "README.md"
 requires-python = ">=3.11"
 license = "Apache-2.0"
@@ -21,6 +21,17 @@ classifiers = [
 ]
 dependencies = ["pyyaml>=6.0"]
 
+[dependency-groups]
+dev = [
+    "mypy>=1.11",
+    "pyright>=1.1.390",
+    "pytest>=8.0",
+    "ruff>=0.6",
+]
+
+[tool.uv]
+package = true
+
 [project.scripts]
 argus = "argus.cli:main"
 
@@ -28,32 +39,52 @@ argus = "argus.cli:main"
 Homepage = "https://github.com/agentmemoir/argus"
 Source = "https://github.com/agentmemoir/argus"
 
-# The command is a shell driver, and it only works with the helper scripts and
-# the bundled tools that sit beside it, so the whole folder ships as the `argus`
-# package: here the project root *is* the package directory, so `packages` names
-# it and `sources` maps it to the `argus` distribution path. Selection is by
-# pattern, so a new module ships without a second edit; `exclude` keeps the
-# development files out.
-#
-# The default selection looks for an `argus/` subdirectory that this layout does
-# not have, and then builds an empty wheel with no error, so this file names the
-# mapping. This mirrors the sibling `glide` project's hatchling setup; the
-# mapping is this layout's own.
+# The command is a shell driver, so the wheel ships the whole `src/argus`
+# folder: the Python tools and the shell driver that sources the helpers beside
+# it. Hatchling writes it to the distribution path `argus/`, and the default
+# VCS rules keep caches and local files out.
 [tool.hatch.build.targets.wheel]
-packages = ["."]
-sources = { "." = "argus" }
-ignore-vcs = true
-exclude = [
-  "/Makefile",
-  "/pyproject.toml",
-  "/README.md",
-  "/check_wheel.py",
-  "/bin",
-  "/scripts",
-  "/guard_faults.py",
-  "/exec_tempdir.py",
-  "/test_*.py",
-  "/dist",
-  "/__pycache__",
-  "/.*",
-]
+packages = ["src/argus"]
+
+[tool.ruff]
+line-length = 88
+src = ["src", "tests"]
+target-version = "py311"
+
+[tool.ruff.lint]
+# The same families glide selects. E501 is ignored because the formatter
+# cannot wrap a long string or a comment, and it is the one line-length voice.
+select = ["E", "F", "W", "I", "UP", "B", "BLE", "SIM", "C4", "RET", "PTH", "ARG"]
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+# `exec_tempdir.py` is a copy of a shared test helper. Rewrites belong in the
+# shared copy, so a re-copy stays a diff of behaviour, not of style.
+"src/argus/exec_tempdir.py" = ["PTH", "SIM105"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
+
+# Type checking: mypy at its default level gates the package (`make
+# typecheck`); pyright in strict mode, the checker behind the editor's Pylance,
+# gates the package and the suite (`make typecheck-strict`). A shipped
+# `py.typed` is the open step of the recorded type-checking target.
+[tool.mypy]
+python_version = "3.11"
+files = ["src/argus"]
+
+[[tool.mypy.overrides]]
+# `_bootstrap` is imported by name from the script-mode guard and is not
+# importable as a package; `glide` is an optional runtime command, and PyYAML
+# ships no stubs. None of the three is a code defect.
+module = ["_bootstrap", "glide", "yaml"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# `exec_tempdir.py` is a copy of a shared test helper whose declared return
+# type is `tempfile.TemporaryDirectory`; its `_OwnedDirectory` answers the same
+# protocol. Rewrites belong in the shared copy, so the mismatch is exempted
+# here rather than edited into this copy.
+module = ["argus.exec_tempdir"]
+disable_error_code = ["return-value"]
