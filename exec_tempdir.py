@@ -46,11 +46,19 @@ SCRIPTS = Path(__file__).resolve().parent
 #: is already disposable, already kept out of version control, and already has
 #: whatever cleanup policy the build has.
 #:
+#: The build tree is deliberately beside this helper's parent and not inside the
+#: helper's own directory: a suite copies that directory into its fixture, so a
+#: fixture created inside it would be copied into itself. A fresh checkout has no
+#: build tree yet, so the directory is created on first use. A hardened host that
+#: mounts its temporary directory and `/dev/shm` `noexec` has nowhere else that
+#: permits execution, and a fixture that cannot run verifies nothing.
+#:
 #: A home directory is deliberately not a candidate. It is not scratch space, a
 #: fixture tree left there outlives the run that made it, and a suite that fails
 #: because of where the machine keeps its files has the defect this module exists
 #: to remove.
-CANDIDATE_PARENTS: tuple[str | None, ...] = (None, "/dev/shm", str(SCRIPTS.parent / "target"))
+BUILD_TREE = SCRIPTS.parent / "target"
+CANDIDATE_PARENTS: tuple[str | None, ...] = (None, "/dev/shm", str(BUILD_TREE))
 
 
 def _expand(parent: str | None) -> str | None:
@@ -138,6 +146,14 @@ def _executable_candidates(
         if key in seen:
             continue
         seen.add(key)
+        if base == str(BUILD_TREE):
+            # The build tree is the one candidate this helper may create. A host
+            # whose temporary directories are `noexec` reaches it only if the
+            # directory exists, and a fresh checkout does not have one yet.
+            try:
+                os.makedirs(base, exist_ok=True)
+            except OSError:
+                continue
         try:
             directory = tempfile.mkdtemp(prefix="argus-selftest-", dir=base)
         except OSError:

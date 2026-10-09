@@ -25,6 +25,11 @@ _drive() {
     flock -n 9 || { log "another driver instance holds the lock; skip"; return 0; }
   fi
 
+  # The tick is the renewer of the claim this machine holds. The board measures a
+  # claim from its newest heartbeat once work has begun, so a claim nobody renews
+  # expires under a live run and another machine may take the work away.
+  claim_renew
+
   if tmux_busy; then
     check_stall
     log "phase window is running; skip"
@@ -80,6 +85,12 @@ _drive() {
 
   log "next phase: $number ($rel)"
 
+  # The fence goes down with the claim, not at the launch. A tick that refuses
+  # after this point, at the branch cut or the sync gate, still leaves the claim
+  # releasable by `--release` instead of stranded on the board until its window
+  # closes.
+  record_claim "$number" "$reservation_id" "$reservation_generation"
+
   _drive_cut_branch || return $?
   [ -z "$_DRIVE_RC" ] || return "$_DRIVE_RC"
 
@@ -132,14 +143,26 @@ _drive_cut_branch() {
     # gitsync's branch mode scans that folder to refuse a branch name another
     # phase in it would also earn, so without it the check runs against the
     # derived folder and a collision inside a configured one goes unseen.
+    #
+    # A group passes its members as well, so the one branch the whole group
+    # publishes is what the helper cuts and what the collision scan checks. The
+    # name is derived from the group's lowest member, so every tick of the group
+    # asks for the same branch whichever member it is launching.
     "$PYTHON" "$ARGUS/gitsync.py" "${ARGUS_CONFIG_ARGS[@]}" --root "$REPO" \
       --mode branch --phase "$number" --roadmap "$roadmap_name" \
       --roadmap-dir "$(roadmap_dir)" \
+      "${GROUP_ARGS[@]+"${GROUP_ARGS[@]}"}" \
       >"$RUN_DIR/phase-branch.json" 2>/dev/null
     local branch_rc=$?
     if [ "$branch_rc" -ne 0 ]; then
       log "could not put phase $number on its own branch; refusing to launch (see $RUN_DIR/phase-branch.json)"
       { _DRIVE_RC=1; return 0; }
+    fi
+    # Only a group records a branch of its own. A single phase's branch is not a
+    # group branch, and writing it here would leave a group's own record naming
+    # a branch no group ever had.
+    if group_active; then
+      group_record_branch "$(selection_value branch <"$RUN_DIR/phase-branch.json")"
     fi
     # The two branches are read per checkout by role, from the action each one
     # reported. The receipt's top-level "branch" is the name that was asked
@@ -147,6 +170,9 @@ _drive_cut_branch() {
     # though it were the public checkout's branch reported a phase branch for a
     # checkout that was still sitting on master.
     log "phase $number: $(branch_state_line "$RUN_DIR/phase-branch.json")"
+    if group_active; then
+      log "group $number: one branch $(group_branch_of) covers [$(printf '%s' "$GROUP_MEMBERS" | tr '\n' ' ')]"
+    fi
     # The branch may have been cut from an open predecessor rather than from the
     # integration branch, and the integration branch may have moved since the
     # launch-time sync. Pull it in now so the phase starts from a base that
@@ -219,6 +245,69 @@ stop() {
   else
     log "stop: wrote halt marker (no live session)"
   fi
+}
+
+# Give the current phase's group back without halting the line.
+#
+# This is deliberately not `stop()`. stop() writes the halt marker before it
+# does anything else; a release is the opposite. Nothing here writes the halt
+# marker, triggers the orphan or stall check, or sends a halt notification. It
+# interrupts only the phase window, waits for that window to close, clears the
+# same run-state files the signal path clears, and returns 0. The board group is
+# released after partial work is pushed, so the next owner resumes from the
+# branch. A failure to push or to release is logged and never halts.
+release() {
+  mkdir -p "$RUN_DIR"
+  local number="" claim_number="" reservation_id="" generation="" rc=0
+  number="$(cat "$CURRENT" 2>/dev/null || true)"
+  if [ -f "$CLAIM" ]; then
+    IFS=$'\t' read -r claim_number reservation_id generation <"$CLAIM" || true
+    [ -n "$claim_number" ] && number="${number:-$claim_number}"
+  fi
+  # Written before the interrupt: the child's signal trap reads it and stops
+  # without writing a halt marker. The parent removes it on every path.
+  : >"$RELEASE"
+  if tmux_phase_window_alive; then
+    tmux_phase_window_interrupt
+    log "release: sent Ctrl-C to '$SESSION:phase'${number:+ for phase $number}"
+  else
+    log "release: no live phase window${number:+ for phase $number}"
+  fi
+  wait_phase_window_gone
+  # Partial work first, so the next owner resumes instead of starting over. A
+  # failure is logged, never a halt. gitsync_clean lands the private run state;
+  # the checkpoint lands the public checkout's unfinished work on the branch the
+  # next owner resumes from, which is the handoff the requirement promises.
+  "$PYTHON" "$ARGUS/gitsync.py" "${ARGUS_CONFIG_ARGS[@]}" --root "$REPO" \
+    --mode checkpoint >"$RUN_DIR/release-checkpoint.json" 2>/dev/null \
+    || log "release: could not push the work in progress; the next owner starts from what is already on the branch (see $RUN_DIR/release-checkpoint.json)"
+  [ -z "$number" ] || gitsync_clean "$number"
+  # The array the run covered, for the log line below. Read before the board
+  # write, because the write is what ends the group on this machine.
+  local group_members=""
+  [ -s "$GROUPFILE" ] && group_members="$(tr '\n' ' ' <"$GROUPFILE")"
+  if [ -n "$reservation_id" ] && [ -n "$generation" ]; then
+    if "$PYTHON" "$ARGUS/phase_reservations.py" release-group \
+        "${ARGUS_CONFIG_ARGS[@]}" --repo-root "$REPO" \
+        --machine-id "$PHASE_MACHINE_ID" \
+        --reservation-id "$reservation_id" \
+        --generation "$generation" \
+        >"$RUN_DIR/release${number:+-$number}.json" 2>&1; then
+      if [ -n "$group_members" ]; then
+        log "release: returned the group for phase $number to the queue [$group_members]"
+      else
+        log "release: returned the group for phase $number to the queue"
+      fi
+      rm -f "$CLAIM"
+    else
+      rc=$?
+      log "release: could not return the group for phase $number (rc=$rc; see $RUN_DIR/release${number:+-$number}.json)"
+    fi
+  else
+    log "release: no board token was recorded; the run was stopped without a board write"
+  fi
+  rm -f "$CURRENT" "$PIDFILE" "$RELEASE" "$GROUPFILE" "$GROUPBRANCH"
+  return 0
 }
 
 # Wait for the phase window to disappear. The session itself is persistent and

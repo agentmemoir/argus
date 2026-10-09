@@ -202,6 +202,45 @@ class PhaseNotificationTests(unittest.TestCase):
         self.assertIn("no new output for 45 minutes", message)
         self.assertIn("session is still running", message)
 
+    def test_released_says_the_group_returns_to_the_queue(self) -> None:
+        message = format_notification(
+            "phase-100520-scale-ceilings-docs.md",
+            "released",
+        )
+        self.assertEqual(
+            message,
+            "Phase 100520 (Scale Ceilings Docs) was released. "
+            "Its group returned to the queue; another agent may pick it up.",
+        )
+
+    def test_group_clause_names_every_member(self) -> None:
+        message = format_notification(
+            "phase-100520-scale-ceilings-docs.md",
+            "started",
+            group=["100520", "100521", "100522"],
+        )
+        self.assertEqual(
+            message,
+            "Phase 100520 (Scale Ceilings Docs) (group: 100520, 100521, 100522) "
+            "has started.",
+        )
+
+    def test_group_accepts_a_comma_separated_string(self) -> None:
+        message = format_notification(
+            "phase-100520-scale-ceilings-docs.md",
+            "released",
+            group="100520, 100521",
+        )
+        self.assertIn("(group: 100520, 100521)", message)
+        self.assertIn("was released", message)
+
+    def test_no_group_leaves_the_message_unchanged(self) -> None:
+        self.assertEqual(
+            format_notification("phase-100520-scale-ceilings-docs.md", "started"),
+            format_notification("phase-100520-scale-ceilings-docs.md", "started",
+                                group=[]),
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

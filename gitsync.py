@@ -227,7 +227,65 @@ def roadmap_folder(root, configured=None):
     return board_repo(root) / "roadmap"
 
 
-def assert_phase_branch_unique(root, phase, roadmap_name, roadmap_dir=None):
+#: The marker a group branch carries between the prefix and its lowest member's
+#: behaviour. A phase branch never carries it: ``phase_branch`` puts a file's
+#: behaviour straight after the prefix, so the two names differ for the same
+#: behaviour and one group's branch can never be mistaken for a member's.
+GROUP_BRANCH_MARKER = "group-"
+
+
+def _phase_file_for(folder, number):
+    """The phase file in ``folder`` whose number matches, or ``None``.
+
+    The match is the one the selector uses: a file's first numeric filename token
+    is its phase number. A file with no number and an appendix file are skipped
+    by ``phase_file_parts``, so neither can be mistaken for a group member.
+    """
+    for path in phase_paths(folder):
+        parts = phase_file_parts(path)
+        if parts and int(parts[0]) == int(number):
+            return path
+    return None
+
+
+def group_branch(root, members, roadmap_dir=None):
+    """The one branch a reservation group's work lives on.
+
+    A group runs as one unit, so it publishes one branch and one pull request for
+    every member. The name is derived from the group's lowest member, which the
+    phase documents fix and which therefore stays the same whichever member a
+    given tick happens to launch from; deriving it from the member being launched
+    would give one group a different branch per member, which is the opposite of
+    what the group is for.
+
+    ``members`` are the declared members, in any order, as phase numbers or
+    six-digit strings.
+
+    Raises:
+        ConfigError: The group is empty, a member is not a phase number, or the
+            lowest member has no document in the roadmap folder.
+    """
+    numbers = set()
+    for member in members or ():
+        try:
+            numbers.add(int(str(member).strip()))
+        except (TypeError, ValueError) as exc:
+            raise ConfigError(f"not a phase number: {member!r}") from exc
+    if not numbers:
+        raise ConfigError("a group branch needs at least one member")
+    folder = roadmap_folder(root, roadmap_dir)
+    lowest = min(numbers)
+    path = _phase_file_for(folder, lowest)
+    if path is None:
+        raise ConfigError(
+            f"group member {lowest:06d} has no phase document in {folder}; "
+            "refusing to guess a branch name")
+    _number, behaviour = _phase_file_parts(path.name)
+    return f"{PHASE_BRANCH_PREFIX}{GROUP_BRANCH_MARKER}{behaviour}"
+
+
+def assert_phase_branch_unique(root, phase, roadmap_name, roadmap_dir=None,
+                               branch=None):
     """Refuse a branch name another of this checkout's phases also earns.
 
     The phase number is deliberately absent from the branch name, so the
@@ -239,10 +297,16 @@ def assert_phase_branch_unique(root, phase, roadmap_name, roadmap_dir=None):
     the derived one, which is what every machine reads unless it configured
     otherwise.
 
+    ``branch`` is the name to check, and defaults to the name derived from the
+    phase's own file. A group passes its own single branch name instead, because
+    the group has no one file to derive a name from. A group branch carries the
+    group marker, so it can never equal a phase branch's name; a collision
+    between two groups is checked separately, by ``assert_group_branch_unique``.
+
     Returns a result dict; ok is the success flag.
     """
     root = Path(root).resolve()
-    branch = phase_branch_for(phase, roadmap_name)
+    branch = branch or phase_branch_for(phase, roadmap_name)
     info = {"repo": str(root), "phase": f"{int(phase):06d}", "branch": branch}
     roadmap = roadmap_folder(root, roadmap_dir)
     for path in phase_paths(roadmap):
@@ -257,6 +321,51 @@ def assert_phase_branch_unique(root, phase, roadmap_name, roadmap_dir=None):
                  "the behaviour part differs")
     return dict(info, ok=True, action="phase-branch-name-unique",
                 branch=branch)
+
+
+def assert_group_branch_unique(root, branch, members, roadmap_dir=None):
+    """Refuse a group branch another declared group would also earn.
+
+    Two groups whose lowest member shares a behaviour word derive the same branch
+    name, and the second group would resume the first one's commits and publish
+    them under one pull request. ``assert_phase_branch_unique`` cannot catch it: a
+    group branch carries the group marker and a phase branch does not, so the two
+    names never compare equal. The comparison here is group against group, which
+    is where the collision actually lives.
+
+    ``members`` are the declared members of the group whose branch is being cut.
+    A document whose declaration cannot be read is left to the launch that will
+    refuse on it, rather than stopping a branch name this group does not share.
+
+    Returns a result dict; ok is the success flag.
+    """
+    from argus import roadmap_source
+
+    root = Path(root).resolve()
+    wanted = sorted(f"{int(member):06d}" for member in members or ())
+    info = {"repo": str(root), "branch": branch, "group": wanted}
+    folder = roadmap_folder(root, roadmap_dir)
+    for path in phase_paths(folder):
+        parts = phase_file_parts(path)
+        if parts is None:
+            continue
+        try:
+            other = roadmap_source.declared_group_members(path, int(parts[0]))
+        except roadmap_source.ReservationGroupError:
+            continue
+        if not other:
+            continue
+        if sorted(f"{int(member):06d}" for member in other) == wanted:
+            continue
+        if group_branch(root, other, roadmap_dir) != branch:
+            continue
+        other_members = [f"{int(member):06d}" for member in other]
+        return blocked(
+            info, f"{branch!r} is also the branch for group {other_members!r} "
+                  f"in {path.name!r}",
+            hint="two groups cannot share a branch; rename a member file so the "
+                 "lowest member's behaviour part differs")
+    return dict(info, ok=True, action="group-branch-name-unique")
 
 
 class ConfigError(Exception):
@@ -655,8 +764,15 @@ def resync_integration(repo, base=None):
     return _merge(info, repo, upstream, ahead, behind, abort_on_conflict=False)
 
 
-def sync_all(root, mode):
-    """Sync the public checkout and the nested private checkout, if present."""
+def sync_all(root, mode, branch=None):
+    """Sync the public checkout and the nested private checkout, if present.
+
+    ``branch`` is the branch the public checkout must be on, and it reaches that
+    checkout alone: the private one is read on the integration branch, so naming
+    a group branch for it would refuse it for no reason. A caller that names no
+    branch leaves the check comparing a checkout's own branch against itself,
+    which is what every caller did before a group could name a branch at all.
+    """
     root = Path(root).resolve()
     repos = [root]
     nested = board_repo(root)
@@ -682,7 +798,8 @@ def sync_all(root, mode):
                        for r in repos]
             return {"ok": False, "mode": mode, "repos": results,
                     "summary": summarize(results, mode)}
-    results = [sync_one(r, mode) for r in repos]
+    results = [sync_one(repos[0], mode, branch=branch)]
+    results += [sync_one(r, mode) for r in repos[1:]]
     ok = all(r["ok"] for r in results)
     return {"ok": ok, "mode": mode, "repos": results,
             "summary": summarize(results, mode)}
@@ -1716,6 +1833,18 @@ def tidy_published_checkout(repo, base=None):
     if not receipt:
         return dict(info, ok=True, action="no-receipt-for-branch",
                     hint=f"{here} has no publication receipt; leaving it alone")
+    # A branch shared by a reservation group answers for the group, not for the
+    # one member whose receipt happened to be found first. The checkout may only
+    # leave while every member is published, because the members still to run
+    # need the branch the others published on.
+    members = list(receipt.get("group") or [])
+    if members:
+        if not _group_all_published(repo, members):
+            return dict(info, ok=True, action="group-not-yet-published",
+                        group=members,
+                        hint=f"{here} carries a reservation group; the checkout "
+                             "stays on it until every member is published")
+        return return_to_integration(repo, base=base)
     state = receipt.get("state")
     if state != "published":
         return dict(info, ok=True, action="phase-not-yet-published",
@@ -1780,6 +1909,78 @@ def _phase_reservations_now():
     return _now()
 
 
+def _declared_group(root, phase):
+    """The reservation group a phase declares, or ``None``.
+
+    Read from the roadmap documents, which is where a declaration lives. A
+    malformed one is refused rather than read as "runs alone": a phase whose
+    group nobody can read is not a phase that ran by itself, and publishing it
+    as one would record the wrong branch. An absent declaration, and a machine
+    with no roadmap folder to read, are the ordinary single-phase case.
+    """
+    from argus import roadmap_source
+    folder = roadmap_folder(root)
+    if not Path(folder).is_dir():
+        return None
+    try:
+        return roadmap_source.resolve_group_or_none(root, folder, phase)
+    except roadmap_source.ReservationGroupMissing:
+        return None
+    except Exception as exc:  # noqa: BLE001 - reported as a configuration error
+        raise ConfigError(
+            f"cannot read the reservation group of phase {int(phase):06d}: "
+            f"{exc}") from exc
+
+
+def _member_published(root, member):
+    """Whether one group member's receipt says it is published."""
+    try:
+        number = int(str(member).strip())
+    except (TypeError, ValueError):
+        return False
+    receipt = phase_receipt(root, number)
+    return bool(receipt) and receipt.get("state") == "published"
+
+
+def _group_all_published(root, members):
+    """Whether every member of a group is published.
+
+    A group shares one branch and one pull request, so a member whose merge is
+    recorded is not permission to leave that branch: the members that have not
+    run yet still need it. A member with no receipt at all is not published,
+    which is the answer that keeps the checkout where the group needs it.
+    """
+    members = list(members or ())
+    return bool(members) and all(
+        _member_published(root, member) for member in members)
+
+
+def _group_pull_request(root, group, branch, phase):
+    """The pull request another member of this group already recorded.
+
+    One branch and one pull request cover a group, so every member's receipt
+    names the pull request the group already has. The join key is the group
+    branch, and the member list is checked with it: once one branch carries
+    several receipts, the branch name alone no longer names one phase. The
+    member being published is skipped, so republishing it cannot answer with its
+    own earlier record.
+    """
+    if not branch:
+        return None
+    wanted = {f"{int(member):06d}" for member in group}
+    mine = f"{int(phase):06d}"
+    for number, _entry in _phase_run_entries(root):
+        if f"{int(number):06d}" == mine:
+            continue
+        receipt = phase_receipt(root, number)
+        if not isinstance(receipt, dict) or receipt.get("branch") != branch:
+            continue
+        recorded = receipt.get("group") or []
+        if {f"{int(member):06d}" for member in recorded} == wanted:
+            return receipt.get("pull_request")
+    return None
+
+
 def _write_publication_receipt(root, phase, reservation, results,
                                engine_written=(), pull_request=None):
     private = board_repo(root)
@@ -1792,6 +1993,15 @@ def _write_publication_receipt(root, phase, reservation, results,
         raise ConfigError("publication did not produce both repository heads")
     public_branch = current_branch(root)
     private_branch = current_branch(private)
+    # One branch and one pull request cover a whole group, so every member's
+    # receipt records the pull request the group already has. A second pull
+    # request on the same branch cannot exist, and a member whose receipt named
+    # none would be verified against its commit id alone. The caller's own URL is
+    # used only until a member of this group has recorded one.
+    group = _declared_group(root, phase)
+    if group:
+        pull_request = (_group_pull_request(
+            root, group["group"], public_branch, phase) or pull_request)
     from argus.phase_reservations import _now
     receipt = {
         "version": 1,
@@ -1814,12 +2024,22 @@ def _write_publication_receipt(root, phase, reservation, results,
         "private_head": private_commit,
         "published_at": _now(),
     }
+    if group:
+        # The declared array, so a reader can see which phases this branch and
+        # this pull request cover, and so the merge check can tell whether every
+        # member is published before the checkout leaves the group branch.
+        receipt["group"] = list(group["group"])
     # The predecessor this phase was stacked on, with the commit it was stacked
     # on. Without the commit, a predecessor branch that is force-pushed or
     # rewritten after this phase branched from it would silently change what
     # this phase is built on, and nothing would ever notice: the branch still
     # exists, so every existence check passes.
     carried = open_predecessor(root, phase)
+    if carried and carried.get("branch") == public_branch:
+        # Another member of this phase's own reservation group: the same branch
+        # and the same pull request. Recording that as a branch this phase was
+        # stacked on would say the phase is based on itself.
+        carried = None
     if carried:
         base = carried["branch"]
         rc_b, base_head, _ = git(root, "rev-parse", "--verify", f"refs/heads/{base}")
@@ -2219,6 +2439,97 @@ def _publication_receipt_check(base):
             pass
         return store.read()[0]["phases"]["100440"]["status"] != "completed", \
             "an unmerged phase cannot be recorded as complete"
+    except Exception as exc:  # noqa: BLE001 - self-test reports the failure
+        return False, str(exc)
+
+
+def _group_publication_check(base):
+    """One branch, one pull request, and one receipt per member of a group.
+
+    A group publishes every member from one branch and one pull request, and each
+    member keeps its own receipt under its own run directory. Both members are
+    published for real here, because the property is about what the helper
+    writes, not about what a fixture says it would write.
+
+    Returns ``(ok, detail)`` like the other fixture checks.
+    """
+    d = base / "group-publication"
+    d.mkdir()
+    _public_remote, pub = _init_remote(d, "pub")
+    nested = pub / BOARD_REL
+    nested.parent.mkdir(parents=True, exist_ok=True)
+    private_remote, _ = _init_remote(d, "priv")
+    subprocess.run([git_binary(), "clone", "-q", str(private_remote),
+                    str(nested)], check=True, capture_output=True, text=True)
+    git(nested, "config", "user.email", "sync-test@example.com")
+    git(nested, "config", "user.name", "sync test")
+    # The declaration lives in the phase documents, so where a group is read
+    # from is where it has to be written.
+    roadmap = nested / "roadmap"
+    roadmap.mkdir(parents=True, exist_ok=True)
+    for number, behaviour in ((100020, "cache-warm"), (100030, "cache-read")):
+        (roadmap / f"phase-{number:06d}-{behaviour}.md").write_text(
+            f"# {number}. Group member\n\n- [ ] Work to do.\n\n"
+            "### Reservation Group\n\n`together: 100020, 100030`\n",
+            encoding="utf-8")
+    _configure_self_test(pub, nested, roadmap=roadmap)
+    members = ["100020", "100030"]
+    try:
+        from argus.phase_reservations import (
+            ReservationStore, save_reservation_file)
+        store = ReservationStore(pub, branch="main")
+        records = store.reserve_group(members, "server-01")
+        git(nested, "fetch", "-q", "origin")
+        git(nested, "merge", "-q", "--ff-only", "origin/main")
+        branch = group_branch(pub, members)
+        made = ensure_phase_branch(pub, branch)
+        if not made.get("ok"):
+            return False, f"the group branch was not created: {made}"
+        for record in records:
+            run_dir = nested / "runs" / f"phase-{record['phase']}"
+            run_dir.mkdir(parents=True, exist_ok=True)
+            save_reservation_file(run_dir / "reservation.json", record)
+            (run_dir / "run.json").write_text('{"state":"completed"}\n')
+        git(nested, "add", "-A")
+        git(nested, "commit", "-q", "-m", "run state")
+        git(nested, "push", "-q", "origin", "main")
+        url = "https://github.com/example/argus/pull/7"
+        first = publish_phase(pub, 100020, pull_request=url)
+        if not first.get("ok"):
+            return False, f"the group's first member did not publish: {first}"
+        # No pull request is passed for the second member. One branch can carry
+        # one pull request, so the group's own record is the only answer.
+        second = publish_phase(pub, 100030)
+        if not second.get("ok"):
+            return False, f"the group's second member did not publish: {second}"
+        receipts = {number: phase_receipt(pub, number) for number in (100020, 100030)}
+        if not all(receipts.values()):
+            return False, "a member published without a receipt of its own"
+        if {r.get("branch") for r in receipts.values()} != {branch}:
+            return False, ("the members did not publish on one branch: "
+                           f"{[r.get('branch') for r in receipts.values()]}")
+        if {r.get("pull_request") for r in receipts.values()} != {url}:
+            return False, ("the members did not record the same pull request: "
+                           f"{[r.get('pull_request') for r in receipts.values()]}")
+        for number, receipt in receipts.items():
+            if list(receipt.get("group") or []) != members:
+                return False, (f"phase {number}'s receipt does not record the "
+                               f"group it belongs to: {receipt.get('group')}")
+        # A merged member must not take the checkout off the group branch: the
+        # members that have not run yet still need it.
+        half = mode_published(pub, 100020)
+        if half.get("state") != "PUBLISHED-GROUP-PENDING":
+            return False, ("a half-published group did not leave the checkout "
+                           f"where the rest of the group needs it: {half.get('state')}")
+        if current_branch(pub) != branch:
+            return False, (f"the checkout left the group branch for "
+                           f"{current_branch(pub)}")
+        done = mode_published(pub, 100030)
+        if done.get("state") != "PUBLISHED":
+            return False, f"the finished group did not tidy the checkout: {done.get('state')}"
+        if current_branch(pub) == branch:
+            return False, "the checkout stayed on the group branch once every member was published"
+        return True, "one branch, one pull request, one receipt per member"
     except Exception as exc:  # noqa: BLE001 - self-test reports the failure
         return False, str(exc)
 
@@ -4537,6 +4848,10 @@ def _self_test_checks():
     _check(checks, "publish: receipt-backed completion", receipt_ok,
            receipt_detail)
 
+    group_ok, group_detail = _group_publication_check(base)
+    _check(checks, "group: one branch, one pull request, one receipt per member",
+           group_ok, group_detail)
+
     race_ok, race_detail = _publish_while_writing_check(base)
     _check(checks, "publish: succeeds first try with the engine writing the marker",
            race_ok, race_detail)
@@ -4566,7 +4881,96 @@ def _self_test_checks():
     portable_ok, portable_detail = _portable_publication_check(base)
     _check(checks, "publish: custom project conventions", portable_ok, portable_detail)
 
+    for name, ok, detail in _handoff_checks(base):
+        _check(checks, f"handoff: {name}", ok, detail)
+    for name, ok, detail in _group_branch_collision_checks(base):
+        _check(checks, f"group name: {name}", ok, detail)
+
     return checks
+
+
+def _handoff_checks(base):
+    """A release handoff pushes the work in progress, and not onto the integration branch.
+
+    Both halves matter. An owner who releases with nothing pushed hands over an
+    empty branch, and one who pushes unfinished work onto the integration branch
+    puts unreviewed code where everyone pulls.
+    """
+    d = base / "handoff"
+    d.mkdir()
+    _public_remote, pub = _init_remote(d, "handoff")
+    _configure_self_test(pub, pub / BOARD_REL)
+    (pub / "unfinished.txt").write_text("half a phase\n", encoding="utf-8")
+    on_integration = mode_checkpoint(pub)
+    branch = "feature/group-cache-warm"
+    made = ensure_phase_branch(pub, branch)
+    if not made.get("ok"):
+        return [("the handoff fixture could not cut a phase branch", False,
+                 str(made))]
+    (pub / "unfinished.txt").write_text("half a phase\n", encoding="utf-8")
+    pushed = mode_checkpoint(pub)
+    head = git(pub, "rev-parse", "HEAD")[1]
+    remote_head = git(pub, "rev-parse", f"origin/{branch}")[1]
+    return [
+        ("the integration branch is refused",
+         not on_integration.get("ok")
+         and "work in progress" in json.dumps(on_integration),
+         f"state={on_integration.get('state')} "
+         f"{on_integration.get('summary')}"),
+        ("work in progress is committed and pushed on the phase branch",
+         pushed.get("ok") and pushed.get("action") == "committed-and-pushed"
+         and remote_head == head,
+         f"ok={pushed.get('ok')} action={pushed.get('action')} "
+         f"remote={remote_head[:8]} head={head[:8]}"),
+    ]
+
+
+def _write_group_phases(roadmap, members, behaviour):
+    """Two phase documents declaring one symmetric group, in a fixture roadmap."""
+    declaration = f"`together: {members[0]:06d}, {members[1]:06d}`"
+    for number in members:
+        (roadmap / f"phase-{number:06d}-{behaviour}.md").write_text(
+            f"# {number}. Group member\n\n- [ ] Work to do.\n\n"
+            f"### Reservation Group\n\n{declaration}\n", encoding="utf-8")
+
+
+def _group_branch_collision_checks(base):
+    """Two groups that derive one branch name are refused, and one group is not.
+
+    A group branch carries no phase number, so the lowest member's behaviour word
+    is all that separates one group's branch from another's.
+    """
+    results = []
+    mine = ["100020", "100021"]
+    d = base / "group-name"
+    d.mkdir()
+    _public_remote, pub = _init_remote(d, "group-name")
+    roadmap = pub / "roadmap"
+    roadmap.mkdir()
+    _write_group_phases(roadmap, (100020, 100021), "cache-warm")
+    _write_group_phases(roadmap, (100040, 100041), "warm-cache")
+    _configure_self_test(pub, pub / BOARD_REL, roadmap=roadmap)
+    branch = group_branch(pub, mine)
+    same = assert_group_branch_unique(pub, branch, mine)
+    results.append((
+        "a group is not its own collision, and its branch comes from its lowest member",
+        same.get("ok") and branch == "feature/group-cache-warm",
+        f"ok={same.get('ok')} branch={branch} {same.get('summary')}"))
+
+    d = base / "group-name-clash"
+    d.mkdir()
+    _public_remote, pub = _init_remote(d, "group-name-clash")
+    roadmap = pub / "roadmap"
+    roadmap.mkdir()
+    _write_group_phases(roadmap, (100020, 100021), "cache-warm")
+    _write_group_phases(roadmap, (100040, 100041), "cache-warm")
+    _configure_self_test(pub, pub / BOARD_REL, roadmap=roadmap)
+    clash = assert_group_branch_unique(pub, branch, ["100040", "100041"])
+    results.append((
+        "two groups deriving one branch are refused",
+        not clash.get("ok") and "also the branch for group" in json.dumps(clash),
+        f"{clash.get('summary')} {json.dumps(clash)}"))
+    return results
 
 
 def self_test():
@@ -4583,7 +4987,7 @@ def result_exit_code(out):
     return 0 if out.get("ok") else 1
 
 
-def mode_branch(root, phase, roadmap, roadmap_dir=None):
+def mode_branch(root, phase, roadmap, roadmap_dir=None, group=None):
     """Put the public checkout on this phase's branch, then report.
 
     Split out of ``main`` so the self-test can drive the whole mode, refusals
@@ -4594,18 +4998,33 @@ def mode_branch(root, phase, roadmap, roadmap_dir=None):
     ``roadmap_dir`` is the folder the phase file was chosen from, so the
     uniqueness check below scans the same phases the selector saw.
 
+    ``group`` lists a reservation group's declared members, and gives the group
+    the one branch every member publishes on. A group has no single file to
+    derive a name from, so its branch is derived from its lowest member and
+    checked for collisions like any other branch name.
+
     Returns the mode's result dict.
     """
     root = Path(root).resolve()
     # The branch no longer carries the phase number, so the behaviour is the
     # only thing separating two phases' branches. A duplicate is refused here,
     # before either checkout is touched.
-    unique = assert_phase_branch_unique(root, phase, roadmap, roadmap_dir)
+    unique = assert_phase_branch_unique(
+        root, phase, roadmap, roadmap_dir,
+        branch=group_branch(root, group, roadmap_dir) if group else None)
     if not unique["ok"]:
         return {"ok": False, "mode": "branch",
                 "branch": unique["branch"], "repos": [unique],
                 "summary": summarize([unique], "branch")}
     branch = unique["branch"]
+    if group:
+        # A group branch comes from the group's lowest member, so two groups can
+        # derive one name even when no phase branch collides with it.
+        shared = assert_group_branch_unique(root, branch, group, roadmap_dir)
+        if not shared["ok"]:
+            return {"ok": False, "mode": "branch", "branch": branch,
+                    "repos": [unique, shared],
+                    "summary": summarize([shared], "branch")}
     # The base is the open predecessor's branch when there is one. Without this
     # the phase starts from the integration branch, which does not contain the
     # previous phase's code, and the phase fails on a symbol that is not there.
@@ -4614,6 +5033,14 @@ def mode_branch(root, phase, roadmap, roadmap_dir=None):
     # looks exactly like a correct launch and produces a phase built on missing
     # code.
     predecessor = open_predecessor(root, phase)
+    if predecessor and predecessor.get("branch") == branch:
+        # Another member of this phase's own reservation group. One branch covers
+        # the whole group, so that member's work is on the branch this launch is
+        # about to cut or resume, and there is no separate base to prove. Without
+        # this the missing-branch refusal below fires on the first tick of every
+        # group, because the group branch does not exist until that tick creates
+        # it, and the members after the first would never launch.
+        predecessor = None
     base = None
     if predecessor:
         rc, _, _ = git(root, "rev-parse", "--verify",
@@ -4717,6 +5144,24 @@ def mode_published(root, phase):
         return {"ok": False, "mode": "published", "state": "BLOCKED",
                 "repos": [marked], "summary": summarize([marked], "published")}
     repos = [marked]
+    # A member of a group does not take the checkout with it. One branch and one
+    # pull request cover the whole group, so the members that have not run yet
+    # still need that branch; moving the checkout to the integration branch here
+    # would take it out from under the next member's launch.
+    receipt = phase_receipt(root, phase)
+    members = list(receipt.get("group") or []) \
+        if isinstance(receipt, dict) else []
+    if members and not _group_all_published(root, members):
+        pending = [m for m in members if not _member_published(root, m)]
+        repos.append({"repo": str(root), "ok": True,
+                      "action": "group-still-open", "group": members,
+                      "pending": pending,
+                      "hint": f"{len(pending)} member(s) of this reservation "
+                              "group are not published; the checkout stays on "
+                              "the group branch"})
+        return {"ok": True, "mode": "published",
+                "state": "PUBLISHED-GROUP-PENDING", "repos": repos,
+                "summary": summarize(repos, "published")}
     repos.append(return_to_integration(root))
     # The private checkout stays on the integration branch by design, so only
     # the public one can drift. A stop there is still a stop: report it rather
@@ -4831,6 +5276,50 @@ def mode_clean(root, phase=None):
             "pathspec": pathspec, "summary": summarize([res], "clean")}
 
 
+def mode_checkpoint(root):
+    """Commit and push a checkout's work in progress on the branch it is on.
+
+    This is the handoff half of a release. The owner is giving the reservation
+    back, so the work it did has to reach the branch before the next owner picks
+    the group up; otherwise the handoff is a restart. The integration branch is
+    refused, because pushing unfinished product code onto the branch everyone
+    pulls is the thing the phase branch exists to prevent. A checkout with
+    nothing to commit is a no-op, not a failure, so an owner with nothing to push
+    still releases.
+
+    Returns a result dict; ok is the success flag.
+    """
+    root = Path(root).resolve()
+    info = {"repo": str(root)}
+    if not is_git_repo(root):
+        return dict(info, ok=True, action="checkpoint-skipped",
+                    hint="not a git working tree")
+    branch, remote, _remote_branch, why = resolve_upstream(root)
+    if why:
+        return blocked(info, why)
+    if branch == integration_branch(root):
+        return blocked(info, f"refusing to push work in progress on {branch!r}",
+                       hint="a handoff is the phase branch, not the integration "
+                            "branch")
+    rc, out, err = git(root, "add", "-A")
+    if rc != 0:
+        return blocked(info, f"could not stage the checkout: {err or out}")
+    rc, out, err = git(root, "commit", "-q", "-m",
+                       f"checkpoint: work in progress on {branch}")
+    action = "committed-and-pushed"
+    if rc != 0:
+        combined = err or out
+        if "nothing to commit" in combined.lower():
+            action = "pushed"
+        else:
+            return blocked(info, f"checkpoint commit failed: {combined}")
+    rc, out, err = git(root, "push", remote, branch)
+    if rc != 0:
+        return blocked(info, f"checkpoint push failed: {err or out}")
+    head = git(root, "rev-parse", "HEAD")[1]
+    return dict(info, ok=True, action=action, branch=branch, head=head)
+
+
 def main():
     ap = argparse.ArgumentParser(description="Fail-closed git sync.")
     ap.add_argument("--root", "--repo-root", dest="config_repo_root",
@@ -4843,7 +5332,7 @@ def main():
                     help="sync one checkout instead of --root")
     ap.add_argument("--mode",
                     choices=["start", "push", "publish", "branch", "published",
-                             "resync", "tidy", "clean"],
+                             "resync", "tidy", "clean", "checkpoint"],
                     default="start",
                     help="start: sync before a phase; push: verify a "
                          "fast-forward; publish: claim-check and push a phase's "
@@ -4856,7 +5345,9 @@ def main():
                          "return a checkout to the integration branch when the "
                          "phase it is on is already recorded as published; "
                          "clean: commit and push leftover private run state, "
-                         "for one --phase or for every phase when it is omitted")
+                         "for one --phase or for every phase when it is omitted; "
+                         "checkpoint: commit and push a checkout's work in "
+                         "progress on the branch it is on, for a release handoff")
     ap.add_argument("--phase", default=None,
                     help="phase number for --mode publish or --mode clean")
     ap.add_argument("--reservation-file", default=None,
@@ -4868,6 +5359,12 @@ def main():
                     help="run stubbed-remote checks and exit")
     ap.add_argument("--roadmap", default=None,
                     help="phase roadmap file name, for --mode branch")
+    ap.add_argument("--group", action="append", default=None,
+                    help="a member of the reservation group this branch covers, "
+                         "for --mode branch; repeat once per member")
+    ap.add_argument("--branch", default=None,
+                    help="the branch the public checkout must be on, for the "
+                         "start and push modes")
     ap.add_argument("--pull-request", default=None,
                     help="pull request URL finalize opened, recorded in the "
                          "receipt for --mode publish")
@@ -4882,7 +5379,8 @@ def main():
                 raise ConfigError(
                     "--phase and --roadmap are required with --mode branch")
             out = mode_branch(args.root, args.phase, args.roadmap,
-                              conventions.setting("roadmap-dir"))
+                              conventions.setting("roadmap-dir"),
+                              group=args.group)
         elif args.mode == "publish":
             if args.phase is None:
                 raise ConfigError("--phase is required with --mode publish")
@@ -4903,12 +5401,16 @@ def main():
             out = mode_resync(args.root)
         elif args.mode == "tidy":
             out = mode_tidy(args.root)
+        elif args.mode == "checkpoint":
+            out = mode_checkpoint(args.root)
         elif args.repo:
-            res = sync_one(Path(args.repo).resolve(), args.mode)
+            res = sync_one(Path(args.repo).resolve(), args.mode,
+                           branch=args.branch)
             out = {"ok": res["ok"], "mode": args.mode, "repos": [res],
                    "summary": summarize([res], args.mode)}
         else:
-            out = sync_all(Path(args.root).resolve(), args.mode)
+            out = sync_all(Path(args.root).resolve(), args.mode,
+                           branch=args.branch)
     except (ArgusConfigError, ConfigError, ValueError) as e:
         print(json.dumps({"ok": False, "mode": args.mode,
                           "state": "config_error", "error": str(e)}, indent=2))

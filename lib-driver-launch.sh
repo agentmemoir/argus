@@ -46,6 +46,12 @@ _drive_launch() {
   9>&- tmux_phase_window_open "$launch" "$RUN_DIR/session-$number.log" \
     || { notify "phase $number failed to launch in tmux"; { _DRIVE_RC=1; return 0; }; }
   printf '%s\n' "$number" >"$CURRENT"
+  # The claim fence was written by the tick, with the claim itself, so a refusal
+  # between the two cannot strand the reservation.
+  # The array this run covers. Written on every launch, stubbed or not, so a
+  # later tick's release log can say which group went back and a reader can see
+  # what the run was for. A launch outside a group clears it.
+  group_record
   # The window stays named 'phase'. Renaming it to carry the phase number would
   # break every target string in phase-tmux.sh that looks it up by name, and
   # the phase number is already in the title and the log. The stage hook

@@ -26,6 +26,15 @@ _drive_dry_run() {
         local number rel
         number="$(printf '%s' "$selection" | selection_value phase)"
         rel="$(printf '%s' "$selection" | selection_value path)"
+        # A group is claimed as a whole array and run one member per tick, so a
+        # dry run that named only the member in front of it would describe a
+        # smaller claim than the tick makes. The member's own file is what the
+        # launch would use, exactly as in the tick.
+        group_take_selection "$selection"
+        if group_active && group_resolve_member "$number"; then
+          rel="$GROUP_MEMBER_REL"
+          log "dry-run: would claim the group [$(printf '%s' "$GROUP_MEMBERS" | tr '\n' ' ')] and launch member $number in tmux '$SESSION'"
+        fi
         log "dry-run: would reserve and launch phase $number in tmux '$SESSION'"
         printf 'would launch: tmux new-window -d -t %s -n phase -c %s "bash %s --session %s %s"\n' \
           "$SESSION" "$REPO" "$SELF" "$number" "$rel"

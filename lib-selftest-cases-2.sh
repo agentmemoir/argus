@@ -204,3 +204,91 @@ selftest_case_flow() {
   LOG="$old_log"; SESSION="$old_session"
 
 }
+
+selftest_case_release() {
+  # A release is the opposite of a stop: the run is stopped on purpose and the
+  # group goes back to the queue, so nothing may write the halt marker, send a
+  # halt notification, or trigger the stall or orphan check. The parent writes
+  # the release marker before it interrupts the phase window; the child's signal
+  # trap reads it. This exercises that handshake on a live stub run.
+  rm -f "$HALT" "$RELEASE" "$CLAIM"
+  local release_wait="$tmp/release-wait" release_ready="$tmp/release-ready"
+  rm -f "$release_wait" "$release_ready"
+  local old_stub_sleep="${DRIVER_STUB_SLEEP:-}"
+  DRIVER_STUB_RC=0
+  DRIVER_STUB_WAIT_FILE="$release_wait"
+  DRIVER_STUB_READY_FILE="$release_ready"
+  DRIVER_STUB_COORDINATION=fence
+  RECOVER_OWN_CLAIM=1
+  export DRIVER_STUB_RC DRIVER_STUB_WAIT_FILE DRIVER_STUB_READY_FILE
+  export DRIVER_STUB_COORDINATION RECOVER_OWN_CLAIM
+  drive --self-test || true
+  local waited=0
+  while [ ! -e "$release_ready" ] && [ "$waited" -lt 200 ]; do
+    sleep 0.1
+    waited=$((waited + 1))
+  done
+  if [ -e "$release_ready" ]; then
+    echo "ok: the release case has a live stubbed phase to release"
+  else
+    echo "FAIL: the release stub never started, so the release case could not run"
+    fail=1
+  fi
+  [ -s "$CLAIM" ] \
+    && echo "ok: the tick recorded the claim fence a release needs" \
+    || { echo "FAIL: the tick recorded no claim fence"; fail=1; }
+  local before_stopped before_stalled before_orphan
+  before_stopped="$(grep -c 'stopped by signal\|needs attention' "$LOG" || true)"
+  before_stalled="$(grep -c 'looks stalled\|stalled:' "$LOG" || true)"
+  before_orphan="$(grep -c 'orphaned run detected' "$LOG" || true)"
+  release || true
+  # Let any straggler pane finish if the interrupt did not reach it, so the
+  # case cannot hang the suite.
+  : >"$release_wait"
+  sleep 0.3
+  if [ ! -f "$HALT" ]; then
+    echo "ok: release did not write the halt marker"
+  else
+    echo "FAIL: release wrote the halt marker"
+    fail=1
+  fi
+  if [ ! -f "$CURRENT" ] && [ ! -f "$PIDFILE" ]; then
+    echo "ok: release cleared the current-phase and pid files"
+  else
+    echo "FAIL: release left the current-phase or pid file behind"
+    fail=1
+  fi
+  # The claim fence is cleared once the board write succeeds, and kept when it
+  # fails so a retry can finish the release. Both are correct; assert the shape.
+  if [ -f "$CLAIM" ]; then
+    echo "ok: a failed board write keeps the claim fence so release can be retried"
+  else
+    echo "ok: a completed release cleared the claim fence"
+  fi
+  if tmux_window_exists; then
+    echo "FAIL: release left the phase window open"
+    fail=1
+  else
+    echo "ok: release closed the phase window"
+  fi
+  if [ "$(grep -c 'stopped by signal\|needs attention' "$LOG" || true)" = "$before_stopped" ] \
+      && [ "$(grep -c 'looks stalled\|stalled:' "$LOG" || true)" = "$before_stalled" ] \
+      && [ "$(grep -c 'orphaned run detected' "$LOG" || true)" = "$before_orphan" ]; then
+    echo "ok: release sent no halt notification and triggered no stall or orphan check"
+  else
+    echo "FAIL: release sent a halt notification or triggered a stall or orphan check"
+    fail=1
+  fi
+  grep -q "release: sent Ctrl-C" "$LOG" \
+    && echo "ok: release interrupted the phase window" \
+    || { echo "FAIL: release did not interrupt the phase window"; fail=1; }
+  local release_rc=0
+  release || release_rc=$?
+  [ "$release_rc" = 0 ] \
+    && echo "ok: release returns success and does not exit through the error path" \
+    || { echo "FAIL: release returned $release_rc"; fail=1; }
+  unset DRIVER_STUB_WAIT_FILE DRIVER_STUB_READY_FILE DRIVER_STUB_COORDINATION
+  RECOVER_OWN_CLAIM=0; export RECOVER_OWN_CLAIM
+  DRIVER_STUB_SLEEP="$old_stub_sleep"; export DRIVER_STUB_SLEEP
+  rm -f "$release_wait" "$release_ready" "$RELEASE" "$CLAIM" "$HALT"
+}

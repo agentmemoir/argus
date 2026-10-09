@@ -37,7 +37,7 @@ selftest_tmpdir() {
   # directory from one another run is using right now, and a fresh one is
   # indistinguishable from that. The age is what tells them apart.
   for leftover in /tmp/argus-selftest-* /dev/shm/argus-selftest-* \
-                  "$REPO/target"/argus-selftest-*; do
+                  "$(dirname "$ARGUS")"/target/argus-selftest-*; do
     [ -d "$leftover" ] || continue
     # `find` prints the directory only when it is older than the age asked for, so
     # an empty answer means too young to be abandoned.
@@ -70,8 +70,37 @@ print(directory)
 PY
 }
 
+# Run one named case unless SELFTEST_CASES names a subset. Unset or empty runs
+# every case, so the default suite is unchanged. The fault harness sets it so a
+# fault runs only the case that catches it instead of all twelve. A name typo
+# skips a case, which shows up as the missing FAIL line, not as a pass.
+selftest_run_case() {
+  local name="$1"
+  if [ -n "${SELFTEST_CASES:-}" ]; then
+    case " $SELFTEST_CASES " in
+      *" $name "*) ;;
+      *)
+        echo "case skipped: $name (SELFTEST_CASES)"
+        return 0
+        ;;
+    esac
+  fi
+  "selftest_case_$name"
+}
+
 driver_self_test() {
   local fail=0 tmp selftest_wf
+  # Refuse a name that matches no case: a case skipped by a typo would
+  # otherwise read as a pass.
+  if [ -n "${SELFTEST_CASES:-}" ]; then
+    local wanted
+    for wanted in $SELFTEST_CASES; do
+      if ! declare -F "selftest_case_$wanted" >/dev/null; then
+        echo "FAIL: SELFTEST_CASES names an unknown case: $wanted" >&2
+        return 1
+      fi
+    done
+  fi
   if ! tmp="$(selftest_tmpdir)"; then
     echo "skip: no fixture directory could be built, so no check ran"
     echo "      (a directory has to permit running a shell script; a home directory is not"
@@ -168,6 +197,11 @@ driver_self_test() {
     # path, so a case that aborts before that leaves it running. It belongs in
     # the trap for the same reason the others do.
     tmux kill-session -t "ar-driver-dead-branch-$$" 2>/dev/null || true
+    # The group cases name their sessions after the case and this process, so a
+    # case that stops before its own cleanup leaves one running.
+    tmux kill-session -t "ar-driver-group-$$" 2>/dev/null || true
+    tmux kill-session -t "ar-driver-group-partial-$$" 2>/dev/null || true
+    tmux kill-session -t "ar-driver-group-release-$$" 2>/dev/null || true
     # A failing run keeps its fixture when asked, because the reason a case
     # failed is usually in a file the fixture owned and the teardown deletes.
     if [ "${SELFTEST_KEEP_TMP:-0}" = "1" ] && [ "$rc" -ne 0 ]; then
@@ -291,21 +325,28 @@ PROBE
   RUN_DIR="$DRIVER_RUN_DIR"
   LOCK="$RUN_DIR/driver.lock"; HALT="$RUN_DIR/halted"
   STALL="$RUN_DIR/stalled"; CURRENT="$RUN_DIR/current"
-  PIDFILE="$RUN_DIR/pid"
+  PIDFILE="$RUN_DIR/pid"; CLAIM="$RUN_DIR/claim"; RELEASE="$RUN_DIR/release"
+  GROUPFILE="$RUN_DIR/group"; GROUPBRANCH="$RUN_DIR/group-branch"
   NOTIFY_BROKEN="$RUN_DIR/notify-broken"; LOG="$RUN_DIR/driver.log"
   mkdir -p "$RUN_DIR"
   echo "self-test session: $SESSION  state dir: $RUN_DIR"
 
   title_of() { tmux show-option -t "$SESSION" -v set-titles-string 2>/dev/null || true; }
 
-  selftest_case_launch
-  selftest_case_locks_stall
-  selftest_case_flow
-  selftest_case_unavailable
-  selftest_case_reasons
-  selftest_case_recovery_sources
-  selftest_case_merge_orphan
-  selftest_case_stranding
+  selftest_run_case launch
+  selftest_run_case locks_stall
+  selftest_run_case flow
+  selftest_run_case release
+  selftest_run_case unavailable
+  selftest_run_case reasons
+  selftest_run_case recovery_sources
+  selftest_run_case merge_orphan
+  selftest_run_case stranding
+  # The group cases last: they build their own sub-fixtures, so they are the
+  # cases that would notice a suite-level setting another case left behind.
+  selftest_run_case group_run
+  selftest_run_case group_partial
+  selftest_run_case group_release
 
 
   tmux kill-session -t "$SESSION" 2>/dev/null || true

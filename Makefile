@@ -25,6 +25,7 @@ self-test:
 	$(PYTHON) test_conventions.py
 	$(PYTHON) test_phase_notifications.py
 	$(PYTHON) test_identifiers.py
+	$(PYTHON) phase_group.py --self-test
 	$(PYTHON) gitsync.py --self-test
 
 # The published folder must carry no identifier: no home path, no numeric

@@ -211,6 +211,15 @@ confirm_pending_reviews() {
         PENDING_PUBLISHED=$((PENDING_PUBLISHED + 1))
         log "phase $phase is merged and recorded, but the checkout could not be returned to the integration branch yet; the tidy step will retry it"
         ;;
+      PUBLISHED-GROUP-PENDING)
+        # One branch and one pull request cover a whole group, so this member is
+        # merged while its group's other members are not. The checkout stays on
+        # the group branch, because the members still to run need it. Progress,
+        # like the two above, and the last member of the group is the one that
+        # returns the checkout to the integration branch.
+        PENDING_PUBLISHED=$((PENDING_PUBLISHED + 1))
+        log "phase $phase is merged and recorded; the checkout stays on the group branch until every member of the group is published"
+        ;;
       *)
         if grep -q '"state": *"unknown"' "$RUN_DIR/phase-published-$phase.json" 2>/dev/null; then
           MERGE_CHECK_HEALTH="UNAVAILABLE (gh could not be asked)"

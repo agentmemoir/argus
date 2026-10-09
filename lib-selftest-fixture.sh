@@ -223,6 +223,42 @@ selftest_fixture_stage_work() {
   done
 }
 
+# Add a two-member reservation group to a fixture's roadmap, and commit it.
+#
+# A group's declaration is symmetric: every member names the same set, so a
+# document that names only itself is refused. The phase documents are the
+# project's own content, so a fixture that wants a group writes them.
+#
+# The fixture's single blocked phase goes with them. A group case needs the
+# lowest uncompleted phase in the roadmap to be a member of the group, and the
+# blocked one would otherwise be selected first and run alone.
+#
+# The two behaviours are what the group's one branch is named from: the branch
+# comes from the group's lowest member, so `phase-100020-cache-warm.md` gives
+# the group the branch `feature/group-cache-warm`.
+#
+#   $1  the root      (already built by selftest_fixture_root)
+selftest_fixture_group_phases() {
+  local root="$1" plans member
+  plans="$root/$BOARD_DIR/plans"
+  rm -f "$plans/phase-100010-fixture.md"
+  rm -rf "$root/$BOARD_DIR/history/phase-100010"
+  for member in 100020-cache-warm 100030-cache-read; do
+    cat >"$plans/phase-$member.md" <<DOC
+# ${member%%-*}. Group member
+
+- [ ] Work to do.
+
+### Reservation Group
+
+\`together: 100020, 100030\`
+DOC
+  done
+  git -C "$root/$BOARD_DIR" add -A
+  git -C "$root/$BOARD_DIR" commit -q -m "roadmap: declare a two-member reservation group"
+  git -C "$root/$BOARD_DIR" push -q origin master
+}
+
 # Write a complete configuration file for a fixture checkout.
 #
 # The suite runs the same configuration path a real tick does: the file names

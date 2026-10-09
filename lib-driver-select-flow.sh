@@ -5,6 +5,10 @@
 # Choose a phase for this tick and act on the selector's answer.
 #
 _drive_choose_selection() {
+  # The group this tick belongs to is the one this selection carries. It is read
+  # here rather than remembered, and it is cleared first so that a stub that
+  # answers without one cannot run under a group an earlier call left behind.
+  group_take_selection ""
   if [ "${1:-}" = "--self-test" ] && [ -z "${DRIVER_STUB_COORDINATION:-}" ]; then
     out="$(selector_run)" || rc=$?
     if [ "$rc" -ne 0 ]; then
@@ -42,12 +46,29 @@ _drive_choose_selection() {
         rel="$(printf '%s' "$selection" | selection_value path)"
         reservation_id="$(printf '%s' "$selection" | selection_value reservation_id)"
         reservation_generation="$(printf '%s' "$selection" | selection_value generation)"
+        group_take_selection "$selection"
+        if group_active; then
+          # The board claimed the whole group under one reservation id, and this
+          # tick runs the member the selection names. Its own roadmap file is
+          # what the launch and the branch check need.
+          if ! group_resolve_member "$number"; then
+            log "group member $number has no roadmap document; refusing to launch"
+            { _DRIVE_RC=1; return 0; }
+          fi
+          rel="$GROUP_MEMBER_REL"
+          log "reserved group [$(printf '%s' "$GROUP_MEMBERS" | tr '\n' ' ')] for $PHASE_MACHINE_ID; this tick runs member $number"
+        fi
         log "reserved phase $number ($rel) for $PHASE_MACHINE_ID"
         ;;
       WAIT_FOR_CLAIM)
         wait_phase="$(printf '%s' "$selection" | selection_value phase)"
         wait_owner="$(printf '%s' "$selection" | selection_value owner)"
         wait_status="$(printf '%s' "$selection" | selection_value status)"
+        # A member of a group this machine already holds. The selector reports
+        # the group on this refusal too, so a tick that is continuing a group —
+        # or taking one over from a dead owner — knows the array and the branch
+        # without having claimed anything itself.
+        group_take_selection "$selection"
         if [ "$RECOVER_OWN_CLAIM" = 1 ] \
             && [ "$wait_owner" = "$PHASE_MACHINE_ID" ] \
             && [ "$wait_phase" != "" ]; then
@@ -81,6 +102,19 @@ _drive_choose_selection() {
             # file named after an issue. Fail closed rather than fall back to a
             # guess if a result ever arrives without one.
             rel="$(printf '%s' "$selection" | selection_value path)"
+            if group_active; then
+              # The member this tick launches is the one the board named, and the
+              # selection's path is the file of the phase the selector was asked
+              # about. They are separate fields, so the member's number is
+              # resolved to its own document here rather than launched against
+              # the file the selection happened to carry.
+              if ! group_resolve_member "$wait_phase"; then
+                log "group member $wait_phase has no roadmap document; refusing to launch"
+                { _DRIVE_RC=1; return 0; }
+              fi
+              rel="$GROUP_MEMBER_REL"
+              log "recovered group [$(printf '%s' "$GROUP_MEMBERS" | tr '\n' ' ')] on phase $wait_phase for $PHASE_MACHINE_ID"
+            fi
             if [ -z "$rel" ]; then
               log "claim recovery for $wait_phase returned no launch path from the work source; refusing to launch"
               { _DRIVE_RC=1; return 0; }

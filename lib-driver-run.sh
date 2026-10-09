@@ -41,16 +41,36 @@ terminal_state_of_file() {
   esac
 }
 
+# Record the claim fence beside the run, so a later `--release` invocation can
+# release the board group. The tick writes it as soon as the selection hands it a
+# claim, so a tick that refuses before the launch still leaves the group
+# releasable; the launch that follows reads the same pair back.
+record_claim() {
+  local number="$1" reservation_id="${2:-}" generation="${3:-}"
+  if [ -z "$reservation_id" ] || [ -z "$generation" ]; then
+    rm -f "$CLAIM"
+    return 0
+  fi
+  printf '%s\t%s\t%s\n' "$number" "$reservation_id" "$generation" >"$CLAIM"
+}
+
 # A signal-driven stop must halt and notify: bash dies before any trailing
 # code after a signal, so the work is done in a trap, marker first. (Ctrl-C
 # reaches this; tmux kill-session does NOT signal the pane, which is why the
 # driver also records the session PID and treats a live PID with no session
 # as an orphan.)
+#
+# A release is different on purpose. The parent writes $RELEASE before it sends
+# the interrupt, and that marker says this stop is intentional: the group is
+# going back to the queue, not being halted. Then no halt marker is written and
+# no halt notification is sent, and the release path finishes the board write.
 on_stop() {
   local rc="$1"
   [ "$_STOPPED" = 1 ] && exit "$rc"
   _STOPPED=1
-  if [ -n "$CUR_PHASE" ]; then
+  if [ -f "$RELEASE" ]; then
+    rm -f "$RELEASE"
+  elif [ -n "$CUR_PHASE" ]; then
     printf 'phase %s stopped by signal (rc=%s) at %s\n' \
       "$CUR_PHASE" "$rc" "$(ts)" >"$HALT"
     notify_phase "$CUR_PHASE_FILE" stopped-signal

@@ -24,6 +24,8 @@ reserves the item, and prints a JSON result:
   NO_PHASE                    nothing left to do
   WAIT_FOR_CLAIM              owned by another live reservation; do not jump it
   BLOCKED_ON_GATE             the plan owes the owner a decision
+  COOLDOWN                    an expired claim is still in its cooldown window
+  GROUP_UNAVAILABLE           a declared group could not be resolved
   COORDINATION_INCONSISTENT   the board and the evidence disagree
   COORDINATION_UNAVAILABLE    the board could not be reached
 
@@ -31,7 +33,14 @@ Exit codes: 0 for RESERVED and AVAILABLE, 1 for NO_PHASE, 3 for
 WAIT_FOR_CLAIM, 4 for BLOCKED_ON_GATE, 2 for everything else. A result may
 carry ``awaiting_review``: items skipped because a pull request of theirs is
 open and unmerged. They are finished work rather than queue work, and the
-driver runs the merge check on them.
+driver runs the merge check on them. A result for a phase that declares a
+reservation group also carries ``group`` and ``members``: the whole group in
+declaration order and the reservation records claimed for it, all sharing one
+reservation id.
+
+``--resolve-group PHASE`` is a read-only query, not a selection. It prints the
+reservation group the phase belongs to and the members still unfinished, and it
+claims nothing. It is the seam the group request program will use.
 
 ``--self-test`` exercises the source, the registry and this file's own wiring,
 including the fail-closed paths, and needs neither the network nor a real
@@ -59,6 +68,7 @@ from argus.phase_reservations import (  # noqa: E402 - path set just above
 from argus.roadmap_source import (  # noqa: E402,F401 - path set just above
     publication_receipt_done,
     reported_path,
+    resolve_group,
     self_test as roadmap_source_self_test,
 )
 from argus.work_source import (  # noqa: E402 - path set just above
@@ -75,6 +85,8 @@ STATE_EXIT = {
     "NO_PHASE": 1,
     "WAIT_FOR_CLAIM": 3,
     "BLOCKED_ON_GATE": 4,
+    "COOLDOWN": 2,
+    "GROUP_UNAVAILABLE": 2,
     "COORDINATION_INCONSISTENT": 2,
 }
 
@@ -83,6 +95,7 @@ def self_test():
     roadmap_source_self_test()
     work_source_self_test()
     _self_test_configuration()
+    _self_test_group_query()
     print("next_phase self-test: pass")
 
 
@@ -212,6 +225,55 @@ def _self_test_configuration():
         assert "work-100462-skip.md" not in err.getvalue(), err.getvalue()
 
 
+def _self_test_group_query():
+    """The read-only group query answers from the roadmap and needs no board.
+
+    The settings below name no board at all. That absence is the proof that
+    matters: if the query reached the board it would fail on the missing
+    configuration, so a clean answer shows the read path never touches it. The
+    second case proves a phase with no declaration is refused by name.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        repo = Path(tmp).resolve()
+        roadmap = repo / "roadmap"
+        roadmap.mkdir()
+        for number in (100010, 100020, 100030):
+            (roadmap / f"phase-{number}-x.md").write_text(
+                "### Reservation Group\n\n`together: 100010, 100020, 100030`\n")
+        (roadmap / "phase-100040-y.md").write_text("## 1. Objective\n")
+        rundir = repo / "runs" / "phase-100010"
+        rundir.mkdir(parents=True)
+        (rundir / "run.json").write_text(json.dumps({"state": "completed"}))
+        settings = {
+            "repo-root": repo,
+            "pipeline": None,
+            "roadmap-dir": roadmap,
+            "driver.include": ["phase-*.md"],
+            "driver.exclude": [],
+            "driver.runs": repo / "runs",
+            "machine.id": "self-test",
+        }
+        out, err = io.StringIO(), io.StringIO()
+        with redirect_stdout(out), redirect_stderr(err):
+            code = main(["--resolve-group", "100020"], _settings=settings)
+        assert code == 0, (code, out.getvalue(), err.getvalue())
+        result = json.loads(out.getvalue())
+        assert result["state"] == "GROUP", result
+        assert result["group"] == ["100010", "100020", "100030"], result
+        assert result["remainder"] == ["100020", "100030"], result
+        assert not (repo / "vault").exists(), \
+            "the group query must not create a board checkout"
+
+        out, err = io.StringIO(), io.StringIO()
+        with redirect_stdout(out), redirect_stderr(err):
+            code = main(["--resolve-group", "100040"], _settings=settings)
+        assert code == 2, (code, out.getvalue(), err.getvalue())
+        result = json.loads(out.getvalue())
+        assert result["state"] == "GROUP_UNAVAILABLE", result
+        assert "no '### Reservation Group' section" in result["error"], result
+        assert result["document"].endswith("phase-100040-y.md"), result
+
+
 def main(argv=None, *, _settings=None):
     parser = argparse.ArgumentParser(
         description="Next piece of work, from the configured work source.")
@@ -242,6 +304,11 @@ def main(argv=None, *, _settings=None):
                         help="stable host ID used by --server")
     parser.add_argument("--json", action="store_true",
                         help="with --server, print a machine-readable result")
+    parser.add_argument("--resolve-group", dest="resolve_group", metavar="PHASE",
+                        default=None,
+                        help="read-only: print the reservation group this "
+                             "phase belongs to, and the members still "
+                             "unfinished; claims nothing")
     parser.add_argument("--migrate-board", action="store_true",
                         help="create the coordination branch if the remote does "
                              "not have it yet, then stop. This is the only "
@@ -249,7 +316,15 @@ def main(argv=None, *, _settings=None):
                              "loud that it means to write")
     args = parser.parse_args(argv)
     if args.self_test:
-        self_test()
+        try:
+            self_test()
+        except Exception as exc:  # noqa: BLE001 - the self-test reports its own failure
+            # A verdict line is printed even when a check raises, because the
+            # guard harness reads the verdict to tell an undetected fault from
+            # a self-test that stopped part way and proved nothing.
+            print(f"FAIL: {type(exc).__name__}: {exc}", file=sys.stderr)
+            print("next_phase self-test: FAIL", file=sys.stderr)
+            return 1
         return 0
     try:
         if _settings is None:
@@ -268,6 +343,25 @@ def main(argv=None, *, _settings=None):
         return 2
     repo = Path(conventions.setting("repo-root")).resolve()
     roadmap = conventions.setting("roadmap-dir")
+    # The group query is read-only and comes before anything that writes. It
+    # resolves the group from the phase documents and claims nothing, so it
+    # needs neither the board nor the work-source registry.
+    if args.resolve_group is not None:
+        try:
+            result = resolve_group(repo, roadmap, args.resolve_group)
+        except WorkSourceError as exc:
+            result = {
+                "state": "GROUP_UNAVAILABLE",
+                "phase": str(args.resolve_group),
+                "error": str(exc),
+            }
+            document = getattr(exc, "document", None)
+            if document is not None:
+                result["document"] = str(document)
+            print(json.dumps(result, sort_keys=True))
+            return 2
+        print(json.dumps(result, sort_keys=True))
+        return 0
     # Before the roadmap is resolved, because this step needs the repository and
     # nothing else. A machine can migrate its coordination branch even while its
     # roadmap folder is unreadable, and the two failures are unrelated.

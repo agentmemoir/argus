@@ -62,6 +62,7 @@ from argus.phase_reservations import (  # noqa: E402 - path set just above
     CoordinationError,
     CoordinationUnavailable,
     ReservationConflict,
+    ReservationCooldown,
     ReservationStore,
     reservation_file,
     save_reservation_file,
@@ -596,6 +597,319 @@ def _reservation_result(number, path, record, state="RESERVED"):
     }
 
 
+#: The fenced heading a phase uses to declare its reservation group.
+GROUP_HEADING = "### Reservation Group"
+
+#: A ``##``/``###`` heading, which ends a group section. The same shape the
+#: decision-gate reader in ``phase_policy`` uses.
+GROUP_HEADING_RE = re.compile(r"^#{2,3} ")
+
+#: The first ``together:`` line of a group section. The value may be wrapped
+#: in backticks; the capture is the comma-separated phase list.
+GROUP_TOGETHER_RE = re.compile(
+    r"^\s*`?together\s*:\s*(.+?)`?\s*$", re.IGNORECASE)
+
+#: One member of a ``together:`` list, a six-digit phase number.
+GROUP_TOKEN_RE = re.compile(r"^\d{6}$")
+
+
+class ReservationGroupError(WorkSourceError):
+    """A phase's reservation group is declared wrongly, so it cannot run.
+
+    A reservation group is symmetric: every member names the same set of
+    phases, and the group runs as one unit. A declaration that is missing,
+    asymmetric, or names a phase with no document would run the wrong work,
+    so it is refused as a work-source error rather than guessed at. The
+    ``document`` attribute names the phase file the mistake was found in when
+    there is one to name.
+    """
+
+    def __init__(self, message, *, document=None):
+        self.document = document
+        super().__init__(message)
+
+
+class ReservationGroupMissing(ReservationGroupError):
+    """The phase document declares no reservation group at all.
+
+    A malformed declaration and an absent one are different problems. An
+    absent one is the ordinary single-phase case the selector must keep
+    serving; a malformed one must fail closed. The selector catches this
+    subclass to run a phase alone, and the request program does not, so a
+    request for a phase with no declaration is still refused by name.
+    """
+
+
+def _group_section(text):
+    """Return the body of the ``### Reservation Group`` section, or ``None``.
+
+    The section ends at the next ``##``/``###`` heading or at a ``---`` rule,
+    whichever comes first, so a together line cannot bleed into the following
+    section. The shape is deliberately the same as the decision-gate reader in
+    ``phase_policy``: two readers of one fenced section must agree on where it
+    ends, so a later change to the fence boundary must be made in both.
+    """
+    lines = text.splitlines()
+    start = None
+    for i, line in enumerate(lines):
+        if line.strip() == GROUP_HEADING:
+            start = i + 1
+            break
+    if start is None:
+        return None
+    body = []
+    for line in lines[start:]:
+        stripped = line.strip()
+        if GROUP_HEADING_RE.match(line) or stripped == "---":
+            break
+        body.append(line)
+    return "\n".join(body)
+
+
+def _parse_group_members(path, number):
+    """The phase numbers a phase file lists in its ``together:`` declaration.
+
+    ``number`` is the phase being read, kept in the signature so every reader
+    of one phase document takes the same pair. Returns the tokens exactly as
+    declared, in declaration order, so group ordering is the document's and
+    not a set's. Every failure names the document, because a bad declaration
+    is a property of the file an operator has to fix.
+    """
+    try:
+        text = Path(path).read_text(encoding="utf-8", errors="replace")
+    except OSError as exc:
+        raise ReservationGroupError(
+            f"cannot read phase document {path}: {exc}",
+            document=path) from exc
+    body = _group_section(text)
+    if body is None:
+        raise ReservationGroupMissing(
+            f"{path} has no '### Reservation Group' section", document=path)
+    value = None
+    for line in body.splitlines():
+        match = GROUP_TOGETHER_RE.match(line)
+        if match is not None:
+            value = match.group(1)
+            break
+    if value is None:
+        raise ReservationGroupMissing(
+            f"{path} has no together declaration", document=path)
+    members = []
+    for raw in value.split(","):
+        token = raw.strip().strip("`").strip()
+        if not GROUP_TOKEN_RE.match(token):
+            raise ReservationGroupError(
+                f"{path} together declaration has an invalid phase number "
+                f"{token!r}", document=path)
+        members.append(token)
+    if not members:
+        raise ReservationGroupError(
+            f"{path} together declaration lists no phases", document=path)
+    if len(set(members)) != len(members):
+        raise ReservationGroupError(
+            f"{path} together declaration repeats a phase", document=path)
+    return members
+
+
+def declared_group_members(path, number):
+    """The members one phase document declares, or ``None`` when it declares none.
+
+    ``resolve_group`` answers the *resolved* group, which also reads the index to
+    work out the remainder. A caller that only needs to know which group a
+    document declares, such as the branch-collision scan, wants the declaration
+    on its own: one file, no index, and no work spent on a remainder it will not
+    use. A malformed declaration still raises, because a document whose group
+    nobody can read is not a document that declares none.
+    """
+    try:
+        return _parse_group_members(path, number)
+    except ReservationGroupMissing:
+        return None
+
+
+def _phase_number(value):
+    """Return ``value`` as a phase number in ``0..999999``, or raise.
+
+    A caller may name a phase as an int or as a numeric string, so both are
+    accepted. Everything else is refused rather than coerced: silently
+    turning a wrong number into a real phase would resolve the wrong group
+    and run the wrong slice.
+    """
+    if isinstance(value, bool):
+        raise ReservationGroupError(f"invalid phase number: {value!r}")
+    if isinstance(value, int):
+        number = value
+    else:
+        text = str(value).strip()
+        if re.fullmatch(r"[0-9]+", text) is None:
+            raise ReservationGroupError(f"invalid phase number: {value!r}")
+        number = int(text)
+    if not 0 <= number <= 999999:
+        raise ReservationGroupError(f"invalid phase number: {value!r}")
+    return number
+
+
+def _phase_file(roadmap, number):
+    """The phase file whose number matches, or ``None``.
+
+    The match is the same one the selector uses: a file's first numeric
+    filename token is its phase number, so a member named in a declaration is
+    found the way the pipeline would find it.
+    """
+    for path in phase_paths(roadmap):
+        parts = phase_file_parts(path)
+        if parts and parts[0] == number:
+            return path
+    return None
+
+
+def resolve_group(repo, roadmap, phase):
+    """Resolve a phase to its reservation group and unfinished remainder.
+
+    The group is populated from the phase documents on disk: the declaration
+    is read, each member must name the same set in return, and each member
+    must have a document. The remainder is the members with no completion
+    evidence, in declaration order, so a caller can run the group as one unit.
+    Nothing is claimed and nothing is written; this is a read of the roadmap.
+    """
+    number = _phase_number(phase)
+    folder = resolve_roadmap(repo, roadmap)
+    path = _phase_file(folder, number)
+    if path is None:
+        raise ReservationGroupError(
+            f"phase {number:06d} has no document in {folder}")
+    key = f"{number:06d}"
+    declared = _parse_group_members(path, number)
+    if key not in declared:
+        raise ReservationGroupError(
+            f"{path} together declaration does not list phase {key}",
+            document=path)
+    for member in declared:
+        member_number = int(member)
+        member_path = _phase_file(folder, member_number)
+        if member_path is None:
+            raise ReservationGroupError(
+                f"group member {member} has no phase document in {folder}")
+        member_declared = _parse_group_members(member_path, member_number)
+        if set(member_declared) != set(declared):
+            raise ReservationGroupError(
+                f"{member_path} declares {member_declared}, expected "
+                f"{declared}", document=member_path)
+    index_done = index_complete(repo, folder)
+    members = []
+    for member in declared:
+        member_number = int(member)
+        member_path = _phase_file(folder, member_number)
+        members.append({
+            "phase": member,
+            "path": reported_path(repo, member_path),
+            "done": is_done(repo, member_number, member_path, index_done),
+        })
+    remainder = [entry["phase"] for entry in members if not entry["done"]]
+    return {
+        "state": "GROUP",
+        "phase": key,
+        "path": reported_path(repo, path),
+        "group": list(declared),
+        "remainder": remainder,
+        "members": members,
+    }
+
+
+def resolve_group_or_none(repo, roadmap, phase):
+    """The phase's group, or ``None`` when its document declares none.
+
+    The selector must keep serving an ordinary phase that carries no
+    declaration, so it asks this instead of ``resolve_group``. A declaration
+    that exists but is malformed still raises, which fails the selection
+    closed: only a genuinely absent declaration means "run this phase alone".
+    """
+    number = _phase_number(phase)
+    folder = resolve_roadmap(repo, roadmap)
+    path = _phase_file(folder, number)
+    if path is None:
+        return None
+    try:
+        _parse_group_members(path, number)
+    except ReservationGroupMissing:
+        return None
+    return resolve_group(repo, roadmap, phase)
+
+
+def _select_group(repo, number, path, group, machine_id, store, *, reserve,
+                  reviews):
+    """Claim a declared group's unfinished members, or report why not.
+
+    The remainder drops completed members. A member whose pull request is open
+    is finished work too, so it is dropped from the claim and recorded under
+    ``reviews``, which is what lets the driver run the merge check on it. If
+    nothing is left to claim the group has no queue work this tick and ``None``
+    is returned, so the caller moves to the next phase.
+    """
+    key = f"{number:06d}"
+    remainder = list(group["remainder"])
+    claimable = []
+    for member in remainder:
+        review = _awaiting_review(repo, int(member))
+        if review:
+            reviews.append({
+                "phase": member,
+                "branch": review.get("branch"),
+                "pull_request": review.get("pull_request"),
+                "head": review.get("head"),
+            })
+        else:
+            claimable.append(member)
+    if not claimable:
+        return None
+    if not reserve:
+        result = _reservation_result(number, path, {}, "AVAILABLE")
+        result["path"] = reported_path(repo, path)
+        result["group"] = list(group["group"])
+        result["remainder"] = remainder
+        return result
+    try:
+        records = store.reserve_group(claimable, machine_id)
+    except ReservationCooldown as exc:
+        return {
+            "state": "COOLDOWN",
+            "phase": exc.phase,
+            "path": reported_path(repo, path),
+            "remaining_seconds": exc.remaining_seconds,
+            "error": str(exc),
+        }
+    except ReservationConflict as exc:
+        # The push race lost. Read the winner rather than force the claim. The
+        # declared group travels with the refusal, because the tick that
+        # continues this group — or takes it over from a dead owner — has to
+        # know which array and which one branch it is running.
+        latest, _latest_commit = store.read()
+        winner = latest.get("phases", {}).get(exc.phase, exc.record) or {}
+        return {
+            "state": "WAIT_FOR_CLAIM",
+            "phase": exc.phase,
+            "path": reported_path(repo, path),
+            "owner": winner.get("machine_id"),
+            "status": winner.get("status"),
+            "reservation_id": winner.get("reservation_id"),
+            "generation": winner.get("generation"),
+            "group": list(group["group"]),
+        }
+    for record in records:
+        token_path = reservation_file(repo, record["phase"])
+        try:
+            save_reservation_file(token_path, record)
+        except OSError as exc:
+            raise CoordinationError(
+                f"could not persist phase reservation token: {exc}") from exc
+    lead = next((r for r in records if r["phase"] == key), records[0])
+    result = _reservation_result(number, path, lead)
+    result["path"] = reported_path(repo, path)
+    result["group"] = list(group["group"])
+    result["members"] = records
+    return result
+
+
 def select_server_phase(repo, machine_id, *, reserve=True, store=None, roadmap=None):
     """Select the lowest incomplete phase and claim it on the shared board.
 
@@ -651,6 +965,41 @@ def select_server_phase(repo, machine_id, *, reserve=True, store=None, roadmap=N
         # person can see what the line moved past.
         if decisions:
             result["needs_decision"] = list(decisions)
+        return result
+
+    def held_answer(error=None):
+        """The answer for a phase the board already holds.
+
+        A held phase may be one member of a declared reservation group. The tick
+        that continues that group — or takes it over from a dead owner — reaches
+        this answer rather than the group path below, because this is where a
+        phase the board already holds is answered. It needs the whole array and
+        the group's one branch, so the declaration travels with the refusal as it
+        does on the group path. A malformed declaration fails the selection closed
+        here too, for the same reason it does below.
+        """
+        result = {
+            "state": "WAIT_FOR_CLAIM",
+            "phase": key,
+            "path": reported_path(repo, path),
+            "owner": record.get("machine_id"),
+            "status": record.get("status"),
+            "reservation_id": record.get("reservation_id"),
+            "generation": record.get("generation"),
+        }
+        if error is not None:
+            result["error"] = error
+        try:
+            declared = resolve_group_or_none(repo, roadmap, number)
+        except WorkSourceError as exc:
+            return {
+                "state": "GROUP_UNAVAILABLE",
+                "phase": key,
+                "path": reported_path(repo, path),
+                "error": str(exc),
+            }
+        if declared is not None:
+            result["group"] = list(declared["group"])
         return result
 
     for number, path in candidates(repo, roadmap):
@@ -732,25 +1081,8 @@ def select_server_phase(repo, machine_id, *, reserve=True, store=None, roadmap=N
                 })
                 continue
             if status in {"claimed", "running", "paused", "blocked"}:
-                return finish({
-                    "state": "WAIT_FOR_CLAIM",
-                    "phase": key,
-                    "path": reported_path(repo, path),
-                    "owner": record.get("machine_id"),
-                    "status": status,
-                    "reservation_id": record.get("reservation_id"),
-                    "generation": record.get("generation"),
-                })
-            return finish({
-                "state": "WAIT_FOR_CLAIM",
-                "phase": key,
-                "path": reported_path(repo, path),
-                "owner": record.get("machine_id"),
-                "status": status,
-                "reservation_id": record.get("reservation_id"),
-                "generation": record.get("generation"),
-                "error": "explicit operator takeover is required",
-            })
+                return finish(held_answer())
+            return finish(held_answer("explicit operator takeover is required"))
         if done:
             continue
         if ended:
@@ -760,6 +1092,30 @@ def select_server_phase(repo, machine_id, *, reserve=True, store=None, roadmap=N
                 "state": ended,
             })
             continue
+        # A phase may declare a reservation group. The group is claimed as one
+        # unit under one reservation id, and the answer carries the array. A
+        # phase whose document declares no group is selected alone, as before,
+        # so the single-phase contract is unchanged for it.
+        try:
+            group = resolve_group_or_none(repo, roadmap, number)
+        except WorkSourceError as exc:
+            result = {
+                "state": "GROUP_UNAVAILABLE",
+                "phase": key,
+                "path": reported_path(repo, path),
+                "error": str(exc),
+            }
+            document = getattr(exc, "document", None)
+            if document is not None:
+                result["document"] = str(document)
+            return finish(result)
+        if group is not None:
+            selected = _select_group(
+                repo, number, path, group, machine_id, store,
+                reserve=reserve, reviews=reviews)
+            if selected is None:
+                continue
+            return finish(selected)
         if not reserve:
             result = _reservation_result(number, path, {}, "AVAILABLE")
             result["path"] = reported_path(repo, path)
@@ -854,6 +1210,116 @@ def self_test():
         "commands.git": "git",
         "commands.gh": "gh",
     })
+    with tempfile.TemporaryDirectory() as tmp:
+        # A reservation group is declared in a fenced ``### Reservation Group``
+        # section, read with the same section shape as a decision gate, and is
+        # symmetric: every member names the same set. Resolution is read-only;
+        # it names the group and the members still to run but claims nothing.
+        # These assertions cover the group a phase resolves to and the
+        # documents that are refused.
+        repo = Path(tmp).resolve()
+        roadmap = repo / "roadmap"
+        roadmap.mkdir()
+        old = conventions.override({
+            "driver.include": ["phase-*.md"],
+            "driver.exclude": [],
+            "driver.runs": repo / "runs",
+        })
+        try:
+            def write_phase(name, together=None):
+                text = "## 1. Objective\n"
+                if together is not None:
+                    text += "### Reservation Group\n\n"
+                    text += f"`together: {together}`\n"
+                (roadmap / name).write_text(text)
+
+            # A symmetric three-member group with one member finished: the
+            # remainder is the other two, in declaration order.
+            for name in ("phase-100410-a.md", "phase-100420-b.md",
+                         "phase-100430-c.md"):
+                write_phase(name, "100410, 100420, 100430")
+            (repo / "runs" / "phase-100410").mkdir(parents=True)
+            (repo / "runs" / "phase-100410" / "run.json").write_text(
+                json.dumps({"state": "completed"}))
+            got = resolve_group(repo, roadmap, 100420)
+            assert got["state"] == "GROUP", got
+            assert got["group"] == ["100410", "100420", "100430"], got
+            assert got["remainder"] == ["100420", "100430"], got
+            from_other = resolve_group(repo, roadmap, 100410)
+            assert from_other["group"] == got["group"], from_other
+            assert from_other["remainder"] == ["100420", "100430"], from_other
+
+            # Every member finished means nothing is left to run.
+            for number in (100420, 100430):
+                rd = repo / "runs" / f"phase-{number}"
+                rd.mkdir(parents=True, exist_ok=True)
+                (rd / "run.json").write_text(
+                    json.dumps({"state": "completed"}))
+            assert resolve_group(repo, roadmap, 100430)["remainder"] == [], \
+                resolve_group(repo, roadmap, 100430)
+
+            # A phase with no group section is refused, and the message says
+            # which section is missing.
+            write_phase("phase-100440-d.md")
+            try:
+                resolve_group(repo, roadmap, 100440)
+                refused = False
+            except ReservationGroupError as exc:
+                refused = True
+                assert "no '### Reservation Group' section" in str(exc), exc
+            assert refused, "a phase with no together declaration is refused by name"
+
+            # Asymmetric membership: 100460 names a different set from the
+            # group 100450 declares, so the mismatching document is named.
+            write_phase("phase-100450-e.md", "100450, 100460")
+            write_phase("phase-100460-f.md", "100450, 100470")
+            write_phase("phase-100470-g.md", "100470, 100450")
+            try:
+                resolve_group(repo, roadmap, 100450)
+                refused = False
+            except ReservationGroupError as exc:
+                refused = True
+                assert "100460" in str(exc), exc
+            assert refused, "an asymmetric group must be refused"
+
+            # A member named in a declaration that has no document.
+            write_phase("phase-100480-h.md", "100480, 100490")
+            try:
+                resolve_group(repo, roadmap, 100480)
+                refused = False
+            except ReservationGroupError as exc:
+                refused = True
+                assert "100490" in str(exc), exc
+            assert refused, "a group member with no document must be refused"
+
+            # A phase whose own declaration does not list it cannot resolve.
+            write_phase("phase-100500-i.md", "100510")
+            write_phase("phase-100510-l.md", "100510")
+            try:
+                resolve_group(repo, roadmap, 100500)
+                refused = False
+            except ReservationGroupError as exc:
+                refused = True
+                assert "100500" in str(exc), exc
+            assert refused, "a phase not listed in its own group must be refused"
+
+            # A token that is not a six-digit phase number.
+            write_phase("phase-100520-j.md", "12345")
+            try:
+                resolve_group(repo, roadmap, 100520)
+                refused = False
+            except ReservationGroupError as exc:
+                refused = True
+                assert "12345" in str(exc), exc
+            assert refused, "an invalid phase token must be refused"
+
+            # A group of one is legal; it is unfinished until done.
+            write_phase("phase-100530-k.md", "100530")
+            solo = resolve_group(repo, roadmap, 100530)
+            assert solo["group"] == ["100530"], solo
+            assert solo["remainder"] == ["100530"], solo
+        finally:
+            conventions.configure(old)
     with tempfile.TemporaryDirectory() as tmp:
         repo = Path(tmp).resolve()
         (repo / "roadmap").mkdir()
@@ -1090,6 +1556,22 @@ def self_test():
                 self.reserved.append((int(phase), machine_id))
                 return record
 
+            def reserve_group(self, phases, machine_id, **kwargs):
+                records = []
+                for phase in phases:
+                    key = f"{int(phase):06d}"
+                    record = {
+                        "phase": key,
+                        "machine_id": machine_id,
+                        "reservation_id": f"rsv-{machine_id}",
+                        "generation": 1,
+                        "run_id": f"phase-{key}",
+                    }
+                    self.state["phases"][key] = record
+                    self.reserved.append((int(phase), machine_id))
+                    records.append(record)
+                return records
+
         repo = Path(tmp).resolve()
         (repo / "roadmap").mkdir()
         (repo / BOARD_REL).mkdir(parents=True)
@@ -1159,6 +1641,49 @@ def self_test():
         except CoordinationError:
             launch_refused = True
         assert launch_refused
+    with tempfile.TemporaryDirectory() as tmp:
+        # A phase that declares a reservation group is selected as one unit:
+        # its unfinished remainder is claimed under one shared reservation id
+        # and reported as an array. A phase with no declaration still selects
+        # alone through the same path, which is the backward-compatible half.
+        repo = Path(tmp).resolve()
+        (repo / "roadmap").mkdir()
+        (repo / BOARD_REL).mkdir(parents=True)
+        together = ("### Reservation Group\n\n"
+                    "`together: 100010, 100020, 100030`\n")
+        for number in (100010, 100020, 100030):
+            (repo / "roadmap" / f"phase-{number}-synthetic.md").write_text(
+                together)
+        fake = FakeStore(private=repo / BOARD_REL)
+        got = select_server_phase(repo, "server-01", store=fake,
+                                  roadmap=repo / "roadmap")
+        assert got["state"] == "RESERVED", got
+        assert got["group"] == ["100010", "100020", "100030"], got
+        assert [member["phase"] for member in got["members"]] == \
+            ["100010", "100020", "100030"], got
+        assert len({member["reservation_id"]
+                    for member in got["members"]}) == 1, got
+        for member in got["members"]:
+            token = json.loads(
+                reservation_file(repo, member["phase"]).read_text())
+            assert token["reservation_id"] == member["reservation_id"], token
+        # The whole group is held now, so the same selection waits for it.
+        got = select_server_phase(repo, "server-01", store=fake, reserve=False,
+                                  roadmap=repo / "roadmap")
+        assert got["state"] == "WAIT_FOR_CLAIM", got
+    with tempfile.TemporaryDirectory() as tmp:
+        # A single phase that declares no group is still selected alone and
+        # reported without a group array: the single-phase contract is intact.
+        repo = Path(tmp).resolve()
+        (repo / "roadmap").mkdir()
+        (repo / BOARD_REL).mkdir(parents=True)
+        (repo / "roadmap" / "phase-100010-plain.md").write_text(
+            "## 1. Objective\n")
+        fake = FakeStore(private=repo / BOARD_REL)
+        got = select_server_phase(repo, "server-01", store=fake,
+                                  roadmap=repo / "roadmap")
+        assert got["state"] == "RESERVED" and got["phase"] == "100010", got
+        assert "members" not in got and "group" not in got, got
     with tempfile.TemporaryDirectory() as tmp:
         # A run that ended rejected or remedy_escalated is neither done nor
         # offerable. The selector reports it under needs_decision and moves on,
