@@ -47,6 +47,8 @@ jobs:
         run: make leakscan
       - name: Check the example configuration
         run: make example-check
+      - name: Check the installed package
+        run: make install-check
       - name: Run make self-test
         run: |
           started=$(date +%s)

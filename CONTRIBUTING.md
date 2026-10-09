@@ -23,12 +23,15 @@ make lint          # ruff check
 make fmt-check     # formatting, 88 columns
 make leakscan      # the published tree carries no host path, credential, or run state
 make example-check # the bundled example loads and passes the readiness report
+make install-check # the built wheel installs and its console script runs
 make self-test     # the driver, the reservation group, and the sync self-tests
 make guard-faults  # break every launch guard and require a named failure
 ```
 
-`make wheel` builds the package and checks that the driver ships inside.
-CI runs the lint and format checks, `make leakscan`, `make example-check`, `make self-test`, and `make guard-faults`.
+`make wheel` builds the package and checks that the driver ships inside;
+`make install-check` installs that wheel into a clean environment and runs the
+installed console script.
+CI runs the lint and format checks, `make leakscan`, `make example-check`, `make install-check`, `make self-test`, and `make guard-faults`.
 
 ## Rules That Matter Here
 

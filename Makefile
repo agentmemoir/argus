@@ -12,7 +12,7 @@ BINDIR ?= $(PREFIX)/bin
 CONFIG ?= config.json
 
 .PHONY: install sync lint fmt fmt-check check dry-run example-check self-test \
-        identifiers leakscan guard-faults wheel
+        identifiers leakscan guard-faults wheel install-check
 install:
 	install -d "$(DESTDIR)$(BINDIR)"
 	ln -sf "$(CURDIR)/bin/argus" "$(DESTDIR)$(BINDIR)/argus"
@@ -83,3 +83,10 @@ guard-faults:
 wheel:
 	$(UV) build --wheel
 	@$(RUN) python scripts/check_wheel.py "$$(ls -1t dist/*.whl | head -1)"
+
+# The wheel must install and run where nothing of this checkout is on PATH and
+# no Glide is installed: a clean venv installs the built wheel, every shipped
+# module imports, the driver ships beside the package, and the installed
+# console script passes the example readiness report.
+install-check: wheel
+	@$(RUN) python scripts/check_install.py "$$(ls -1t dist/*.whl | head -1)"
