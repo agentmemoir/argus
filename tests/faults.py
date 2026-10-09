@@ -163,7 +163,7 @@ FAULTS = (
         "name": "group-branch-ignored",
         "breaks": "a group's one branch is not asked for, so each member gets a "
         "branch of its own and the group publishes several",
-        "file": "src/argus/gitsync.py",
+        "file": "src/argus/gitsync_mode_branch.py",
         "find": "        branch=group_branch(root, group, roadmap_dir) if group "
         "else None,",
         "replace": "        branch=None,  # FAULT: the group's one branch is not used",

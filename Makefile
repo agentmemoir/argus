@@ -14,7 +14,7 @@ LINE_LIMIT := 350
 # Files still above the limit while the migration splits them, one per session.
 # Each split removes its file from this list; the list is empty when the
 # migration ends.
-LINE_EXEMPT := src/argus/gitsync.py src/argus/phase_reservations.py src/argus/roadmap_source.py
+LINE_EXEMPT := src/argus/phase_reservations.py src/argus/roadmap_source.py
 
 .PHONY: install sync lint fmt fmt-check typecheck lines check dry-run example-check \
         self-test identifiers leakscan guard-faults wheel install-check
@@ -41,7 +41,7 @@ typecheck:
 	$(RUN) mypy src/argus
 
 # No Python file may exceed the line limit, comments and blank lines included.
-# The exempt files are the three a later session splits; each split removes its
+# The exempt files are the two a later session splits; each split removes its
 # file here in the same change.
 lines:
 	@printf 'checking every Python file against the %s-line limit\n' '$(LINE_LIMIT)'
