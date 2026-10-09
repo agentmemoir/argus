@@ -7,6 +7,7 @@ Run the checks from the repository root. The tooling runs through `uv run`; the 
 | `make lint` | `ruff check` finds nothing. |
 | `make fmt-check` | The tree is formatted at 88 columns. |
 | `make typecheck` | mypy over the package, at its default level. |
+| `make typecheck-strict` | pyright in strict mode over the package and the suite, the checker behind the editor's Pylance. |
 | `make lines` | No Python file exceeds 350 lines, comments and blank lines included. |
 | `make self-test` | The driver self-test, the unit suites, the reservation group, the gitsync self-test, and the identifier gate all pass. Needs no configuration file. |
 | `make identifiers` | The published folder carries no home path, no numeric account or channel id, and no notification default or literal that is not a placeholder. |

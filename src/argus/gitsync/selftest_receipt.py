@@ -4,6 +4,7 @@
 
 import subprocess
 from pathlib import Path
+from typing import Any, cast
 
 from argus.gitsync.branch import ensure_phase_branch
 from argus.gitsync.git import current_branch, git, git_binary
@@ -17,7 +18,7 @@ from argus.gitsync.selftest_fixture import BOARD_REL, _configure_self_test, _ini
 from argus.gitsync.selftest_publish import _publish_fixture
 
 
-def _publication_receipt_check(base):
+def _publication_receipt_check(base: Path) -> tuple[bool, str]:
     d = base / "publication-receipt"
     d.mkdir()
     _public_remote, pub = _init_remote(d, "pub")
@@ -74,7 +75,7 @@ def _publication_receipt_check(base):
         return False, str(exc)
 
 
-def _group_publication_check(base):
+def _group_publication_check(base: Path) -> tuple[bool, str]:
     """One branch, one pull request, and one receipt per member of a group.
 
     A group publishes every member from one branch and one pull request, and each
@@ -138,7 +139,10 @@ def _group_publication_check(base):
         second = publish_phase(pub, 100030)
         if not second.get("ok"):
             return False, f"the group's second member did not publish: {second}"
-        receipts = {number: phase_receipt(pub, number) for number in (100020, 100030)}
+        receipts = {
+            number: cast("dict[str, Any]", phase_receipt(pub, number))
+            for number in (100020, 100030)
+        }
         if not all(receipts.values()):
             return False, "a member published without a receipt of its own"
         if {r.get("branch") for r in receipts.values()} != {branch}:
@@ -185,7 +189,7 @@ def _group_publication_check(base):
         return False, str(exc)
 
 
-def _portable_publication_check(base):
+def _portable_publication_check(base: Path) -> tuple[bool, str]:
     """Publish a custom phase through an independently named private checkout."""
     phase = 100615
     try:
@@ -235,8 +239,10 @@ def _portable_publication_check(base):
         )
         return (
             receipt.get("path") == str(run / "publication.json")
-            and phase_receipt(pub, phase).get("branch") == branch
-            and receipt_for_branch(pub, branch).get("phase") == str(phase)
+            and cast("dict[str, Any]", phase_receipt(pub, phase)).get("branch")
+            == branch
+            and cast("dict[str, Any]", receipt_for_branch(pub, branch)).get("phase")
+            == str(phase)
             and predecessor is not None
             and predecessor["phase"] == phase
             and recorded[0] == 0,
@@ -245,3 +251,10 @@ def _portable_publication_check(base):
         )
     except Exception as exc:  # noqa: BLE001 - the self-test reports the failure
         return False, str(exc)
+
+
+__all__ = [
+    "_group_publication_check",
+    "_portable_publication_check",
+    "_publication_receipt_check",
+]

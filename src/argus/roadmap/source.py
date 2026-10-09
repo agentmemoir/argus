@@ -47,8 +47,10 @@ if not __package__:
     import sys
     from pathlib import Path
 
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-    import _bootstrap  # noqa: F401 - register the source package
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+    from argus import (
+        _bootstrap as _bootstrap,  # noqa: F401 - register the source package
+    )
 from argus.roadmap.evidence import (  # noqa: E402 - path set just above
     APPROVAL,
     INDEX_HEAD_RE,

@@ -3,6 +3,8 @@
 """The integration-branch merge and stacked-predecessor checks."""
 
 import subprocess
+from pathlib import Path
+from typing import Any, cast
 
 from argus.gitsync.branch import branch_phase_checkouts, ensure_phase_branch
 from argus.gitsync.git import current_branch, git, git_binary
@@ -14,7 +16,9 @@ from argus.gitsync.selftest_publish import _publish_fixture
 from argus.gitsync.sync import resync_integration
 
 
-def _sequencing_integration_checks(base, results):
+def _sequencing_integration_checks(
+    base: Path, results: list[tuple[str, object, str]]
+) -> None:
     # --- Item 5: the integration branch merged into the phase branch. ---
     d = base / "resync"
     d.mkdir()
@@ -111,7 +115,9 @@ def _sequencing_integration_checks(base, results):
     )
 
 
-def _sequencing_stack_checks(base, results):
+def _sequencing_stack_checks(
+    base: Path, results: list[tuple[str, object, str]]
+) -> None:
     # --- Item 3 and 7: a phase built on an open predecessor. ---
     pub3, nested3, _run3 = _publish_fixture(base, "stack-base", 100453)
     branch_first = "feature/stack-base-first"
@@ -137,7 +143,7 @@ def _sequencing_stack_checks(base, results):
         (
             "an open predecessor is found for the next phase",
             (predecessor or {}).get("phase") == 100453
-            and predecessor["branch"] == branch_first,
+            and cast("dict[str, Any]", predecessor)["branch"] == branch_first,
             f"predecessor={predecessor}",
         )
     )
@@ -218,9 +224,9 @@ def _sequencing_stack_checks(base, results):
         100454,
         pull_request="https://github.com/example-org/example-repo/pull/902",
     )
-    carries = second_res.get("carries_open_phase") or {}
-    second_receipt = phase_receipt(pub3, 100454)
-    stacked = second_receipt.get("stacked_on") or {}
+    carries: dict[str, Any] = second_res.get("carries_open_phase") or {}
+    second_receipt = cast("dict[str, Any]", phase_receipt(pub3, 100454))
+    stacked: dict[str, Any] = second_receipt.get("stacked_on") or {}
     results.append(
         (
             "publishing on top of an unmerged predecessor warns that the pull "
@@ -263,3 +269,6 @@ def _sequencing_stack_checks(base, results):
             f"awaiting_review(100453)={still_named} open_predecessor(100455)={highest}",
         )
     )
+
+
+__all__ = ["_sequencing_integration_checks", "_sequencing_stack_checks"]

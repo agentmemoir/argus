@@ -4,32 +4,40 @@
 
 import contextlib
 import re
+from collections.abc import Mapping
 from pathlib import Path
+from typing import TYPE_CHECKING, Any, cast
 
-_SETTINGS: dict[str, object] = {}
+if TYPE_CHECKING:
+    from argus.config.loader import Config
+
+_settings: dict[str, object] = {}
 _MISSING = object()
 
 
-def configure(settings):
+def configure(settings: Mapping[str, Any]) -> dict[str, object]:
     """Replace the settings used by the current tool invocation."""
-    global _SETTINGS
-    _SETTINGS = dict(settings)
-    return _SETTINGS
+    global _settings
+    _settings = dict(settings)
+    return _settings
 
 
-def override(settings):
+def override(settings: Mapping[str, Any]) -> dict[str, object]:
     """Apply explicit settings to the current invocation."""
-    previous = _SETTINGS
-    configure({**_SETTINGS, **settings})
+    previous = _settings
+    configure({**_settings, **settings})
     return previous
 
 
-def settings_from_config(config):
+def settings_from_config(config: "Config") -> dict[str, object]:
     """Return the validated values loaded by ``argus.config``."""
     return dict(config.values)
 
 
-def configure_from_file(config_path=None, overrides=None):
+def configure_from_file(
+    config_path: str | Path | None = None,
+    overrides: dict[str, object] | None = None,
+) -> "Config":
     """Load one config file and publish its values to shared settings."""
     from argus.config.loader import load
 
@@ -38,9 +46,9 @@ def configure_from_file(config_path=None, overrides=None):
     return config
 
 
-def configure_from_args(args):
+def configure_from_args(args: Any) -> "Config":
     """Load settings and the four shared CLI overrides from parsed arguments."""
-    overrides = {}
+    overrides: dict[str, object] = {}
     for key, name in (
         ("repo-root", "config_repo_root"),
         ("roadmap-dir", "config_roadmap_dir"),
@@ -53,7 +61,7 @@ def configure_from_args(args):
     return configure_from_file(args.config, overrides)
 
 
-def configure_from_cli(argv):
+def configure_from_cli(argv: list[str]) -> "Config":
     """Load shared settings from CLI flags embedded in a helper invocation."""
     import argparse
 
@@ -67,16 +75,16 @@ def configure_from_cli(argv):
     return configure_from_args(args)
 
 
-def setting(key, default=_MISSING):
+def setting(key: str, default: Any = _MISSING) -> Any:
     """Read one configured value, with defaults only for optional fields."""
-    if key in _SETTINGS:
-        return _SETTINGS[key]
+    if key in _settings:
+        return _settings[key]
     if default is not _MISSING:
         return default
     raise ValueError(f"configuration key '{key}' is not loaded")
 
 
-def board_repo(repo=None):
+def board_repo(repo: str | Path | None = None) -> Path | None:
     """The configured checkout that owns the reservation board."""
     path = setting("board.repo", None)
     if path is None:
@@ -87,25 +95,25 @@ def board_repo(repo=None):
     return path.resolve()
 
 
-def phase_globs():
+def phase_globs() -> list[str]:
     """The configured work-item filename patterns."""
     return list(setting("driver.include"))
 
 
-def phase_excluded(name):
+def phase_excluded(name: str) -> bool:
     """True when ``name`` matches a configured excluded file name."""
     return Path(name).name in set(setting("driver.exclude", []))
 
 
-def phase_paths(folder):
+def phase_paths(folder: str | Path) -> list[Path]:
     """Every configured work-item file, in stable order and without repeats."""
-    found = set()
+    found: set[Path] = set()
     for pattern in phase_globs():
         found.update(Path(folder).glob(pattern))
     return [path for path in sorted(found) if not phase_excluded(path.name)]
 
 
-def runs_dir(repo=None):
+def runs_dir(repo: str | Path | None = None) -> Path:
     """The run-state folder named in the loaded config."""
     path = Path(setting("driver.runs"))
     if not path.is_absolute():
@@ -113,7 +121,7 @@ def runs_dir(repo=None):
     return path
 
 
-def phase_file_parts(path):
+def phase_file_parts(path: str | Path) -> tuple[int, str] | None:
     """Read the first numeric filename token and the slug after it.
 
     Tokens are separated by '-' or '_'. The prefix is not part of the slug.
@@ -128,7 +136,7 @@ def phase_file_parts(path):
     return int(match.group(1)), match.group(2)
 
 
-def resolve_phase_file(repo, number):
+def resolve_phase_file(repo: str | Path, number: int) -> Path | None:
     """Find the configured work-item file with ``number`` in its name."""
     roadmap = Path(setting("roadmap-dir"))
     if not roadmap.is_absolute():
@@ -140,7 +148,7 @@ def resolve_phase_file(repo, number):
     return None
 
 
-def _pipeline(repo):
+def _pipeline(repo: str | Path) -> dict[str, Any] | None:
     configured = setting("pipeline", None)
     if configured is None:
         return None
@@ -157,10 +165,15 @@ def _pipeline(repo):
         raise ValueError(f"cannot read pipeline {path}: {exc}") from exc
     if not isinstance(pipeline, dict):
         raise ValueError("pipeline must be a mapping")
-    return pipeline
+    return cast("dict[str, Any]", pipeline)
 
 
-def _pipeline_inputs(repo, number, phase_file, pipeline):
+def _pipeline_inputs(
+    repo: str | Path,
+    number: int,
+    phase_file: str | Path | None,
+    pipeline: dict[str, Any],
+) -> dict[str, object]:
     number_name = setting("number-input", "phase_number")
     file_name = setting("file-input", "phase_file")
     if not number_name or not file_name or number_name == file_name:
@@ -170,7 +183,8 @@ def _pipeline_inputs(repo, number, phase_file, pipeline):
     declared = pipeline.get("inputs", {})
     if not isinstance(declared, dict):
         raise ValueError("pipeline inputs must be a mapping")
-    overrides = {number_name: f"{int(number):06d}"}
+    declared = cast("dict[str, Any]", declared)
+    overrides: dict[str, str] = {number_name: f"{int(number):06d}"}
     if phase_file is not None:
         path = Path(phase_file)
         if path.is_absolute():
@@ -179,9 +193,13 @@ def _pipeline_inputs(repo, number, phase_file, pipeline):
         overrides[file_name] = str(path)
     if number_name not in declared or file_name not in declared:
         raise ValueError("pipeline must declare the configured phase inputs")
-    resolved = {}
+    resolved: dict[str, object] = {}
     for name, spec in declared.items():
-        fields = spec if isinstance(spec, dict) else {"default": spec}
+        fields = (
+            cast("dict[str, Any]", spec)
+            if isinstance(spec, dict)
+            else {"default": spec}
+        )
         kind = fields.get("type", "str")
         if kind not in {"str", "int"}:
             raise ValueError(f"input {name!r}: type must be str or int")
@@ -197,12 +215,17 @@ def _pipeline_inputs(repo, number, phase_file, pipeline):
     return resolved
 
 
-def pipeline_inputs(repo, number, phase_file):
+def pipeline_inputs(
+    repo: str | Path, number: int, phase_file: str | Path | None
+) -> dict[str, object]:
     """Resolve phase overrides and typed defaults like Glide's input resolver."""
-    return _pipeline_inputs(repo, number, phase_file, _pipeline(repo))
+    pipeline = _pipeline(repo)
+    return _pipeline_inputs(repo, number, phase_file, cast("dict[str, Any]", pipeline))
 
 
-def phase_run_dir(repo, number, phase_file=None):
+def phase_run_dir(
+    repo: str | Path, number: int, phase_file: str | Path | None = None
+) -> Path:
     """Return the run folder named by the configured pipeline."""
     root = Path(repo).resolve()
     pipeline = _pipeline(root)

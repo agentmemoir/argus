@@ -4,6 +4,8 @@
 
 import json
 import subprocess
+from pathlib import Path
+from typing import Any, cast
 
 from argus import conventions
 from argus.gitsync.branch import ensure_phase_branch
@@ -23,7 +25,7 @@ from argus.gitsync.selftest_stacked import (
 )
 
 
-def _sequencing_checks(base):
+def _sequencing_checks(base: Path) -> list[tuple[str, object, str]]:
     """Items 1, 2, 3, 5 and 7 of the reliable-sequencing plan.
 
     Every merge-detection case here is measured against a real squash, because
@@ -31,8 +33,8 @@ def _sequencing_checks(base):
     multi-commit one. That is why the fixtures commit several times rather than
     once: a one-commit phase is not the case that occurs.
     """
-    results = []
-    old_branch = conventions.setting("board.branch")
+    results: list[tuple[str, object, str]] = []
+    old_branch: str = conventions.setting("board.branch")
     conventions.override({"board.branch": "main"})
     try:
         _sequencing_reference_checks(results)
@@ -48,7 +50,9 @@ def _sequencing_checks(base):
     return results
 
 
-def _sequencing_reference_checks(results):
+def _sequencing_reference_checks(
+    results: list[tuple[str, object, str]],
+) -> None:
     # --- Item 2: the pull request reference is parsed at receipt time. ---
     parsed = [
         (
@@ -68,7 +72,7 @@ def _sequencing_reference_checks(results):
             ("ghe.example.com", "example-org", "example-repo", 7),
         ),
     ]
-    wrong = []
+    wrong: list[tuple[str | None, object, object]] = []
     for url, want in parsed:
         ref = pull_request_ref(url)
         got = (ref["host"], ref["owner"], ref["repo"], ref["number"]) if ref else None
@@ -77,15 +81,15 @@ def _sequencing_reference_checks(results):
     # The negative direction matters more: a string that is not a pull
     # request URL must yield None so the check is skipped, never a number
     # guessed from the wrong field.
-    for url in (
+    for candidate in (
         "",
         "not a url",
         "https://github.com/example-org/example-repo/issues/42",
         "https://github.com/example-org/example-repo/pull/abc",
         None,
     ):
-        if pull_request_ref(url) is not None:
-            wrong.append((url, "parsed", None))
+        if pull_request_ref(candidate) is not None:
+            wrong.append((candidate, "parsed", None))
     results.append(
         (
             "a pull request URL yields owner, repo and number; anything else "
@@ -162,7 +166,9 @@ def _sequencing_reference_checks(results):
     )
 
 
-def _sequencing_merge_checks(base, results):
+def _sequencing_merge_checks(
+    base: Path, results: list[tuple[str, object, str]]
+) -> None:
     # --- Item 1 end to end: a squash merge, recognised by GitHub. ---
     # Five commits, squashed into one, which is the case the commit-id test
     # alone fails. This is the deadlock the plan exists to remove.
@@ -178,7 +184,8 @@ def _sequencing_merge_checks(base, results):
         100451,
         pull_request="https://github.com/example-org/example-repo/pull/900",
     )
-    ref = (res.get("receipt") or {}).get("pull_request_ref")
+    receipt: dict[str, Any] = res.get("receipt") or {}
+    ref = receipt.get("pull_request_ref")
     results.append(
         (
             "the receipt records the parsed pull request alongside the URL",
@@ -216,7 +223,8 @@ def _sequencing_merge_checks(base, results):
         (
             "a squash merge with GitHub reporting OPEN stays blocked",
             (not blocked_open["ok"])
-            and phase_receipt(pub, 100451).get("state") == "awaiting_review"
+            and cast("dict[str, Any]", phase_receipt(pub, 100451)).get("state")
+            == "awaiting_review"
             and "not merged" in (blocked_open.get("blockers") or [""])[-1],
             f"blockers={blocked_open.get('blockers')}",
         )
@@ -228,14 +236,15 @@ def _sequencing_merge_checks(base, results):
             "a squash merge with GitHub unreachable stays blocked rather than "
             "being assumed merged",
             (not blocked_unknown["ok"])
-            and phase_receipt(pub, 100451).get("state") == "awaiting_review"
+            and cast("dict[str, Any]", phase_receipt(pub, 100451)).get("state")
+            == "awaiting_review"
             and "could not be asked" in ((blocked_unknown.get("blockers") or [""])[-1]),
             f"blockers={blocked_unknown.get('blockers')}",
         )
     )
     with _StubGH(_gh_says("MERGED")):
         marked = mark_phase_published(pub, 100451)
-    published = phase_receipt(pub, 100451)
+    published = cast("dict[str, Any]", phase_receipt(pub, 100451))
     results.append(
         (
             "a squash merge is recorded once GitHub reports the pull request "
@@ -268,7 +277,7 @@ def _sequencing_merge_checks(base, results):
     # keeps the commit, so this must still succeed.
     with _StubGH({"returncode": 1}):
         offsite = mark_phase_published(pub2, 100452)
-    offsite_receipt = phase_receipt(pub2, 100452)
+    offsite_receipt = cast("dict[str, Any]", phase_receipt(pub2, 100452))
     results.append(
         (
             "a merge commit is still recognised when GitHub cannot be asked",
@@ -281,3 +290,6 @@ def _sequencing_merge_checks(base, results):
             f"receipt={offsite_receipt.get('merge_confirmed_by')}",
         )
     )
+
+
+__all__ = ["_sequencing_checks"]

@@ -51,10 +51,13 @@ import argparse
 import json
 import sys
 from pathlib import Path
+from typing import Any
 
 if not __package__:
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-    import _bootstrap  # noqa: F401 - register the source package
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+    from argus import (
+        _bootstrap as _bootstrap,  # noqa: F401 - register the source package
+    )
 from argus import conventions
 
 # Re-exported rather than moved out from under one caller: the publishing tool's
@@ -74,6 +77,8 @@ from argus.select.work_source import (  # noqa: E402 - path set just above
     resolve,
 )
 
+__all__ = ["publication_receipt_done"]
+
 #: Exit code per selection state. Anything unlisted is an error, so a new
 #: state cannot be mistaken for a launch.
 STATE_EXIT = {
@@ -88,7 +93,9 @@ STATE_EXIT = {
 }
 
 
-def main(argv=None, *, _settings=None):
+def main(
+    argv: list[str] | None = None, *, _settings: dict[str, Any] | None = None
+) -> int:
     parser = argparse.ArgumentParser(
         description="Next piece of work, from the configured work source."
     )

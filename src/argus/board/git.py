@@ -12,12 +12,14 @@ from argus import conventions
 from argus.board.core import GIT_TIMEOUT_S, CoordinationUnavailable
 
 
-def git_binary():
+def git_binary() -> str:
     """The git command named in the loaded config."""
     return conventions.setting("commands.git")
 
 
-def _git(repo, *args, timeout=GIT_TIMEOUT_S):
+def _git(
+    repo: str | Path, *args: str, timeout: int = GIT_TIMEOUT_S
+) -> tuple[int, str, str]:
     env = dict(os.environ, GIT_TERMINAL_PROMPT="0")
     try:
         result = subprocess.run(
@@ -36,23 +38,23 @@ def _git(repo, *args, timeout=GIT_TIMEOUT_S):
     return result.returncode, result.stdout.strip(), result.stderr.strip()
 
 
-def _is_git_repo(path):
+def _is_git_repo(path: str | Path) -> bool:
     rc, out, _ = _git(path, "rev-parse", "--is-inside-work-tree")
     return rc == 0 and out == "true"
 
 
-def _remote_urls(repo, remote, *, push=False):
+def _remote_urls(repo: str | Path, remote: str, *, push: bool = False) -> list[str]:
     args = ["remote", "get-url"]
     if push:
         args.append("--push")
     args.extend(["--all", remote])
-    rc, out, err = _git(repo, *args)
+    rc, out, _ = _git(repo, *args)
     if rc != 0:
         return []
     return [line.strip() for line in out.splitlines() if line.strip()]
 
 
-def _canonical_remote_url(value):
+def _canonical_remote_url(value: str | None) -> str:
     value = (value or "").strip()
     if not value:
         return ""
@@ -72,7 +74,9 @@ def _canonical_remote_url(value):
     )
 
 
-def _remote_url_sets(root, private, remote):
+def _remote_url_sets(
+    root: str | Path, private: str | Path, remote: str
+) -> tuple[set[str], set[str], set[str], set[str]]:
     public_fetch = {_canonical_remote_url(url) for url in _remote_urls(root, remote)}
     public_push = {
         _canonical_remote_url(url) for url in _remote_urls(root, remote, push=True)
@@ -86,7 +90,9 @@ def _remote_url_sets(root, private, remote):
     return public_fetch, public_push, private_fetch, private_push
 
 
-def _assert_private_boundary(root, private, remote):
+def _assert_private_boundary(
+    root: str | Path, private: str | Path, remote: str
+) -> None:
     public_is_repo = _is_git_repo(root)
     if not public_is_repo:
         return
@@ -107,6 +113,9 @@ def _assert_private_boundary(root, private, remote):
         )
 
 
-def _head(repo):
+def _head(repo: str | Path) -> str | None:
     rc, out, _ = _git(repo, "rev-parse", "HEAD")
     return out if rc == 0 and out else None
+
+
+__all__ = ["_assert_private_boundary", "_head"]

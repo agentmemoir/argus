@@ -3,7 +3,9 @@
 """The reservation fence, and the receipt a publication writes for one phase or a group."""
 
 import json
+from collections.abc import Iterable
 from pathlib import Path
+from typing import Any, cast
 
 from argus.conventions import board_repo, phase_run_dir
 from argus.gitsync.git import (
@@ -25,7 +27,7 @@ from argus.gitsync.review import open_predecessor
 from argus.gitsync.runstate import commit_leftover_run_state
 
 
-def _declared_group(root, phase):
+def _declared_group(root: str | Path, phase: int) -> dict[str, Any] | None:
     """The reservation group a phase declares, or ``None``.
 
     Read from the roadmap documents, which is where a declaration lives. A
@@ -49,17 +51,17 @@ def _declared_group(root, phase):
         ) from exc
 
 
-def _member_published(root, member):
+def _member_published(root: str | Path, member: object) -> bool:
     """Whether one group member's receipt says it is published."""
     try:
         number = int(str(member).strip())
     except (TypeError, ValueError):
         return False
     receipt = phase_receipt(root, number)
-    return bool(receipt) and receipt.get("state") == "published"
+    return receipt is not None and receipt.get("state") == "published"
 
 
-def _group_all_published(root, members):
+def _group_all_published(root: str | Path, members: Iterable[Any] | None) -> bool:
     """Whether every member of a group is published.
 
     A group shares one branch and one pull request, so a member whose merge is
@@ -71,7 +73,9 @@ def _group_all_published(root, members):
     return bool(members) and all(_member_published(root, member) for member in members)
 
 
-def _group_pull_request(root, group, branch, phase):
+def _group_pull_request(
+    root: str | Path, group: Iterable[Any], branch: str | None, phase: int
+) -> Any:
     """The pull request another member of this group already recorded.
 
     One branch and one pull request cover a group, so every member's receipt
@@ -91,16 +95,21 @@ def _group_pull_request(root, group, branch, phase):
         receipt = phase_receipt(root, number)
         if not isinstance(receipt, dict) or receipt.get("branch") != branch:
             continue
-        recorded = receipt.get("group") or []
+        recorded: list[Any] = receipt.get("group") or []
         if {f"{int(member):06d}" for member in recorded} == wanted:
             return receipt.get("pull_request")
     return None
 
 
 def _write_publication_receipt(
-    root, phase, reservation, results, engine_written=(), pull_request=None
-):
-    private = board_repo(root)
+    root: str | Path,
+    phase: int,
+    reservation: dict[str, Any],
+    results: list[dict[str, Any]],
+    engine_written: Iterable[str] = (),
+    pull_request: str | None = None,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    private = cast("Path", board_repo(root))
     run_dir = phase_run_dir(root, phase)
     if not run_dir.is_dir():
         raise ConfigError(f"phase run directory is missing: {run_dir}")
@@ -123,7 +132,7 @@ def _write_publication_receipt(
         )
     from argus.board.reservations import _now
 
-    receipt = {
+    receipt: dict[str, Any] = {
         "version": 1,
         "phase": f"{int(phase):06d}",
         # Not "published". A phase's commits live on its own branch until a
@@ -154,7 +163,7 @@ def _write_publication_receipt(
     # rewritten after this phase branched from it would silently change what
     # this phase is built on, and nothing would ever notice: the branch still
     # exists, so every existence check passes.
-    carried = open_predecessor(root, phase)
+    carried: dict[str, Any] | None = open_predecessor(root, phase)
     if carried and carried.get("branch") == public_branch:
         # Another member of this phase's own reservation group: the same branch
         # and the same pull request. Recording that as a branch this phase was
@@ -206,17 +215,17 @@ def _write_publication_receipt(
 
 
 def _load_phase_reservation(
-    root,
-    phase,
-    reservation_file=None,
-    machine_id=None,
-    reservation_id=None,
-    generation=None,
-):
+    root: str | Path,
+    phase: int,
+    reservation_file: str | Path | None = None,
+    machine_id: str | None = None,
+    reservation_id: str | None = None,
+    generation: int | str | None = None,
+) -> dict[str, Any]:
     if reservation_file is None:
         reservation_file = phase_run_dir(root, phase) / "reservation.json"
     try:
-        data = json.loads(Path(reservation_file).read_text())
+        data = cast("dict[str, Any]", json.loads(Path(reservation_file).read_text()))
     except (OSError, ValueError) as exc:
         raise ConfigError(f"cannot read phase reservation: {exc}") from exc
     if machine_id:
@@ -229,10 +238,12 @@ def _load_phase_reservation(
     return data
 
 
-def _push_one(repo):
+def _push_one(repo: str | Path) -> dict[str, Any]:
     branch, remote, _remote_branch, why = resolve_upstream(repo)
     if why:
         return blocked({"repo": str(repo)}, why)
+    branch = cast("str", branch)
+    remote = cast("str", remote)
     rc, out, err = git(repo, "push", remote, branch)
     if rc != 0:
         return blocked(
@@ -246,3 +257,11 @@ def _push_one(repo):
         "action": "pushed",
         "after": git(repo, "rev-parse", "HEAD")[1],
     }
+
+
+__all__ = [
+    "_group_all_published",
+    "_load_phase_reservation",
+    "_push_one",
+    "_write_publication_receipt",
+]

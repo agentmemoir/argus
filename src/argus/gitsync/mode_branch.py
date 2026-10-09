@@ -3,6 +3,7 @@
 """Putting the public checkout on the branch a phase or a group publishes from."""
 
 from pathlib import Path
+from typing import Any
 
 from argus.gitsync.branch import branch_phase_checkouts
 from argus.gitsync.git import blocked, git, integration_branch, summarize
@@ -14,7 +15,13 @@ from argus.gitsync.paths import (
 from argus.gitsync.review import open_predecessor, phase_work_on_integration
 
 
-def mode_branch(root, phase, roadmap, roadmap_dir=None, group=None):
+def mode_branch(
+    root: str | Path,
+    phase: int | str,
+    roadmap: str | None,
+    roadmap_dir: str | Path | None = None,
+    group: list[str] | None = None,
+) -> dict[str, Any]:
     """Put the public checkout on this phase's branch, then report.
 
     Split out of ``main`` so the self-test can drive the whole mode, refusals
@@ -145,7 +152,7 @@ def mode_branch(root, phase, roadmap, roadmap_dir=None, group=None):
         base = predecessor["branch"]
     made = branch_phase_checkouts(root, branch, base=base)
     ok = all(m["ok"] for m in made)
-    out = {
+    out: dict[str, Any] = {
         "ok": ok,
         "mode": "branch",
         "branch": branch,

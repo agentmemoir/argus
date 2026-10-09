@@ -21,12 +21,15 @@ import argparse
 import pathlib
 import re
 import sys
+from collections.abc import Iterator
 
 if not __package__:
     from pathlib import Path
 
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-    import _bootstrap  # noqa: F401 - register the source package
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+    from argus import (
+        _bootstrap as _bootstrap,  # noqa: F401 - register the source package
+    )
 from argus import conventions
 from argus.config.loader import ConfigError
 from argus.conventions import phase_file_parts, phase_paths
@@ -41,12 +44,12 @@ GATE_STATES = ("none", "recorded", "open")
 RUNNABLE_GATE_STATES = ("none", "recorded")
 
 
-def is_runnable_phase(number):
+def is_runnable_phase(number: int) -> bool:
     """True when ``number`` may be selected or launched by the pipeline."""
     return int(number) < PARKED_PHASE_FLOOR
 
 
-def _section_body(text):
+def _section_body(text: str) -> str | None:
     """Return the body of the ``### Decision Gates`` section, or ``None``.
 
     The section ends at the next ``##``/``###`` heading or at a ``---`` rule,
@@ -61,7 +64,7 @@ def _section_body(text):
     if start is None:
         return None
 
-    body = []
+    body: list[str] = []
     for line in lines[start:]:
         stripped = line.strip()
         if HEADING_RE.match(line) or stripped == "---":
@@ -70,7 +73,7 @@ def _section_body(text):
     return "\n".join(body)
 
 
-def _gate_rows(body):
+def _gate_rows(body: str) -> Iterator[tuple[str, str, str, str]]:
     """Yield ``(gate, issue, state, choice)`` for each data row of the table."""
     for line in body.splitlines():
         stripped = line.strip()
@@ -92,7 +95,7 @@ def _gate_rows(body):
         yield gate, issue, state, choice.strip("` ").strip()
 
 
-def phase_gate_state(path):
+def phase_gate_state(path: str | pathlib.Path) -> tuple[str, str]:
     """Return ``(state, detail)`` for one phase plan file.
 
     ``state`` is one of ``none``, ``recorded``, ``open``, or ``unknown``.
@@ -130,15 +133,15 @@ def phase_gate_state(path):
     return worst, detail
 
 
-def phase_gates_blocked(path):
+def phase_gates_blocked(path: str | pathlib.Path) -> bool:
     """True when the plan carries a gate that must stop the phase being run."""
     state, _ = phase_gate_state(path)
     return state == "open"
 
 
-def scan_gates(roadmap_dir):
+def scan_gates(roadmap_dir: str | pathlib.Path) -> dict[str, tuple[str, str, str]]:
     """Return ``{phase_number: (state, detail, filename)}`` for every plan."""
-    found = {}
+    found: dict[str, tuple[str, str, str]] = {}
     for entry in phase_paths(roadmap_dir):
         parts = phase_file_parts(entry)
         if parts is None or not entry.is_file():
@@ -148,7 +151,7 @@ def scan_gates(roadmap_dir):
     return found
 
 
-def main(argv=None):
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Report phase decision gates that block a run."
     )

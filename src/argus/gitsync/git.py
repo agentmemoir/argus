@@ -6,6 +6,7 @@ import os
 import subprocess
 import urllib.parse
 from pathlib import Path
+from typing import Any
 
 from argus.conventions import board_repo, setting
 
@@ -28,7 +29,7 @@ MAX_SUBJECTS = 5
 INTEGRATION_BRANCH = "master"
 
 
-def integration_branch(repo, default=INTEGRATION_BRANCH):
+def integration_branch(repo: str | Path, default: str = INTEGRATION_BRANCH) -> str:
     """The integration branch for a checkout.
 
     Prefers ``default`` when the checkout actually has it, so a host that
@@ -51,17 +52,23 @@ class ConfigError(Exception):
     """A usage or environment error (exit 2), not a sync conflict."""
 
 
-def git_binary():
+def git_binary() -> str:
     """The git command named in the loaded config."""
     return setting("commands.git")
 
 
-def gh_binary():
+def gh_binary() -> str:
     """The gh command named in the loaded config."""
     return setting("commands.gh")
 
 
-def git(repo, *args, timeout=GIT_TIMEOUT_S, extra_env=None, raw=False):
+def git(
+    repo: str | Path,
+    *args: str,
+    timeout: int = GIT_TIMEOUT_S,
+    extra_env: dict[str, str] | None = None,
+    raw: bool = False,
+) -> tuple[int, str, str]:
     """Run one git command in repo. Returns (rc, stdout, stderr), stripped
     unless raw=True (porcelain status keeps its leading status column).
 
@@ -88,14 +95,16 @@ def git(repo, *args, timeout=GIT_TIMEOUT_S, extra_env=None, raw=False):
     return p.returncode, p.stdout.strip(), p.stderr.strip()
 
 
-def is_git_repo(path):
+def is_git_repo(path: str | Path | None) -> bool:
     if path is None:
         return False
     rc, out, _ = git(path, "rev-parse", "--is-inside-work-tree")
     return rc == 0 and out == "true"
 
 
-def resolve_upstream(repo):
+def resolve_upstream(
+    repo: str | Path,
+) -> tuple[str | None, str | None, str | None, str | None]:
     """Return (branch, remote, remote_branch, why). why is None on success;
     otherwise it explains why the checkout cannot be synced safely."""
     rc, branch, _ = git(repo, "rev-parse", "--abbrev-ref", "HEAD")
@@ -112,7 +121,7 @@ def resolve_upstream(repo):
     return branch, remote, remote_branch, None
 
 
-def remote_urls(repo, remote, *, push=False):
+def remote_urls(repo: str | Path, remote: str, *, push: bool = False) -> list[str]:
     args = ["remote", "get-url"]
     if push:
         args.append("--push")
@@ -123,7 +132,7 @@ def remote_urls(repo, remote, *, push=False):
     return [line.strip() for line in out.splitlines() if line.strip()]
 
 
-def canonical_remote_url(value):
+def canonical_remote_url(value: str | None) -> str:
     value = (value or "").strip()
     if not value:
         return ""
@@ -143,18 +152,18 @@ def canonical_remote_url(value):
     )
 
 
-def upstream_urls(repo, *, push=False):
+def upstream_urls(repo: str | Path, *, push: bool = False) -> set[str]:
     _branch, remote, _remote_branch, why = resolve_upstream(repo)
     if why or not remote:
         return set()
     return {canonical_remote_url(url) for url in remote_urls(repo, remote, push=push)}
 
 
-def upstream_push_urls(repo):
+def upstream_push_urls(repo: str | Path) -> set[str]:
     return upstream_urls(repo, push=True)
 
 
-def classify(repo, upstream):
+def classify(repo: str | Path, upstream: str) -> tuple[str, str, int, int, str]:
     """(local, tip, ahead, behind, relation) after a fetch."""
     local = git(repo, "rev-parse", "HEAD")[1]
     tip = git(repo, "rev-parse", upstream)[1]
@@ -171,14 +180,14 @@ def classify(repo, upstream):
     return local, tip, ahead, behind, relation
 
 
-def subjects(repo, rev_range):
+def subjects(repo: str | Path, rev_range: str) -> list[str]:
     rc, out, _ = git(
         repo, "log", "--oneline", "--no-decorate", f"-n{MAX_SUBJECTS}", rev_range
     )
     return out.splitlines() if rc == 0 and out else []
 
 
-def incoming_paths(repo, upstream):
+def incoming_paths(repo: str | Path, upstream: str) -> list[str]:
     """The paths the incoming commits change, as a conservative superset.
 
     The comparison is against the merge base, not against HEAD, because that is
@@ -198,13 +207,13 @@ def incoming_paths(repo, upstream):
     return sorted(out.splitlines()) if rc == 0 and out else []
 
 
-def overlapping_paths(repo, upstream, local):
+def overlapping_paths(repo: str | Path, upstream: str, local: list[str]) -> list[str]:
     """The locally-dirty paths the incoming commits also change."""
     incoming = set(incoming_paths(repo, upstream))
     return sorted(incoming & set(local))
 
 
-def blocked(info, reason, **extra):
+def blocked(info: dict[str, Any], reason: str, **extra: Any) -> dict[str, Any]:
     info = dict(info)
     info["ok"] = False
     info["action"] = "blocked"
@@ -215,15 +224,13 @@ def blocked(info, reason, **extra):
     return info
 
 
-def dirty_paths(repo):
+def dirty_paths(repo: str | Path) -> list[str]:
     """Repo-relative paths with any staged, unstaged, or untracked change.
 
     Ignored files (for example the runner's interface log and driver state) do not
     appear, so this is exactly the set a commit would carry."""
-    rc, out, _ = git(
-        repo, "status", "--porcelain=v1", "--untracked-files=all", raw=True
-    )
-    paths = []
+    _, out, _ = git(repo, "status", "--porcelain=v1", "--untracked-files=all", raw=True)
+    paths: list[str] = []
     for line in out.splitlines():
         if len(line) < 4:
             continue
@@ -234,7 +241,7 @@ def dirty_paths(repo):
     return paths
 
 
-def _is_private_path(root, path):
+def _is_private_path(root: str | Path, path: str) -> bool:
     """Exclude only the configured nested private checkout from public dirt."""
     private = board_repo(root)
     if private is None:
@@ -246,19 +253,19 @@ def _is_private_path(root, path):
     return path == prefix or path.startswith(prefix + "/")
 
 
-def is_run_state(path, scope="runs"):
+def is_run_state(path: str, scope: str = "runs") -> bool:
     """True for the pipeline's own run-state paths inside the private repo."""
     return path == scope or path.startswith(scope.rstrip("/") + "/")
 
 
-def current_branch(repo):
+def current_branch(repo: str | Path) -> str:
     """The checked-out branch, or an empty string on a detached HEAD."""
     rc, out, _ = git(repo, "rev-parse", "--abbrev-ref", "HEAD")
     return out if rc == 0 and out and out != "HEAD" else ""
 
 
-def summarize(results, mode):
-    parts = []
+def summarize(results: list[dict[str, Any]], mode: str) -> str:
+    parts: list[str] = []
     for r in results:
         if r.get("ok"):
             parts.append(f"{r['repo']}: {r.get('action', 'ok')}")
@@ -266,3 +273,6 @@ def summarize(results, mode):
             parts.append(f"{r['repo']}: BLOCKED ({'; '.join(r.get('blockers', []))})")
     head = f"{mode} sync {'ok' if all(r.get('ok') for r in results) else 'BLOCKED'}"
     return f"{head}: " + "; ".join(parts)
+
+
+__all__ = ["_is_private_path"]

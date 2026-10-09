@@ -2,6 +2,9 @@
 # SPDX-License-Identifier: Apache-2.0
 """The sync_one checks: fast-forward, merge, refusal."""
 
+from pathlib import Path
+from typing import Any
+
 from argus.gitsync.git import git
 from argus.gitsync.merge import sync_one
 from argus.gitsync.selftest_fixture import (
@@ -12,13 +15,13 @@ from argus.gitsync.selftest_fixture import (
 )
 
 
-def _sync_one_checks(base, checks):
+def _sync_one_checks(base: Path, checks: list[dict[str, Any]]) -> None:
     # 1. stale start is synced by fast-forward, preserving the remote work.
     d = base / "stale"
     d.mkdir()
     remote, work = _init_remote(d, "w")
     _remote_commit(remote, d, "w")
-    res = sync_one(work, "start")
+    res: dict[str, Any] = sync_one(work, "start")
     _check(
         checks,
         "sync: stale start fast-forwards",
@@ -272,3 +275,6 @@ def _sync_one_checks(base, checks):
         and (work / "a.txt").read_text() == "a1\nlocal edit\n",
         f"overlapping={res.get('overlapping')}",
     )
+
+
+__all__ = ["_sync_one_checks"]

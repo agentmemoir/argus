@@ -11,10 +11,13 @@ import re
 import shlex
 import sys
 from pathlib import Path
+from typing import Any, cast
 
 if not __package__:
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-    import _bootstrap  # noqa: F401 - register the source package
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+    from argus import (
+        _bootstrap as _bootstrap,  # noqa: F401 - register the source package
+    )
 from argus import conventions
 from argus.config.loader import ConfigError
 from argus.conventions import phase_file_parts, phase_run_dir
@@ -122,13 +125,16 @@ def default_run_json(phase_file: str | Path) -> Path:
 def stage_timings(run_json: Path) -> list[tuple[str, float]]:
     """Return the per-visit step durations recorded in a run record."""
     try:
-        record = json.loads(run_json.read_text(encoding="utf-8"))
+        record = cast(
+            "dict[str, Any]", json.loads(run_json.read_text(encoding="utf-8"))
+        )
     except (OSError, ValueError):
         return []
     timings: list[tuple[str, float]] = []
     for event in record.get("events", []):
         if not isinstance(event, dict):
             continue
+        event = cast("dict[str, Any]", event)
         seconds = event.get("duration_s")
         if isinstance(seconds, bool) or not isinstance(seconds, (int, float)):
             continue
@@ -161,7 +167,7 @@ def _safe_reason(reason: str | None) -> str | None:
     return first_line[:180] if first_line else None
 
 
-def _group_phrase(group) -> str:
+def _group_phrase(group: Any) -> str:
     """A trailing clause naming the reservation group, or nothing.
 
     The group is optional because a phase with no declaration runs alone and its
@@ -186,7 +192,7 @@ def format_notification(
     exit_code: int | None = None,
     quiet_minutes: int = 45,
     run_json: Path | None = None,
-    group=None,
+    group: Any = None,
 ) -> str:
     """Format one phase event as a short, user-facing notification."""
     label = phase_label(phase_file)

@@ -4,6 +4,7 @@
 
 import subprocess
 from pathlib import Path
+from typing import Any, cast
 
 from argus import conventions
 from argus.gitsync.git import current_branch, git, git_binary, integration_branch
@@ -18,7 +19,7 @@ from argus.gitsync.selftest_publish import _publish_fixture
 from argus.gitsync.sync import mode_resync
 
 
-def _two_phase_stack_checks(base):
+def _two_phase_stack_checks(base: Path) -> list[tuple[str, object, str]]:
     """Two phases open at once, driven through every step the pipeline uses.
 
     Every other check here exercises one decision. This one walks the sequence
@@ -30,7 +31,7 @@ def _two_phase_stack_checks(base):
     agent harness stay stubbed, but every git operation, every receipt and every
     refusal is the real code against real remotes.
     """
-    results = []
+    results: list[tuple[str, object, str]] = []
     old_branch = conventions.setting("board.branch")
     conventions.override({"board.branch": "main"})
     try:
@@ -49,7 +50,7 @@ def _two_phase_stack_checks(base):
         # the other.
         third_roadmap = "phase-100472-evidence-freshness-sweep.md"
 
-        def reserve(phase):
+        def reserve(phase: int) -> None:
             git(nested, "fetch", "-q", "origin")
             git(nested, "merge", "-q", "--ff-only", "origin/main")
             rd = nested / "runs" / f"phase-{phase:06d}"
@@ -136,13 +137,10 @@ def _two_phase_stack_checks(base):
         git(other, "commit", "-q", "-m", "another machine lands a change")
         git(other, "push", "-q", "origin", base_branch)
         resynced = mode_resync(pub)
-        public_resync = next(
-            (
-                r
-                for r in resynced.get("repos", [])
-                if Path(r.get("repo", "")).resolve() == pub.resolve()
-            ),
-            {},
+        repos: list[dict[str, Any]] = resynced.get("repos", [])
+        public_resync: dict[str, Any] = next(
+            (r for r in repos if Path(r.get("repo", "")).resolve() == pub.resolve()),
+            dict[str, Any](),
         )
         results.append(
             (
@@ -166,7 +164,7 @@ def _two_phase_stack_checks(base):
             100471,
             pull_request="https://github.com/example-org/example-repo/pull/971",
         )
-        carried = two.get("carries_open_phase") or {}
+        carried: dict[str, Any] = two.get("carries_open_phase") or {}
         results.append(
             (
                 "phase two publishes carrying phase one's unmerged work, and says so",
@@ -191,7 +189,8 @@ def _two_phase_stack_checks(base):
                 "checkout",
                 first_done["ok"]
                 and first_done.get("state") == "PUBLISHED"
-                and phase_receipt(pub, 100470).get("state") == "published"
+                and cast("dict[str, Any]", phase_receipt(pub, 100470)).get("state")
+                == "published"
                 and current_branch(pub) == base_branch,
                 f"ok={first_done.get('ok')} state={first_done.get('state')} "
                 f"branch={current_branch(pub)}",
@@ -285,3 +284,6 @@ def _two_phase_stack_checks(base):
     finally:
         conventions.override({"board.branch": old_branch})
     return results
+
+
+__all__ = ["_two_phase_stack_checks"]

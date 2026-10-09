@@ -3,6 +3,7 @@
 """The phase branch and branch-name checks."""
 
 from pathlib import Path
+from typing import Any
 
 from argus.gitsync.branch import ensure_phase_branch
 from argus.gitsync.git import ConfigError, current_branch, git
@@ -11,21 +12,21 @@ from argus.gitsync.paths import assert_phase_branch_unique, phase_branch_for
 from argus.gitsync.selftest_fixture import BOARD_REL, _configure_self_test, _init_remote
 
 
-def _phase_branch_checks(base):
+def _phase_branch_checks(base: Path) -> list[tuple[str, object, str]]:
     """A phase's work must never sit on the integration branch, and a branch
     must never be moved out from under a working tree that holds it."""
-    results = []
+    results: list[tuple[str, object, str]] = []
     d = base / "branch"
     d.mkdir(parents=True)
-    remote, work = _init_remote(d, "w")
+    work: Path = _init_remote(d, "w")[1]
     name = "phase-100440-backup-archive-format-and-directory.md"
     branch = phase_branch_for(100440, name)
 
     # 1. Creating it carries the phase's staged work across untouched.
     (work / "c.txt").write_text("staged baseline\n")
     git(work, "add", "c.txt")
-    blob = git(work, "rev-parse", ":c.txt")[1]
-    res = ensure_phase_branch(work, branch, base="main")
+    blob: str = git(work, "rev-parse", ":c.txt")[1]
+    res: dict[str, Any] = ensure_phase_branch(work, branch, base="main")
     results.append(
         (
             "a phase branch is created from the integration branch and "
@@ -40,8 +41,8 @@ def _phase_branch_checks(base):
     )
 
     # 2. Idempotent: a second tick must not move or recreate anything.
-    head = git(work, "rev-parse", "HEAD")[1]
-    res2 = ensure_phase_branch(work, branch, base="main")
+    head: str = git(work, "rev-parse", "HEAD")[1]
+    res2: dict[str, Any] = ensure_phase_branch(work, branch, base="main")
     results.append(
         (
             "creating it again is a no-op",
@@ -57,10 +58,10 @@ def _phase_branch_checks(base):
     (work / "d.txt").write_text("earlier run\n")
     git(work, "add", "d.txt")
     git(work, "commit", "-q", "-m", "earlier run of this phase")
-    earlier = git(work, "rev-parse", "HEAD")[1]
+    earlier: str = git(work, "rev-parse", "HEAD")[1]
     git(work, "checkout", "-q", "main")
     git(work, "push", "-q", "origin", "main")
-    res3 = ensure_phase_branch(work, branch, base="main")
+    res3: dict[str, Any] = ensure_phase_branch(work, branch, base="main")
     results.append(
         (
             "a leftover phase branch is resumed, not recreated",
@@ -76,7 +77,7 @@ def _phase_branch_checks(base):
     #    working tree that holds unreviewed work between branches is the
     #    operation that can leave that work in pieces.
     git(work, "checkout", "-q", "-b", "someone-elses-work")
-    res4 = ensure_phase_branch(work, branch, base="main")
+    res4: dict[str, Any] = ensure_phase_branch(work, branch, base="main")
     results.append(
         (
             "a checkout on another branch is never switched silently",
@@ -89,7 +90,9 @@ def _phase_branch_checks(base):
 
     # 5. A missing integration branch stops rather than inventing a start point.
     git(work, "checkout", "-q", "main")
-    res5 = ensure_phase_branch(work, "phase/100999-nothing-here", base="no-such-base")
+    res5: dict[str, Any] = ensure_phase_branch(
+        work, "phase/100999-nothing-here", base="no-such-base"
+    )
     results.append(
         (
             "a missing integration branch refuses",
@@ -104,7 +107,9 @@ def _phase_branch_checks(base):
     #    it would strand run state on a branch nobody merges. A name that does
     #    not exist yet, so the check can prove nothing was created.
     fresh = "phase/100440-never-created"
-    res6 = ensure_phase_branch(work, fresh, base="main", integration_only=True)
+    res6: dict[str, Any] = ensure_phase_branch(
+        work, fresh, base="main", integration_only=True
+    )
     results.append(
         (
             "an integration-branch checkout is left where it is, and no "
@@ -121,7 +126,9 @@ def _phase_branch_checks(base):
     #    stop, and a missing integration branch is a stop. Silence here would
     #    let run state be published from an unexpected place.
     git(work, "checkout", "-q", "-b", "unrelated-work")
-    res7 = ensure_phase_branch(work, branch, base="main", integration_only=True)
+    res7: dict[str, Any] = ensure_phase_branch(
+        work, branch, base="main", integration_only=True
+    )
     results.append(
         (
             "an integration-branch checkout on another branch refuses",
@@ -131,7 +138,9 @@ def _phase_branch_checks(base):
             f"blockers={res7.get('blockers')}",
         )
     )
-    res8 = ensure_phase_branch(work, branch, base="no-such-base", integration_only=True)
+    res8: dict[str, Any] = ensure_phase_branch(
+        work, branch, base="no-such-base", integration_only=True
+    )
     results.append(
         (
             "an integration-branch checkout with no base refuses",
@@ -142,7 +151,7 @@ def _phase_branch_checks(base):
     return results
 
 
-def _phase_branch_name_checks(base):
+def _phase_branch_name_checks(base: Path) -> list[tuple[str, object, str]]:
     """The published branch name must not carry the phase number.
 
     The branch is pushed to the public repository, where the number is an
@@ -151,7 +160,7 @@ def _phase_branch_name_checks(base):
     against the phase the caller means: that check now reads the file name,
     because the branch no longer carries the number at all.
     """
-    results = []
+    results: list[tuple[str, object, str]] = []
     fixture = base / "branch-name"
     _configure_self_test(
         fixture, fixture / BOARD_REL, roadmap=Path(BOARD_REL) / "roadmap"
@@ -191,7 +200,7 @@ def _phase_branch_name_checks(base):
     (roadmap / name).write_text("x\n")
     clash_name = "phase-100460-backup-archive-format-and-directory.md"
     (roadmap / clash_name).write_text("x\n")
-    clash = assert_phase_branch_unique(root, 100440, name)
+    clash: dict[str, Any] = assert_phase_branch_unique(root, 100440, name)
     results.append(
         (
             "a behaviour another phase also claims is refused",
@@ -201,7 +210,7 @@ def _phase_branch_name_checks(base):
     )
 
     (roadmap / clash_name).unlink()
-    unique = assert_phase_branch_unique(root, 100440, name)
+    unique: dict[str, Any] = assert_phase_branch_unique(root, 100440, name)
     results.append(
         (
             "a behaviour only this phase claims is accepted",
@@ -219,7 +228,7 @@ def _phase_branch_name_checks(base):
     elsewhere.mkdir()
     (elsewhere / name).write_text("x\n")
     (elsewhere / clash_name).write_text("x\n")
-    same_name_only_in_derived = assert_phase_branch_unique(
+    same_name_only_in_derived: dict[str, Any] = assert_phase_branch_unique(
         named, 100440, name, elsewhere
     )
     results.append(
@@ -230,7 +239,9 @@ def _phase_branch_name_checks(base):
             f"blockers={same_name_only_in_derived.get('blockers')}",
         )
     )
-    relative = assert_phase_branch_unique(named, 100440, name, "other-roadmap")
+    relative: dict[str, Any] = assert_phase_branch_unique(
+        named, 100440, name, "other-roadmap"
+    )
     results.append(
         (
             "a relative configured folder resolves against the repository root",
@@ -246,7 +257,7 @@ def _phase_branch_name_checks(base):
     # reached the uniqueness check at all refuses, and one that dropped the
     # folder would carry on to try to cut a branch in a directory that is not a
     # repository, which is a different failure.
-    refused = mode_branch(named, 100440, name, "other-roadmap")
+    refused: dict[str, Any] = mode_branch(named, 100440, name, "other-roadmap")
     results.append(
         (
             "the branch mode scans the configured folder and refuses the collision",
@@ -257,3 +268,6 @@ def _phase_branch_name_checks(base):
         )
     )
     return results
+
+
+__all__ = ["_phase_branch_checks", "_phase_branch_name_checks"]

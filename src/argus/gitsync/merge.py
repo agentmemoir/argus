@@ -3,6 +3,7 @@
 """One sync attempt: fast-forward, or a plain merge, and the refusal that stops it."""
 
 from pathlib import Path
+from typing import Any, cast
 
 from argus.gitsync.git import (
     FETCH_TIMEOUT_S,
@@ -17,7 +18,9 @@ from argus.gitsync.git import (
 )
 
 
-def _fast_forward(info, repo, upstream, behind):
+def _fast_forward(
+    info: dict[str, Any], repo: str | Path, upstream: str, behind: int
+) -> dict[str, Any]:
     """Integrate a strictly-behind remote by fast-forward only (no merge
     commit).
 
@@ -60,7 +63,14 @@ def _fast_forward(info, repo, upstream, behind):
     )
 
 
-def _merge(info, repo, upstream, ahead, behind, abort_on_conflict=True):
+def _merge(
+    info: dict[str, Any],
+    repo: str | Path,
+    upstream: str,
+    ahead: int,
+    behind: int,
+    abort_on_conflict: bool = True,
+) -> dict[str, Any]:
     """Integrate diverged histories with a plain merge commit: accept the
     remote changes while keeping every local commit. Never rebases or
     forces. On a real conflict, start mode aborts and halts; push mode
@@ -98,7 +108,7 @@ def _merge(info, repo, upstream, ahead, behind, abort_on_conflict=True):
     )
     if rc != 0:
         _, conflicts, _ = git(repo, "diff", "--name-only", "--diff-filter=U")
-        aborted = None
+        aborted: bool | None = None
         if abort_on_conflict:
             _, _, ab_err = git(repo, "merge", "--abort")
             aborted = not ab_err
@@ -130,7 +140,12 @@ def _merge(info, repo, upstream, ahead, behind, abort_on_conflict=True):
     )
 
 
-def sync_one(repo, mode, remote=None, branch=None):
+def sync_one(
+    repo: str | Path,
+    mode: str,
+    remote: str | None = None,
+    branch: str | None = None,
+) -> dict[str, Any]:
     """Bring one checkout in line with its remote, accepting changes where
     that is mechanically safe.
 
@@ -141,14 +156,14 @@ def sync_one(repo, mode, remote=None, branch=None):
     push, and a conflict is left in place for the finalize agent to
     resolve. Returns a result dict; ok is the success flag."""
     repo = Path(repo).resolve()
-    info = {"repo": str(repo), "mode": mode}
+    info: dict[str, Any] = {"repo": str(repo), "mode": mode}
     if not is_git_repo(repo):
         return blocked(info, "not a git working tree")
     cur_branch, cur_remote, remote_branch, why = resolve_upstream(repo)
     if why:
         return blocked(info, why)
     branch = branch or cur_branch
-    remote = remote or cur_remote
+    remote = cast("str", remote or cur_remote)
     if branch != cur_branch:
         return blocked(info, f"checkout is on {cur_branch!r}, not {branch!r}")
     info.update(branch=branch, remote=remote)

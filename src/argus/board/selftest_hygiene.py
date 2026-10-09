@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import tempfile
 from pathlib import Path
+from typing import Any
 
 from argus.board.core import WORKTREE_PREFIX, CoordinationUnavailable
 from argus.board.git import _git, git_binary
@@ -17,22 +18,22 @@ from argus.board.store import ReservationStore
 from argus.board.worktree import sweep_stale_worktrees
 
 
-def _no_identity(private):
+def _no_identity(private: Path) -> None:
     """Take every git identity away, so the commit step cannot succeed."""
     for key in ("user.email", "user.name"):
         _git(private, "config", key, "")
 
 
-def _worktree_entries(private):
+def _worktree_entries(private: Path) -> str:
     rc, out, _err = _git(private, "worktree", "list")
     return out if rc == 0 else ""
 
 
-def _leftover_checkouts():
+def _leftover_checkouts() -> list[Path]:
     return sorted(Path(tempfile.gettempdir()).glob(f"{WORKTREE_PREFIX}*"))
 
 
-def drop_checkouts_under(path):
+def drop_checkouts_under(path: str | Path) -> int:
     """Remove kept checkouts that belong to a fixture rooted at ``path``.
 
     A checkout deliberately survives a rejected push, and a self-test provokes
@@ -57,7 +58,7 @@ def drop_checkouts_under(path):
     return dropped
 
 
-def _checkout_hygiene_checks(checks, base):
+def _checkout_hygiene_checks(checks: list[dict[str, Any]], base: Path) -> None:
     """A failed commit must leave no checkout, and a rejected push must leave one.
 
     The two are opposites on purpose. A commit that failed has no commit, so
@@ -191,3 +192,6 @@ def _checkout_hygiene_checks(checks, base):
     finally:
         drop_checkouts_under(sandbox)
         shutil.rmtree(sandbox, ignore_errors=True)
+
+
+__all__ = ["_checkout_hygiene_checks"]

@@ -4,6 +4,7 @@
 
 import json
 from pathlib import Path
+from typing import Any, cast
 
 from argus import conventions
 from argus.board.core import (
@@ -20,7 +21,7 @@ from argus.board.core import (
 from argus.conventions import board_repo
 
 
-def state_rel():
+def state_rel() -> Path:
     configured = conventions.setting("board.file")
     path = Path(configured)
     if path.is_absolute():
@@ -40,7 +41,7 @@ def state_rel():
     return path
 
 
-def state_path(repo):
+def state_path(repo: str | Path) -> Path:
     root = Path(repo).resolve()
     path = root / state_rel()
     try:
@@ -52,13 +53,15 @@ def state_path(repo):
     return path
 
 
-def _empty_state():
-    return {"version": COORDINATION_VERSION, "phases": {}}
+def _empty_state() -> dict[str, Any]:
+    phases: dict[str, Any] = {}
+    return {"version": COORDINATION_VERSION, "phases": phases}
 
 
-def _validate_state(state):
+def _validate_state(state: Any) -> dict[str, Any]:
     if not isinstance(state, dict):
         raise CoordinationUnavailable("coordination state is not an object")
+    state = cast("dict[str, Any]", state)
     if state.get("version") != COORDINATION_VERSION:
         raise CoordinationUnavailable(
             f"unsupported coordination state version: {state.get('version')!r}"
@@ -66,11 +69,13 @@ def _validate_state(state):
     phases = state.get("phases")
     if not isinstance(phases, dict):
         raise CoordinationUnavailable("coordination state.phases is not an object")
+    phases = cast("dict[Any, Any]", phases)
     for key, record in phases.items():
         if not isinstance(key, str) or not PHASE_KEY_RE.fullmatch(key):
             raise CoordinationUnavailable(f"invalid phase key in state: {key!r}")
         if not isinstance(record, dict):
             raise CoordinationUnavailable(f"phase {key} record is not an object")
+        record = cast("dict[str, Any]", record)
         for field in ("status", "machine_id", "reservation_id"):
             if not isinstance(record.get(field), str) or not record[field]:
                 raise CoordinationUnavailable(f"phase {key} has an invalid {field}")
@@ -93,6 +98,7 @@ def _validate_state(state):
     if publication is not None:
         if not isinstance(publication, dict):
             raise CoordinationUnavailable("publication lock is not an object")
+        publication = cast("dict[str, Any]", publication)
         for field in ("machine_id", "reservation_id", "phase", "generation"):
             if field not in publication:
                 raise CoordinationUnavailable(f"publication lock is missing {field}")
@@ -103,7 +109,7 @@ def _validate_state(state):
     return state
 
 
-def _read_state_file(path, *, allow_missing=True):
+def _read_state_file(path: Path, *, allow_missing: bool = True) -> dict[str, Any]:
     try:
         raw = path.read_text()
     except FileNotFoundError as exc:
@@ -121,14 +127,19 @@ def _read_state_file(path, *, allow_missing=True):
     return _validate_state(state)
 
 
-def _write_state_file(path, state):
+def _write_state_file(path: Path, state: object) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(path.name + ".tmp")
     temporary.write_text(json.dumps(state, indent=2, sort_keys=True) + "\n")
     temporary.replace(path)
 
 
-def _owner_matches(record, machine_id, reservation_id, generation):
+def _owner_matches(
+    record: dict[str, Any],
+    machine_id: str,
+    reservation_id: str,
+    generation: int,
+) -> bool:
     return (
         record.get("machine_id") == machine_id
         and record.get("reservation_id") == reservation_id
@@ -136,7 +147,7 @@ def _owner_matches(record, machine_id, reservation_id, generation):
     )
 
 
-def _reservation_from_record(record):
+def _reservation_from_record(record: dict[str, Any]) -> dict[str, Any]:
     return {
         "phase": str(record.get("_phase", "")),
         "status": record.get("status"),
@@ -146,3 +157,11 @@ def _reservation_from_record(record):
         "run_id": record.get("run_id"),
         "base_revisions": record.get("base_revisions"),
     }
+
+
+__all__ = [
+    "_owner_matches",
+    "_read_state_file",
+    "_reservation_from_record",
+    "_write_state_file",
+]

@@ -5,6 +5,7 @@
 import datetime as _datetime
 import json
 import re
+from typing import Any
 
 #: A branch name used only in isolated self-tests.
 SELF_TEST_BRANCH = "fixture-claims"
@@ -128,7 +129,12 @@ class CoordinationUnavailable(CoordinationError):
 class ReservationConflict(CoordinationError):
     """Another owner, or another reservation, already owns the phase."""
 
-    def __init__(self, phase, record=None, reason="phase is already reserved"):
+    def __init__(
+        self,
+        phase: str | int,
+        record: dict[str, Any] | None = None,
+        reason: str = "phase is already reserved",
+    ) -> None:
         self.phase = phase
         self.record = record or {}
         self.reason = reason
@@ -153,7 +159,12 @@ class ReservationCooldown(CoordinationError):
     and reports the time left; a request never shortens the window.
     """
 
-    def __init__(self, phase, remaining_seconds, record=None):
+    def __init__(
+        self,
+        phase: str | int,
+        remaining_seconds: int | float,
+        record: dict[str, Any] | None = None,
+    ) -> None:
         self.phase = phase
         self.remaining_seconds = int(remaining_seconds)
         self.record = record or {}
@@ -167,12 +178,12 @@ class PublicationBusy(CoordinationError):
 
 
 class _Mutation:
-    def __init__(self, changed, value):
+    def __init__(self, changed: bool, value: Any) -> None:
         self.changed = changed
         self.value = value
 
 
-def _iso(moment=None):
+def _iso(moment: _datetime.datetime | None = None) -> str:
     """Format a moment (or now) as the board's Zulu millisecond stamp."""
     moment = moment or _datetime.datetime.now(_datetime.UTC)
     if moment.tzinfo is None:
@@ -180,7 +191,9 @@ def _iso(moment=None):
     return moment.isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
 
-def _as_moment(value):
+def _as_moment(
+    value: _datetime.datetime | str | None,
+) -> _datetime.datetime | None:
     """Normalize an optional injected clock to an aware UTC datetime.
 
     ``None`` means the caller did not inject a clock, and the caller then reads
@@ -196,7 +209,7 @@ def _as_moment(value):
     return _parse_moment(value, what="time")
 
 
-def _parse_moment(value, *, what="timestamp"):
+def _parse_moment(value: object, *, what: str = "timestamp") -> _datetime.datetime:
     """Parse a board stamp; a value nobody can parse fails closed."""
     if not isinstance(value, str) or not value:
         raise CoordinationUnavailable(f"invalid {what}: {value!r}")
@@ -209,11 +222,11 @@ def _parse_moment(value, *, what="timestamp"):
     return moment
 
 
-def _now():
+def _now() -> str:
     return _iso()
 
 
-def _phase_key(phase):
+def _phase_key(phase: Any) -> tuple[str, int]:
     try:
         if isinstance(phase, bool):
             raise ValueError
@@ -225,7 +238,7 @@ def _phase_key(phase):
     return f"{number:06d}", number
 
 
-def _validate_machine_id(machine_id):
+def _validate_machine_id(machine_id: object) -> str:
     if not isinstance(machine_id, str) or not MACHINE_ID_RE.fullmatch(machine_id):
         raise CoordinationError(
             "machine_id must contain only letters, numbers, '.', '_' or '-' "
@@ -234,7 +247,7 @@ def _validate_machine_id(machine_id):
     return machine_id
 
 
-def _validate_branch(branch):
+def _validate_branch(branch: object) -> str:
     if (
         not isinstance(branch, str)
         or not BRANCH_RE.fullmatch(branch)
@@ -246,13 +259,13 @@ def _validate_branch(branch):
     return branch
 
 
-def _validate_remote(remote):
+def _validate_remote(remote: object) -> str:
     if not isinstance(remote, str) or not REMOTE_RE.fullmatch(remote):
         raise CoordinationError(f"invalid Git remote: {remote!r}")
     return remote
 
 
-def _validate_reservation_id(reservation_id):
+def _validate_reservation_id(reservation_id: object) -> str:
     if not isinstance(reservation_id, str) or not RESERVATION_ID_RE.fullmatch(
         reservation_id
     ):
@@ -263,7 +276,7 @@ def _validate_reservation_id(reservation_id):
     return reservation_id
 
 
-def _validate_generation(generation):
+def _validate_generation(generation: object) -> int:
     if (
         isinstance(generation, bool)
         or not isinstance(generation, int)
@@ -273,18 +286,34 @@ def _validate_generation(generation):
     return generation
 
 
-def _validate_status(status):
+def _validate_status(status: str) -> str:
     if status not in STATUSES:
         raise CoordinationError(f"invalid reservation status: {status!r}")
     return status
 
 
-def _safe_detail(text, limit=500):
+def _safe_detail(text: str | None, limit: int = 500) -> str:
     """Keep diagnostics useful without echoing a credential-bearing URL."""
     text = (text or "").replace("\n", " ").strip()
     text = re.sub(r"(https?://)[^/@\s]+@", r"\1<redacted>@", text)
     return text[:limit]
 
 
-def _print_json(value):
+def _print_json(value: object) -> None:
     print(json.dumps(value, indent=2, sort_keys=True))
+
+
+__all__ = [
+    "_Mutation",
+    "_as_moment",
+    "_now",
+    "_phase_key",
+    "_print_json",
+    "_safe_detail",
+    "_validate_branch",
+    "_validate_generation",
+    "_validate_machine_id",
+    "_validate_remote",
+    "_validate_reservation_id",
+    "_validate_status",
+]

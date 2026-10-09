@@ -4,6 +4,7 @@
 
 import re
 from pathlib import Path
+from typing import Any
 
 from argus.conventions import board_repo, runs_dir
 from argus.gitsync.git import is_git_repo, summarize
@@ -13,13 +14,13 @@ from argus.gitsync.receipts import phase_receipt
 from argus.gitsync.tidy import return_to_integration, tidy_published_checkout
 
 
-def result_exit_code(out):
+def result_exit_code(out: dict[str, Any]) -> int:
     if out.get("state") in {"COORDINATION_UNAVAILABLE", "CONFIG_ERROR"}:
         return 2
     return 0 if out.get("ok") else 1
 
 
-def mode_published(root, phase):
+def mode_published(root: str | Path, phase: int | str) -> dict[str, Any]:
     """Confirm a human merged the phase, mark it published, and tidy up.
 
     Order matters. The receipt is only written after the merge is verified, and
@@ -43,12 +44,12 @@ def mode_published(root, phase):
             "repos": [marked],
             "summary": summarize([marked], "published"),
         }
-    repos = [marked]
+    repos: list[dict[str, Any]] = [marked]
     # A member of a group does not take the checkout with it. One branch and one
     # pull request cover the whole group, so the members that have not run yet
     # still need that branch; moving the checkout to the integration branch here
     # would take it out from under the next member's launch.
-    receipt = phase_receipt(root, phase)
+    receipt = phase_receipt(root, int(phase))
     members = list(receipt.get("group") or []) if isinstance(receipt, dict) else []
     if members and not _group_all_published(root, members):
         pending = [m for m in members if not _member_published(root, m)]
@@ -86,12 +87,12 @@ def mode_published(root, phase):
     }
 
 
-def mode_tidy(root):
+def mode_tidy(root: str | Path) -> dict[str, Any]:
     """Return a checkout sitting on a published phase branch to master."""
     root = Path(root).resolve()
-    repos = [tidy_published_checkout(root)]
+    repos: list[dict[str, Any]] = [tidy_published_checkout(root)]
     nested = board_repo(root)
-    if is_git_repo(nested):
+    if nested is not None and is_git_repo(nested):
         repos.append(tidy_published_checkout(nested))
     ok = all(r["ok"] for r in repos)
     return {
@@ -102,11 +103,14 @@ def mode_tidy(root):
     }
 
 
-def _run_phase_numbers(root):
+def _run_phase_numbers(root: str | Path) -> list[int]:
     """Every phase number with a run directory under ``runs/``, lowest first."""
-    numbers = []
+    numbers: list[int] = []
     for path in sorted(runs_dir(root).glob("phase-*")):
         match = re.fullmatch(r"phase-(\d+)", path.name)
         if match and path.is_dir():
             numbers.append(int(match.group(1)))
     return numbers
+
+
+__all__ = ["_run_phase_numbers"]

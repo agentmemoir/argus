@@ -2,9 +2,16 @@
 # SPDX-License-Identifier: Apache-2.0
 """The configuration schema: the key table, its shell variables, and the flag overrides."""
 
-import collections
+from typing import NamedTuple
 
-Field = collections.namedtuple("Field", "key type required")
+
+class Field(NamedTuple):
+    """One schema row: a dotted key, its value type, and its requirement."""
+
+    key: str
+    type: str
+    required: str
+
 
 # The schema, in report order. `required` is one of:
 #   "required" - always needed;

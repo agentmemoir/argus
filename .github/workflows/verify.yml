@@ -32,6 +32,8 @@ jobs:
           uv run ruff format --check .
       - name: Type-check
         run: make typecheck
+      - name: Type-check (strict)
+        run: make typecheck-strict
       - name: Check the line limit
         run: make lines
 

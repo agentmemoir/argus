@@ -3,6 +3,8 @@
 """The store root: construction, the board branch, and the board read."""
 
 import json
+from pathlib import Path
+from typing import Any
 
 from argus.board.branch import (
     _branch_setting,
@@ -18,13 +20,19 @@ from argus.board.state import _empty_state, _validate_state, state_rel
 
 
 class _StoreBase:
-    def __init__(self, repo_root, private_repo=None, branch=None, remote=None):
+    def __init__(
+        self,
+        repo_root: str | Path,
+        private_repo: str | Path | None = None,
+        branch: str | None = None,
+        remote: str | None = None,
+    ) -> None:
         self.root, self.private = _resolve_private_repo(repo_root, private_repo)
         self.branch = _branch_setting(branch)
         self.remote = _remote_setting(remote)
         _assert_private_boundary(self.root, self.private, self.remote)
 
-    def migrate_board(self):
+    def migrate_board(self) -> bool:
         """Create the board's branch if the remote does not have it yet.
 
         This is the deliberate way the branch comes into being, and it is named
@@ -36,7 +44,7 @@ class _StoreBase:
         """
         return ensure_board_branch(self.private, self.remote, self.branch)
 
-    def read(self):
+    def read(self) -> tuple[dict[str, Any], str]:
         ref, commit = _fetch_branch_ref(self.private, self.remote, self.branch)
         initialized = _state_initialized(self.private, ref)
         exists_rc, _, _ = _git(
@@ -62,3 +70,6 @@ class _StoreBase:
                 f"coordination state does not parse: {exc}"
             ) from exc
         return _validate_state(state), commit
+
+
+__all__ = ["_StoreBase"]

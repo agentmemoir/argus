@@ -3,6 +3,7 @@
 """Whether a phase already sits on the integration branch, and which predecessor is still open."""
 
 from pathlib import Path
+from typing import Any, cast
 
 from argus.gitsync.git import integration_branch, is_git_repo
 from argus.gitsync.receipts import (
@@ -15,7 +16,9 @@ from argus.gitsync.receipts import (
 )
 
 
-def phase_work_on_integration(root, phase, receipt=None):
+def phase_work_on_integration(
+    root: str | Path, phase: int, receipt: dict[str, Any] | None = None
+) -> dict[str, Any]:
     """Whether this phase's code is already on the integration branch.
 
     One derived fact, asked one way, because two places need this answer and
@@ -48,7 +51,7 @@ def phase_work_on_integration(root, phase, receipt=None):
     ``reason``.
     """
     root = Path(root).resolve()
-    info = {
+    info: dict[str, Any] = {
         "phase": f"{int(phase):06d}",
         "on_integration": False,
         "confirmed_by": None,
@@ -70,8 +73,11 @@ def phase_work_on_integration(root, phase, receipt=None):
     # URL when it does not. That second path is the fix for a receipt written
     # before the reference was recorded: it names the pull request in plain
     # sight, and the old code simply never asked about it.
-    ref = receipt.get("pull_request_ref") or {}
-    if not isinstance(ref, dict) or not ref.get("number"):
+    ref: dict[str, Any] = {}
+    candidate = receipt.get("pull_request_ref")
+    if isinstance(candidate, dict):
+        ref = cast("dict[str, Any]", candidate)
+    if not ref.get("number"):
         ref = pull_request_ref(receipt.get("pull_request")) or {}
     github = {"state": "not-asked", "detail": "no pull request reference"}
     if ref.get("number"):
@@ -108,7 +114,7 @@ def phase_work_on_integration(root, phase, receipt=None):
     return info
 
 
-def awaiting_review(repo, number):
+def awaiting_review(repo: str | Path, number: int) -> dict[str, Any] | None:
     """The branch and pull request a phase is waiting on, or None.
 
     A phase is waiting for a human when its receipt says so. The receipt is
@@ -132,7 +138,7 @@ def awaiting_review(repo, number):
     }
 
 
-def open_predecessor(root, phase):
+def open_predecessor(root: str | Path, phase: int | str) -> dict[str, Any] | None:
     """The highest earlier phase whose code is not yet on master, or None.
 
     A phase that is waiting for review is finished work. The next phase must be
@@ -158,7 +164,7 @@ def open_predecessor(root, phase):
     Returns ``{"phase", "branch", "pull_request", "head"}`` or None.
     """
     root = Path(root).resolve()
-    best = None
+    best: dict[str, Any] | None = None
     for number, _entry in _phase_run_entries(root):
         if number >= int(phase):
             continue

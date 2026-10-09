@@ -4,17 +4,29 @@
 
 import json
 import subprocess
+from pathlib import Path
+from typing import Any
 
 from argus.board.core import PUBLICATION_NAME, _now
 from argus.board.git import _git, _head, git_binary
 from argus.board.state import _write_state_file, state_rel
+from argus.board.store import ReservationStore
 
 
-def _self_test_check(checks, name, ok, detail=""):
+def _self_test_check(
+    checks: list[dict[str, Any]],
+    name: str,
+    ok: object,
+    detail: str = "",
+) -> None:
     checks.append({"check": name, "ok": bool(ok), "detail": detail})
 
 
-def _git_test_repo(base, name, initial_state=None):
+def _git_test_repo(
+    base: Path,
+    name: str,
+    initial_state: dict[str, Any] | None = None,
+) -> tuple[Path, list[Path]]:
     """Create one local bare remote and one client checkout for self-tests."""
     remote = base / f"{name}-remote.git"
     subprocess.run(
@@ -40,7 +52,7 @@ def _git_test_repo(base, name, initial_state=None):
     _git(seed, "add", ".")
     _git(seed, "commit", "-q", "-m", "coordination seed")
     _git(seed, "push", "-q", "-u", "origin", "master")
-    clients = []
+    clients: list[Path] = []
     for index in (1, 2):
         client = base / f"{name}-client-{index}"
         subprocess.run(
@@ -55,12 +67,12 @@ def _git_test_repo(base, name, initial_state=None):
     return remote, clients
 
 
-def _self_test_receipt(store, reservation):
+def _self_test_receipt(store: ReservationStore, reservation: dict[str, Any]) -> Path:
     _git(store.private, "fetch", "origin", "master")
     _git(store.private, "merge", "--ff-only", "origin/master")
     path = store.private / "runs" / f"phase-{reservation['phase']}" / PUBLICATION_NAME
     path.parent.mkdir(parents=True, exist_ok=True)
-    payload = {
+    payload: dict[str, Any] = {
         "version": 1,
         "phase": reservation["phase"],
         "state": "published",
@@ -78,3 +90,6 @@ def _self_test_receipt(store, reservation):
     _git(store.private, "commit", "-q", "-m", "test publication receipt")
     _git(store.private, "push", "origin", "HEAD:master")
     return path
+
+
+__all__ = ["_git_test_repo", "_self_test_check", "_self_test_receipt"]

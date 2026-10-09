@@ -22,7 +22,7 @@ from argus.roadmap.selftest_fixture import BOARD_REL
 from argus.roadmap.server import RoadmapSource
 
 
-def _evidence_checks():
+def _evidence_checks() -> None:
     """Each completion marker alone, and the folder a machine was told to read."""
     with tempfile.TemporaryDirectory() as tmp:
         repo = Path(tmp).resolve()
@@ -264,3 +264,6 @@ def _evidence_checks():
         ), reported_path(repo, named / "phase-100020-named.md")
         # The file's value selects the roadmap when no CLI override is passed.
         assert RoadmapSource(repo).roadmap == repo / BOARD_REL / "roadmap"
+
+
+__all__ = ["_evidence_checks"]

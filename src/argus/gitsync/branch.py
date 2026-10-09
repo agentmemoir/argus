@@ -3,6 +3,7 @@
 """Placing a checkout on a phase branch, and checking both out."""
 
 from pathlib import Path
+from typing import Any
 
 from argus.conventions import board_repo
 from argus.gitsync.git import (
@@ -16,7 +17,12 @@ from argus.gitsync.git import (
 )
 
 
-def ensure_phase_branch(repo, branch, base=None, integration_only=False):
+def ensure_phase_branch(
+    repo: str | Path,
+    branch: str,
+    base: str | None = None,
+    integration_only: bool = False,
+) -> dict[str, Any]:
     """Put a checkout on its phase branch, creating it from ``base`` if needed.
 
     Idempotent, because a driver tick runs more than once and a phase that is
@@ -58,7 +64,7 @@ def ensure_phase_branch(repo, branch, base=None, integration_only=False):
     """
     repo = Path(repo).resolve()
     base = base or integration_branch(repo)
-    info = {"repo": str(repo), "branch": branch, "base": base}
+    info: dict[str, Any] = {"repo": str(repo), "branch": branch, "base": base}
     if not is_git_repo(repo):
         return blocked(info, "not a git working tree")
     # Recorded up front so every return below, blocked ones included, reports
@@ -203,7 +209,9 @@ def ensure_phase_branch(repo, branch, base=None, integration_only=False):
     )
 
 
-def branch_phase_checkouts(root, branch, base=None):
+def branch_phase_checkouts(
+    root: str | Path, branch: str, base: str | None = None
+) -> list[dict[str, Any]]:
     """Put the public checkout on ``branch`` and leave the private one alone.
 
     The two checkouts are reviewed in two different ways, so they are branched
@@ -235,7 +243,9 @@ def branch_phase_checkouts(root, branch, base=None):
     """
     root = Path(root).resolve()
     private = board_repo(root)
-    targets = [root] + ([private] if is_git_repo(private) else [])
+    targets: list[Path] = [root] + (
+        [private] if is_git_repo(private) and private else []
+    )
     return [
         ensure_phase_branch(
             r,

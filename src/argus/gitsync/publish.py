@@ -4,6 +4,7 @@
 
 import json
 from pathlib import Path
+from typing import Any, cast
 
 from argus.conventions import board_repo, phase_run_dir
 from argus.gitsync.git import (
@@ -23,7 +24,7 @@ from argus.gitsync.receipts import (
 from argus.gitsync.runstate import _commit_and_push_run_state, _phase_run_pathspec
 
 
-def _commit_phase_receipt(root, phase):
+def _commit_phase_receipt(root: str | Path, phase: int | str) -> dict[str, Any]:
     """Commit and push one phase's run directory in the private checkout.
 
     ``mark_phase_published`` rewrites a merged phase's receipt from
@@ -49,7 +50,7 @@ def _commit_phase_receipt(root, phase):
     itself fails the receipt is still dirty and nobody owns it, so
     ``mark_phase_published`` restores the previous bytes; see it for why.
     """
-    private = board_repo(root)
+    private = cast("Path", board_repo(root))
     return _commit_and_push_run_state(
         private,
         f"pipeline: publish completion receipt for phase {int(phase):06d}",
@@ -57,7 +58,12 @@ def _commit_phase_receipt(root, phase):
     )
 
 
-def mark_phase_published(root, phase, public_commit=None, private_commit=None):
+def mark_phase_published(
+    root: str | Path,
+    phase: int | str,
+    public_commit: str | None = None,
+    private_commit: str | None = None,
+) -> dict[str, Any]:
     """Record that a human merged a phase's pull request.
 
     This is the only path from ``awaiting_review`` to ``published``, and it
@@ -89,9 +95,9 @@ def mark_phase_published(root, phase, public_commit=None, private_commit=None):
     Returns a result dict; ok is the success flag.
     """
     root = Path(root).resolve()
-    private = board_repo(root)
-    info = {"repo": str(root), "phase": f"{int(phase):06d}"}
-    receipt = phase_receipt(root, phase)
+    private = cast("Path", board_repo(root))
+    info: dict[str, Any] = {"repo": str(root), "phase": f"{int(phase):06d}"}
+    receipt = phase_receipt(root, int(phase))
     if not receipt:
         return blocked(info, "no publication receipt for this phase")
     if receipt.get("state") == "published":
@@ -105,8 +111,8 @@ def mark_phase_published(root, phase, public_commit=None, private_commit=None):
         return blocked(
             info, f"receipt state is {receipt.get('state')!r}, not awaiting review"
         )
-    merged = {}
-    confirmed_by = {}
+    merged: dict[str, Any] = {}
+    confirmed_by: dict[str, str] = {}
     github = {"state": "not-asked", "detail": "no pull request reference"}
     for label, checkout, want in (
         ("public", root, public_commit),
@@ -126,8 +132,11 @@ def mark_phase_published(root, phase, public_commit=None, private_commit=None):
             # names its pull request in plain sight, and asking GitHub about it
             # is the only way a squash-merged phase is ever recognised on a host
             # where the commit-id test cannot see the merge.
-            ref = receipt.get("pull_request_ref") or {}
-            if not isinstance(ref, dict) or not ref.get("number"):
+            ref: dict[str, Any] = {}
+            stored_ref = receipt.get("pull_request_ref")
+            if isinstance(stored_ref, dict):
+                ref = cast("dict[str, Any]", stored_ref)
+            if not ref.get("number"):
                 ref = pull_request_ref(receipt.get("pull_request")) or {}
             if ref.get("number"):
                 state, detail = gh_pull_request_state(
@@ -186,7 +195,7 @@ def mark_phase_published(root, phase, public_commit=None, private_commit=None):
                 hint="merge the pull request, then rerun; a receipt is never "
                 "edited into claiming a merge that did not happen",
             )
-    path = phase_run_dir(root, phase) / "publication.json"
+    path = phase_run_dir(root, int(phase)) / "publication.json"
     data = dict(receipt)
     data["state"] = "published"
     data["public_commit"] = merged["public"]
@@ -245,7 +254,7 @@ def mark_phase_published(root, phase, public_commit=None, private_commit=None):
     )
 
 
-def _phase_reservations_now():
+def _phase_reservations_now() -> Any:
     from argus.board.reservations import _now
 
     return _now()

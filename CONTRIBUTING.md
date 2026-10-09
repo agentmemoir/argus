@@ -22,6 +22,7 @@ Run the checks before opening a pull request:
 make lint          # ruff check
 make fmt-check     # formatting, 88 columns
 make typecheck     # mypy over the package
+make typecheck-strict # pyright strict over the package and the suite
 make lines         # the 350-line per-file limit
 make leakscan      # the published tree carries no host path, credential, or run state
 make example-check # the bundled example loads and passes the readiness report
@@ -38,10 +39,9 @@ CI runs the lint, format, type, and line-limit checks, `make leakscan`, `make ex
 ## Rules That Matter Here
 
 - **One formatter: `ruff format`, 88 columns.** Never hand-format.
-- **Types: mypy is the gate, at its default level.** `make typecheck` must
-  pass. Strict mode and a shipped `py.typed` are the target once the large
-  modules are split and annotated; until then, new code keeps the default gate
-  green.
+- **Types: mypy at its default level over the package, pyright strict over the
+  package and the suite.** `make typecheck` and `make typecheck-strict` must
+  pass. A shipped `py.typed` is the open step of the recorded target.
 - **No Python file may exceed 350 lines**, comments and blank lines included.
   `make lines` must pass. New files must fit; the files still above the limit
   are listed in the Makefile and shrink one per session.

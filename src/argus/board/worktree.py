@@ -7,7 +7,9 @@ import datetime as _datetime
 import shutil
 import sys
 import tempfile
+from collections.abc import Callable, Generator
 from pathlib import Path
+from typing import Any
 
 from argus.board.branch import (
     _fetch_branch_ref,
@@ -20,6 +22,7 @@ from argus.board.core import (
     WORKTREE_PREFIX,
     WORKTREE_SWEEP_AGE_S,
     CoordinationUnavailable,
+    _Mutation,
     _safe_detail,
 )
 from argus.board.git import _git, _head, _is_git_repo
@@ -42,21 +45,21 @@ class _Checkout:
     nothing at all, because the commit is what would have held it.
     """
 
-    def __init__(self, private, parent, path):
+    def __init__(self, private: Path, parent: Path, path: Path) -> None:
         self.private = private
         self.parent = parent
         self.path = path
         self.keep = False
         #: Set when the checkout could not be removed, so the caller can name
         #: the folder in whatever it reports about the failure.
-        self.stranded = None
+        self.stranded: str | None = None
 
-    def __fspath__(self):
+    def __fspath__(self) -> str:
         return str(self.path)
 
 
 @contextlib.contextmanager
-def _detached_worktree(private, ref):
+def _detached_worktree(private: Path, ref: str) -> Generator[_Checkout, None, None]:
     """Yield a disposable checkout without taking the phase branch."""
     parent = Path(tempfile.mkdtemp(prefix=WORKTREE_PREFIX))
     checkout = _Checkout(private, parent, parent / "checkout")
@@ -89,13 +92,13 @@ def _detached_worktree(private, ref):
     _remove_checkout(checkout)
 
 
-def _discard_checkout_contents(checkout):
+def _discard_checkout_contents(checkout: _Checkout) -> None:
     """Make a dirty checkout clean again, so an ordinary removal can succeed."""
     _git(checkout.path, "reset", "--hard", "--quiet", "HEAD")
     _git(checkout.path, "clean", "-fdq")
 
 
-def _remove_checkout(checkout):
+def _remove_checkout(checkout: _Checkout) -> None:
     """Remove the checkout and its folder, and report it if that is impossible.
 
     The path is created and owned here. Removing it must not touch the phase
@@ -125,7 +128,11 @@ def _remove_checkout(checkout):
     )
 
 
-def sweep_stale_worktrees(now=None, age_s=WORKTREE_SWEEP_AGE_S, root=None):
+def sweep_stale_worktrees(
+    now: float | None = None,
+    age_s: int = WORKTREE_SWEEP_AGE_S,
+    root: str | Path | None = None,
+) -> tuple[int, int]:
     """Delete leftover coordination checkouts older than ``age_s``.
 
     A checkout is left behind when the machine lost power mid-transaction, and
@@ -159,7 +166,7 @@ def sweep_stale_worktrees(now=None, age_s=WORKTREE_SWEEP_AGE_S, root=None):
     return removed, reclaimed
 
 
-def _directory_bytes(path):
+def _directory_bytes(path: Path) -> int:
     total = 0
     try:
         for entry in path.rglob("*"):
@@ -173,7 +180,7 @@ def _directory_bytes(path):
     return total
 
 
-def _commit_state(checkout, message):
+def _commit_state(checkout: Path, message: str) -> str | None:
     rc, _, err = _git(checkout, "add", "--", state_rel().as_posix())
     if rc != 0:
         raise CoordinationUnavailable(
@@ -191,7 +198,13 @@ def _commit_state(checkout, message):
     return commit
 
 
-def _transaction(private, remote, branch, mutate, message):
+def _transaction(
+    private: Path,
+    remote: str,
+    branch: str,
+    mutate: Callable[[dict[str, Any]], _Mutation],
+    message: str,
+) -> Any:
     """Run a read-modify-push transaction, retrying only rejected pushes."""
     last_error = None
     # A transaction is a write, so it is the path allowed to create the board's
@@ -244,7 +257,10 @@ def _transaction(private, remote, branch, mutate, message):
     )
 
 
-def _base_revisions(root, private):
+def _base_revisions(root: Path, private: Path) -> dict[str, Any]:
     public = _head(root) if _is_git_repo(root) else None
     private_revision = _head(private)
     return {"public": public, "private": private_revision}
+
+
+__all__ = ["_base_revisions", "_transaction"]

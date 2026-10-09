@@ -3,6 +3,8 @@
 """The sync checks that must refuse."""
 
 import subprocess
+from pathlib import Path
+from typing import Any
 
 from argus.gitsync.git import git, git_binary
 from argus.gitsync.merge import sync_one
@@ -16,7 +18,7 @@ from argus.gitsync.selftest_fixture import (
 from argus.gitsync.sync import sync_all
 
 
-def _sync_refuse_checks(base, checks):
+def _sync_refuse_checks(base: Path, checks: list[dict[str, Any]]) -> None:
     # 7. a staged change blocks a diverged merge before any merge runs.
     d = base / "staged"
     d.mkdir()
@@ -25,7 +27,7 @@ def _sync_refuse_checks(base, checks):
     (work / "c.txt").write_text("staged\n")
     git(work, "add", "c.txt")
     _remote_commit(remote, d, "w")
-    res = sync_one(work, "start")
+    res: dict[str, Any] = sync_one(work, "start")
     _check(
         checks,
         "sync: staged change blocks a diverged merge before git runs",
@@ -149,3 +151,6 @@ def _sync_refuse_checks(base, checks):
         (not res["ok"]) and "share a Git push/fetch destination" in res["summary"],
         res["summary"],
     )
+
+
+__all__ = ["_sync_refuse_checks"]

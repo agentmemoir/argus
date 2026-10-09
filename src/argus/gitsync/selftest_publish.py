@@ -3,9 +3,11 @@
 """The publish-while-writing checks and their heartbeat fixture."""
 
 import contextlib
+import importlib
 import subprocess
 import time
 from pathlib import Path
+from typing import Any, Literal
 
 from argus import conventions
 from argus.gitsync.git import git, git_binary
@@ -14,7 +16,7 @@ from argus.gitsync.runstate import is_engine_written_run_artifact, publish_dirt
 from argus.gitsync.selftest_fixture import BOARD_REL, _configure_self_test, _init_remote
 
 
-def _publish_fixture(base, name, phase):
+def _publish_fixture(base: Path, name: str, phase: int) -> tuple[Path, Path, Path]:
     """A phase at finalize in its own throwaway pair of remotes.
 
     Returns (public checkout, nested private checkout, run directory). The
@@ -23,10 +25,10 @@ def _publish_fixture(base, name, phase):
     """
     d = base / name
     d.mkdir(parents=True)
-    _public_remote, pub = _init_remote(d, "pub")
+    pub: Path = _init_remote(d, "pub")[1]
     nested = pub / BOARD_REL
     nested.parent.mkdir(parents=True, exist_ok=True)
-    private_remote, _ = _init_remote(d, "priv")
+    private_remote: Path = _init_remote(d, "priv")[0]
     subprocess.run(
         [git_binary(), "clone", "-q", str(private_remote), str(nested)],
         check=True,
@@ -38,7 +40,7 @@ def _publish_fixture(base, name, phase):
     _configure_self_test(pub, nested)
     from argus.board.reservations import ReservationStore, save_reservation_file
 
-    store = ReservationStore(pub, branch="main")
+    store: Any = ReservationStore(pub, branch="main")
     reservation = store.reserve(phase, "server-01")
     # The coordination transaction pushes onto the same branch the working tree
     # is on, so the checkout is left behind its own remote. That is the real
@@ -70,26 +72,26 @@ class _Heartbeat:
     the check says so.
     """
 
-    def __init__(self, run_dir, period=0.05):
+    def __init__(self, run_dir: str | Path, period: float = 0.05) -> None:
         self.run_dir = Path(run_dir)
         self.period = period
         self.using_glide = False
         self.proc = None
 
-    def __enter__(self):
+    def __enter__(self) -> "_Heartbeat":
         import threading
 
         try:
-            from glide import nudge
+            glide_nudge = importlib.import_module("glide.nudge")
 
-            self.using_glide = nudge.ACTIVITY_NAME == "activity"
+            self.using_glide = glide_nudge.ACTIVITY_NAME == "activity"
         except ImportError:
             self.using_glide = False
         stop = threading.Event()
         marker = self.run_dir / "activity"
-        seq = [0]
+        seq: list[int] = [0]
 
-        def write():
+        def write() -> None:
             while not stop.is_set():
                 seq[0] += 1
                 with contextlib.suppress(OSError):
@@ -101,17 +103,17 @@ class _Heartbeat:
         self._stop, self._thread = stop, thread
         return self
 
-    def __exit__(self, *_exc):
+    def __exit__(self, *_exc: object) -> Literal[False]:
         self._stop.set()
         self._thread.join(timeout=5)
         return False
 
-    def write_now(self):
+    def write_now(self) -> None:
         marker = self.run_dir / "activity"
         marker.write_text("harness output at 1999999999\n")
 
 
-def _publish_while_writing_check(base):
+def _publish_while_writing_check(base: Path) -> tuple[bool, str]:
     """Publication must succeed on the first attempt with the engine writing.
 
     Before the engine-written-artifact exclusion, this failed intermittently
@@ -123,6 +125,9 @@ def _publish_while_writing_check(base):
     pub, nested, run_dir = _publish_fixture(base, "publish-race", 100441)
     old_branch = conventions.setting("board.branch")
     conventions.override({"board.branch": "main"})
+    result: dict[str, Any] = {}
+    first = ""
+    second = ""
     try:
         with _Heartbeat(run_dir):
             time.sleep(0.4)
@@ -148,8 +153,9 @@ def _publish_while_writing_check(base):
     if not ok:
         return False, detail
     # The marker is still committed and pushed, exclusion or not.
-    tracked = "activity" in git(nested, "ls-files", "runs")[1]
-    committed = git(nested, "show", "HEAD:runs/phase-100441/activity")[1]
+    tracked_files: str = git(nested, "ls-files", "runs")[1]
+    tracked = "activity" in tracked_files
+    committed: str = git(nested, "show", "HEAD:runs/phase-100441/activity")[1]
     if not tracked or not committed.strip():
         return False, f"marker is not committed and pushed: {detail}"
     receipt = result.get("receipt", {})
@@ -158,19 +164,19 @@ def _publish_while_writing_check(base):
     return (bool(receipt.get("engine_written_at_publish")), detail)
 
 
-def _publish_still_refuses_check(base):
+def _publish_still_refuses_check(base: Path) -> list[tuple[str, object, str]]:
     """The exclusion must not have become a blanket pass.
 
     Each case gets its own fixture, because a publication moves both remotes.
     """
-    results = []
+    results: list[tuple[str, object, str]] = []
     old_branch = conventions.setting("board.branch")
     conventions.override({"board.branch": "main"})
     try:
         # 1. A modified tracked source file in the public checkout.
         pub, _nested, _run = _publish_fixture(base, "publish-dirt-source", 100442)
         (pub / "a.txt").write_text("one\nunreviewed edit\n")
-        res = publish_phase(pub, 100442)
+        res: dict[str, Any] = publish_phase(pub, 100442)
         results.append(
             (
                 "a modified tracked source file still blocks",
@@ -200,10 +206,8 @@ def _publish_still_refuses_check(base):
         pub, nested, run_dir = _publish_fixture(base, "publish-inside", 100445)
         (run_dir / "findings.json").write_text('{"open": []}\n')
         res = publish_phase(pub, 100445)
-        pushed = (
-            "runs/phase-100445/findings.json"
-            in git(nested, "ls-files", "runs")[1].splitlines()
-        )
+        tracked_files: str = git(nested, "ls-files", "runs")[1]
+        pushed = "runs/phase-100445/findings.json" in tracked_files.splitlines()
         results.append(
             (
                 "a new file inside the phase's run directory is published, not blocked",
@@ -245,6 +249,8 @@ def _publish_still_refuses_check(base):
         )
     )
 
+    real: list[str]
+    engine: list[str]
     real, engine = publish_dirt(
         [
             f"{BOARD_REL}/runs/phase-1/activity",
@@ -266,3 +272,6 @@ def _publish_still_refuses_check(base):
         )
     )
     return results
+
+
+__all__ = ["_publish_still_refuses_check", "_publish_while_writing_check"]

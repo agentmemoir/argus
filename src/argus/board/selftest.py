@@ -6,6 +6,7 @@ import shutil
 import sys
 import tempfile
 from pathlib import Path
+from typing import Any
 
 from argus import conventions
 from argus.board.core import (
@@ -38,7 +39,7 @@ from argus.board.store import ReservationStore
 from argus.exec_tempdir import make_exec_dir
 
 
-def self_test_checks():
+def self_test_checks() -> list[dict[str, Any]]:
     """Exercise the shared board with two local clients; no network or repo state."""
     import threading
 
@@ -59,7 +60,7 @@ def self_test_checks():
             "board.remote": "origin",
         }
     )
-    checks = []
+    checks: list[dict[str, Any]] = []
     # The hygiene fixture writes a `pre-receive` hook and git refuses to run it
     # from a `noexec` mount, so the fixture must live where the host runs a
     # script. A host whose default temporary directory is `noexec` would
@@ -68,7 +69,7 @@ def self_test_checks():
         make_exec_dir() or tempfile.mkdtemp(prefix="phase-reservations-selftest-")
     )
     try:
-        remote, clients = _git_test_repo(base, "claims")
+        _remote, clients = _git_test_repo(base, "claims")
         # Each store owns a different real client checkout. The public side
         # is intentionally absent in this hermetic check; the private repo is
         # the only remote that can receive coordination state.
@@ -80,10 +81,10 @@ def self_test_checks():
         store_b = ReservationStore(root_b, private_repo=clients[1])
 
         barrier = threading.Barrier(2)
-        results = []
-        errors = []
+        results: list[dict[str, Any]] = []
+        errors: list[Exception] = []
 
-        def claim(store, machine):
+        def claim(store: ReservationStore, machine: str) -> None:
             barrier.wait()
             try:
                 results.append(store.reserve(100601, machine))
@@ -267,7 +268,7 @@ def self_test_checks():
     return checks
 
 
-def self_test():
+def self_test() -> int:
     checks = self_test_checks()
     ok = all(item["ok"] for item in checks)
     # The named FAIL lines and the verdict go to stderr and the JSON record to

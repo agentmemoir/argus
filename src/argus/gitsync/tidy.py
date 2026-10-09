@@ -3,6 +3,7 @@
 """Returning a checkout to the integration branch once its phase is published."""
 
 from pathlib import Path
+from typing import Any
 
 from argus.gitsync.git import (
     blocked,
@@ -15,7 +16,9 @@ from argus.gitsync.group_publication import _group_all_published
 from argus.gitsync.receipts import receipt_for_branch
 
 
-def tidy_published_checkout(repo, base=None):
+def tidy_published_checkout(
+    repo: str | Path, base: str | None = None
+) -> dict[str, Any]:
     """Return the checkout to the integration branch if its phase is published.
 
     This exists because of a stall the change that removed the line's review
@@ -45,7 +48,11 @@ def tidy_published_checkout(repo, base=None):
     repo = Path(repo).resolve()
     base = base or integration_branch(repo)
     here = current_branch(repo)
-    info = {"repo": str(repo), "base": base, "branch": here or "(detached)"}
+    info: dict[str, Any] = {
+        "repo": str(repo),
+        "base": base,
+        "branch": here or "(detached)",
+    }
     if not is_git_repo(repo):
         return blocked(info, "not a git working tree")
     if not here or here == base:
@@ -93,7 +100,7 @@ def tidy_published_checkout(repo, base=None):
     return return_to_integration(repo, base=base)
 
 
-def return_to_integration(repo, base=None):
+def return_to_integration(repo: str | Path, base: str | None = None) -> dict[str, Any]:
     """Put a checkout back on the integration branch once its phase is merged.
 
     Called only after ``mark_phase_published`` has confirmed the merge is real.
@@ -111,7 +118,7 @@ def return_to_integration(repo, base=None):
     """
     repo = Path(repo).resolve()
     base = base or integration_branch(repo)
-    info = {"repo": str(repo), "base": base}
+    info: dict[str, Any] = {"repo": str(repo), "base": base}
     if not is_git_repo(repo):
         return blocked(info, "not a git working tree")
     rc, dirty, _ = git(repo, "status", "--porcelain")

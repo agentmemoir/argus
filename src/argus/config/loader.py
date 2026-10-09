@@ -4,15 +4,22 @@
 
 import json
 from pathlib import Path
+from typing import Any, cast
 
-from argus.config.schema import _OBJECT_KEYS, _OVERRIDES, _REPORT_KEY, SCHEMA
+from argus.config.schema import (
+    _OBJECT_KEYS,
+    _OVERRIDES,
+    _REPORT_KEY,
+    SCHEMA,
+    Field,
+)
 
 
 class ConfigError(Exception):
     """Any problem with the configuration file or one of its values."""
 
 
-def strip_comments(text):
+def strip_comments(text: str) -> str:
     """Remove `//` and `/* */` comments, keeping string literals intact.
 
     The scanner follows RFC 8259, section 7 for escapes: inside a string a
@@ -20,7 +27,7 @@ def strip_comments(text):
     not close the string. Newlines inside a block comment are kept so a parse
     error still points at roughly the original line.
     """
-    out = []
+    out: list[str] = []
     index = 0
     length = len(text)
     in_string = False
@@ -70,19 +77,24 @@ def strip_comments(text):
 class Config:
     """A loaded configuration: resolved values and where each one came from."""
 
-    def __init__(self, path, values, sources):
+    def __init__(
+        self, path: Path, values: dict[str, object], sources: dict[str, str]
+    ) -> None:
         self.path = path
         self.values = values
         self.sources = sources
 
-    def get(self, key):
+    def get(self, key: str) -> object | None:
         return self.values.get(key)
 
-    def source(self, key):
+    def source(self, key: str) -> str | None:
         return self.sources.get(key)
 
 
-def load(config_path=None, overrides=None):
+def load(
+    config_path: str | Path | None = None,
+    overrides: dict[str, object] | None = None,
+) -> Config:
     """Read, clean, resolve, and validate one configuration file.
 
     `config_path=None` uses `./config.json` when it is a file. `overrides` may
@@ -125,20 +137,25 @@ def load(config_path=None, overrides=None):
     if not isinstance(raw, dict):
         raise ConfigError(f"config file '{path}' must hold a JSON object")
 
-    return _build(path, raw, overrides or {})
+    supplied_overrides: dict[str, object] = overrides or {}
+    return _build(path, cast("dict[str, Any]", raw), supplied_overrides)
 
 
-def _build(path, raw, overrides):
+def _build(path: Path, raw: dict[str, Any], overrides: dict[str, object]) -> Config:
     for name in _OBJECT_KEYS:
         if name in raw and raw[name] is not None and not isinstance(raw[name], dict):
             raise ConfigError(f"invalid type for key '{name}': expected object")
 
-    board = raw.get("board")
-    board = board if isinstance(board, dict) else None
-    notify = raw.get("notify")
-    notify = notify if isinstance(notify, dict) else None
+    board_value = raw.get("board")
+    board = (
+        cast("dict[str, Any]", board_value) if isinstance(board_value, dict) else None
+    )
+    notify_value = raw.get("notify")
+    notify = (
+        cast("dict[str, Any]", notify_value) if isinstance(notify_value, dict) else None
+    )
 
-    supplied = {}
+    supplied: dict[str, tuple[object, str]] = {}
     for field in SCHEMA:
         found, value = _lookup(raw, field.key)
         if found and value is not None:
@@ -154,8 +171,8 @@ def _build(path, raw, overrides):
             value = [value]
         supplied[key] = (value, "flag")
 
-    values = {}
-    sources = {}
+    values: dict[str, object] = {}
+    sources: dict[str, str] = {}
     for field in SCHEMA:
         required = _is_required(field, board, notify)
         if field.key in supplied:
@@ -171,7 +188,9 @@ def _build(path, raw, overrides):
     return Config(path, values, sources)
 
 
-def _is_required(field, board, notify):
+def _is_required(
+    field: Field, board: dict[str, Any] | None, notify: dict[str, Any] | None
+) -> bool:
     if field.required == "required":
         return True
     if field.required == "board":
@@ -181,16 +200,19 @@ def _is_required(field, board, notify):
     return False
 
 
-def _lookup(raw, dotted):
-    node = raw
+def _lookup(raw: dict[str, Any], dotted: str) -> tuple[bool, Any]:
+    node: Any = raw
     for part in dotted.split("."):
-        if not isinstance(node, dict) or part not in node:
+        if not isinstance(node, dict):
             return False, None
-        node = node[part]
+        mapping = cast("dict[str, Any]", node)
+        if part not in mapping:
+            return False, None
+        node = mapping[part]
     return True, node
 
 
-def _check_type(field, value):
+def _check_type(field: Field, value: object) -> None:
     kind = field.type
     if kind == "str":
         ok = isinstance(value, str)
@@ -201,17 +223,19 @@ def _check_type(field, value):
     elif kind in ("path", "id-file"):
         ok = isinstance(value, str)
     elif kind == "str-list":
-        ok = isinstance(value, list) and all(isinstance(item, str) for item in value)
+        ok = isinstance(value, list) and all(
+            isinstance(item, str) for item in cast("list[object]", value)
+        )
     else:
         ok = False
     if not ok:
         raise ConfigError(f"invalid type for key '{field.key}': expected {kind}")
 
 
-def _convert(field, value, config_dir):
+def _convert(field: Field, value: object, config_dir: Path) -> object:
     if field.type not in ("path", "id-file"):
         return value
-    candidate = Path(value)
+    candidate = Path(cast("str", value))
     if not candidate.is_absolute():
         candidate = config_dir / candidate
     candidate = candidate.resolve()
@@ -220,7 +244,7 @@ def _convert(field, value, config_dir):
     return candidate
 
 
-def _read_machine_id(path):
+def _read_machine_id(path: Path) -> str:
     """Read a machine's name from the first non-empty line of ``path``."""
     try:
         text = path.read_text(encoding="utf-8")
@@ -234,14 +258,14 @@ def _read_machine_id(path):
     raise ConfigError(f"machine id file '{path}' is empty")
 
 
-def _check_value(field, value, required):
+def _check_value(field: Field, value: object, required: bool) -> None:
     if required and field.type == "str-list" and not value:
         raise ConfigError(
             f"invalid value for key '{field.key}': list must not be empty"
         )
     if required and field.type in ("str", "path") and value == "":
         raise ConfigError(f"missing required key '{field.key}'")
-    if field.key == "driver.state" and "/" in value:
+    if field.key == "driver.state" and "/" in cast("str", value):
         raise ConfigError(
             "invalid value for key 'driver.state': must be a folder name, not a path"
         )

@@ -3,6 +3,8 @@
 """Claiming: one phase, a registered run, and the reserve mutation."""
 
 import secrets
+from collections.abc import Callable
+from typing import Any
 
 from argus.board.core import (
     ACTIVE_STATUSES,
@@ -22,15 +24,22 @@ from argus.board.worktree import _base_revisions, _transaction
 
 class _ClaimOps(_StoreBase):
     def _reserve_mutation(
-        self, phase, machine_id, reservation_id, generation, run_id, revisions, status
-    ):
+        self,
+        phase: str | int,
+        machine_id: str,
+        reservation_id: str,
+        generation: int,
+        run_id: str | None,
+        revisions: dict[str, Any],
+        status: str,
+    ) -> Callable[[dict[str, Any]], _Mutation]:
         key, number = _phase_key(phase)
         machine_id = _validate_machine_id(machine_id)
         _validate_status(status)
         if status not in ACTIVE_STATUSES:
             raise CoordinationError("a new reservation must start as active")
 
-        def mutate(state):
+        def mutate(state: dict[str, Any]) -> _Mutation:
             record = _claim_one(
                 state,
                 key,
@@ -48,15 +57,15 @@ class _ClaimOps(_StoreBase):
 
     def reserve(
         self,
-        phase,
-        machine_id,
+        phase: str | int,
+        machine_id: str,
         *,
-        reservation_id=None,
-        generation=None,
-        run_id=None,
-        base_revisions=None,
-        status="claimed",
-    ):
+        reservation_id: str | None = None,
+        generation: int | None = None,
+        run_id: str | None = None,
+        base_revisions: dict[str, Any] | None = None,
+        status: str = "claimed",
+    ) -> Any:
         key, number = _phase_key(phase)
         machine_id = _validate_machine_id(machine_id)
         reservation_id = reservation_id or f"rsv-{secrets.token_hex(12)}"
@@ -81,8 +90,18 @@ class _ClaimOps(_StoreBase):
             f"phase coordination: reserve {key} for {machine_id}",
         )
 
-    def register_running(self, phase, machine_id, *, confirm=False, run_id=None):
+    def register_running(
+        self,
+        phase: str | int,
+        machine_id: str,
+        *,
+        confirm: bool = False,
+        run_id: str | None = None,
+    ) -> Any:
         """Register a pre-coordination run as an active server claim."""
         if not confirm:
             raise CoordinationError("registering a running phase requires confirm=true")
         return self.reserve(phase, machine_id, run_id=run_id, status="running")
+
+
+__all__ = ["_ClaimOps"]

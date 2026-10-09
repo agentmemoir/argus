@@ -5,6 +5,7 @@
 import json
 import tempfile
 from pathlib import Path
+from typing import Any
 
 from argus.board.reservations import CoordinationError, reservation_file
 from argus.roadmap.evidence import needs_decision, signals
@@ -19,7 +20,7 @@ from argus.roadmap.selftest_fixture import (
 from argus.roadmap.server import select_server_phase
 
 
-def _selection_checks():
+def _selection_checks() -> None:
     """What the selector offers, waits for, skips, or refuses to claim."""
     with tempfile.TemporaryDirectory() as tmp:
         repo = Path(tmp).resolve()
@@ -169,7 +170,7 @@ def _selection_checks():
             roadmap=repo / "roadmap",
         )
         assert got["state"] == "NO_PHASE", got
-        skipped = got.get("needs_decision") or []
+        skipped: list[dict[str, Any]] = got.get("needs_decision") or []
         assert [e["phase"] for e in skipped] == ["100010", "100020"], skipped
         assert [e["state"] for e in skipped] == ["rejected", "remedy_escalated"], (
             skipped
@@ -244,3 +245,6 @@ def _selection_checks():
         assert gate_block(100440, gate_plan) is not None, (
             "recorded with an empty choice must fail closed"
         )
+
+
+__all__ = ["_selection_checks"]

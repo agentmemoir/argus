@@ -3,6 +3,7 @@
 """The branch-pair and merge-gate checks."""
 
 from pathlib import Path
+from typing import Any, cast
 
 from argus import conventions
 from argus.gitsync.branch import branch_phase_checkouts, ensure_phase_branch
@@ -22,7 +23,7 @@ from argus.gitsync.selftest_publish import _publish_fixture
 from argus.gitsync.tidy import return_to_integration
 
 
-def _branch_pair_checks(base):
+def _branch_pair_checks(base: Path) -> list[tuple[str, object, str]]:
     """The public checkout gets the phase branch; the private one does not.
 
     Checks 1 to 8 above drive ``ensure_phase_branch`` one checkout at a time,
@@ -33,7 +34,7 @@ def _branch_pair_checks(base):
     ``ok`` either way, every single-repo check stayed green while a phase was
     launched onto the integration branch to write unreviewed code into it.
     """
-    results = []
+    results: list[tuple[str, object, str]] = []
     pub, nested, _ = _publish_fixture(base, "branch-pair", 100809)
     # The shared fixture builds its throwaway pair on "main". Both real
     # checkouts are on "master", and that is the name the phase branch is cut
@@ -122,10 +123,10 @@ def _branch_pair_checks(base):
     return results
 
 
-def _merge_gate_checks(base):
+def _merge_gate_checks(base: Path) -> list[tuple[str, object, str]]:
     """A receipt may only say published once a real merge put it there."""
-    results = []
-    pub, nested, run_dir = _publish_fixture(base, "merge-gate", 100446)
+    results: list[tuple[str, object, str]] = []
+    pub, nested, _run_dir = _publish_fixture(base, "merge-gate", 100446)
     branch = phase_branch_for(100446, "phase-100446-merge-gate.md")
     old = conventions.setting("board.branch")
     conventions.override({"board.branch": "main"})
@@ -161,7 +162,8 @@ def _merge_gate_checks(base):
                 "completion is refused before the pull request merges",
                 (not res2["ok"])
                 and "not on the integration branch" in res2["blockers"][-1]
-                and phase_receipt(pub, 100446).get("state") == "awaiting_review",
+                and cast("dict[str, Any]", phase_receipt(pub, 100446)).get("state")
+                == "awaiting_review",
                 f"blockers={res2.get('blockers')} "
                 f"heads={res2.get('public_head') or ''}",
             )
@@ -178,7 +180,7 @@ def _merge_gate_checks(base):
             git(repo, "push", "-q", "origin", merge_into)
             git(repo, "checkout", "-q", branch)
         res3 = mark_phase_published(pub, 100446)
-        published = phase_receipt(pub, 100446)
+        published = cast("dict[str, Any]", phase_receipt(pub, 100446))
         results.append(
             (
                 "completion is recorded once the merge is real",
@@ -293,3 +295,6 @@ def _merge_gate_checks(base):
     finally:
         conventions.override({"board.branch": old})
     return results
+
+
+__all__ = ["_branch_pair_checks", "_merge_gate_checks"]

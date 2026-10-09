@@ -35,6 +35,7 @@ import tempfile
 import unittest
 from collections.abc import Callable, Iterator, Sequence
 from pathlib import Path
+from typing import cast
 
 SCRIPTS = Path(__file__).resolve().parent
 
@@ -148,7 +149,7 @@ def _executable_candidates(
         if key in seen:
             continue
         seen.add(key)
-        if base == str(BUILD_TREE):
+        if base is not None and base == str(BUILD_TREE):
             # The build tree is the one candidate this helper may create. A host
             # whose temporary directories are `noexec` reaches it only if the
             # directory exists, and a fresh checkout does not have one yet.
@@ -189,7 +190,7 @@ def exec_tempdir(
     probe: Callable[[str], bool] | None = None,
     purpose: str = "an executable file",
     parents: Sequence[str | None] | None = None,
-) -> tempfile.TemporaryDirectory:
+) -> tempfile.TemporaryDirectory[str]:
     """A temporary directory whose scripts the host will really run, removed with the suite.
 
     The candidates in `parents`, or `CANDIDATE_PARENTS` when that is not given, are
@@ -211,4 +212,5 @@ def exec_tempdir(
         raise unittest.SkipTest(
             f"no temporary directory on this host permits running {purpose}"
         )
-    return _OwnedDirectory(created)
+    # The owned directory answers the same protocol without inheriting.
+    return cast("tempfile.TemporaryDirectory[str]", _OwnedDirectory(created))

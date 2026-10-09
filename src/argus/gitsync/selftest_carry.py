@@ -3,6 +3,8 @@
 """The receipt-carry, handoff and group-branch-collision checks."""
 
 import json
+from pathlib import Path
+from typing import Any
 
 from argus import conventions
 from argus.gitsync.branch import ensure_phase_branch
@@ -27,7 +29,7 @@ from argus.gitsync.selftest_fixture import (
 from argus.gitsync.selftest_publish import _publish_fixture
 
 
-def _receipt_carry_checks(base):
+def _receipt_carry_checks(base: Path) -> list[tuple[str, object, str]]:
     """A merged phase's receipt must not block the next phase's publication.
 
     The incident this reproduces: phases 100874 and 100875 were merged while
@@ -41,7 +43,7 @@ def _receipt_carry_checks(base):
     single-assertion version lives in ``_merge_gate_checks``; this one proves
     the cross-phase consequence, which no other check constructs.
     """
-    results = []
+    results: list[tuple[str, object, str]] = []
     old_branch = conventions.setting("board.branch")
     conventions.override({"board.branch": "main"})
     try:
@@ -50,12 +52,12 @@ def _receipt_carry_checks(base):
         # 100490 is taken by the fixture itself, so the second phase under test
         # is 100491 and needs its own reservation below.
         pub, nested, _run = _publish_fixture(base, "receipt-carry", 100490)
-        store = ReservationStore(pub, branch="main")
-        base_branch = integration_branch(pub)
+        store: Any = ReservationStore(pub, branch="main")
+        base_branch: str = integration_branch(pub)
         first_branch = phase_branch_for(100490, "phase-100490-carry-first.md")
         second_branch = phase_branch_for(100491, "phase-100491-carry-second.md")
 
-        def reserve(phase):
+        def reserve(phase: int) -> None:
             git(nested, "fetch", "-q", "origin")
             git(nested, "merge", "-q", "--ff-only", "origin/main")
             rd = nested / "runs" / f"phase-{phase:06d}"
@@ -78,7 +80,7 @@ def _receipt_carry_checks(base):
         (pub / "first.txt").write_text("phase one\n")
         git(pub, "add", "first.txt")
         git(pub, "commit", "-q", "-m", "phase 100490: the first change")
-        one = publish_phase(
+        one: dict[str, Any] = publish_phase(
             pub,
             100490,
             pull_request="https://github.com/example-org/example-repo/pull/990",
@@ -93,7 +95,7 @@ def _receipt_carry_checks(base):
         )
 
         # The human squash-merges phase one, and the merge check records it.
-        integration = integration_branch(pub)
+        integration: str = integration_branch(pub)
         git(pub, "checkout", "-q", integration)
         git(pub, "merge", "-q", "--squash", first_branch)
         git(pub, "commit", "-q", "-m", "phase 100490 (squashed by a human)")
@@ -102,13 +104,13 @@ def _receipt_carry_checks(base):
         git(nested, "merge", "-q", "--no-edit", first_branch)
         git(nested, "push", "-q", "origin", integration_branch(nested))
         with _StubGH(_gh_says("MERGED")):
-            done = mode_published(pub, 100490)
+            done: dict[str, Any] = mode_published(pub, 100490)
         results.append(
             (
                 "the merge check marks the merged phase published",
                 done["ok"]
                 and done.get("state") == "PUBLISHED"
-                and phase_receipt(pub, 100490).get("state") == "published",
+                and (phase_receipt(pub, 100490) or {}).get("state") == "published",
                 f"ok={done.get('ok')} state={done.get('state')} "
                 f"summary={done.get('summary')}",
             )
@@ -122,7 +124,7 @@ def _receipt_carry_checks(base):
         git(pub, "add", "second.txt")
         git(pub, "commit", "-q", "-m", "phase 100491: the second change")
         reserve(100491)
-        two = publish_phase(
+        two: dict[str, Any] = publish_phase(
             pub,
             100491,
             pull_request="https://github.com/example-org/example-repo/pull/991",
@@ -150,7 +152,7 @@ def _receipt_carry_checks(base):
     return results
 
 
-def _handoff_checks(base):
+def _handoff_checks(base: Path) -> list[tuple[str, object, str]]:
     """A release handoff pushes the work in progress, and not onto the integration branch.
 
     Both halves matter. An owner who releases with nothing pushed hands over an
@@ -159,18 +161,18 @@ def _handoff_checks(base):
     """
     d = base / "handoff"
     d.mkdir()
-    _public_remote, pub = _init_remote(d, "handoff")
+    pub: Path = _init_remote(d, "handoff")[1]
     _configure_self_test(pub, pub / BOARD_REL)
     (pub / "unfinished.txt").write_text("half a phase\n", encoding="utf-8")
-    on_integration = mode_checkpoint(pub)
+    on_integration: dict[str, Any] = mode_checkpoint(pub)
     branch = "feature/group-cache-warm"
-    made = ensure_phase_branch(pub, branch)
+    made: dict[str, Any] = ensure_phase_branch(pub, branch)
     if not made.get("ok"):
         return [("the handoff fixture could not cut a phase branch", False, str(made))]
     (pub / "unfinished.txt").write_text("half a phase\n", encoding="utf-8")
-    pushed = mode_checkpoint(pub)
-    head = git(pub, "rev-parse", "HEAD")[1]
-    remote_head = git(pub, "rev-parse", f"origin/{branch}")[1]
+    pushed: dict[str, Any] = mode_checkpoint(pub)
+    head: str = git(pub, "rev-parse", "HEAD")[1]
+    remote_head: str = git(pub, "rev-parse", f"origin/{branch}")[1]
     return [
         (
             "the integration branch is refused",
@@ -189,24 +191,24 @@ def _handoff_checks(base):
     ]
 
 
-def _group_branch_collision_checks(base):
+def _group_branch_collision_checks(base: Path) -> list[tuple[str, object, str]]:
     """Two groups that derive one branch name are refused, and one group is not.
 
     A group branch carries no phase number, so the lowest member's behaviour word
     is all that separates one group's branch from another's.
     """
-    results = []
+    results: list[tuple[str, object, str]] = []
     mine = ["100020", "100021"]
     d = base / "group-name"
     d.mkdir()
-    _public_remote, pub = _init_remote(d, "group-name")
+    pub: Path = _init_remote(d, "group-name")[1]
     roadmap = pub / "roadmap"
     roadmap.mkdir()
     _write_group_phases(roadmap, (100020, 100021), "cache-warm")
     _write_group_phases(roadmap, (100040, 100041), "warm-cache")
     _configure_self_test(pub, pub / BOARD_REL, roadmap=roadmap)
     branch = group_branch(pub, mine)
-    same = assert_group_branch_unique(pub, branch, mine)
+    same: dict[str, Any] = assert_group_branch_unique(pub, branch, mine)
     results.append(
         (
             "a group is not its own collision, and its branch comes from its lowest member",
@@ -217,13 +219,15 @@ def _group_branch_collision_checks(base):
 
     d = base / "group-name-clash"
     d.mkdir()
-    _public_remote, pub = _init_remote(d, "group-name-clash")
+    pub = _init_remote(d, "group-name-clash")[1]
     roadmap = pub / "roadmap"
     roadmap.mkdir()
     _write_group_phases(roadmap, (100020, 100021), "cache-warm")
     _write_group_phases(roadmap, (100040, 100041), "cache-warm")
     _configure_self_test(pub, pub / BOARD_REL, roadmap=roadmap)
-    clash = assert_group_branch_unique(pub, branch, ["100040", "100041"])
+    clash: dict[str, Any] = assert_group_branch_unique(
+        pub, branch, ["100040", "100041"]
+    )
     results.append(
         (
             "two groups deriving one branch are refused",
@@ -232,3 +236,10 @@ def _group_branch_collision_checks(base):
         )
     )
     return results
+
+
+__all__ = [
+    "_group_branch_collision_checks",
+    "_handoff_checks",
+    "_receipt_carry_checks",
+]

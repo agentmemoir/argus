@@ -2,7 +2,9 @@
 # SPDX-License-Identifier: Apache-2.0
 """The phase and group branch names derived from roadmap file names."""
 
+from collections.abc import Iterable
 from pathlib import Path
+from typing import Any, cast
 
 from argus.conventions import board_repo, phase_file_parts, phase_paths, setting
 from argus.gitsync.git import ConfigError, blocked
@@ -18,7 +20,7 @@ from argus.gitsync.git import ConfigError, blocked
 PHASE_BRANCH_PREFIX = "feature/"
 
 
-def _phase_file_parts(roadmap_name):
+def _phase_file_parts(roadmap_name: str | None) -> tuple[str, str]:
     """Split a roadmap file's base name into its number and its behaviour.
 
     Args:
@@ -44,7 +46,7 @@ def _phase_file_parts(roadmap_name):
     return str(number), behaviour
 
 
-def phase_branch(roadmap_name):
+def phase_branch(roadmap_name: str | None) -> str:
     """The branch name for a phase, derived from its roadmap file name.
 
     Args:
@@ -62,7 +64,7 @@ def phase_branch(roadmap_name):
     return f"{PHASE_BRANCH_PREFIX}{behaviour}"
 
 
-def phase_branch_for(phase, roadmap_name):
+def phase_branch_for(phase: int | str, roadmap_name: str | None) -> str:
     """The branch for a phase, checked against the phase number the caller
     expects. A mismatch means the wrong roadmap file was passed, which would
     put the phase's work on another phase's branch.
@@ -79,7 +81,7 @@ def phase_branch_for(phase, roadmap_name):
     return phase_branch(roadmap_name)
 
 
-def roadmap_folder(root, configured=None):
+def roadmap_folder(root: str | Path, configured: str | Path | None = None) -> Path:
     """The roadmap folder to scan, as a Path.
 
     A folder named by the caller is taken as the operator's word and is never
@@ -92,7 +94,7 @@ def roadmap_folder(root, configured=None):
     if configured:
         base = Path(configured)
         return base if base.is_absolute() else Path(root) / base
-    return board_repo(root) / "roadmap"
+    return cast("Path", board_repo(root)) / "roadmap"
 
 
 #: The marker a group branch carries between the prefix and its lowest member's
@@ -102,7 +104,7 @@ def roadmap_folder(root, configured=None):
 GROUP_BRANCH_MARKER = "group-"
 
 
-def _phase_file_for(folder, number):
+def _phase_file_for(folder: Path, number: int) -> Path | None:
     """The phase file in ``folder`` whose number matches, or ``None``.
 
     The match is the one the selector uses: a file's first numeric filename token
@@ -116,7 +118,11 @@ def _phase_file_for(folder, number):
     return None
 
 
-def group_branch(root, members, roadmap_dir=None):
+def group_branch(
+    root: str | Path,
+    members: Iterable[int | str] | None,
+    roadmap_dir: str | Path | None = None,
+) -> str:
     """The one branch a reservation group's work lives on.
 
     A group runs as one unit, so it publishes one branch and one pull request for
@@ -133,7 +139,7 @@ def group_branch(root, members, roadmap_dir=None):
         ConfigError: The group is empty, a member is not a phase number, or the
             lowest member has no document in the roadmap folder.
     """
-    numbers = set()
+    numbers: set[int] = set()
     for member in members or ():
         try:
             numbers.add(int(str(member).strip()))
@@ -154,8 +160,12 @@ def group_branch(root, members, roadmap_dir=None):
 
 
 def assert_phase_branch_unique(
-    root, phase, roadmap_name, roadmap_dir=None, branch=None
-):
+    root: str | Path,
+    phase: int | str,
+    roadmap_name: str | None,
+    roadmap_dir: str | Path | None = None,
+    branch: str | None = None,
+) -> dict[str, Any]:
     """Refuse a branch name another of this checkout's phases also earns.
 
     The phase number is deliberately absent from the branch name, so the
@@ -177,7 +187,11 @@ def assert_phase_branch_unique(
     """
     root = Path(root).resolve()
     branch = branch or phase_branch_for(phase, roadmap_name)
-    info = {"repo": str(root), "phase": f"{int(phase):06d}", "branch": branch}
+    info: dict[str, Any] = {
+        "repo": str(root),
+        "phase": f"{int(phase):06d}",
+        "branch": branch,
+    }
     roadmap = roadmap_folder(root, roadmap_dir)
     for path in phase_paths(roadmap):
         if phase_file_parts(path) is None:
@@ -194,7 +208,12 @@ def assert_phase_branch_unique(
     return dict(info, ok=True, action="phase-branch-name-unique", branch=branch)
 
 
-def assert_group_branch_unique(root, branch, members, roadmap_dir=None):
+def assert_group_branch_unique(
+    root: str | Path,
+    branch: str,
+    members: Iterable[int | str] | None,
+    roadmap_dir: str | Path | None = None,
+) -> dict[str, Any]:
     """Refuse a group branch another declared group would also earn.
 
     Two groups whose lowest member shares a behaviour word derive the same branch
@@ -214,7 +233,7 @@ def assert_group_branch_unique(root, branch, members, roadmap_dir=None):
 
     root = Path(root).resolve()
     wanted = sorted(f"{int(member):06d}" for member in members or ())
-    info = {"repo": str(root), "branch": branch, "group": wanted}
+    info: dict[str, Any] = {"repo": str(root), "branch": branch, "group": wanted}
     folder = roadmap_folder(root, roadmap_dir)
     for path in phase_paths(folder):
         parts = phase_file_parts(path)

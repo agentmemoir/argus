@@ -9,6 +9,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from typing import Any
 
 from argus.config.schema import SHELL_VARS
 
@@ -41,11 +42,11 @@ class RestoreError(RuntimeError):
     """The driver was not put back, which is worse than any fault below."""
 
 
-def _digest(path):
+def _digest(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def apply_fault(path, fault):
+def apply_fault(path: Path, fault: dict[str, Any]) -> None:
     """Patch one fault into the driver. Raises when a patch no longer matches."""
     text = path.read_text()
     find = fault["find"]
@@ -89,7 +90,7 @@ _SCRUBBED_NAMES = frozenset(
 SHORT_TEMP = "/tmp"
 
 
-def _scratch_parent():
+def _scratch_parent() -> str | None:
     """A short parent for one fault's scratch space, or ``None`` for the default."""
     candidate = Path(SHORT_TEMP)
     if candidate.is_dir() and os.access(candidate, os.W_OK):
@@ -97,7 +98,7 @@ def _scratch_parent():
     return None
 
 
-def _isolated_env(scratch):
+def _isolated_env(scratch: str) -> dict[str, str]:
     """This process's environment, with one fault's own scratch space.
 
     The caller's Argus settings are dropped and `TMPDIR` and `TMUX_TMPDIR` point
@@ -117,7 +118,7 @@ def _isolated_env(scratch):
     return env
 
 
-def _kill_isolated_tmux(env):
+def _kill_isolated_tmux(env: dict[str, str]) -> None:
     """Stop the fault's own tmux server, so a leaked session dies with it."""
     binary = shutil.which("tmux")
     if binary is None:
@@ -127,7 +128,9 @@ def _kill_isolated_tmux(env):
     )
 
 
-def run_selftest(repo, driver, check="driver", cases=None):
+def run_selftest(
+    repo: Path, driver: Path, check: str = "driver", cases: str | None = None
+) -> tuple[list[str], int]:
     """Run the self-test in a one-fault scratch space and return its output.
 
     Returns ``(lines, exit status)``. The self-test never sees this machine's
@@ -171,7 +174,7 @@ def run_selftest(repo, driver, check="driver", cases=None):
     return proc.stdout.splitlines() + proc.stderr.splitlines(), proc.returncode
 
 
-def judge(lines, rc, fault):
+def judge(lines: list[str], rc: int, fault: dict[str, Any]) -> tuple[bool, str]:
     """Decide whether the self-test caught this fault. Returns (caught, detail).
 
     A run that stopped before its own verdict line detected nothing, whatever the
@@ -220,7 +223,9 @@ def judge(lines, rc, fault):
     return True, f"the driver still works under this fault ({verdict})"
 
 
-def check_fault(repo, driver, fault):
+def check_fault(
+    repo: Path, driver: Path, fault: dict[str, Any]
+) -> tuple[bool | None, str]:
     """Patch one fault in, run the self-test, restore, report.
 
     The restore happens in a ``finally``, so an exception or a signal still puts

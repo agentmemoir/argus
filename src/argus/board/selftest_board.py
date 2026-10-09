@@ -5,6 +5,8 @@
 import json
 import shutil
 import subprocess
+from pathlib import Path
+from typing import Any
 
 from argus.board.branch import _integration_branch
 from argus.board.core import SELF_TEST_BRANCH, CoordinationUnavailable
@@ -14,7 +16,7 @@ from argus.board.state import state_rel
 from argus.board.store import ReservationStore
 
 
-def _board_branch_checks(checks, base):
+def _board_branch_checks(checks: list[dict[str, Any]], base: Path) -> None:
     """The board gets its own branch, and moving it must not move run state.
 
     The defect this replaces was a board commit landing on the branch a phase's
@@ -28,7 +30,7 @@ def _board_branch_checks(checks, base):
     root = base / "board-root"
     root.mkdir()
 
-    def integration_tip(repo):
+    def integration_tip(repo: Path) -> str | None:
         rc, commit, _err = _git(
             repo,
             "rev-parse",
@@ -64,7 +66,7 @@ def _board_branch_checks(checks, base):
     # store uses is the configured value, and the fixtures that run this
     # suite deliberately name one that already exists. A probe for "the board
     # branch is missing" has to use a branch that is missing.
-    def remote_branches():
+    def remote_branches() -> list[str] | None:
         rc, out, _err = _git(remote, "branch", "--format=%(refname:short)")
         return sorted(out.split()) if rc == 0 else None
 
@@ -205,7 +207,10 @@ def _board_branch_checks(checks, base):
         )
         integration = _integration_branch(race_private, "origin")
 
-        def publish_run_state(race_private=race_private, integration=integration):
+        def publish_run_state(
+            race_private: Path = race_private,
+            integration: str = integration,
+        ) -> bool:
             # Run state is published from the private checkout, which is where
             # the publishing tool writes it.
             (race_private / "runs" / "phase-100711" / "run.json").write_text(
@@ -235,7 +240,7 @@ def _board_branch_checks(checks, base):
         shutil.rmtree(case, ignore_errors=True)
 
 
-def _deleted_state_check(base):
+def _deleted_state_check(base: Path) -> tuple[bool, str]:
     remote, clients = _git_test_repo(base, "deleted-state")
     root = base / "deleted-root"
     root.mkdir()
@@ -264,8 +269,8 @@ def _deleted_state_check(base):
         return True, str(exc)
 
 
-def _bad_phase_key_check(base):
-    bad = {
+def _bad_phase_key_check(base: Path) -> tuple[bool, str]:
+    bad: dict[str, Any] = {
         "version": 1,
         "phases": {
             "1": {
@@ -281,7 +286,7 @@ def _bad_phase_key_check(base):
             }
         },
     }
-    remote, clients = _git_test_repo(base, "bad-key", initial_state=bad)
+    _remote, clients = _git_test_repo(base, "bad-key", initial_state=bad)
     root = base / "bad-key-root"
     root.mkdir()
     store = ReservationStore(root, private_repo=clients[0])
@@ -290,3 +295,6 @@ def _bad_phase_key_check(base):
         return False, "noncanonical phase key was accepted"
     except CoordinationUnavailable as exc:
         return True, str(exc)
+
+
+__all__ = ["_bad_phase_key_check", "_board_branch_checks", "_deleted_state_check"]

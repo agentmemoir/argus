@@ -99,7 +99,7 @@ from argus.gitsync.selftest import self_test
 from argus.gitsync.sync import mode_resync, sync_all
 
 
-def main():
+def main() -> int:
     ap = argparse.ArgumentParser(description="Fail-closed git sync.")
     ap.add_argument(
         "--root",

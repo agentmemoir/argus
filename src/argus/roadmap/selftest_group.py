@@ -10,7 +10,7 @@ from argus import conventions
 from argus.roadmap.group import ReservationGroupError, resolve_group
 
 
-def _declaration_checks():
+def _declaration_checks() -> None:
     """A symmetric declaration resolves; every other shape is refused by name."""
     with tempfile.TemporaryDirectory() as tmp:
         # A reservation group is declared in a fenced ``### Reservation Group``
@@ -31,7 +31,7 @@ def _declaration_checks():
         )
         try:
 
-            def write_phase(name, together=None):
+            def write_phase(name: str, together: str | None = None) -> None:
                 text = "## 1. Objective\n"
                 if together is not None:
                     text += "### Reservation Group\n\n"
@@ -125,3 +125,6 @@ def _declaration_checks():
             assert solo["remainder"] == ["100530"], solo
         finally:
             conventions.configure(old)
+
+
+__all__ = ["_declaration_checks"]

@@ -46,6 +46,7 @@ discover. Adding a source is one line in ``SOURCES``.
 import importlib
 from abc import ABC, abstractmethod
 from pathlib import Path
+from typing import Any
 
 from argus import conventions
 
@@ -74,7 +75,9 @@ class WorkSource(ABC):
     name: str
 
     @abstractmethod
-    def select(self, machine_id=None, *, reserve=True):
+    def select(
+        self, machine_id: str | None = None, *, reserve: bool = True
+    ) -> dict[str, Any]:
         """Return the next item to claim as a result dict, claiming it.
 
         ``reserve=False`` reports what it would claim without writing to the
@@ -82,18 +85,20 @@ class WorkSource(ABC):
         """
 
 
-def source_names():
+def source_names() -> list[str]:
     """Every configured name, sorted, for an error message that is useful."""
     return sorted(SOURCES)
 
 
-def implementation(name):
+def implementation(name: str) -> Any:
     """The class registered under ``name``, imported on demand."""
     module_name, class_name = SOURCES[name]
     return getattr(importlib.import_module(module_name), class_name)
 
 
-def resolve(name, repo, roadmap=None):
+def resolve(
+    name: str | None, repo: str | Path, roadmap: str | Path | None = None
+) -> Any:
     """Build the configured source, or raise WorkSourceError naming the known ones.
 
     ``name`` is None when a machine has configured nothing, which is the
@@ -113,7 +118,7 @@ def resolve(name, repo, roadmap=None):
         raise WorkSourceError(f"work source {key!r}: {exc}") from exc
 
 
-def self_test():
+def self_test() -> None:
     previous = conventions.configure(
         {
             "repo-root": Path(),
@@ -130,7 +135,7 @@ def self_test():
         conventions.configure(previous)
 
 
-def _self_test():
+def _self_test() -> None:
     # Every registered name must be real: its module must import, its class
     # must exist, it must honour the contract, and the name a machine
     # configures must be the name it answers to. A source that is selectable
@@ -170,12 +175,14 @@ class _FixtureSource(WorkSource):
 
     name = "fixture"
 
-    def __init__(self, repo, setting=None):
+    def __init__(self, repo: str | Path, setting: str | None = None) -> None:
         self.repo = Path(repo)
         self.setting = setting
-        self.calls = []
+        self.calls: list[tuple[str | None, bool]] = []
 
-    def select(self, machine_id=None, *, reserve=True):
+    def select(
+        self, machine_id: str | None = None, *, reserve: bool = True
+    ) -> dict[str, Any]:
         self.calls.append((machine_id, reserve))
         return {"state": "NO_PHASE", "fixture": True}
 
@@ -215,3 +222,6 @@ def _self_test_second_source():
     finally:
         SOURCES.pop("fixture", None)
     assert "fixture" not in source_names(), "the fixture source leaked"
+
+
+__all__ = ["_FixtureSource"]

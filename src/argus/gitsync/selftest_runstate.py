@@ -4,6 +4,8 @@
 
 import json
 import subprocess
+from pathlib import Path
+from typing import Any
 
 from argus.gitsync.git import dirty_paths, git, git_binary
 from argus.gitsync.mode_clean import mode_clean
@@ -11,7 +13,7 @@ from argus.gitsync.runstate import commit_leftover_run_state
 from argus.gitsync.selftest_fixture import BOARD_REL, _check, _init_remote
 
 
-def _runstate_checks(base, checks):
+def _runstate_checks(base: Path, checks: list[dict[str, Any]]) -> None:
     # 10. a fresh start commits and pushes only the private repo's runs/
     # leftovers, then the private tree is clean.
     d = base / "runstate"
@@ -34,7 +36,7 @@ def _runstate_checks(base, checks):
     git(nested, "commit", "-q", "-m", "ledger")
     git(nested, "push", "-q", "origin", "main")
     (nested / "runs" / "ledger.json").write_text('{"finalize": true}\n')
-    res = commit_leftover_run_state(pub, "pipeline: test")
+    res: dict[str, Any] = commit_leftover_run_state(pub, "pipeline: test")
     _check(
         checks,
         "sync: start commits and pushes runs/ leftovers",
@@ -149,7 +151,7 @@ def _runstate_checks(base, checks):
     (nested / "runs" / "phase-100601" / "run.json").write_text('{"state": "blocked"}\n')
     (pub / "uncommitted-public.txt").write_text("mid-work\n")
     res = mode_clean(pub, 100440)
-    dirty_after = dirty_paths(nested)
+    dirty_after: list[str] = dirty_paths(nested)
     _check(
         checks,
         "sync: clean commits a finished phase's closing run state",
@@ -165,7 +167,7 @@ def _runstate_checks(base, checks):
     # whose run ended without its own closing commit cannot block the next
     # phase's publish. The public checkout is mid-work and must stay untouched.
     res = mode_clean(pub)
-    dirty_after_all = dirty_paths(nested)
+    dirty_after_all: list[str] = dirty_paths(nested)
     _check(
         checks,
         "sync: clean with no phase lands every phase's leftover run state",
@@ -178,3 +180,6 @@ def _runstate_checks(base, checks):
         and "uncommitted-public.txt" in dirty_paths(pub),
         f"{res['summary']}; dirty={dirty_after_all}",
     )
+
+
+__all__ = ["_runstate_checks"]

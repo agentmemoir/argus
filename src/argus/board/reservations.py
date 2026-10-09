@@ -32,8 +32,10 @@ import sys
 if not __package__:
     from pathlib import Path
 
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-    import _bootstrap  # noqa: F401 - register the source package
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+    from argus import (
+        _bootstrap as _bootstrap,  # noqa: F401 - register the source package
+    )
 from argus.board.branch import (
     ensure_board_branch,
 )

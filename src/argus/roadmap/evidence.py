@@ -16,6 +16,7 @@ import json
 import re
 import sys
 from pathlib import Path
+from typing import Any, cast
 
 from argus import conventions
 from argus.conventions import phase_run_dir
@@ -36,7 +37,7 @@ class RoadmapUnavailable(WorkSourceError):
     """
 
 
-def resolve_roadmap(repo, configured=None):
+def resolve_roadmap(repo: str | Path, configured: str | Path | None = None) -> Path:
     """The roadmap folder to read, or None when there is none to read.
 
     A configured folder is taken as the operator's word and is never second-
@@ -61,7 +62,7 @@ def resolve_roadmap(repo, configured=None):
     return base
 
 
-def reported_path(repo, path):
+def reported_path(repo: str | Path, path: str | Path) -> str:
     """The path the driver is told to launch, as a string.
 
     Repository-relative when the file is inside the repository, because that is
@@ -77,25 +78,31 @@ def reported_path(repo, path):
         return str(path)
 
 
-def file_approved(path):
-    for line in path.read_text(errors="replace").splitlines():
+def file_approved(path: str | Path) -> bool:
+    for line in Path(path).read_text(errors="replace").splitlines():
         stripped = line.strip()
         if stripped.startswith("- [x]") and APPROVAL in stripped:
             return True
     return False
 
 
-def run_dir(repo, number, phase_file=None):
+def run_dir(
+    repo: str | Path, number: int, phase_file: str | Path | None = None
+) -> Path:
     return phase_run_dir(repo, number, phase_file)
 
 
-def run_completed(repo, number, phase_file=None):
+def run_completed(
+    repo: str | Path, number: int, phase_file: str | Path | None = None
+) -> bool:
     rj = run_dir(repo, number, phase_file) / "run.json"
     try:
         state = json.loads(rj.read_text())
     except (OSError, ValueError):
         return False
-    return isinstance(state, dict) and state.get("state") == "completed"
+    if not isinstance(state, dict):
+        return False
+    return cast("dict[str, Any]", state).get("state") == "completed"
 
 
 #: Run states that are terminal but are not completion evidence.
@@ -111,7 +118,7 @@ def run_completed(repo, number, phase_file=None):
 NEEDS_DECISION_RUN_STATES = frozenset({"rejected", "remedy_escalated"})
 
 
-def needs_decision(repo, number):
+def needs_decision(repo: str | Path, number: int) -> str | None:
     """The run state when this phase ended needing a person's decision.
 
     Args:
@@ -129,11 +136,13 @@ def needs_decision(repo, number):
         return None
     if not isinstance(state, dict):
         return None
-    value = state.get("state")
+    value = cast("dict[str, Any]", state).get("state")
     return value if value in NEEDS_DECISION_RUN_STATES else None
 
 
-def ledger_steps(repo, number, phase_file=None):
+def ledger_steps(
+    repo: str | Path, number: int, phase_file: str | Path | None = None
+) -> dict[str, Any] | None:
     """Parsed steps map from ledger.json, or None when missing/unusable."""
     try:
         ledger = json.loads(
@@ -143,16 +152,20 @@ def ledger_steps(repo, number, phase_file=None):
         return None
     if not isinstance(ledger, dict):
         return None
-    steps = ledger.get("steps")
-    return steps if isinstance(steps, dict) else None
+    steps = cast("dict[str, Any]", ledger).get("steps")
+    return cast("dict[str, Any]", steps) if isinstance(steps, dict) else None
 
 
-def ledger_present(repo, number, phase_file=None):
+def ledger_present(
+    repo: str | Path, number: int, phase_file: str | Path | None = None
+) -> bool:
     """A ledger.json exists and parses far enough to carry step proofs."""
     return ledger_steps(repo, number, phase_file) is not None
 
 
-def ledger_finalized(repo, number, phase_file=None):
+def ledger_finalized(
+    repo: str | Path, number: int, phase_file: str | Path | None = None
+) -> bool:
     """ledger.json records a finalize step with a FINALIZE_DONE signal.
 
     The signal carries a digest: the runner writes ``FINALIZE_DONE <8 hex>``.
@@ -167,27 +180,33 @@ def ledger_finalized(repo, number, phase_file=None):
     fin = steps.get("finalize")
     if not isinstance(fin, dict):
         return False
-    signal = fin.get("signal")
+    signal = cast("dict[str, Any]", fin).get("signal")
     if not isinstance(signal, str):
         return False
     return signal == "FINALIZE_DONE" or signal.startswith("FINALIZE_DONE ")
 
 
-def publication_receipt_done(repo, number, phase_file=None):
+def publication_receipt_done(
+    repo: str | Path, number: int, phase_file: str | Path | None = None
+) -> bool:
     path = run_dir(repo, number, phase_file) / "publication.json"
     try:
         data = json.loads(path.read_text())
     except (OSError, ValueError):
         return False
+    if not isinstance(data, dict):
+        return False
+    receipt = cast("dict[str, Any]", data)
     return (
-        isinstance(data, dict)
-        and data.get("version") == 1
-        and data.get("state") == "published"
-        and data.get("phase") == f"{int(number):06d}"
+        receipt.get("version") == 1
+        and receipt.get("state") == "published"
+        and receipt.get("phase") == f"{int(number):06d}"
     )
 
 
-def finalize_log_done(repo, number, phase_file=None):
+def finalize_log_done(
+    repo: str | Path, number: int, phase_file: str | Path | None = None
+) -> bool:
     """A finalize-task-r*.log ends with a FINALIZE_DONE signal line."""
     try:
         logs = sorted(run_dir(repo, number, phase_file).glob("finalize-task-r*.log"))
@@ -208,16 +227,16 @@ def finalize_log_done(repo, number, phase_file=None):
     return False
 
 
-def index_complete(_repo, roadmap):
+def index_complete(_repo: str | Path, roadmap: str | Path | None) -> set[int]:
     """Phase numbers marked Complete in roadmap/index.md."""
     if roadmap is None:
         return set()
-    path = roadmap / "index.md"
+    path = Path(roadmap) / "index.md"
     try:
         text = path.read_text(errors="replace")
     except OSError:
         return set()
-    done = set()
+    done: set[int] = set()
     for line in text.splitlines():
         row = INDEX_ROW_RE.match(line)
         if row and "Complete" in line:
@@ -233,7 +252,9 @@ def index_complete(_repo, roadmap):
     return done
 
 
-def phase_attempted(repo, number, phase_file=None):
+def phase_attempted(
+    repo: str | Path, number: int, phase_file: str | Path | None = None
+) -> bool:
     """The pipeline has run this phase at least once.
 
     A run directory exists whatever the run went on to do: it holds the run
@@ -248,7 +269,9 @@ def phase_attempted(repo, number, phase_file=None):
         return False
 
 
-def is_done(repo, number, path, index_done):
+def is_done(
+    repo: str | Path, number: int, path: str | Path, index_done: set[int]
+) -> bool:
     """Whether this phase's work is finished, from the machine's own records.
 
     The ticked "required approval is obtained" box on the phase file is
@@ -292,7 +315,12 @@ def is_done(repo, number, path, index_done):
     return False
 
 
-def signals(repo, number, path, index_done):
+def signals(
+    repo: str | Path,
+    number: int,
+    path: str | Path,
+    index_done: set[int],
+) -> dict[str, bool]:
     """Per-signal completion evidence for one phase (verbose/audit output)."""
     return {
         "run": run_completed(repo, number, path),

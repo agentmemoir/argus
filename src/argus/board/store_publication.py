@@ -2,6 +2,8 @@
 # SPDX-License-Identifier: Apache-2.0
 """The short publication lock: acquire and release."""
 
+from typing import Any
+
 from argus.board.core import (
     TERMINAL_STATUSES,
     PublicationBusy,
@@ -19,13 +21,13 @@ from argus.board.worktree import _transaction
 
 
 class _PublicationOps(_StoreBase):
-    def acquire_publication(self, reservation):
+    def acquire_publication(self, reservation: dict[str, Any]) -> Any:
         key, _number = _phase_key(reservation.get("phase"))
         machine_id = _validate_machine_id(reservation.get("machine_id"))
         reservation_id = _validate_reservation_id(reservation.get("reservation_id"))
         generation = _validate_generation(reservation.get("generation"))
 
-        def mutate(state):
+        def mutate(state: dict[str, Any]) -> _Mutation:
             record = state["phases"].get(key)
             if record is None or not _owner_matches(
                 record, machine_id, reservation_id, generation
@@ -68,13 +70,13 @@ class _PublicationOps(_StoreBase):
             f"phase coordination: publication lock {key}",
         )
 
-    def release_publication(self, reservation):
+    def release_publication(self, reservation: dict[str, Any]) -> Any:
         key, _number = _phase_key(reservation.get("phase"))
         machine_id = _validate_machine_id(reservation.get("machine_id"))
         reservation_id = _validate_reservation_id(reservation.get("reservation_id"))
         generation = _validate_generation(reservation.get("generation"))
 
-        def mutate(state):
+        def mutate(state: dict[str, Any]) -> _Mutation:
             current = state.get("publication")
             if current is None:
                 return _Mutation(False, None)
@@ -96,3 +98,6 @@ class _PublicationOps(_StoreBase):
             mutate,
             f"phase coordination: release publication lock {key}",
         )
+
+
+__all__ = ["_PublicationOps"]

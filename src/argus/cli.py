@@ -13,7 +13,7 @@ import sys
 from pathlib import Path
 
 
-def main(argv=None):
+def main(argv: list[str] | None = None) -> None:
     """Replace this process with the shell driver, keeping args and status."""
     args = list(sys.argv[1:] if argv is None else argv)
     driver = Path(__file__).resolve().parent / "driver" / "phase-driver.sh"

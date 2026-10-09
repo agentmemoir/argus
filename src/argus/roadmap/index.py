@@ -2,6 +2,8 @@
 # SPDX-License-Identifier: Apache-2.0
 """roadmap/index.md drift: report it, and repair the half that is mechanical."""
 
+from pathlib import Path
+
 from argus.roadmap.evidence import (
     INDEX_HEAD_RE,
     INDEX_ROW_RE,
@@ -11,7 +13,9 @@ from argus.roadmap.evidence import (
 from argus.roadmap.queue import candidates
 
 
-def audit(repo, roadmap, apply_index=False):
+def audit(
+    repo: str | Path, roadmap: str | Path | None, apply_index: bool = False
+) -> int:
     """Report index.md drift. Returns issue count.
 
     With ``apply_index`` the second drift class is also repaired: a phase that
@@ -27,7 +31,7 @@ def audit(repo, roadmap, apply_index=False):
     """
     index_done = index_complete(repo, roadmap)
     issues = 0
-    drifted = []
+    drifted: list[tuple[int, Path]] = []
     for number, path in candidates(repo, roadmap):
         s = signals(repo, number, path, index_done)
         markers = (
@@ -68,7 +72,11 @@ def audit(repo, roadmap, apply_index=False):
     return issues
 
 
-def _annotate_index_complete(_repo, roadmap, drifted):
+def _annotate_index_complete(
+    _repo: str | Path,
+    roadmap: str | Path | None,
+    drifted: list[tuple[int, Path]],
+) -> tuple[int, int]:
     """Mark each named phase's index.md entry Complete, in place.
 
     Two shapes exist and they need different edits:
@@ -87,7 +95,7 @@ def _annotate_index_complete(_repo, roadmap, drifted):
     """
     if roadmap is None:
         return 0, 0
-    path = roadmap / "index.md"
+    path = Path(roadmap) / "index.md"
     try:
         text = path.read_text()
     except OSError as exc:
@@ -101,7 +109,7 @@ def _annotate_index_complete(_repo, roadmap, drifted):
     status_col = None
     applied = 0
     skipped = 0
-    out = []
+    out: list[str] = []
     for line in lines:
         stripped = line.strip()
         if stripped.startswith("|"):
@@ -137,7 +145,7 @@ def _annotate_index_complete(_repo, roadmap, drifted):
     return applied, skipped
 
 
-def _is_header_row(cells):
+def _is_header_row(cells: list[str]) -> bool:
     """True for a table header: a non-numeric first cell naming the column.
 
     ``cells`` is the raw ``split("|")``, so index 0 is the empty string before
@@ -149,7 +157,7 @@ def _is_header_row(cells):
     return labels[0].lower() in {"slice", "phase", "number", "id"}
 
 
-def _status_column_index(cells):
+def _status_column_index(cells: list[str]) -> int | None:
     """Index into a raw ``split("|")`` row for the Status cell, or None."""
     for idx, cell in enumerate(cells[1:-1], start=1):
         if cell.strip().lower().startswith("status"):
@@ -157,7 +165,7 @@ def _status_column_index(cells):
     return None
 
 
-def _mark_heading_complete(line):
+def _mark_heading_complete(line: str) -> str | None:
     """Insert the marker before the link, not inside it."""
     newline = "\n" if line.endswith("\n") else ""
     body = line.rstrip("\n")
@@ -170,7 +178,7 @@ def _mark_heading_complete(line):
     return f"{before} · **Complete** · {body[start:]}{newline}"
 
 
-def _mark_row_complete(line, status_col):
+def _mark_row_complete(line: str, status_col: int | None) -> str | None:
     """Replace the Status cell when the table has one, else mark the last cell.
 
     The rebuilt row keeps the line's original indentation and column widths by

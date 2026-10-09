@@ -21,11 +21,11 @@ from argus.board.store import ReservationStore
 from argus.config.loader import ConfigError
 
 
-def _cli_store(_args):
+def _cli_store(_args: argparse.Namespace) -> ReservationStore:
     return ReservationStore(conventions.setting("repo-root"))
 
 
-def _add_store_args(parser):
+def _add_store_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--config")
     parser.add_argument("--repo-root", dest="config_repo_root")
     parser.add_argument("--roadmap-dir", dest="config_roadmap_dir")
@@ -33,20 +33,20 @@ def _add_store_args(parser):
     parser.add_argument("--driver", dest="config_driver")
 
 
-def _add_reservation_args(parser):
+def _add_reservation_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--phase", required=True)
     parser.add_argument("--machine-id", required=True)
     parser.add_argument("--reservation-id", required=True)
     parser.add_argument("--generation", required=True, type=int)
 
 
-def _add_token_args(parser):
+def _add_token_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--machine-id", required=True)
     parser.add_argument("--reservation-id", required=True)
     parser.add_argument("--generation", required=True, type=int)
 
 
-def main(argv=None):
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Shared phase reservations")
     sub = parser.add_subparsers(dest="command", required=False)
 

@@ -15,7 +15,7 @@ from argus.select.work_source import WorkSourceError, resolve
 from argus.select.work_source import self_test as work_source_self_test
 
 
-def self_test():
+def self_test() -> None:
     roadmap_source_self_test()
     work_source_self_test()
     _self_test_configuration()
@@ -23,7 +23,7 @@ def self_test():
     print("next_phase self-test: pass")
 
 
-def _self_test_configuration():
+def _self_test_configuration() -> None:
     """This file's own wiring: which source is chosen, and what a bad one does.
 
     The source's rules are tested where they live. What is tested here is the
@@ -170,7 +170,7 @@ def _self_test_configuration():
         assert "work-100462-skip.md" not in err.getvalue(), err.getvalue()
 
 
-def _self_test_group_query():
+def _self_test_group_query() -> None:
     """The read-only group query answers from the roadmap and needs no board.
 
     The settings below name no board at all. That absence is the proof that

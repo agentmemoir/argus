@@ -3,7 +3,9 @@
 """Run-state artifacts, and the phase-scoped commit that lands leftovers."""
 
 import re
+from collections.abc import Iterable
 from pathlib import Path
+from typing import Any, cast
 
 from argus.conventions import board_repo, phase_run_dir, runs_dir
 from argus.gitsync.git import (
@@ -51,7 +53,7 @@ ENGINE_WRITTEN_RUN_ARTIFACTS = (
 _RUN_ARTIFACT_RE = re.compile(r"(?:^|/)runs/(phase-\d+)/([^/]+)$")
 
 
-def is_engine_written_run_artifact(path):
+def is_engine_written_run_artifact(path: str) -> bool:
     """Whether a repo-relative path is engine telemetry the running step
     rewrites in place, rather than phase evidence.
 
@@ -62,10 +64,14 @@ def is_engine_written_run_artifact(path):
         Whether the path is an engine-written artifact of one phase.
     """
     match = _RUN_ARTIFACT_RE.search(path)
-    return bool(match) and match.group(2) in ENGINE_WRITTEN_RUN_ARTIFACTS
+    return match is not None and match.group(2) in ENGINE_WRITTEN_RUN_ARTIFACTS
 
 
-def publish_dirt(dirty, root=None, phase=None):
+def publish_dirt(
+    dirty: Iterable[str],
+    root: str | Path | None = None,
+    phase: int | None = None,
+) -> tuple[list[str], list[str]]:
     """Split dirty paths into the ones that must refuse publication and the
     engine-written ones that were already committed and pushed.
 
@@ -75,7 +81,7 @@ def publish_dirt(dirty, root=None, phase=None):
     if root is not None and phase is not None:
         run = phase_run_dir(root, phase).resolve()
 
-        def engine_artifact(path):
+        def engine_artifact(path: str) -> bool:
             candidate = Path(path)
             if not candidate.is_absolute():
                 candidate = Path(root) / candidate
@@ -90,16 +96,20 @@ def publish_dirt(dirty, root=None, phase=None):
     return real, engine
 
 
-def _commit_and_push_run_state(repo, message, pathspec="runs"):
+def _commit_and_push_run_state(
+    repo: str | Path, message: str, pathspec: str = "runs"
+) -> dict[str, Any]:
     """Commit one scoped run-state path and push without force.
 
     ``pathspec`` is deliberately narrow. A phase must never publish another
     phase's run directory merely because both are dirty at the same time.
     """
-    branch, remote, remote_branch, why = resolve_upstream(repo)
-    info = {"repo": str(repo), "pathspec": pathspec}
+    branch, remote, _remote_branch, why = resolve_upstream(repo)
+    info: dict[str, Any] = {"repo": str(repo), "pathspec": pathspec}
     if why:
         return blocked(info, why)
+    branch = cast("str", branch)
+    remote = cast("str", remote)
     _, staged, _ = git(repo, "diff", "--cached", "--name-only")
     if staged:
         prefix = pathspec.rstrip("/") + "/"
@@ -144,7 +154,7 @@ def _commit_and_push_run_state(repo, message, pathspec="runs"):
     )
 
 
-def _phase_run_pathspec(phase, root=None):
+def _phase_run_pathspec(phase: int | str, root: str | Path | None = None) -> str:
     root = Path(root or Path.cwd()).resolve()
     try:
         number = int(phase)
@@ -173,7 +183,9 @@ def _phase_run_pathspec(phase, root=None):
         ) from exc
 
 
-def commit_leftover_run_state(root, message, phase=None):
+def commit_leftover_run_state(
+    root: str | Path, message: str, phase: int | None = None
+) -> dict[str, Any]:
     """Commit only the current phase's private run state.
 
     With ``phase`` omitted, the legacy all-``runs`` scope remains available
@@ -181,13 +193,13 @@ def commit_leftover_run_state(root, message, phase=None):
     concurrent phase's partial records cannot be swept into this publication.
     """
     root = Path(root).resolve()
-    private = board_repo(root)
+    private = cast("Path", board_repo(root))
     pathspec = (
         _phase_run_pathspec(phase, root)
         if phase is not None
         else str(runs_dir(root).relative_to(private))
     )
-    results = []
+    results: list[dict[str, Any]] = []
     # The nested private checkout is a separate repo by design; if a host
     # lacks the global ignore for it, do not mistake it for public dirt.
     pub_dirty = [p for p in dirty_paths(root) if not _is_private_path(root, p)]

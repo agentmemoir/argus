@@ -66,9 +66,10 @@ ignore = ["E501"]
 testpaths = ["tests"]
 addopts = "-ra --strict-markers"
 
-# Type checking is adopted at mypy's default level: every shipped module must
-# pass `make typecheck`. Strict mode and a shipped `py.typed` are the recorded
-# target for a later pass, once the large modules are split and annotated.
+# Type checking: mypy at its default level gates the package (`make
+# typecheck`); pyright in strict mode, the checker behind the editor's Pylance,
+# gates the package and the suite (`make typecheck-strict`). A shipped
+# `py.typed` is the open step of the recorded type-checking target.
 [tool.mypy]
 python_version = "3.11"
 files = ["src/argus"]

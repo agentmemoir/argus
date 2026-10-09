@@ -201,7 +201,7 @@ def _text(path: Path) -> str:
         return ""
 
 
-def check(condition, detail=""):
+def check(condition: object, detail: object = "") -> None:
     if not condition:
         raise AssertionError(detail)
 

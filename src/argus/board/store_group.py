@@ -4,6 +4,8 @@
 
 import datetime as _datetime
 import secrets
+from collections.abc import Sequence
+from typing import Any
 
 from argus.board.core import (
     ACTIVE_STATUSES,
@@ -25,16 +27,16 @@ from argus.board.worktree import _base_revisions, _transaction
 class _GroupOps(_StoreBase):
     def reserve_group(
         self,
-        phases,
-        machine_id,
+        phases: Sequence[str | int],
+        machine_id: str,
         *,
-        reservation_id=None,
-        generation=None,
-        run_ids=None,
-        base_revisions=None,
-        status="claimed",
-        now=None,
-    ):
+        reservation_id: str | None = None,
+        generation: int | None = None,
+        run_ids: dict[str, str] | None = None,
+        base_revisions: dict[str, Any] | None = None,
+        status: str = "claimed",
+        now: _datetime.datetime | str | None = None,
+    ) -> Any:
         """Claim every phase in ``phases`` in one board write, or claim none.
 
         The members share one reservation id, so the driver fences the whole
@@ -55,7 +57,7 @@ class _GroupOps(_StoreBase):
 
         Returns one reservation dict per member, in the order given.
         """
-        keys = []
+        keys: list[str] = []
         for phase in phases:
             key, _number = _phase_key(phase)
             if key in keys:
@@ -80,8 +82,8 @@ class _GroupOps(_StoreBase):
         revisions = base_revisions or _base_revisions(self.root, self.private)
         run_ids = run_ids or {}
 
-        def mutate(state):
-            records = []
+        def mutate(state: dict[str, Any]) -> _Mutation:
+            records: list[Any] = []
             for key in keys:
                 number = int(key)
                 record = _claim_one(
@@ -107,7 +109,7 @@ class _GroupOps(_StoreBase):
             f"phase coordination: reserve group [{','.join(keys)}] for {machine_id}",
         )
 
-    def expire_stale(self, now=None):
+    def expire_stale(self, now: _datetime.datetime | str | None = None) -> Any:
         """Return every stale group to the queue under a cooldown stamp.
 
         A claim is stale when no work started inside the start window, or, once
@@ -120,7 +122,7 @@ class _GroupOps(_StoreBase):
         """
         moment = _as_moment(now) or _datetime.datetime.now(_datetime.UTC)
 
-        def mutate(state):
+        def mutate(state: dict[str, Any]) -> _Mutation:
             expired = _expire_records(state, moment)
             return _Mutation(bool(expired), expired)
 
@@ -131,3 +133,6 @@ class _GroupOps(_StoreBase):
             mutate,
             "phase coordination: expire stale claims",
         )
+
+
+__all__ = ["_GroupOps"]

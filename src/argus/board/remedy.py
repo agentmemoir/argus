@@ -32,10 +32,13 @@ import json
 import re
 import sys
 from pathlib import Path
+from typing import Any, cast
 
 if not __package__:
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-    import _bootstrap  # noqa: F401 - register the source package
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+    from argus import (
+        _bootstrap as _bootstrap,  # noqa: F401 - register the source package
+    )
 from argus import conventions
 from argus.config.loader import ConfigError
 
@@ -72,10 +75,13 @@ def last_approver_signal(run_json: Path) -> str | None:
         return None
     if not isinstance(data, dict):
         return None
-    signal = None
-    for event in data.get("events") or []:
-        if isinstance(event, dict) and event.get("step") == APPROVER_STEP:
-            value = event.get("signal")
+    data = cast("dict[str, Any]", data)
+    signal: str | None = None
+    events: list[Any] = data.get("events") or []
+    for event in events:
+        event_obj = cast("dict[str, Any]", event)
+        if isinstance(event, dict) and event_obj.get("step") == APPROVER_STEP:
+            value = event_obj.get("signal")
             if isinstance(value, str) and value:
                 signal = value
     return signal
@@ -100,7 +106,7 @@ def _open_findings(signal: str | None) -> list[str]:
     return found
 
 
-def record_escalation(phase_dir: Path, phase: str | None = None) -> dict:
+def record_escalation(phase_dir: Path, phase: str | None = None) -> dict[str, Any]:
     """Write the durable escalation record and return it.
 
     Args:
@@ -114,7 +120,7 @@ def record_escalation(phase_dir: Path, phase: str | None = None) -> dict:
     run_json = phase_dir / "run.json"
     signal = last_approver_signal(run_json)
     key = phase or phase_dir.name.removeprefix("phase-")
-    record = {
+    record: dict[str, Any] = {
         "version": 1,
         "phase": f"{int(key):06d}" if str(key).isdigit() else str(key),
         "state": "remedy_escalated",
@@ -132,7 +138,7 @@ def record_escalation(phase_dir: Path, phase: str | None = None) -> dict:
     return record
 
 
-def release_claim(repo_root: Path, reservation: dict):
+def release_claim(repo_root: Path, reservation: dict[str, Any]) -> Any:
     """Mark the phase's board record rejected, so the claim is not retained.
 
     Returns the store's result. Raises whatever the store raises; the caller
@@ -145,7 +151,7 @@ def release_claim(repo_root: Path, reservation: dict):
     return store.set_status(reservation, "rejected")
 
 
-def _reservation_from_args(args) -> dict | None:
+def _reservation_from_args(args: argparse.Namespace) -> dict[str, Any] | None:
     if not (args.machine_id and args.reservation_id and args.generation is not None):
         return None
     return {
@@ -156,7 +162,7 @@ def _reservation_from_args(args) -> dict | None:
     }
 
 
-def run(args) -> int:
+def run(args: argparse.Namespace) -> int:
     phase_dir = Path(args.run_dir)
     if not phase_dir.is_dir():
         print(json.dumps({"ok": False, "error": f"no run directory: {phase_dir}"}))
@@ -174,7 +180,7 @@ def run(args) -> int:
             reason = (
                 str(exc).splitlines()[0][:200] if str(exc) else exc.__class__.__name__
             )
-    result = {
+    result: dict[str, Any] = {
         "ok": True,
         "record": record["record"],
         "released": released,
@@ -251,7 +257,7 @@ def self_test() -> int:
     return 0
 
 
-def main(argv=None) -> int:
+def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if args.self_test:
         return self_test()

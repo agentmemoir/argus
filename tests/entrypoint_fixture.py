@@ -4,6 +4,7 @@
 
 import re
 import subprocess
+from collections.abc import Mapping
 from pathlib import Path
 
 from argus.config.schema import SHELL_VARS
@@ -12,18 +13,20 @@ ARGUS = Path(__file__).resolve().parents[1]
 CONFIG_ENV_NAMES = frozenset(SHELL_VARS.values())
 
 
-def run(command, cwd, env):
+def run(
+    command: list[str], cwd: str | Path, env: Mapping[str, str]
+) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         command, cwd=cwd, env=env, text=True, capture_output=True, timeout=180
     )
 
 
-def require(ok, message, detail=""):
+def require(ok: object, message: str, detail: object = "") -> None:
     if not ok:
         raise AssertionError(f"{message}: {detail}")
 
 
-def checkout(base, name, env):
+def checkout(base: Path, name: str, env: Mapping[str, str]) -> Path:
     remote, repo = base / f"{name}.git", base / name
     commands = [
         ["git", "init", "--bare", "--initial-branch=master", str(remote)],
@@ -39,11 +42,20 @@ def checkout(base, name, env):
     return repo
 
 
-def normalized(text):
+def normalized(text: str) -> str:
     return re.sub(r"(?m)^\d{4}-\d{2}-\d{2}T\S+ ", "", text)
 
 
-def write_config(path, *, project, board, roadmap, runs, pipeline, python):
+def write_config(
+    path: Path,
+    *,
+    project: Path,
+    board: Path,
+    roadmap: Path,
+    runs: Path,
+    pipeline: Path,
+    python: str,
+) -> None:
     """Write a hand-edited-style JSONC config. Relative paths resolve against it."""
     (path.parent / "machine-id").write_text("fixture-machine\n", encoding="utf-8")
     path.write_text(f"""// Argus configuration for the entrypoint fixture.

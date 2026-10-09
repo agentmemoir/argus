@@ -2,6 +2,9 @@
 # SPDX-License-Identifier: Apache-2.0
 """Self-test checks for the claim lifecycle."""
 
+from pathlib import Path
+from typing import Any
+
 from argus import conventions
 from argus.board.core import (
     COOLDOWN_UNTIL_FIELD,
@@ -21,7 +24,7 @@ from argus.board.selftest_fixture import (
 from argus.board.store import ReservationStore
 
 
-def _group_lifecycle_checks(checks, base):
+def _group_lifecycle_checks(checks: list[dict[str, Any]], base: Path) -> None:
     """Prove release, expiry, cooldown and fencing on a two-machine fixture.
 
     Time is injected through the stores rather than slept through, so the
@@ -39,7 +42,7 @@ def _group_lifecycle_checks(checks, base):
     store_b = ReservationStore(root_b, private_repo=clients[1])
     epoch = _dt.datetime(2026, 10, 8, 12, 0, tzinfo=_dt.UTC)
 
-    def at(seconds):
+    def at(seconds: float) -> _dt.datetime:
         return epoch + _dt.timedelta(seconds=seconds)
 
     members = ["100200", "100201", "100202"]
@@ -56,7 +59,7 @@ def _group_lifecycle_checks(checks, base):
     )
     try:
         store_b.reserve_group(members, "server-02", now=at(GROUP_START_WINDOW_S - 1))
-        early = None
+        early: ReservationConflict | ReservationCooldown | None = None
     except ReservationConflict as exc:
         early = exc
     except ReservationCooldown as exc:  # pragma: no cover - clearer failure
@@ -161,7 +164,7 @@ def _group_lifecycle_checks(checks, base):
         store_b.reserve_group(
             running, "server-04", now=at(GROUP_HEARTBEAT_WINDOW_S + 1)
         )
-        still_live = None
+        still_live: ReservationCooldown | ReservationConflict | None = None
     except ReservationCooldown as exc:
         still_live = exc
     except ReservationConflict as exc:
@@ -244,3 +247,6 @@ def _group_lifecycle_checks(checks, base):
         and takeover["reservation_id"] != taken[0]["reservation_id"],
         str({key: after_takeover["phases"][key]["reservation_id"] for key in takers}),
     )
+
+
+__all__ = ["_group_lifecycle_checks"]

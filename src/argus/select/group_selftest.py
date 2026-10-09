@@ -15,12 +15,15 @@ import json
 import shutil
 import tempfile
 from pathlib import Path
+from typing import Any, cast
 
 if not __package__:
     import sys
 
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-    import _bootstrap  # noqa: F401 - register the source package
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+    from argus import (
+        _bootstrap as _bootstrap,  # noqa: F401 - register the source package
+    )
 from argus import conventions
 from argus.board.reservations import (
     ReservationConflict,
@@ -32,12 +35,14 @@ from argus.board.reservations import (
 from argus.select.group import _release, _renew, _request
 
 
-def _check(checks, name, ok, detail=""):
+def _check(
+    checks: list[dict[str, Any]], name: str, ok: object, detail: str = ""
+) -> None:
     checks.append({"check": name, "ok": bool(ok), "detail": detail})
 
 
-def _configure(repo, *, board=None):
-    settings = {
+def _configure(repo: Path, *, board: dict[str, Any] | None = None) -> None:
+    settings: dict[str, Any] = {
         "repo-root": repo,
         "pipeline": None,
         "roadmap-dir": repo / "roadmap",
@@ -53,14 +58,14 @@ def _configure(repo, *, board=None):
     conventions.configure(settings)
 
 
-def _write_group(roadmap, members):
+def _write_group(roadmap: Path, members: list[str]) -> None:
     """Write one symmetric together declaration into every member file."""
     text = "### Reservation Group\n\n`together: " + ", ".join(members) + "`\n"
     for member in members:
         (roadmap / f"phase-{member}-x.md").write_text(text)
 
 
-def _self_test_missing_declaration(checks):
+def _self_test_missing_declaration(checks: list[dict[str, Any]]) -> None:
     with tempfile.TemporaryDirectory() as tmp:
         repo = Path(tmp).resolve()
         roadmap = repo / "roadmap"
@@ -78,7 +83,7 @@ def _self_test_missing_declaration(checks):
         )
 
 
-def _self_test_already_completed(checks):
+def _self_test_already_completed(checks: list[dict[str, Any]]) -> None:
     with tempfile.TemporaryDirectory() as tmp:
         repo = Path(tmp).resolve()
         roadmap = repo / "roadmap"
@@ -98,7 +103,7 @@ def _self_test_already_completed(checks):
         )
 
 
-def _self_test_group_claim(checks):
+def _self_test_group_claim(checks: list[dict[str, Any]]) -> None:
     from argus.board.reservations import SELF_TEST_BRANCH, _git_test_repo
     from argus.exec_tempdir import make_exec_dir
 
@@ -163,22 +168,23 @@ def _self_test_group_claim(checks):
         )
 
         result, code = _request(repo, roadmap, "100050", "server-03")
-        array_ok = (
+        rows = cast("list[dict[str, Any]]", result)
+        array_ok: bool = (
             code == 0
             and isinstance(result, list)
-            and [record["phase"] for record in result] == ["100050", "100060"]
-            and result[0]["reservation_id"] == result[1]["reservation_id"]
+            and [record["phase"] for record in rows] == ["100050", "100060"]
+            and rows[0]["reservation_id"] == rows[1]["reservation_id"]
         )
         _check(
             checks,
             "a request answers the group's unfinished remainder as an array",
             array_ok,
-            result,
+            str(rows),
         )
 
-        tokens_ok = array_ok
+        tokens_ok: bool = array_ok
         if array_ok:
-            for record in result:
+            for record in rows:
                 token = load_reservation_file(reservation_file(repo, record["phase"]))
                 tokens_ok = (
                     tokens_ok
@@ -189,7 +195,7 @@ def _self_test_group_claim(checks):
             checks,
             "each member's reservation token is written under the shared id",
             tokens_ok,
-            result,
+            str(rows),
         )
 
         held, held_code = _request(repo, roadmap, "100060", "server-05", store=other)
@@ -207,26 +213,36 @@ def _self_test_group_claim(checks):
         partial, partial_code = _request(
             repo, roadmap, "100090", "server-07", store=other
         )
+        partial_rows = cast("list[dict[str, Any]]", partial)
         _check(
             checks,
             "a completed member is dropped from the requested remainder",
             partial_code == 0
             and isinstance(partial, list)
-            and [record["phase"] for record in partial] == ["100090"],
-            partial,
+            and [record["phase"] for record in partial_rows] == ["100090"],
+            str(partial_rows),
         )
 
         # The cooldown lifecycle lands later; this proves the refusal path a
         # request uses while a claim waits it out.
         class _CooldownStore:
-            def read(self):
+            def read(self) -> tuple[dict[str, Any], None]:
                 return {"phases": {}}, None
 
-            def reserve_group(self, phases, machine_id, **kwargs):  # noqa: ARG002 - the fake mirrors the real store's signature
+            def reserve_group(
+                self,
+                phases: list[str],
+                machine_id: str,  # noqa: ARG002 - the fake mirrors the real store's signature
+                **kwargs: Any,  # noqa: ARG002 - the fake mirrors the real store's signature
+            ) -> list[dict[str, Any]]:
                 raise ReservationCooldown(phases[0], 17, {})
 
         cooling, cold_code = _request(
-            repo, roadmap, "100070", "server-06", store=_CooldownStore()
+            repo,
+            roadmap,
+            "100070",
+            "server-06",
+            store=cast("ReservationStore", _CooldownStore()),
         )
         _check(
             checks,
@@ -240,15 +256,16 @@ def _self_test_group_claim(checks):
         # A second request from the owner answers the same array: the call is
         # idempotent, and an owner is never refused its own reservation.
         again, again_code = _request(repo, roadmap, "100050", "server-03", store=store)
+        again_rows = cast("list[dict[str, Any]]", again)
         _check(
             checks,
             "a repeated request from the holder answers the same array",
             again_code == 0
             and isinstance(again, list)
-            and [record["phase"] for record in again]
-            == [record["phase"] for record in result]
-            and again[0]["reservation_id"] == result[0]["reservation_id"],
-            again,
+            and [record["phase"] for record in again_rows]
+            == [record["phase"] for record in rows]
+            and again_rows[0]["reservation_id"] == rows[0]["reservation_id"],
+            str(again_rows),
         )
 
         class _Args:
@@ -285,9 +302,9 @@ def _self_test_group_claim(checks):
         shutil.rmtree(base, ignore_errors=True)
 
 
-def self_test():
+def self_test() -> int:
     """Exercise the request rules and the atomic group claim; needs no network."""
-    checks = []
+    checks: list[dict[str, Any]] = []
     _self_test_missing_declaration(checks)
     _self_test_already_completed(checks)
     _self_test_group_claim(checks)

@@ -3,13 +3,15 @@
 """Self-test checks for the push boundary and publication lock."""
 
 import subprocess
+from pathlib import Path
+from typing import Any
 
 from argus.board.core import CoordinationUnavailable, PublicationBusy
 from argus.board.git import _git, git_binary
 from argus.board.store import ReservationStore
 
 
-def _pushurl_boundary_check(base):
+def _pushurl_boundary_check(base: Path) -> tuple[bool, str]:
     public_remote = base / "public-boundary.git"
     private_remote = base / "private-boundary.git"
     for remote in (public_remote, private_remote):
@@ -43,7 +45,11 @@ def _pushurl_boundary_check(base):
         return True, str(exc)
 
 
-def _publication_lock_check(store, reservation, contender):
+def _publication_lock_check(
+    store: ReservationStore,
+    reservation: dict[str, Any],
+    contender: dict[str, Any],
+) -> bool:
     store.acquire_publication(reservation)
     try:
         store.acquire_publication(contender)
@@ -52,3 +58,6 @@ def _publication_lock_check(store, reservation, contender):
         blocked = True
     store.release_publication(reservation)
     return blocked
+
+
+__all__ = ["_publication_lock_check", "_pushurl_boundary_check"]

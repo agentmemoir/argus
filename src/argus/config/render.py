@@ -4,23 +4,28 @@
 
 import shlex
 from pathlib import Path
+from typing import TYPE_CHECKING, cast
 
 from argus.config.schema import _REPORT_KEY, SCHEMA, SHELL_VARS
 
+if TYPE_CHECKING:
+    from argus.config.loader import Config
 
-def _shell_value(value):
+
+def _shell_value(value: object) -> str:
     if isinstance(value, list):
-        if not value:
+        items = cast("list[object]", value)
+        if not items:
             return "()"
-        return "( " + " ".join(shlex.quote(str(item)) for item in value) + " )"
+        return "( " + " ".join(shlex.quote(str(item)) for item in items) + " )"
     if isinstance(value, bool):
         return "1" if value else "0"
     return shlex.quote(str(value))
 
 
-def shell_lines(config):
+def shell_lines(config: "Config") -> list[str]:
     """One assignment per present variable, plus its source, in schema order."""
-    lines = []
+    lines: list[str] = []
     for field in SCHEMA:
         key = _REPORT_KEY.get(field.key, field.key)
         if key not in config.values:
@@ -31,19 +36,19 @@ def shell_lines(config):
     return lines
 
 
-def _render(value):
+def _render(value: object) -> str:
     if isinstance(value, Path):
         return str(value)
     if isinstance(value, list):
-        return " ".join(str(item) for item in value)
+        return " ".join(str(item) for item in cast("list[object]", value))
     if isinstance(value, bool):
         return "true" if value else "false"
     return str(value)
 
 
-def report_lines(config):
+def report_lines(config: "Config") -> list[str]:
     """`key<TAB>source<TAB>value` for every present key, in schema order."""
-    lines = []
+    lines: list[str] = []
     for field in SCHEMA:
         key = _REPORT_KEY.get(field.key, field.key)
         if key not in config.values:
@@ -52,8 +57,15 @@ def report_lines(config):
     return lines
 
 
-def _json_view(config):
-    values = {}
+def _json_view(config: "Config") -> dict[str, object]:
+    values: dict[str, object] = {}
     for key, value in config.values.items():
         values[key] = str(value) if isinstance(value, Path) else value
-    return {"path": str(config.path), "values": values, "sources": dict(config.sources)}
+    return {
+        "path": str(config.path),
+        "values": values,
+        "sources": dict(config.sources),
+    }
+
+
+__all__ = ["_json_view"]

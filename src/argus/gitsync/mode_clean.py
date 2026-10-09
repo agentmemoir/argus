@@ -3,6 +3,7 @@
 """The clean and checkpoint modes: leftover run state, and work in progress."""
 
 from pathlib import Path
+from typing import Any, cast
 
 from argus.conventions import board_repo
 from argus.gitsync.git import (
@@ -19,7 +20,7 @@ from argus.gitsync.modes import _run_phase_numbers
 from argus.gitsync.runstate import _commit_and_push_run_state, _phase_run_pathspec
 
 
-def mode_clean(root, phase=None):
+def mode_clean(root: str | Path, phase: int | str | None = None) -> dict[str, Any]:
     """Commit and push one phase's leftover private run state, and only that.
 
     The private-only sibling of ``commit_leftover_run_state``. It runs after a
@@ -47,7 +48,7 @@ def mode_clean(root, phase=None):
     """
     root = Path(root).resolve()
     private = board_repo(root)
-    if not is_git_repo(private):
+    if private is None or not is_git_repo(private):
         return {
             "ok": True,
             "mode": "clean",
@@ -60,7 +61,7 @@ def mode_clean(root, phase=None):
         # would make `git commit` report "no changes added to commit" while a
         # sibling phase is still dirty, which the helper reads as a failure.
         dirty = set(dirty_paths(private))
-        numbers = []
+        numbers: list[int] = []
         for number in _run_phase_numbers(root):
             try:
                 pathspec = _phase_run_pathspec(number, root)
@@ -111,7 +112,7 @@ def mode_clean(root, phase=None):
     }
 
 
-def mode_checkpoint(root):
+def mode_checkpoint(root: str | Path) -> dict[str, Any]:
     """Commit and push a checkout's work in progress on the branch it is on.
 
     This is the handoff half of a release. The owner is giving the reservation
@@ -133,6 +134,8 @@ def mode_checkpoint(root):
     branch, remote, _remote_branch, why = resolve_upstream(root)
     if why:
         return blocked(info, why)
+    remote = cast("str", remote)
+    branch = cast("str", branch)
     if branch == integration_branch(root):
         return blocked(
             info,

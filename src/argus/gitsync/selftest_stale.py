@@ -1,27 +1,25 @@
 # Copyright 2026 Agent Memoir Developers (https://agentmemoir.com/)
 # SPDX-License-Identifier: Apache-2.0
-"""The stale-receipt and tree-proof checks."""
+"""The stale-receipt checks."""
 
 import json
+from pathlib import Path
+from typing import Any
 
 from argus import conventions
-from argus.gitsync.branch import ensure_phase_branch
 from argus.gitsync.git import git, integration_branch
 from argus.gitsync.mode_branch import mode_branch
 from argus.gitsync.modes import mode_published
 from argus.gitsync.paths import phase_branch_for
 from argus.gitsync.publish_phase import publish_phase
-from argus.gitsync.receipts import (
-    _head_carried_locally,
-    head_tree_on_integration,
-    phase_receipt,
-)
+from argus.gitsync.receipts import _head_carried_locally, phase_receipt
 from argus.gitsync.review import open_predecessor
 from argus.gitsync.selftest_fixture import _gh_says, _StubGH
 from argus.gitsync.selftest_publish import _publish_fixture
+from argus.gitsync.selftest_tree_proof import _tree_proof_checks as _tree_proof_checks
 
 
-def _stale_receipt_checks(base):
+def _stale_receipt_checks(base: Path) -> list[tuple[str, object, str]]:
     """A merged phase whose receipt still says awaiting_review must not block.
 
     This is the state the line actually stalls in, and no other check here
@@ -46,7 +44,7 @@ def _stale_receipt_checks(base):
     real entry points. The phase after it must branch from the integration
     branch, not from a branch whose content is already there.
     """
-    results = []
+    results: list[tuple[str, object, str]] = []
     old_branch = conventions.setting("board.branch")
     conventions.override({"board.branch": "main"})
     try:
@@ -55,8 +53,8 @@ def _stale_receipt_checks(base):
         # The fixture takes 100484 for its own coordination board, so the two
         # phases under test are 100485 and 100486.
         pub, nested, _run = _publish_fixture(base, "stale-receipt", 100484)
-        store = ReservationStore(pub, branch="main")
-        base_branch = integration_branch(pub)
+        store: Any = ReservationStore(pub, branch="main")
+        base_branch: str = integration_branch(pub)
         first = phase_branch_for(100485, "phase-100485-stale-receipt.md")
         second = phase_branch_for(100486, "phase-100486-after-stale.md")
 
@@ -83,7 +81,7 @@ def _stale_receipt_checks(base):
         git(nested, "add", "-A")
         git(nested, "commit", "-q", "-m", "run state 100485")
         git(nested, "push", "-q", "origin", integration_branch(nested))
-        one = publish_phase(
+        one: dict[str, Any] = publish_phase(
             pub,
             100485,
             pull_request="https://github.com/example-org/example-repo/pull/980",
@@ -93,7 +91,8 @@ def _stale_receipt_checks(base):
                 "the phase under test published and is waiting for a human",
                 one["ok"]
                 and one.get("state") == "AWAITING_REVIEW"
-                and phase_receipt(pub, 100485).get("state") == "awaiting_review",
+                and (phase_receipt(pub, 100485) or {}).get("state")
+                == "awaiting_review",
                 f"ok={one.get('ok')} state={one.get('state')}",
             )
         )
@@ -109,7 +108,9 @@ def _stale_receipt_checks(base):
                 "the squash really did rewrite history, so the commit-id test alone "
                 "cannot see the merge",
                 not _head_carried_locally(
-                    pub, phase_receipt(pub, 100485)["public_head"], (base_branch,)
+                    pub,
+                    (phase_receipt(pub, 100485) or {})["public_head"],
+                    (base_branch,),
                 )
                 and (pub / "first.txt").is_file(),
                 "the phase head is no longer an ancestor of the integration branch",
@@ -139,14 +140,14 @@ def _stale_receipt_checks(base):
 
         # GitHub knows the merge. The number is in the URL and nowhere else.
         with _StubGH(_gh_says("MERGED", "2026-06-01T00:00:00Z")) as gh:
-            done = mode_published(pub, 100485)
+            done: dict[str, Any] = mode_published(pub, 100485)
         results.append(
             (
                 "a merged phase with a stale receipt is marked published even "
                 "though its receipt recorded no pull request reference",
                 done["ok"]
                 and done.get("state") == "PUBLISHED"
-                and phase_receipt(pub, 100485).get("state") == "published",
+                and (phase_receipt(pub, 100485) or {}).get("state") == "published",
                 f"ok={done.get('ok')} state={done.get('state')} "
                 f"gh_calls={len(gh.calls)} "
                 f"blockers={[b for r in done.get('repos', []) for b in r.get('blockers', [])]}",
@@ -170,7 +171,7 @@ def _stale_receipt_checks(base):
                 f"predecessor={open_predecessor(pub, 100486)}",
             )
         )
-        two = mode_branch(pub, 100486, "phase-100486-after-stale.md")
+        two: dict[str, Any] = mode_branch(pub, 100486, "phase-100486-after-stale.md")
         results.append(
             (
                 "the next phase branches from the integration branch and inherits "
@@ -193,7 +194,7 @@ def _stale_receipt_checks(base):
         # The fixture takes 100612 for its own coordination board, so the two
         # phases under test here are 100613 and 100614.
         pub3, nested3, _run3 = _publish_fixture(base, "stale-no-gh", 100612)
-        base3 = integration_branch(pub3)
+        base3: str = integration_branch(pub3)
         branch3 = phase_branch_for(100613, "phase-100613-stale-no-gh.md")
         next3 = phase_branch_for(100614, "phase-100614-after-no-gh.md")
         (nested3 / "roadmap").mkdir(parents=True, exist_ok=True)
@@ -212,7 +213,7 @@ def _stale_receipt_checks(base):
         # built for the first fixture points at different checkouts, and a
         # reservation written through it lands nowhere this phase can publish
         # from — which shows up as a publish that silently writes no receipt.
-        store3 = ReservationStore(pub3, branch="main")
+        store3: Any = ReservationStore(pub3, branch="main")
         save_reservation_file(
             rd3 / "reservation.json", store3.reserve(100613, "server-01")
         )
@@ -236,7 +237,7 @@ def _stale_receipt_checks(base):
         git(nested3, "merge", "-q", "--no-edit", branch3)
         git(nested3, "push", "-q", "origin", integration_branch(nested3))
         with _StubGH({"returncode": 4}):
-            nogh = mode_published(pub3, 100613)
+            nogh: dict[str, Any] = mode_published(pub3, 100613)
         results.append(
             (
                 "with GitHub unreachable the receipt is not rewritten, because "
@@ -256,7 +257,7 @@ def _stale_receipt_checks(base):
                 f"predecessor={open_predecessor(pub3, 100614)}",
             )
         )
-        three = mode_branch(pub3, 100614, "phase-100614-after-no-gh.md")
+        three: dict[str, Any] = mode_branch(pub3, 100614, "phase-100614-after-no-gh.md")
         results.append(
             (
                 "a phase launched on a host that cannot ask GitHub inherits the "
@@ -280,50 +281,4 @@ def _stale_receipt_checks(base):
     return results
 
 
-def _tree_proof_checks(base):
-    """The tree a phase published must be findable on the integration branch.
-
-    A squash merge deletes the commit a phase pushed, so the commit-id test
-    cannot see the merge. What survives is the content: the squash commit's
-    tree is the phase branch's tree. That is the proof this checks, and it is
-    the one that still works when GitHub cannot be asked at all.
-    """
-    results = []
-    pub, _nested, _run = _publish_fixture(base, "tree-proof", 100482)
-    integration = integration_branch(pub)
-    branch = phase_branch_for(100482, "phase-100482-tree-proof.md")
-    ensure_phase_branch(pub, branch, base=integration)
-    for step in range(3):
-        (pub / f"part-{step}.txt").write_text(f"work {step}\n")
-        git(pub, "add", f"part-{step}.txt")
-        git(pub, "commit", "-q", "-m", f"phase 100482 step {step}")
-    head = git(pub, "rev-parse", "HEAD")[1]
-    git(pub, "checkout", "-q", integration)
-    git(pub, "merge", "-q", "--squash", branch)
-    git(pub, "commit", "-q", "-m", "phase 100482 (squashed)")
-    results.append(
-        (
-            "a squash-merged phase's content is on the integration branch even "
-            "though its commit is not",
-            _head_carried_locally(pub, head, (integration,)) is None
-            and head_tree_on_integration(pub, head, integration),
-            f"head={head[:12]}",
-        )
-    )
-
-    # The negative direction: a tree that was never merged must not be found.
-    other = phase_branch_for(100483, "phase-100483-unmerged.md")
-    ensure_phase_branch(pub, other, base=integration)
-    (pub / "unmerged.txt").write_text("still open\n")
-    git(pub, "add", "unmerged.txt")
-    git(pub, "commit", "-q", "-m", "phase 100483: not merged")
-    unmerged_head = git(pub, "rev-parse", "HEAD")[1]
-    git(pub, "checkout", "-q", integration)
-    results.append(
-        (
-            "content that was never merged is not found on the integration branch",
-            not head_tree_on_integration(pub, unmerged_head, integration),
-            f"head={unmerged_head[:12]}",
-        )
-    )
-    return results
+__all__ = ["_stale_receipt_checks", "_tree_proof_checks"]

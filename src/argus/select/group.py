@@ -40,15 +40,15 @@ token that is fenced or expired, and 6 for a cooldown.
 
 from __future__ import annotations
 
-import argparse
-import json
 import sys
 from pathlib import Path
+from typing import Any, cast
 
 if not __package__:
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-    import _bootstrap  # noqa: F401 - register the source package
-from argus import conventions
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+    from argus import (
+        _bootstrap as _bootstrap,  # noqa: F401 - register the source package
+    )
 from argus.board.reservations import (  # noqa: E402 - path set just above
     ACTIVE_STATUSES,
     CoordinationError,
@@ -60,7 +60,6 @@ from argus.board.reservations import (  # noqa: E402 - path set just above
     reservation_file,
     save_reservation_file,
 )
-from argus.config.loader import ConfigError
 from argus.roadmap.source import resolve_group
 from argus.select.work_source import WorkSourceError
 
@@ -79,7 +78,9 @@ REQUEST_EXIT = {
 }
 
 
-def _held_group(store, key, remainder, machine_id):
+def _held_group(
+    store: ReservationStore, key: str, remainder: list[str], machine_id: str
+) -> dict[str, Any] | None:
     """The reservation this machine already holds over ``remainder``, or ``None``.
 
     Returns the keyword arguments that re-claim the same group: one shared
@@ -92,8 +93,8 @@ def _held_group(store, key, remainder, machine_id):
         state, _commit = store.read()
     except CoordinationError:
         return None
-    records = state.get("phases", {})
-    mine = records.get(key) or {}
+    records: dict[str, Any] = state.get("phases", {})
+    mine: dict[str, Any] = records.get(key) or {}
     if (
         mine.get("machine_id") != machine_id
         or mine.get("status") not in ACTIVE_STATUSES
@@ -103,7 +104,8 @@ def _held_group(store, key, remainder, machine_id):
     if not reservation_id:
         return None
     if any(
-        (records.get(member) or {}).get("reservation_id") != reservation_id
+        cast("dict[str, Any]", records.get(member) or {}).get("reservation_id")
+        != reservation_id
         for member in remainder
     ):
         return None
@@ -114,7 +116,14 @@ def _held_group(store, key, remainder, machine_id):
     }
 
 
-def _request(repo, roadmap, phase, machine_id, *, store=None):
+def _request(
+    repo: str | Path,
+    roadmap: str | Path,
+    phase: str,
+    machine_id: str,
+    *,
+    store: ReservationStore | None = None,
+) -> tuple[Any, int]:
     """Resolve ``phase`` to its group and claim the unfinished remainder.
 
     Returns ``(result, exit_code)``. On success ``result`` is the list of
@@ -184,7 +193,7 @@ def _request(repo, roadmap, phase, machine_id, *, store=None):
     return records, REQUEST_EXIT["RESERVED"]
 
 
-def _held_token(repo, phase, args):
+def _held_token(repo: str | Path, phase: str, args: Any) -> dict[str, Any]:
     """The fence a release or renew acts on, or raise a clear error.
 
     The token beside the phase is the fence a request or the driver wrote, so a
@@ -210,7 +219,13 @@ def _held_token(repo, phase, args):
     }
 
 
-def _release(repo, phase, args, *, store=None):
+def _release(
+    repo: str | Path,
+    phase: str,
+    args: Any,
+    *,
+    store: ReservationStore | None = None,
+) -> tuple[Any, int]:
     """Give this machine's whole group back, and report the members it returned."""
     key = f"{int(phase):06d}"
     store = store or ReservationStore(repo)
@@ -232,7 +247,13 @@ def _release(repo, phase, args, *, store=None):
     ]
 
 
-def _renew(repo, phase, args, *, store=None):
+def _renew(
+    repo: str | Path,
+    phase: str,
+    args: Any,
+    *,
+    store: ReservationStore | None = None,
+) -> tuple[Any, int]:
     """Refresh this machine's whole group, and report the members it moved."""
     key = f"{int(phase):06d}"
     store = store or ReservationStore(repo)
@@ -256,82 +277,10 @@ def _renew(repo, phase, args, *, store=None):
     }, REQUEST_EXIT["RENEWED"]
 
 
-def build_parser():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--phase",
-        default=None,
-        help="one phase in the group to request, release or renew",
-    )
-    parser.add_argument(
-        "--machine-id", default=None, help="the requesting agent's machine id"
-    )
-    parser.add_argument(
-        "--release", action="store_true", help="give this machine's whole group back"
-    )
-    parser.add_argument(
-        "--renew", action="store_true", help="refresh this machine's whole group"
-    )
-    parser.add_argument(
-        "--status", default=None, help="the status a renewal sets, for --renew"
-    )
-    parser.add_argument(
-        "--reservation-id",
-        dest="reservation_id",
-        default=None,
-        help="the fence to act on when no token is present",
-    )
-    parser.add_argument(
-        "--generation",
-        type=int,
-        default=None,
-        help="the fence generation when no token is present",
-    )
-    parser.add_argument("--repo-root", dest="config_repo_root")
-    parser.add_argument("--roadmap-dir", dest="config_roadmap_dir")
-    parser.add_argument("--phase-glob", dest="config_phase_glob", action="append")
-    parser.add_argument("--driver", dest="config_driver")
-    parser.add_argument("--config")
-    parser.add_argument("--self-test", action="store_true")
-    return parser
-
-
-def main(argv=None):
-    args = build_parser().parse_args(argv)
-    if args.self_test:
-        # Imported here so the program does not carry its own test fixtures, and
-        # so `--self-test` still runs the checks the Makefile and the fault
-        # harness expect from this file.
-        from argus.select.group_selftest import self_test
-
-        return self_test()
-    if not args.phase:
-        print("phase_group: --phase is required", file=sys.stderr)
-        return 2
-    if not (args.release or args.renew) and not args.machine_id:
-        print("phase_group: --machine-id is required for a request", file=sys.stderr)
-        return 2
-    try:
-        phase = f"{int(args.phase):06d}"
-    except (TypeError, ValueError):
-        print("phase_group: --phase must be a phase number", file=sys.stderr)
-        return 2
-    try:
-        conventions.configure_from_args(args)
-    except ConfigError as exc:
-        print(f"phase_group: {exc}", file=sys.stderr)
-        return 2
-    repo = Path(conventions.setting("repo-root")).resolve()
-    roadmap = conventions.setting("roadmap-dir")
-    if args.release:
-        result, code = _release(repo, phase, args)
-    elif args.renew:
-        result, code = _renew(repo, phase, args)
-    else:
-        result, code = _request(repo, roadmap, phase, args.machine_id)
-    print(json.dumps(result, sort_keys=True))
-    return code
-
-
 if __name__ == "__main__":
+    from argus.select.group_cli import main  # noqa: E402 - this file stays the program
+
     sys.exit(main())
+
+
+__all__ = ["_release", "_renew", "_request"]

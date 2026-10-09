@@ -70,7 +70,7 @@ from faults import FAULTS
 from guard_faults_engine import DRIVER, RestoreError, check_fault
 
 
-def main(argv=None):
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Break each launch guard and prove a self-test notices."
     )

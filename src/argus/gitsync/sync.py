@@ -3,6 +3,7 @@
 """Both checkouts synced together, and the integration branch merged into a phase branch."""
 
 from pathlib import Path
+from typing import Any
 
 from argus.conventions import board_repo
 from argus.gitsync.git import (
@@ -21,7 +22,7 @@ from argus.gitsync.git import (
 from argus.gitsync.merge import _fast_forward, _merge, sync_one
 
 
-def resync_integration(repo, base=None):
+def resync_integration(repo: str | Path, base: str | None = None) -> dict[str, Any]:
     """Merge the integration branch into the checkout's current phase branch.
 
     The gap this closes: nothing pulls the integration branch into a running
@@ -48,7 +49,7 @@ def resync_integration(repo, base=None):
     """
     repo = Path(repo).resolve()
     base = base or integration_branch(repo)
-    info = {"repo": str(repo), "mode": "resync", "base": base}
+    info: dict[str, Any] = {"repo": str(repo), "mode": "resync", "base": base}
     if not is_git_repo(repo):
         return blocked(info, "not a git working tree")
     here = current_branch(repo)
@@ -144,7 +145,7 @@ def resync_integration(repo, base=None):
     return _merge(info, repo, upstream, ahead, behind, abort_on_conflict=False)
 
 
-def sync_all(root, mode, branch=None):
+def sync_all(root: str | Path, mode: str, branch: str | None = None) -> dict[str, Any]:
     """Sync the public checkout and the nested private checkout, if present.
 
     ``branch`` is the branch the public checkout must be on, and it reaches that
@@ -158,7 +159,7 @@ def sync_all(root, mode, branch=None):
     nested = board_repo(root)
     if nested is not None and is_git_repo(nested):
         repos.append(nested)
-    if len(repos) == 2:
+    if nested is not None and len(repos) == 2:
         public_fetch = upstream_urls(root)
         public_push = upstream_push_urls(root)
         private_fetch = upstream_urls(nested)
@@ -202,14 +203,15 @@ def sync_all(root, mode, branch=None):
     }
 
 
-def mode_resync(root):
+def mode_resync(root: str | Path) -> dict[str, Any]:
     """Merge the integration branch into both checkouts' current branches."""
     root = Path(root).resolve()
     # The public checkout is the one that can be on a phase branch. The private
     # one is always on the integration branch and reports itself as a no-op,
     # which is named rather than dropped so the two stay distinguishable in the
     # run record.
-    targets = [root] + ([board_repo(root)] if is_git_repo(board_repo(root)) else [])
+    nested = board_repo(root)
+    targets = [root] + ([nested] if nested is not None and is_git_repo(nested) else [])
     repos = [resync_integration(r) for r in targets]
     ok = all(r["ok"] for r in repos)
     return {

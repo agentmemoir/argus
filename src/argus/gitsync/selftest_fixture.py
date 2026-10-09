@@ -4,7 +4,9 @@
 
 import json
 import subprocess
+from collections.abc import Callable, Sequence
 from pathlib import Path
+from typing import Any, cast
 
 from argus import conventions
 from argus.gitsync.git import git, git_binary
@@ -13,11 +15,13 @@ from argus.gitsync.git import git, git_binary
 BOARD_REL = Path("vault") / "notes"
 
 
-def _check(checks, name, ok, detail=""):
+def _check(
+    checks: list[dict[str, Any]], name: str, ok: object, detail: str = ""
+) -> None:
     checks.append({"check": name, "ok": bool(ok), "detail": detail})
 
 
-def _init_remote(tmp, name):
+def _init_remote(tmp: Path, name: str) -> tuple[Path, Path]:
     """Bare remote with HEAD -> main, plus a clone at tmp/<name> that has
     one commit on main tracking origin/main.
 
@@ -68,7 +72,7 @@ def _init_remote(tmp, name):
     return remote, work
 
 
-def _remote_commit(remote, tmp, name, content="two\n"):
+def _remote_commit(remote: Path, tmp: Path, name: str, content: str = "two\n") -> None:
     """Push one commit to the remote from a throwaway clone."""
     other = tmp / f"other-{name}"
     subprocess.run(
@@ -85,24 +89,24 @@ def _remote_commit(remote, tmp, name, content="two\n"):
     git(other, "push", "-q", "origin", "main")
 
 
-def _local_commit(work, name):
+def _local_commit(work: Path, name: str) -> None:
     (work / "b.txt").write_text(f"{name}\n")
     git(work, "add", "b.txt")
     git(work, "commit", "-q", "-m", f"local {name}")
 
 
 def _configure_self_test(
-    pub,
-    board,
+    pub: str | Path,
+    board: str | Path,
     *,
-    pipeline=None,
-    roadmap=None,
-    runs=None,
-    include=("phase-*.md",),
-    exclude=(),
-    number_input="phase_number",
-    file_input="phase_file",
-):
+    pipeline: str | Path | None = None,
+    roadmap: str | Path | None = None,
+    runs: str | Path | None = None,
+    include: tuple[str, ...] = ("phase-*.md",),
+    exclude: tuple[str, ...] = (),
+    number_input: str = "phase_number",
+    file_input: str = "phase_file",
+) -> None:
     pub = Path(pub).resolve()
     board = Path(board).resolve()
     try:
@@ -147,11 +151,16 @@ class _StubGH:
     for a later check.
     """
 
-    def __init__(self, result):
-        self.result = result
-        self.calls = []
+    saved: Callable[..., Any]
 
-    def __call__(self, argv, **kwargs):
+    def __init__(
+        self,
+        result: dict[str, Any] | Exception | Callable[[Any], dict[str, Any]],
+    ) -> None:
+        self.result = result
+        self.calls: list[Any] = []
+
+    def __call__(self, argv: Any, **kwargs: Any) -> Any:
         import types
 
         # Only gh is stubbed. Everything else in this module runs git through
@@ -171,16 +180,17 @@ class _StubGH:
             stderr=self.result.get("stderr", ""),
         )
 
-    def __enter__(self):
+    def __enter__(self) -> "_StubGH":
         self.saved = subprocess.run
-        subprocess.run = self
+        # mypy types run as variadic; the stub matches the call shape used here.
+        subprocess.run = cast(Any, self)
         return self
 
-    def __exit__(self, *_exc):
+    def __exit__(self, *_exc: object) -> None:
         subprocess.run = self.saved
 
 
-def _gh_says(state, extra=""):
+def _gh_says(state: str, extra: str = "") -> dict[str, str]:
     """A ``gh pr view --json state`` response body."""
     return {
         "stdout": json.dumps(
@@ -193,7 +203,7 @@ def _gh_says(state, extra=""):
     }
 
 
-def _write_group_phases(roadmap, members, behaviour):
+def _write_group_phases(roadmap: Path, members: Sequence[int], behaviour: str) -> None:
     """Two phase documents declaring one symmetric group, in a fixture roadmap."""
     declaration = f"`together: {members[0]:06d}, {members[1]:06d}`"
     for number in members:
@@ -202,3 +212,15 @@ def _write_group_phases(roadmap, members, behaviour):
             f"### Reservation Group\n\n{declaration}\n",
             encoding="utf-8",
         )
+
+
+__all__ = [
+    "_StubGH",
+    "_check",
+    "_configure_self_test",
+    "_gh_says",
+    "_init_remote",
+    "_local_commit",
+    "_remote_commit",
+    "_write_group_phases",
+]

@@ -19,7 +19,7 @@ from entrypoint_fixture import (
 )
 
 
-def exercise(package, base):
+def exercise(package: Path, base: Path) -> None:
     env = {
         key: value
         for key, value in os.environ.items()
@@ -201,7 +201,7 @@ sys.exit(2)
         ["bash", str(package / "src/argus/driver/phase-driver.sh")],
         ["argus"],
     ]
-    selections = []
+    selections: list[list[str]] = []
     for command in commands:
         result = run([*command, "--config", str(config), "--dry-run"], base, env)
         require(result.returncode == 0, "entrypoint selection failed", result.stderr)
@@ -218,7 +218,7 @@ sys.exit(2)
         selections.append(selection)
     require(selections[0] == selections[1], "entrypoint selection differs", selections)
 
-    observations = []
+    observations: list[tuple[str, list[str]]] = []
     for command in commands:
         state = runs / "state"
         if state.exists():

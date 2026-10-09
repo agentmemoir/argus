@@ -2,6 +2,11 @@
 # SPDX-License-Identifier: Apache-2.0
 """Renewal, release, status changes, and the ownership fence."""
 
+import datetime as _datetime
+from collections.abc import Callable
+from pathlib import Path
+from typing import Any, cast
+
 from argus.board.core import (
     EXPIRED_STATUS,
     TERMINAL_STATUSES,
@@ -24,7 +29,12 @@ from argus.board.worktree import _transaction
 
 
 class _LifecycleOps(_StoreBase):
-    def release_group(self, reservation, *, now=None):
+    def release_group(
+        self,
+        reservation: Any,
+        *,
+        now: _datetime.datetime | str | None = None,
+    ) -> Any:
         """Give one owner's whole group back, atomically, with no cooldown.
 
         The members of a group share one reservation id, so the release finds
@@ -40,12 +50,13 @@ class _LifecycleOps(_StoreBase):
         """
         if not isinstance(reservation, dict):
             raise CoordinationError("reservation must be an object")
+        reservation = cast("dict[str, Any]", reservation)
         machine_id = _validate_machine_id(reservation.get("machine_id"))
         reservation_id = _validate_reservation_id(reservation.get("reservation_id"))
         generation = _validate_generation(reservation.get("generation"))
         moment = _iso(_as_moment(now))
 
-        def mutate(state):
+        def mutate(state: dict[str, Any]) -> _Mutation:
             keys = sorted(
                 key
                 for key, record in state["phases"].items()
@@ -53,7 +64,7 @@ class _LifecycleOps(_StoreBase):
             )
             if not keys:
                 raise ReservationFenced("reservation has no current members to release")
-            released = []
+            released: list[str] = []
             for key in keys:
                 record = state["phases"][key]
                 if not _owner_matches(record, machine_id, reservation_id, generation):
@@ -77,7 +88,13 @@ class _LifecycleOps(_StoreBase):
             f"[{reservation_id}] for {machine_id} at {moment}",
         )
 
-    def renew_group(self, reservation, status=None, *, now=None):
+    def renew_group(
+        self,
+        reservation: Any,
+        status: str | None = None,
+        *,
+        now: _datetime.datetime | str | None = None,
+    ) -> Any:
         """Renew every member of one group under its shared reservation id.
 
         One board write refreshes each active member's heartbeat; the group is
@@ -89,6 +106,7 @@ class _LifecycleOps(_StoreBase):
         """
         if not isinstance(reservation, dict):
             raise CoordinationError("reservation must be an object")
+        reservation = cast("dict[str, Any]", reservation)
         machine_id = _validate_machine_id(reservation.get("machine_id"))
         reservation_id = _validate_reservation_id(reservation.get("reservation_id"))
         generation = _validate_generation(reservation.get("generation"))
@@ -96,7 +114,7 @@ class _LifecycleOps(_StoreBase):
             status = _validate_status(status)
         moment = _iso(_as_moment(now))
 
-        def mutate(state):
+        def mutate(state: dict[str, Any]) -> _Mutation:
             keys = sorted(
                 key
                 for key, record in state["phases"].items()
@@ -104,7 +122,7 @@ class _LifecycleOps(_StoreBase):
             )
             if not keys:
                 raise ReservationFenced("reservation has no current members to renew")
-            records = []
+            records: list[Any] = []
             refreshed = False
             for key in keys:
                 record = state["phases"][key]
@@ -135,14 +153,15 @@ class _LifecycleOps(_StoreBase):
 
     def _owned_mutation(
         self,
-        reservation,
-        next_status=None,
-        evidence_path=None,
-        accepted_reason=None,
-        now=None,
-    ):
+        reservation: Any,
+        next_status: str | None = None,
+        evidence_path: str | Path | None = None,
+        accepted_reason: str | None = None,
+        now: _datetime.datetime | None = None,
+    ) -> Callable[[dict[str, Any]], _Mutation]:
         if not isinstance(reservation, dict):
             raise CoordinationError("reservation must be an object")
+        reservation = cast("dict[str, Any]", reservation)
         machine_id = _validate_machine_id(reservation.get("machine_id"))
         reservation_id = _validate_reservation_id(reservation.get("reservation_id"))
         generation = _validate_generation(reservation.get("generation"))
@@ -167,7 +186,7 @@ class _LifecycleOps(_StoreBase):
             raise CoordinationError(
                 "an acceptance reason is only valid for accepted status"
             )
-        receipt = None
+        receipt: dict[str, Any] | None = None
         if next_status == "completed":
             if evidence_path is None:
                 raise CoordinationError(
@@ -186,7 +205,7 @@ class _LifecycleOps(_StoreBase):
                 "publication receipts are only valid for completed status"
             )
 
-        def mutate(state):
+        def mutate(state: dict[str, Any]) -> _Mutation:
             record = state["phases"].get(key)
             if record is None:
                 raise ReservationFenced(f"phase {key} has no current reservation")
@@ -210,7 +229,8 @@ class _LifecycleOps(_StoreBase):
             if next_status is not None:
                 record["status"] = next_status
             if next_status == "accepted":
-                record["accepted_reason"] = accepted_reason.strip()
+                if accepted_reason is not None:
+                    record["accepted_reason"] = accepted_reason.strip()
                 record["accepted_at"] = _now()
             if receipt is not None:
                 record["completion_receipt"] = receipt
@@ -219,7 +239,7 @@ class _LifecycleOps(_StoreBase):
 
         return mutate
 
-    def renew(self, reservation, status=None):
+    def renew(self, reservation: dict[str, Any], status: str | None = None) -> Any:
         mutate = self._owned_mutation(reservation, status)
         return _transaction(
             self.private,
@@ -230,8 +250,13 @@ class _LifecycleOps(_StoreBase):
         )
 
     def set_status(
-        self, reservation, status, *, evidence_path=None, accepted_reason=None
-    ):
+        self,
+        reservation: dict[str, Any],
+        status: str,
+        *,
+        evidence_path: str | Path | None = None,
+        accepted_reason: str | None = None,
+    ) -> Any:
         mutate = self._owned_mutation(
             reservation,
             status,
@@ -246,13 +271,14 @@ class _LifecycleOps(_StoreBase):
             f"phase coordination: {status} {reservation['phase']}",
         )
 
-    def assert_owner(self, reservation):
+    def assert_owner(self, reservation: Any) -> dict[str, Any]:
         """Fetch the latest board and verify the three-part fence."""
         if not isinstance(reservation, dict):
             raise CoordinationError("reservation must be an object")
+        reservation = cast("dict[str, Any]", reservation)
         key, _number = _phase_key(reservation.get("phase"))
         state, _commit = self.read()
-        record = state["phases"].get(key)
+        record: dict[str, Any] | None = state["phases"].get(key)
         if record is None or not _owner_matches(
             record,
             reservation.get("machine_id"),
@@ -265,3 +291,6 @@ class _LifecycleOps(_StoreBase):
         if record.get("status") in TERMINAL_STATUSES:
             return dict(record)
         return dict(record)
+
+
+__all__ = ["_LifecycleOps"]

@@ -3,6 +3,7 @@
 """The tidy and dispatch checks."""
 
 from pathlib import Path
+from typing import Any, cast
 
 from argus import conventions
 from argus.gitsync.branch import ensure_phase_branch
@@ -17,7 +18,7 @@ from argus.gitsync.sync import mode_resync
 from argus.gitsync.tidy import tidy_published_checkout
 
 
-def _tidy_and_dispatch_checks(base):
+def _tidy_and_dispatch_checks(base: Path) -> list[tuple[str, object, str]]:
     """The mode dispatches, and the self-healing tidy that replaces the retry.
 
     These are the paths whose behaviour used to be untested, because the mode
@@ -25,8 +26,8 @@ def _tidy_and_dispatch_checks(base):
     one of those paths is the difference between a recoverable hiccup and a
     pipeline that never starts another phase again.
     """
-    results = []
-    old_branch = conventions.setting("board.branch")
+    results: list[tuple[str, object, str]] = []
+    old_branch: str = conventions.setting("board.branch")
     conventions.override({"board.branch": "main"})
     try:
         # --- mode_resync drives both checkouts through one dispatch. ---
@@ -101,7 +102,7 @@ def _tidy_and_dispatch_checks(base):
         git(pub2, "add", "late.txt")
         git(pub2, "commit", "-q", "-m", "a late commit on the predecessor")
         moved = mode_branch(pub2, 100457, "phase-100457-dispatch-next")
-        drift = moved.get("predecessor_moved") or {}
+        drift: dict[str, Any] = moved.get("predecessor_moved") or {}
         results.append(
             (
                 "a predecessor that moved since the phase was based on it is "
@@ -162,7 +163,7 @@ def _tidy_and_dispatch_checks(base):
         # One stray untracked file is enough to stop the branch switch.
         (pub3 / "stray-run-artifact.log").write_text("harness noise\n")
         stalled = mode_published(pub3, 100459)
-        receipt3 = phase_receipt(pub3, 100459)
+        receipt3 = cast("dict[str, Any]", phase_receipt(pub3, 100459))
         results.append(
             (
                 "a phase that is published but whose checkout cannot move reports "
@@ -204,7 +205,7 @@ def _tidy_and_dispatch_checks(base):
         )
 
         # --- Tidy must not move a phase that is still waiting for a human. ---
-        pub4, nested4, _run4 = _publish_fixture(base, "dispatch-untidy", 100460)
+        pub4, _nested4, _run4 = _publish_fixture(base, "dispatch-untidy", 100460)
         branch4 = "feature/dispatch-untidy"
         ensure_phase_branch(pub4, branch4, base="main")
         (pub4 / "phase.txt").write_text("the phase's change\n")
@@ -238,3 +239,6 @@ def _tidy_and_dispatch_checks(base):
     finally:
         conventions.override({"board.branch": old_branch})
     return results
+
+
+__all__ = ["_tidy_and_dispatch_checks"]

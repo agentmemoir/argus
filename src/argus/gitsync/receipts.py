@@ -5,6 +5,9 @@
 import json
 import re
 import subprocess
+from collections.abc import Iterable, Iterator
+from pathlib import Path
+from typing import Any, cast
 
 from argus.conventions import (
     phase_file_parts,
@@ -17,14 +20,14 @@ from argus.gitsync.git import GH_TIMEOUT_S, gh_binary, git
 from argus.gitsync.paths import roadmap_folder
 
 
-def _published_head(results, repo):
+def _published_head(results: list[dict[str, Any]], repo: str | Path) -> Any:
     for result in results:
         if result.get("repo") == str(repo) and result.get("action") == "pushed":
             return result.get("after")
     return None
 
 
-def phase_receipt(repo, number):
+def phase_receipt(repo: str | Path, number: int) -> dict[str, Any] | None:
     """A phase's publication receipt, or None when there is none.
 
     A receipt is the only record of where a phase's commits ended up, so it is
@@ -37,10 +40,12 @@ def phase_receipt(repo, number):
         data = json.loads(path.read_text())
     except (OSError, ValueError):
         return None
-    return data if isinstance(data, dict) else None
+    if not isinstance(data, dict):
+        return None
+    return cast("dict[str, Any]", data)
 
 
-def head_tree_on_integration(checkout, head, integration):
+def head_tree_on_integration(checkout: str | Path, head: str, integration: str) -> bool:
     """Whether ``head``'s file content is already on the integration branch.
 
     A squash merge deletes the commit a phase pushed, so the commit-id test
@@ -72,7 +77,7 @@ def head_tree_on_integration(checkout, head, integration):
     return rc == 0 and tree in found.split()
 
 
-def _run_phase_number(entry):
+def _run_phase_number(entry: Path) -> int | None:
     parts = phase_file_parts(entry.name + ".md")
     if parts is not None:
         return int(parts[0])
@@ -80,13 +85,15 @@ def _run_phase_number(entry):
     if match:
         return int(match.group(1))
     try:
-        receipt = json.loads((entry / "publication.json").read_text())
+        receipt = cast(
+            "dict[str, Any]", json.loads((entry / "publication.json").read_text())
+        )
         return int(receipt["phase"])
     except (OSError, ValueError, KeyError, TypeError):
         return None
 
 
-def _phase_run_entries(root):
+def _phase_run_entries(root: str | Path) -> Iterator[tuple[int, Path]]:
     if setting("pipeline", None) is not None:
         roadmap = roadmap_folder(root)
         for phase_file in phase_paths(roadmap):
@@ -123,7 +130,7 @@ _PULL_REQUEST_URL_RE = re.compile(
 )
 
 
-def pull_request_ref(url):
+def pull_request_ref(url: object) -> dict[str, Any] | None:
     """The (host, owner, repo, number) a pull request URL names, or None.
 
     Args:
@@ -146,7 +153,12 @@ def pull_request_ref(url):
     }
 
 
-def gh_pull_request_state(number, owner, repo, host=None):
+def gh_pull_request_state(
+    number: int | str,
+    owner: str | None,
+    repo: str | None,
+    host: str | None = None,
+) -> tuple[str, str]:
     """Ask GitHub whether a pull request is merged.
 
     Returns ``(state, detail)`` where state is ``merged``, ``not-merged``, or
@@ -193,11 +205,12 @@ def gh_pull_request_state(number, owner, repo, host=None):
         # may be reported as a merge.
         return "unknown", f"gh exited {done.returncode}"
     try:
-        data = json.loads(done.stdout)
+        raw = json.loads(done.stdout)
     except ValueError:
         return "unknown", "gh did not return JSON"
-    if not isinstance(data, dict):
+    if not isinstance(raw, dict):
         return "unknown", "gh returned JSON that is not an object"
+    data = cast("dict[str, Any]", raw)
     state = str(data.get("state") or "")
     if state == "MERGED":
         # mergeCommit, not mergedAt, is the durable record: it names the commit
@@ -209,7 +222,11 @@ def gh_pull_request_state(number, owner, repo, host=None):
         oid = (
             commit
             if isinstance(commit, str)
-            else (commit.get("oid") if isinstance(commit, dict) else None)
+            else (
+                cast("dict[str, Any]", commit).get("oid")
+                if isinstance(commit, dict)
+                else None
+            )
         )
         return "merged", oid or str(data.get("mergedAt") or "")
     if state in {"OPEN", "CLOSED"}:
@@ -219,7 +236,9 @@ def gh_pull_request_state(number, owner, repo, host=None):
     return "unknown", f"unrecognised state {state!r}"
 
 
-def _head_carried_locally(checkout, head, candidates):
+def _head_carried_locally(
+    checkout: str | Path, head: str, candidates: Iterable[str | None]
+) -> str | None:
     """The first candidate ref in this checkout that carries ``head``, or None.
 
     Split out so the "try local first, fetch only if that failed" rule is one
@@ -235,7 +254,7 @@ def _head_carried_locally(checkout, head, candidates):
     return None
 
 
-def receipt_for_branch(repo, branch):
+def receipt_for_branch(repo: str | Path, branch: str) -> dict[str, Any] | None:
     """The publication receipt whose ``branch`` is ``branch``, or None.
 
     The branch name is the join key, not the phase number, because the branch
@@ -248,6 +267,12 @@ def receipt_for_branch(repo, branch):
             data = json.loads((entry / "publication.json").read_text())
         except (OSError, ValueError):
             continue
-        if isinstance(data, dict) and data.get("branch") == branch:
-            return data
+        if not isinstance(data, dict):
+            continue
+        receipt = cast("dict[str, Any]", data)
+        if receipt.get("branch") == branch:
+            return receipt
     return None
+
+
+__all__ = ["_head_carried_locally", "_published_head"]

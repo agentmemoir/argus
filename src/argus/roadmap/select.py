@@ -2,6 +2,10 @@
 # SPDX-License-Identifier: Apache-2.0
 """Claiming a phase, or a declared group, on the shared reservation board."""
 
+from collections.abc import Callable
+from pathlib import Path
+from typing import Any
+
 from argus.board.reservations import (
     CoordinationError,
     ReservationConflict,
@@ -12,7 +16,7 @@ from argus.board.reservations import (
 from argus.roadmap.evidence import reported_path
 
 
-def _gitsync(_repo):
+def _gitsync(_repo: str | Path) -> Callable[..., Any]:
     """Return the publisher shipped with this Argus package."""
     try:
         from argus.gitsync.review import awaiting_review
@@ -21,7 +25,7 @@ def _gitsync(_repo):
     return awaiting_review
 
 
-def _awaiting_review(repo, number):
+def _awaiting_review(repo: str | Path, number: int) -> dict[str, Any] | None:
     """A phase whose pull request is waiting for a human, or None.
 
     A phase that has been pushed but not merged is finished work, not queue
@@ -31,7 +35,12 @@ def _awaiting_review(repo, number):
     return _gitsync(repo)(repo, number)
 
 
-def _reservation_result(number, path, record, state="RESERVED"):
+def _reservation_result(
+    number: int,
+    path: str | Path,
+    record: dict[str, Any],
+    state: str = "RESERVED",
+) -> dict[str, Any]:
     return {
         "state": state,
         "phase": f"{number:06d}",
@@ -44,7 +53,17 @@ def _reservation_result(number, path, record, state="RESERVED"):
     }
 
 
-def _select_group(repo, number, path, group, machine_id, store, *, reserve, reviews):
+def _select_group(
+    repo: str | Path,
+    number: int,
+    path: str | Path,
+    group: dict[str, Any],
+    machine_id: str,
+    store: Any,
+    *,
+    reserve: bool,
+    reviews: list[dict[str, Any]],
+) -> dict[str, Any] | None:
     """Claim a declared group's unfinished members, or report why not.
 
     The remainder drops completed members. A member whose pull request is open
@@ -55,7 +74,7 @@ def _select_group(repo, number, path, group, machine_id, store, *, reserve, revi
     """
     key = f"{number:06d}"
     remainder = list(group["remainder"])
-    claimable = []
+    claimable: list[str] = []
     for member in remainder:
         review = _awaiting_review(repo, int(member))
         if review:
@@ -93,7 +112,9 @@ def _select_group(repo, number, path, group, machine_id, store, *, reserve, revi
         # continues this group — or takes it over from a dead owner — has to
         # know which array and which one branch it is running.
         latest, _latest_commit = store.read()
-        winner = latest.get("phases", {}).get(exc.phase, exc.record) or {}
+        winner: dict[str, Any] = (
+            latest.get("phases", {}).get(exc.phase, exc.record) or {}
+        )
         return {
             "state": "WAIT_FOR_CLAIM",
             "phase": exc.phase,
@@ -118,3 +139,6 @@ def _select_group(repo, number, path, group, machine_id, store, *, reserve, revi
     result["group"] = list(group["group"])
     result["members"] = records
     return result
+
+
+__all__ = ["_select_group"]

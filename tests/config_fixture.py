@@ -5,14 +5,16 @@
 import json
 import subprocess
 import sys
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 from argus.config import cli as cfgmod
 
 HERE = Path(__file__).resolve().parent
 SAMPLE = HERE.parent / "config.sample.jsonc"
 
-BASE = {
+BASE: dict[str, Any] = {
     "repo-root": "project",
     "pipeline": "pipeline.yaml",
     "roadmap-dir": "roadmap",
@@ -52,12 +54,12 @@ BASE = {
 }
 
 
-def check(condition, detail=""):
+def check(condition: object, detail: object = "") -> None:
     if not condition:
         raise AssertionError(detail)
 
 
-def write(directory, text, name="config.json"):
+def write(directory: str | Path, text: str, name: str = "config.json") -> Path:
     # Every config here names machine.id-file, so the file it points at is
     # written beside it. The sample does the same for the tests that load it.
     (Path(directory) / "machine.id").write_text("machine-1\n", encoding="utf-8")
@@ -66,7 +68,7 @@ def write(directory, text, name="config.json"):
     return path
 
 
-def sample_in(directory):
+def sample_in(directory: str | Path) -> Path:
     """Copy the sample beside the machine-id file it names."""
     (Path(directory) / "machine.id").write_text("sample-machine\n", encoding="utf-8")
     path = Path(directory) / "config.json"
@@ -74,13 +76,13 @@ def sample_in(directory):
     return path
 
 
-def commented(document):
+def commented(document: object) -> str:
     text = json.dumps(document, indent=2)
     text = text.replace("{\n", "{\n  /* block comment */\n", 1)
     return "// leading line comment\n" + text + "\n// trailing comment\n"
 
 
-def expect_error(call, needle):
+def expect_error(call: Callable[[], object], needle: str) -> None:
     try:
         call()
     except cfgmod.ConfigError as exc:
@@ -89,7 +91,7 @@ def expect_error(call, needle):
     raise AssertionError(f"no ConfigError naming {needle!r}")
 
 
-def run_cli(args, cwd):
+def run_cli(args: list[str], cwd: str | Path) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [sys.executable, "-m", "argus.config.cli", *args],
         cwd=cwd,

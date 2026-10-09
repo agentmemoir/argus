@@ -3,6 +3,7 @@
 """Operator takeover of a whole group under a new reservation."""
 
 import secrets
+from typing import Any
 
 from argus.board.core import (
     TERMINAL_STATUSES,
@@ -25,15 +26,15 @@ from argus.board.worktree import _base_revisions, _transaction
 class _TakeoverOps(_StoreBase):
     def takeover(
         self,
-        phase,
-        machine_id,
+        phase: str | int,
+        machine_id: str,
         *,
-        confirm=False,
-        run_id=None,
-        base_revisions=None,
-        expected_reservation_id=None,
-        expected_generation=None,
-    ):
+        confirm: bool = False,
+        run_id: str | None = None,
+        base_revisions: dict[str, Any] | None = None,
+        expected_reservation_id: Any = None,
+        expected_generation: Any = None,
+    ) -> Any:
         """Take one claim over under a new reservation id, for a whole group.
 
         A reservation id covers a whole group, so the takeover moves every member
@@ -53,7 +54,7 @@ class _TakeoverOps(_StoreBase):
         new_id = f"rsv-{secrets.token_hex(12)}"
         revisions = base_revisions or _base_revisions(self.root, self.private)
         current_state, _current_commit = self.read()
-        current = current_state["phases"].get(key)
+        current: dict[str, Any] | None = current_state["phases"].get(key)
         if current is None:
             raise ReservationConflict(number, reason="phase has no claim")
         if expected_reservation_id is not None:
@@ -84,7 +85,7 @@ class _TakeoverOps(_StoreBase):
             if record.get("reservation_id") == expected_reservation_id
         )
 
-        def mutate(state):
+        def mutate(state: dict[str, Any]) -> _Mutation:
             old = state["phases"].get(key)
             if old is None:
                 raise ReservationConflict(number, reason="phase has no claim")
@@ -167,3 +168,6 @@ class _TakeoverOps(_StoreBase):
             f"phase coordination: explicit takeover "
             f"[{','.join(members)}] by {machine_id}",
         )
+
+
+__all__ = ["_TakeoverOps"]

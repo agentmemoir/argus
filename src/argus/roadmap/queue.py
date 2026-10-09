@@ -2,13 +2,18 @@
 # SPDX-License-Identifier: Apache-2.0
 """The plain roadmap queue: which phases exist, and which one comes next."""
 
+from pathlib import Path
+from typing import Any
+
 from argus.conventions import phase_file_parts, phase_paths
 from argus.roadmap.evidence import index_complete, is_done
 from argus.select.policy import is_runnable_phase, phase_gates_blocked
 
+_Phase = tuple[int, Path]
 
-def candidates(_repo, roadmap):
-    out = []
+
+def candidates(_repo: str | Path, roadmap: str | Path | None) -> list[_Phase]:
+    out: list[_Phase] = []
     if roadmap is None:
         return out
     for path in phase_paths(roadmap):
@@ -18,7 +23,7 @@ def candidates(_repo, roadmap):
     return sorted(out)
 
 
-def select_next(repo, roadmap):
+def select_next(repo: str | Path, roadmap: str | Path | None) -> _Phase | None:
     index_done = index_complete(repo, roadmap)
     for number, path in candidates(repo, roadmap):
         if not is_done(repo, number, path, index_done):
@@ -26,7 +31,7 @@ def select_next(repo, roadmap):
     return None
 
 
-def gate_block(number, path):
+def gate_block(number: int, path: str | Path) -> dict[str, Any] | None:
     """Return a BLOCKED_ON_GATE result when the plan owes the owner a decision.
 
     A phase with an ``open`` decision gate is not runnable, and the whole point

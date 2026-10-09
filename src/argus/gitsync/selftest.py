@@ -5,6 +5,7 @@
 import json
 import tempfile
 from pathlib import Path
+from typing import Any
 
 from argus import conventions
 from argus.gitsync.modes import result_exit_code
@@ -37,7 +38,7 @@ from argus.gitsync.selftest_sync import _sync_one_checks
 from argus.gitsync.selftest_sync_refuse import _sync_refuse_checks
 
 
-def self_test_checks():
+def self_test_checks() -> list[dict[str, Any]]:
     """Run checks with explicit temporary layout settings."""
     conventions.configure(
         {
@@ -59,9 +60,9 @@ def self_test_checks():
     return _self_test_checks()
 
 
-def _self_test_checks():
+def _self_test_checks() -> list[dict[str, Any]]:
     """Stubbed-remote checks. Pure: temp dirs only, no repo state touched."""
-    checks = []
+    checks: list[dict[str, Any]] = []
     base = Path(tempfile.mkdtemp(prefix="gitsync-selftest-"))
 
     _sync_one_checks(base, checks)
@@ -72,7 +73,7 @@ def _self_test_checks():
     return checks
 
 
-def _delegated_checks(base, checks):
+def _delegated_checks(base: Path, checks: list[dict[str, Any]]) -> None:
 
     _check(
         checks,
@@ -133,7 +134,7 @@ def _delegated_checks(base, checks):
         _check(checks, f"group name: {name}", ok, detail)
 
 
-def self_test():
+def self_test() -> int:
     checks = self_test_checks()
     ok = all(c["ok"] for c in checks)
     print(

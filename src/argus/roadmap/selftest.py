@@ -15,7 +15,7 @@ from argus.roadmap.selftest_selection import _selection_checks
 from argus.roadmap.server import RoadmapSource
 
 
-def self_test():
+def self_test() -> None:
     conventions.configure(
         {
             "repo-root": Path(),
@@ -41,7 +41,7 @@ def self_test():
     _self_test_publisher_lookup()
 
 
-def _roadmap_source_checks():
+def _roadmap_source_checks() -> None:
     # The class the registry hands the driver must reach the same answer as the
     # functions, or the driver is being served by a different code path than
     # the one this file's tests above cover.
@@ -54,12 +54,13 @@ def _roadmap_source_checks():
         source = RoadmapSource(repo, repo / "roadmap")
         got = source.select("server-01", reserve=False, store=_ReadOnlyStore())
         assert got["state"] == "AVAILABLE" and got["phase"] == "100440", got
-        assert source.select_next()[0] == 100440
+        next_phase = source.select_next()
+        assert next_phase is not None and next_phase[0] == 100440, next_phase
         assert [n for n, _ in source.candidates()] == [100440]
         assert source.signals((100440, repo / "roadmap" / "phase-100440-first.md"))
 
 
-def _self_test_publisher_lookup():
+def _self_test_publisher_lookup() -> None:
     from argus.gitsync.review import awaiting_review
 
     assert _gitsync(Path()) is awaiting_review

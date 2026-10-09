@@ -4,6 +4,7 @@
 
 import datetime as _datetime
 import math
+from typing import Any
 
 from argus.board.core import (
     ACTIVE_STATUSES,
@@ -23,7 +24,11 @@ from argus.board.core import (
 from argus.board.state import _owner_matches
 
 
-def _cooldown_remaining(record, _number, now=None):
+def _cooldown_remaining(
+    record: dict[str, Any],
+    _number: int,
+    now: _datetime.datetime | str | None = None,
+) -> int:
     """Seconds left in a record's claim cooldown, or 0 when none is active.
 
     Stage 3 writes ``COOLDOWN_UNTIL_FIELD`` when an expired group returns to
@@ -44,7 +49,7 @@ def _cooldown_remaining(record, _number, now=None):
     return math.ceil(delta)
 
 
-def _claim_window(record):
+def _claim_window(record: dict[str, Any]) -> tuple[_datetime.datetime, int] | None:
     """The moment and length a claim is measured against, or ``None``.
 
     Before any work starts the claim is measured from ``claimed_at`` against the
@@ -67,7 +72,7 @@ def _claim_window(record):
     return reference, window
 
 
-def _claim_window_passed(record, moment):
+def _claim_window_passed(record: dict[str, Any], moment: _datetime.datetime) -> bool:
     measured = _claim_window(record)
     if measured is None:
         return False
@@ -75,7 +80,9 @@ def _claim_window_passed(record, moment):
     return (moment - reference).total_seconds() > window
 
 
-def _expire_records(state, moment):
+def _expire_records(
+    state: dict[str, Any], moment: _datetime.datetime
+) -> list[dict[str, Any]]:
     """Move every stale group to ``EXPIRED_STATUS`` under one cooldown stamp.
 
     The members of one reservation share a reservation id, so the group is
@@ -83,7 +90,7 @@ def _expire_records(state, moment):
     old owner is fenced for every member at once. Returns the expired records,
     each with its phase key, so the caller can report what moved.
     """
-    groups = {}
+    groups: dict[tuple[Any, Any], list[tuple[Any, Any]]] = {}
     for key, record in state["phases"].items():
         if record.get("status") not in ACTIVE_STATUSES:
             continue
@@ -93,7 +100,7 @@ def _expire_records(state, moment):
         groups.setdefault((record.get("machine_id"), reservation_id), []).append(
             (key, record)
         )
-    expired = []
+    expired: list[dict[str, Any]] = []
     for members in groups.values():
         if not any(_claim_window_passed(record, moment) for _key, record in members):
             continue
@@ -112,17 +119,17 @@ def _expire_records(state, moment):
 
 
 def _claim_one(
-    state,
-    key,
-    machine_id,
-    reservation_id,
-    generation,
-    run_id,
-    revisions,
-    status,
-    number,
-    now=None,
-):
+    state: dict[str, Any],
+    key: str,
+    machine_id: str,
+    reservation_id: str,
+    generation: int,
+    run_id: str | None,
+    revisions: dict[str, Any],
+    status: str,
+    number: int,
+    now: _datetime.datetime | None = None,
+) -> dict[str, Any]:
     """Write or refresh one claim in ``state``; return its phase record.
 
     One helper backs both ``reserve`` and ``reserve_group`` so a single claim
@@ -132,7 +139,7 @@ def _claim_one(
     board untouched: a group is claimed atomically or not at all, and half a
     group is never reserved.
     """
-    existing = state["phases"].get(key)
+    existing: dict[str, Any] | None = state["phases"].get(key)
     if existing is not None:
         if existing.get("status") == EXPIRED_STATUS:
             remaining = _cooldown_remaining(existing, number, now)
@@ -168,3 +175,6 @@ def _claim_one(
     }
     state["phases"][key] = record
     return record
+
+
+__all__ = ["_claim_one", "_expire_records"]

@@ -3,6 +3,7 @@
 """The server selection, and the work source the registry hands the driver."""
 
 from pathlib import Path
+from typing import Any, cast
 
 from argus import conventions
 from argus.board.reservations import (
@@ -28,7 +29,14 @@ from argus.roadmap.select import _awaiting_review, _reservation_result, _select_
 from argus.select.work_source import WorkSource, WorkSourceError
 
 
-def select_server_phase(repo, machine_id, *, reserve=True, store=None, roadmap=None):
+def select_server_phase(
+    repo: str | Path,
+    machine_id: str | None,
+    *,
+    reserve: bool = True,
+    store: Any = None,
+    roadmap: str | Path | None = None,
+) -> dict[str, Any]:
     """Select the lowest incomplete phase and claim it on the shared board.
 
     A future claim is intentionally ignored until it becomes the lowest
@@ -53,7 +61,7 @@ def select_server_phase(repo, machine_id, *, reserve=True, store=None, roadmap=N
     check, which is the only thing that turns a finished pull request into a
     finished phase.
     """
-    machine_id = machine_id or conventions.setting("machine.id")
+    machine_id = cast("str", machine_id or conventions.setting("machine.id"))
     store = store or ReservationStore(repo)
     try:
         state, _commit = store.read()
@@ -69,10 +77,10 @@ def select_server_phase(repo, machine_id, *, reserve=True, store=None, roadmap=N
         store.migrate_board()
         state, _commit = store.read()
     index_done = index_complete(repo, roadmap)
-    reviews = []
-    decisions = []
+    reviews: list[dict[str, Any]] = []
+    decisions: list[dict[str, Any]] = []
 
-    def finish(result):
+    def finish(result: dict[str, Any]) -> dict[str, Any]:
         # Attached to every outcome, including the ones that do not launch, so
         # the merge check runs on a tick that selected nothing too. Absent when
         # nothing was skipped, which is the ordinary case.
@@ -85,7 +93,7 @@ def select_server_phase(repo, machine_id, *, reserve=True, store=None, roadmap=N
             result["needs_decision"] = list(decisions)
         return result
 
-    def held_answer(error=None):
+    def held_answer(error: str | None = None) -> dict[str, Any]:
         """The answer for a phase the board already holds.
 
         A held phase may be one member of a declared reservation group. The tick
@@ -96,7 +104,7 @@ def select_server_phase(repo, machine_id, *, reserve=True, store=None, roadmap=N
         does on the group path. A malformed declaration fails the selection closed
         here too, for the same reason it does below.
         """
-        result = {
+        result: dict[str, Any] = {
             "state": "WAIT_FOR_CLAIM",
             "phase": key,
             "path": reported_path(repo, path),
@@ -304,29 +312,35 @@ class RoadmapSource(WorkSource):
 
     name = "roadmap"
 
-    def __init__(self, repo, roadmap=None):
+    def __init__(self, repo: str | Path, roadmap: str | Path | None = None) -> None:
         self.repo = Path(repo)
         self.roadmap = resolve_roadmap(self.repo, roadmap)
 
-    def select(self, machine_id=None, *, reserve=True, store=None):
+    def select(
+        self,
+        machine_id: str | None = None,
+        *,
+        reserve: bool = True,
+        store: Any = None,
+    ) -> dict[str, Any]:
         """Return the next claimable phase as a result dict, claiming it."""
         return select_server_phase(
             self.repo, machine_id, reserve=reserve, store=store, roadmap=self.roadmap
         )
 
-    def select_next(self):
+    def select_next(self) -> tuple[int, Path] | None:
         """The lowest incomplete phase, or None. Never claims anything."""
         return select_next(self.repo, self.roadmap)
 
-    def candidates(self):
+    def candidates(self) -> list[tuple[int, Path]]:
         """Every runnable phase file, lowest number first."""
         return candidates(self.repo, self.roadmap)
 
-    def index_complete(self):
+    def index_complete(self) -> set[int]:
         return index_complete(self.repo, self.roadmap)
 
-    def signals(self, item):
+    def signals(self, item: tuple[int, Path]) -> dict[str, bool]:
         return signals(self.repo, item[0], item[1], self.index_complete())
 
-    def audit(self, apply_index=False):
+    def audit(self, apply_index: bool = False) -> int:
         return audit(self.repo, self.roadmap, apply_index=apply_index)

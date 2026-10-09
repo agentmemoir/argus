@@ -3,6 +3,7 @@
 """The publication helper: fence, lock, leftover commit, sync and push."""
 
 from pathlib import Path
+from typing import Any, cast
 
 from argus.conventions import board_repo
 from argus.gitsync.git import (
@@ -24,16 +25,16 @@ from argus.gitsync.sync import mode_resync, sync_all
 
 
 def publish_phase(
-    root,
-    phase,
+    root: str | Path,
+    phase: int | str,
     *,
-    reservation_file=None,
-    machine_id=None,
-    reservation_id=None,
-    generation=None,
-    commit_run_state=True,
-    pull_request=None,
-):
+    reservation_file: str | Path | None = None,
+    machine_id: str | None = None,
+    reservation_id: str | None = None,
+    generation: int | None = None,
+    commit_run_state: bool = True,
+    pull_request: str | None = None,
+) -> dict[str, Any]:
     """Check the phase fence, take the short publication lock, and publish.
 
     The caller must commit the phase's product changes first, on the phase's own
@@ -58,7 +59,15 @@ def publish_phase(
             ReservationFenced,
             ReservationStore,
         )
-
+    except Exception as exc:  # noqa: BLE001 - normalize boundary errors
+        return {
+            "ok": False,
+            "mode": "publish",
+            "state": "COORDINATION_UNAVAILABLE",
+            "error": str(exc),
+            "phase": f"{int(phase):06d}",
+        }
+    try:
         reservation = _load_phase_reservation(
             root, phase, reservation_file, machine_id, reservation_id, generation
         )
@@ -90,10 +99,11 @@ def publish_phase(
             "phase": f"{int(phase):06d}",
         }
 
-    results = []
-    outcome = None
-    engine_churn = []
+    results: list[Any] = []
+    outcome: dict[str, Any] | None = None
+    engine_churn: list[str] = []
     try:
+        private = cast("Path", board_repo(root))
         if commit_run_state:
             clean = commit_leftover_run_state(
                 root,
@@ -112,10 +122,8 @@ def publish_phase(
                 }
         if outcome is None:
             dirty = [p for p in dirty_paths(root) if not _is_private_path(root, p)]
-            if is_git_repo(board_repo(root)):
-                dirty += [
-                    str(board_repo(root) / p) for p in dirty_paths(board_repo(root))
-                ]
+            if is_git_repo(private):
+                dirty += [str(private / p) for p in dirty_paths(private)]
             # The engine that is publishing is the engine that rewrites the
             # heartbeat marker, so a clean-tree requirement tests a directory
             # that is still being written. The marker is already committed and
@@ -176,7 +184,7 @@ def publish_phase(
                     "summary": sync["summary"],
                 }
         if outcome is None:
-            for checkout in (root, board_repo(root)):
+            for checkout in (root, private):
                 if not is_git_repo(checkout):
                     continue
                 store.assert_owner(reservation)
@@ -193,7 +201,11 @@ def publish_phase(
                     }
                     break
         if outcome is None:
-            push_results = [r for r in results if isinstance(r, dict) and "repo" in r]
+            push_results = [
+                cast("dict[str, Any]", r)
+                for r in results
+                if isinstance(r, dict) and "repo" in r
+            ]
             # AWAITING_REVIEW, not PUBLISHED. The phase's commits are on its
             # own branch; a human merges the pull request. The exit code is
             # still 0, because publishing the branch is what this helper does,
@@ -221,7 +233,12 @@ def publish_phase(
             outcome["receipt"] = receipt
             outcome["repos"] = results
             outcome["summary"] = summarize(
-                [r for r in results if isinstance(r, dict) and "repo" in r], "publish"
+                [
+                    cast("dict[str, Any]", r)
+                    for r in results
+                    if isinstance(r, dict) and "repo" in r
+                ],
+                "publish",
             )
             # A warning, never a block. This phase was built on an earlier
             # phase's branch, so its pull request carries that phase's work.
@@ -229,7 +246,7 @@ def publish_phase(
             # own phase, and only a human can decide whether that phase's work
             # should exist at all. Blocking here would put the human back on the
             # critical path, which is the thing this pipeline exists to remove.
-            carried = open_predecessor(root, phase)
+            carried: dict[str, Any] | None = open_predecessor(root, phase)
             if carried:
                 outcome["carries_open_phase"] = carried
                 outcome["warning"] = (

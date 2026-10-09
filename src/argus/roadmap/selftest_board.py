@@ -5,6 +5,7 @@
 import json
 import tempfile
 from pathlib import Path
+from typing import Any
 
 from argus import conventions
 from argus.board.reservations import ReservationStore
@@ -13,14 +14,14 @@ from argus.roadmap.selftest_fixture import BOARD_REL
 from argus.roadmap.server import select_server_phase
 
 
-def _board_checks():
+def _board_checks() -> None:
     """The board a machine really has: real checkouts and real pushes."""
     with tempfile.TemporaryDirectory() as tmp:
         # Exercise the real Git-backed store through the selector rather than
         # relying only on FakeStore for cross-machine ordering.
         from argus.board.reservations import _git_test_repo, _self_test_receipt
 
-        remote, clients = _git_test_repo(Path(tmp).resolve(), "real-ordering")
+        _, clients = _git_test_repo(Path(tmp).resolve(), "real-ordering")
         repo = Path(tmp).resolve() / "root"
         nested = repo / BOARD_REL
         (nested / "roadmap").mkdir(parents=True)
@@ -46,7 +47,7 @@ def _board_checks():
             store_local.set_status(local, "completed", evidence_path=local_receipt)
         finally:
             conventions.configure(old_runs)
-        server = dict(store_server.read()[0]["phases"]["100440"])
+        server: dict[str, Any] = dict(store_server.read()[0]["phases"]["100440"])
         server["phase"] = "100440"
         (nested / "runs" / "phase-100440").mkdir(exist_ok=True)
         (nested / "runs" / "phase-100440" / "run.json").write_text(
@@ -64,7 +65,9 @@ def _board_checks():
         assert following["state"] == "RESERVED" and following["phase"] == "100460", (
             following
         )
-        following_record = dict(store_server.read()[0]["phases"]["100460"])
+        following_record: dict[str, Any] = dict(
+            store_server.read()[0]["phases"]["100460"]
+        )
         following_record["phase"] = "100460"
         (nested / "runs" / "phase-100460").mkdir(exist_ok=True)
         (nested / "runs" / "phase-100460" / "run.json").write_text(
@@ -118,7 +121,7 @@ def _board_checks():
         assert review["state"] == "RESERVED" and review["phase"] == "100591", review
         # ...and says which phase it moved past, or nothing would ever run the
         # merge check on it and its receipt would read awaiting_review for ever.
-        skipped = review.get("awaiting_review") or []
+        skipped: list[dict[str, Any]] = review.get("awaiting_review") or []
         assert [e["phase"] for e in skipped] == [f"{review_phase:06d}"], review
         assert skipped[0]["branch"].endswith("awaiting-review"), review
         assert skipped[0]["pull_request"] == "https://example/pr/9", review
@@ -134,7 +137,9 @@ def _board_checks():
         # either. That is the case that matters: a tick whose selection is
         # WAIT_FOR_CLAIM is still the tick on which a merge check is due, so
         # dropping the report there would strand the merged phase's receipt.
-        drained_record = dict(store_server.read()[0]["phases"]["100591"])
+        drained_record: dict[str, Any] = dict(
+            store_server.read()[0]["phases"]["100591"]
+        )
         drained_record["phase"] = "100591"
         (nested / "runs" / "phase-100591").mkdir(exist_ok=True)
         (nested / "runs" / "phase-100591" / "run.json").write_text(
@@ -152,16 +157,16 @@ def _board_checks():
         drained = select_server_phase(
             repo, "server-01", store=store_server, roadmap=roadmap
         )
-        assert [e["phase"] for e in (drained.get("awaiting_review") or [])] == [
-            f"{review_phase:06d}"
-        ], drained
+        drained_skipped: list[dict[str, Any]] = drained.get("awaiting_review") or []
+        assert [e["phase"] for e in drained_skipped] == [f"{review_phase:06d}"], drained
         # And on the one outcome that is not a launch at all.
         drained_state = select_server_phase(
             repo, "server-01", store=store_server, reserve=False, roadmap=roadmap
         )
-        assert [e["phase"] for e in (drained_state.get("awaiting_review") or [])] == [
-            f"{review_phase:06d}"
-        ], drained_state
+        state_skipped: list[dict[str, Any]] = drained_state.get("awaiting_review") or []
+        assert [e["phase"] for e in state_skipped] == [f"{review_phase:06d}"], (
+            drained_state
+        )
 
     with tempfile.TemporaryDirectory() as tmp:
         # The config names the board and run folder. A store that was given a
@@ -197,3 +202,6 @@ def _board_checks():
         assert got["state"] == "RESERVED" and got["phase"] == str(number), got
         assert not (decoy / "runs" / f"phase-{number}" / "reservation.json").exists()
         assert (nested / "runs" / f"phase-{number}" / "reservation.json").exists()
+
+
+__all__ = ["_board_checks"]

@@ -22,8 +22,10 @@ import sys
 if not __package__:
     from pathlib import Path
 
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-    import _bootstrap  # noqa: F401 - register the source package
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+    from argus import (
+        _bootstrap as _bootstrap,  # noqa: F401 - register the source package
+    )
 from argus.config.loader import Config, ConfigError, load, strip_comments
 from argus.config.render import (
     _json_view,
@@ -64,7 +66,7 @@ __all__ = [
 ]
 
 
-def main(argv=None):
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="argus.config.cli",
         description="Load an Argus configuration and print it for a caller.",
@@ -79,7 +81,7 @@ def main(argv=None):
     )
     args = parser.parse_args(argv)
 
-    overrides = {}
+    overrides: dict[str, object] = {}
     if args.repo_root is not None:
         overrides["repo-root"] = args.repo_root
     if args.roadmap_dir is not None:

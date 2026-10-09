@@ -5,6 +5,7 @@
 import json
 import re
 from pathlib import Path
+from typing import Any, cast
 
 from argus import conventions
 from argus.board.branch import _fetch_branch_ref, _integration_branch
@@ -22,26 +23,32 @@ from argus.board.git import _git
 from argus.conventions import phase_run_dir
 
 
-def reservation_file(repo_root, phase):
+def reservation_file(repo_root: str | Path, phase: str | int) -> Path:
     """Return the token beside this phase's pipeline run record."""
     _key, number = _phase_key(phase)
     return phase_run_dir(repo_root, number) / "reservation.json"
 
 
-def publication_file(repo_root, phase):
+def publication_file(repo_root: str | Path, phase: str | int) -> Path:
     _key, number = _phase_key(phase)
     return phase_run_dir(repo_root, number) / PUBLICATION_NAME
 
 
-def _receipt_commit(value, field):
+def _receipt_commit(value: Any, field: str) -> str:
     if not isinstance(value, str) or not re.fullmatch(r"[0-9a-fA-F]{40,64}", value):
         raise CoordinationError(f"publication receipt has invalid {field}")
     return value.lower()
 
 
 def _validate_publication_receipt(
-    path, reservation, private_repo, remote, _branch, *, repo_root=None
-):
+    path: str | Path,
+    reservation: Any,
+    private_repo: str | Path,
+    remote: str,
+    _branch: str | None,
+    *,
+    repo_root: str | Path | None = None,
+) -> dict[str, Any]:
     path = Path(path).resolve()
     key, _number = _phase_key(reservation.get("phase"))
     expected = (
@@ -53,19 +60,21 @@ def _validate_publication_receipt(
             "publication receipt is outside the phase run directory"
         )
     try:
-        data = json.loads(path.read_text())
+        raw_data = json.loads(path.read_text())
     except (OSError, ValueError) as exc:
         raise CoordinationError(f"publication receipt cannot be read: {exc}") from exc
-    if (
-        not isinstance(data, dict)
-        or data.get("version") != 1
-        or data.get("state") != "published"
-    ):
+    if not isinstance(raw_data, dict):
+        raise CoordinationError("publication receipt is not a published receipt")
+    data = cast("dict[str, Any]", raw_data)
+    if data.get("version") != 1 or data.get("state") != "published":
         raise CoordinationError("publication receipt is not a published receipt")
     if data.get("phase") != key:
         raise CoordinationError("publication receipt phase does not match reservation")
-    owner = data.get("reservation")
-    if not isinstance(owner, dict) or any(
+    owner_raw = data.get("reservation")
+    if not isinstance(owner_raw, dict):
+        raise CoordinationError("publication receipt does not match reservation")
+    owner = cast("dict[str, Any]", owner_raw)
+    if any(
         owner.get(field) != reservation.get(field)
         for field in ("machine_id", "reservation_id", "generation")
     ):
@@ -102,7 +111,7 @@ def _validate_publication_receipt(
     }
 
 
-def save_reservation_file(path, reservation):
+def save_reservation_file(path: str | Path, reservation: Any) -> dict[str, Any]:
     """Persist the fence token before a phase process is launched."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -120,15 +129,16 @@ def save_reservation_file(path, reservation):
     return payload
 
 
-def load_reservation_file(path):
+def load_reservation_file(path: str | Path) -> dict[str, Any] | None:
     try:
-        data = json.loads(Path(path).read_text())
+        raw_data = json.loads(Path(path).read_text())
     except FileNotFoundError:
         return None
     except (OSError, ValueError) as exc:
         raise CoordinationError(f"reservation file is unreadable: {exc}") from exc
-    if not isinstance(data, dict):
+    if not isinstance(raw_data, dict):
         raise CoordinationError("reservation file is not an object")
+    data = cast("dict[str, Any]", raw_data)
     for field in ("phase", "machine_id", "reservation_id", "generation"):
         if field not in data:
             raise CoordinationError(f"reservation file is missing {field}")
@@ -136,3 +146,6 @@ def load_reservation_file(path):
     _validate_reservation_id(data["reservation_id"])
     _validate_generation(data["generation"])
     return data
+
+
+__all__ = ["_validate_publication_receipt"]
