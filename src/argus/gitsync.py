@@ -80,6 +80,7 @@ Usage (name the source tool and the project root):
 Exit codes: 0 synced/verified, 1 blocked (operator decision required),
 2 config or usage error. JSON goes to stdout in every case.
 """
+
 import argparse
 import json
 import os
@@ -97,7 +98,11 @@ if not __package__:
 from argus import conventions
 from argus.config import ConfigError as ArgusConfigError
 from argus.conventions import (
-    board_repo, phase_file_parts, phase_paths, phase_run_dir, runs_dir,
+    board_repo,
+    phase_file_parts,
+    phase_paths,
+    phase_run_dir,
+    runs_dir,
     setting,
 )
 
@@ -140,6 +145,7 @@ def integration_branch(repo, default=INTEGRATION_BRANCH):
             return out.rsplit("/", 1)[-1]
     return default
 
+
 # A phase branch is named from the behaviour in the phase's roadmap file, and
 # never from its number. The branch is pushed to the public repository, where
 # the number reads as an internal label to every reviewer, and the behaviour is
@@ -169,12 +175,12 @@ def _phase_file_parts(roadmap_name):
     if parts is None:
         raise ConfigError(
             f"cannot derive a phase branch from {roadmap_name!r}: "
-            "expected a configured phase filename with a behaviour")
+            "expected a configured phase filename with a behaviour"
+        )
     number, behaviour = parts
     if not behaviour:
         raise ConfigError(f"phase file carries no behaviour: {roadmap_name!r}")
     return str(number), behaviour
-
 
 
 def phase_branch(roadmap_name):
@@ -207,7 +213,8 @@ def phase_branch_for(phase, roadmap_name):
     if int(number) != int(phase):
         raise ConfigError(
             f"roadmap file {roadmap_name!r} belongs to phase {int(number):06d}, "
-            f"not {int(phase):06d}; refusing to guess a branch name")
+            f"not {int(phase):06d}; refusing to guess a branch name"
+        )
     return phase_branch(roadmap_name)
 
 
@@ -279,13 +286,15 @@ def group_branch(root, members, roadmap_dir=None):
     if path is None:
         raise ConfigError(
             f"group member {lowest:06d} has no phase document in {folder}; "
-            "refusing to guess a branch name")
+            "refusing to guess a branch name"
+        )
     _number, behaviour = _phase_file_parts(path.name)
     return f"{PHASE_BRANCH_PREFIX}{GROUP_BRANCH_MARKER}{behaviour}"
 
 
-def assert_phase_branch_unique(root, phase, roadmap_name, roadmap_dir=None,
-                               branch=None):
+def assert_phase_branch_unique(
+    root, phase, roadmap_name, roadmap_dir=None, branch=None
+):
     """Refuse a branch name another of this checkout's phases also earns.
 
     The phase number is deliberately absent from the branch name, so the
@@ -316,11 +325,12 @@ def assert_phase_branch_unique(root, phase, roadmap_name, roadmap_dir=None,
         if int(number) == int(phase) or phase_branch(path.name) != branch:
             continue
         return blocked(
-            info, f"{branch!r} is also the branch for {path.name!r}",
+            info,
+            f"{branch!r} is also the branch for {path.name!r}",
             hint="two phases cannot share a branch; rename one phase file so "
-                 "the behaviour part differs")
-    return dict(info, ok=True, action="phase-branch-name-unique",
-                branch=branch)
+            "the behaviour part differs",
+        )
+    return dict(info, ok=True, action="phase-branch-name-unique", branch=branch)
 
 
 def assert_group_branch_unique(root, branch, members, roadmap_dir=None):
@@ -361,10 +371,12 @@ def assert_group_branch_unique(root, branch, members, roadmap_dir=None):
             continue
         other_members = [f"{int(member):06d}" for member in other]
         return blocked(
-            info, f"{branch!r} is also the branch for group {other_members!r} "
-                  f"in {path.name!r}",
+            info,
+            f"{branch!r} is also the branch for group {other_members!r} "
+            f"in {path.name!r}",
             hint="two groups cannot share a branch; rename a member file so the "
-                 "lowest member's behaviour part differs")
+            "lowest member's behaviour part differs",
+        )
     return dict(info, ok=True, action="group-branch-name-unique")
 
 
@@ -393,9 +405,13 @@ def git(repo, *args, timeout=GIT_TIMEOUT_S, extra_env=None, raw=False):
     if extra_env:
         env.update(extra_env)
     try:
-        p = subprocess.run([git_binary(), "-C", str(repo), *args],
-                           capture_output=True, text=True, timeout=timeout,
-                           env=env)
+        p = subprocess.run(
+            [git_binary(), "-C", str(repo), *args],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            env=env,
+        )
     except FileNotFoundError:
         raise ConfigError("git is not on PATH")
     except subprocess.TimeoutExpired:
@@ -418,8 +434,9 @@ def resolve_upstream(repo):
     rc, branch, _ = git(repo, "rev-parse", "--abbrev-ref", "HEAD")
     if rc != 0 or not branch or branch == "HEAD":
         return None, None, None, "detached HEAD or unreadable current branch"
-    rc, up, _ = git(repo, "rev-parse", "--abbrev-ref", "--symbolic-full-name",
-                    "@{upstream}")
+    rc, up, _ = git(
+        repo, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"
+    )
     if rc != 0 or not up:
         return branch, None, None, f"branch {branch!r} has no upstream"
     remote, _, remote_branch = up.partition("/")
@@ -448,23 +465,22 @@ def canonical_remote_url(value):
     parsed = urllib.parse.urlsplit(value)
     if not parsed.scheme:
         return value
-    return urllib.parse.urlunsplit((
-        parsed.scheme.lower(),
-        parsed.netloc.lower(),
-        parsed.path.rstrip("/") or "/",
-        parsed.query,
-        parsed.fragment,
-    ))
+    return urllib.parse.urlunsplit(
+        (
+            parsed.scheme.lower(),
+            parsed.netloc.lower(),
+            parsed.path.rstrip("/") or "/",
+            parsed.query,
+            parsed.fragment,
+        )
+    )
 
 
 def upstream_urls(repo, *, push=False):
     _branch, remote, _remote_branch, why = resolve_upstream(repo)
     if why or not remote:
         return set()
-    return {
-        canonical_remote_url(url)
-        for url in remote_urls(repo, remote, push=push)
-    }
+    return {canonical_remote_url(url) for url in remote_urls(repo, remote, push=push)}
 
 
 def upstream_push_urls(repo):
@@ -489,8 +505,9 @@ def classify(repo, upstream):
 
 
 def subjects(repo, rev_range):
-    rc, out, _ = git(repo, "log", "--oneline", "--no-decorate",
-                     f"-n{MAX_SUBJECTS}", rev_range)
+    rc, out, _ = git(
+        repo, "log", "--oneline", "--no-decorate", f"-n{MAX_SUBJECTS}", rev_range
+    )
     return out.splitlines() if rc == 0 and out else []
 
 
@@ -545,22 +562,33 @@ def _fast_forward(info, repo, upstream, behind):
     clash = overlapping_paths(repo, upstream, local)
     if clash:
         return blocked(
-            info, "incoming commits and local work touch the same paths",
-            overlapping=clash, dirty=sorted(local),
+            info,
+            "incoming commits and local work touch the same paths",
+            overlapping=clash,
+            dirty=sorted(local),
             hint="commit or move the overlapping edits, then rerun; the "
-                 "pipeline will not merge over unreviewed work")
+            "pipeline will not merge over unreviewed work",
+        )
     rc, out, err = git(repo, "merge", "--ff-only", upstream)
     if rc != 0:
         return blocked(
-            info, f"fast-forward merge refused: {err or out}",
-            dirty=sorted(local), overlapping=[],
+            info,
+            f"fast-forward merge refused: {err or out}",
+            dirty=sorted(local),
+            overlapping=[],
             hint="git refused for a reason the overlap check does not name; "
-                 "read the message and resolve it by hand")
+            "read the message and resolve it by hand",
+        )
     after = git(repo, "rev-parse", "HEAD")[1]
-    return dict(info, ok=True, action="fast-forwarded", after=after,
-                carried=sorted(local),
-                hint=f"advanced {behind} commit(s) to {upstream}, carrying "
-                     f"{len(local)} uncommitted path(s) over")
+    return dict(
+        info,
+        ok=True,
+        action="fast-forwarded",
+        after=after,
+        carried=sorted(local),
+        hint=f"advanced {behind} commit(s) to {upstream}, carrying "
+        f"{len(local)} uncommitted path(s) over",
+    )
 
 
 def _merge(info, repo, upstream, ahead, behind, abort_on_conflict=True):
@@ -578,45 +606,59 @@ def _merge(info, repo, upstream, ahead, behind, abort_on_conflict=True):
     _, staged, _ = git(repo, "diff", "--cached", "--name-only")
     if staged:
         return blocked(
-            info, "staged changes present; a merge of diverged histories "
-                  "needs the index to match HEAD",
+            info,
+            "staged changes present; a merge of diverged histories "
+            "needs the index to match HEAD",
             staged=staged.splitlines(),
             hint="commit or unstage the phase work, then rerun; git refuses a "
-                 "merge with a dirty index even when the paths are disjoint")
+            "merge with a dirty index even when the paths are disjoint",
+        )
     local = dirty_paths(repo)
     clash = overlapping_paths(repo, upstream, local)
     if clash:
         return blocked(
-            info, "incoming commits and local work touch the same paths",
-            overlapping=clash, dirty=sorted(local),
+            info,
+            "incoming commits and local work touch the same paths",
+            overlapping=clash,
+            dirty=sorted(local),
             hint="commit or move the overlapping edits, then rerun; the "
-                 "pipeline will not merge over unreviewed work")
-    rc, out, err = git(repo, "merge", "--no-edit", upstream,
-                       extra_env={"GIT_MERGE_AUTOEDIT": "no"})
+            "pipeline will not merge over unreviewed work",
+        )
+    rc, out, err = git(
+        repo, "merge", "--no-edit", upstream, extra_env={"GIT_MERGE_AUTOEDIT": "no"}
+    )
     if rc != 0:
         _, conflicts, _ = git(repo, "diff", "--name-only", "--diff-filter=U")
         aborted = None
         if abort_on_conflict:
             _, _, ab_err = git(repo, "merge", "--abort")
             aborted = not ab_err
-        reason = ("clean merge impossible; remote changes conflict with "
-                  "local work")
+        reason = "clean merge impossible; remote changes conflict with local work"
         hint = "resolve by hand; the pipeline will not rebase or force"
         if not abort_on_conflict:
-            hint = ("resolve the conflicted files, `git add` them, and "
-                    "complete the merge with `git commit`; never force or "
-                    "rebase")
+            hint = (
+                "resolve the conflicted files, `git add` them, and "
+                "complete the merge with `git commit`; never force or "
+                "rebase"
+            )
         return blocked(
-            info, reason,
+            info,
+            reason,
             conflicted=conflicts.splitlines() if conflicts else [],
             merge_error=(err or out),
             merge_aborted=aborted,
-            hint=hint)
+            hint=hint,
+        )
     after = git(repo, "rev-parse", "HEAD")[1]
-    return dict(info, ok=True, action="merged", after=after,
-                carried=sorted(local),
-                hint=f"merged {behind} remote commit(s) with {ahead} local "
-                     f"commit(s); push will fast-forward")
+    return dict(
+        info,
+        ok=True,
+        action="merged",
+        after=after,
+        carried=sorted(local),
+        hint=f"merged {behind} remote commit(s) with {ahead} local "
+        f"commit(s); push will fast-forward",
+    )
 
 
 def sync_one(repo, mode, remote=None, branch=None):
@@ -649,25 +691,38 @@ def sync_one(repo, mode, remote=None, branch=None):
     if rc != 0 or not tip:
         return blocked(info, f"upstream {upstream} does not exist after fetch")
     local, tip, ahead, behind, relation = classify(repo, upstream)
-    info.update(upstream=upstream, before=local, remote_tip=tip,
-                ahead=ahead, behind=behind, relation=relation,
-                local_only=subjects(repo, f"{upstream}..HEAD"),
-                remote_only=subjects(repo, f"HEAD..{upstream}"))
+    info.update(
+        upstream=upstream,
+        before=local,
+        remote_tip=tip,
+        ahead=ahead,
+        behind=behind,
+        relation=relation,
+        local_only=subjects(repo, f"{upstream}..HEAD"),
+        remote_only=subjects(repo, f"HEAD..{upstream}"),
+    )
     if relation == "equal":
-        return dict(info, ok=True, action="up-to-date",
-                    hint="local and remote match")
+        return dict(info, ok=True, action="up-to-date", hint="local and remote match")
     if relation == "ahead":
         if mode == "push":
-            return dict(info, ok=True, action="verified",
-                        hint="remote is an ancestor of local HEAD; "
-                             "push will fast-forward")
-        return dict(info, ok=True, action="ahead",
-                    hint=f"remote has nothing new; {ahead} local commit(s) "
-                         f"will publish at finalize")
+            return dict(
+                info,
+                ok=True,
+                action="verified",
+                hint="remote is an ancestor of local HEAD; push will fast-forward",
+            )
+        return dict(
+            info,
+            ok=True,
+            action="ahead",
+            hint=f"remote has nothing new; {ahead} local commit(s) "
+            f"will publish at finalize",
+        )
     if relation == "behind":
         return _fast_forward(info, repo, upstream, behind)
-    return _merge(info, repo, upstream, ahead, behind,
-                  abort_on_conflict=(mode != "push"))
+    return _merge(
+        info, repo, upstream, ahead, behind, abort_on_conflict=(mode != "push")
+    )
 
 
 def resync_integration(repo, base=None):
@@ -702,12 +757,19 @@ def resync_integration(repo, base=None):
         return blocked(info, "not a git working tree")
     here = current_branch(repo)
     if not here:
-        return blocked(info, "detached HEAD; refusing to move the working tree",
-                       hint="check out the phase branch, then rerun")
+        return blocked(
+            info,
+            "detached HEAD; refusing to move the working tree",
+            hint="check out the phase branch, then rerun",
+        )
     info["branch"] = here
     if here == base:
-        return dict(info, ok=True, action="already-on-integration-branch",
-                    hint=f"already on {base}; there is no phase branch to resync")
+        return dict(
+            info,
+            ok=True,
+            action="already-on-integration-branch",
+            hint=f"already on {base}; there is no phase branch to resync",
+        )
     # The remote is read from the phase branch first, and from the base branch
     # second, because a phase branch that has never been pushed has no upstream
     # of its own and the sync helper refuses a branch with no remote copy.
@@ -716,32 +778,52 @@ def resync_integration(repo, base=None):
         rc_r, from_base, _ = git(repo, "config", "--get", f"branch.{base}.remote")
         remote = from_base if rc_r == 0 else None
     if not remote:
-        return blocked(info, why or "no remote is configured",
-                       hint="the integration branch cannot be merged in "
-                            "without a remote to read it from")
+        return blocked(
+            info,
+            why or "no remote is configured",
+            hint="the integration branch cannot be merged in "
+            "without a remote to read it from",
+        )
     rc, _, err = git(repo, "fetch", "--prune", remote, timeout=FETCH_TIMEOUT_S)
     if rc != 0:
         return blocked(info, f"git fetch {remote} failed", detail=err)
     upstream = f"{remote}/{base}"
     rc, _, _ = git(repo, "rev-parse", "--verify", upstream)
     if rc != 0:
-        return blocked(info, f"{upstream} does not exist after fetch",
-                       hint="the integration branch is missing on the remote")
+        return blocked(
+            info,
+            f"{upstream} does not exist after fetch",
+            hint="the integration branch is missing on the remote",
+        )
     local, tip, ahead, behind, relation = classify(repo, upstream)
-    info.update(upstream=upstream, before=local, remote_tip=tip,
-                ahead=ahead, behind=behind, relation=relation)
+    info.update(
+        upstream=upstream,
+        before=local,
+        remote_tip=tip,
+        ahead=ahead,
+        behind=behind,
+        relation=relation,
+    )
     if relation == "equal":
-        return dict(info, ok=True, action="up-to-date",
-                    hint=f"{here} already contains {upstream}")
+        return dict(
+            info,
+            ok=True,
+            action="up-to-date",
+            hint=f"{here} already contains {upstream}",
+        )
     if relation == "behind":
         return _fast_forward(info, repo, upstream, behind)
     if relation == "ahead":
         # The phase branch has commits the integration branch does not, and the
         # integration branch has nothing new. Merging would be a no-op with a
         # commit attached, so it is reported and left alone.
-        return dict(info, ok=True, action="phase-ahead",
-                    hint=f"{base} has nothing new; {ahead} phase commit(s) "
-                         "stay local until finalize pushes them")
+        return dict(
+            info,
+            ok=True,
+            action="phase-ahead",
+            hint=f"{base} has nothing new; {ahead} phase commit(s) "
+            "stay local until finalize pushes them",
+        )
     # A diverged phase branch is the only case that needs a real merge, and a
     # real merge is the only case git refuses while the index is dirty. That is
     # reported under its own action with the staged paths, because "the merge
@@ -751,12 +833,14 @@ def resync_integration(repo, base=None):
     _, staged, _ = git(repo, "diff", "--cached", "--name-only")
     if staged:
         blocked_result = blocked(
-            info, "the index holds staged changes, and git refuses to merge "
-                  "diverged histories while the index differs from HEAD",
+            info,
+            "the index holds staged changes, and git refuses to merge "
+            "diverged histories while the index differs from HEAD",
             staged=staged.splitlines(),
             hint="run this again once the index is clean — after committing, "
-                 "or from a tree with nothing staged. This is git's rule, not "
-                 "this helper's, so there is no flag that bypasses it")
+            "or from a tree with nothing staged. This is git's rule, not "
+            "this helper's, so there is no flag that bypasses it",
+        )
         # blocked() hardcodes action="blocked"; the distinct action is the whole
         # point, because the driver and the run log both branch on it.
         blocked_result["action"] = "resync-blocked-dirty-index"
@@ -784,25 +868,42 @@ def sync_all(root, mode, branch=None):
         private_fetch = upstream_urls(nested)
         private_push = upstream_push_urls(nested)
         if not public_fetch or not public_push or not private_fetch or not private_push:
-            reason = ("cannot prove separate public/private Git destinations; "
-                      "refusing to sync either checkout")
-            results = [blocked({"repo": str(r), "mode": mode}, reason)
-                       for r in repos]
-            return {"ok": False, "mode": mode, "repos": results,
-                    "summary": summarize(results, mode)}
-        if public_push & private_push or public_push & private_fetch \
-                or public_fetch & private_push:
-            reason = ("nested private repo and public repo share a Git "
-                      "push/fetch destination; refusing to sync either checkout")
-            results = [blocked({"repo": str(r), "mode": mode}, reason)
-                       for r in repos]
-            return {"ok": False, "mode": mode, "repos": results,
-                    "summary": summarize(results, mode)}
+            reason = (
+                "cannot prove separate public/private Git destinations; "
+                "refusing to sync either checkout"
+            )
+            results = [blocked({"repo": str(r), "mode": mode}, reason) for r in repos]
+            return {
+                "ok": False,
+                "mode": mode,
+                "repos": results,
+                "summary": summarize(results, mode),
+            }
+        if (
+            public_push & private_push
+            or public_push & private_fetch
+            or public_fetch & private_push
+        ):
+            reason = (
+                "nested private repo and public repo share a Git "
+                "push/fetch destination; refusing to sync either checkout"
+            )
+            results = [blocked({"repo": str(r), "mode": mode}, reason) for r in repos]
+            return {
+                "ok": False,
+                "mode": mode,
+                "repos": results,
+                "summary": summarize(results, mode),
+            }
     results = [sync_one(repos[0], mode, branch=branch)]
     results += [sync_one(r, mode) for r in repos[1:]]
     ok = all(r["ok"] for r in results)
-    return {"ok": ok, "mode": mode, "repos": results,
-            "summary": summarize(results, mode)}
+    return {
+        "ok": ok,
+        "mode": mode,
+        "repos": results,
+        "summary": summarize(results, mode),
+    }
 
 
 def dirty_paths(repo):
@@ -810,8 +911,9 @@ def dirty_paths(repo):
 
     Ignored files (for example the runner's interface log and driver state) do not
     appear, so this is exactly the set a commit would carry."""
-    rc, out, _ = git(repo, "status", "--porcelain=v1",
-                     "--untracked-files=all", raw=True)
+    rc, out, _ = git(
+        repo, "status", "--porcelain=v1", "--untracked-files=all", raw=True
+    )
     paths = []
     for line in out.splitlines():
         if len(line) < 4:
@@ -898,24 +1000,37 @@ def ensure_phase_branch(repo, branch, base=None, integration_only=False):
         here = current_branch(repo)
         rc, _, err = git(repo, "rev-parse", "--verify", base)
         if rc != 0:
-            return blocked(info, f"base branch {base!r} does not exist",
-                           hint="the integration branch is missing; refusing to "
-                                "publish run state with no starting point")
+            return blocked(
+                info,
+                f"base branch {base!r} does not exist",
+                hint="the integration branch is missing; refusing to "
+                "publish run state with no starting point",
+            )
         if here and here != base:
             return blocked(
-                info, f"checkout is on {here!r}, not {base!r}",
+                info,
+                f"checkout is on {here!r}, not {base!r}",
                 hint="run state is published from the integration branch; "
-                     "moving the working tree is an operator decision")
-        return dict(info, ok=True, action="stays-on-integration-branch",
-                    after=git(repo, "rev-parse", "HEAD")[1],
-                    after_branch=base,
-                    hint=f"left on {base}; this checkout's contents are read "
-                         f"on the integration branch, not as a pull request")
+                "moving the working tree is an operator decision",
+            )
+        return dict(
+            info,
+            ok=True,
+            action="stays-on-integration-branch",
+            after=git(repo, "rev-parse", "HEAD")[1],
+            after_branch=base,
+            hint=f"left on {base}; this checkout's contents are read "
+            f"on the integration branch, not as a pull request",
+        )
     here = current_branch(repo)
     if here == branch:
-        return dict(info, ok=True, action="already-on-phase-branch",
-                    after_branch=branch,
-                    hint="the phase is already on its own branch")
+        return dict(
+            info,
+            ok=True,
+            action="already-on-phase-branch",
+            after_branch=branch,
+            hint="the phase is already on its own branch",
+        )
     # The remote is read from the base branch, before anything is switched: a
     # branch that does not exist yet has no upstream of its own, so asking this
     # checkout would answer about the wrong branch.
@@ -923,17 +1038,23 @@ def ensure_phase_branch(repo, branch, base=None, integration_only=False):
     if why or not remote:
         rc_r, remote, _ = git(repo, "config", "--get", f"branch.{base}.remote")
         if rc_r != 0 or not remote:
-            return blocked(info, why or "no remote is configured",
-                           hint="the phase branch cannot be published; "
-                                "refusing to leave it with no remote copy")
+            return blocked(
+                info,
+                why or "no remote is configured",
+                hint="the phase branch cannot be published; "
+                "refusing to leave it with no remote copy",
+            )
     # The base is checked before the current branch, so a missing integration
     # branch is reported as itself rather than as "you are on the wrong
     # branch", which is what the reverse order would say.
     rc, _, err = git(repo, "rev-parse", "--verify", base)
     if rc != 0:
-        return blocked(info, f"base branch {base!r} does not exist",
-                       hint="the integration branch is missing; refusing to "
-                            "invent a starting point")
+        return blocked(
+            info,
+            f"base branch {base!r} does not exist",
+            hint="the integration branch is missing; refusing to "
+            "invent a starting point",
+        )
     if here and here != base:
         # The integration branch is where the checkout is left between phases,
         # so it is a place the launch may leave from rather than a conflict it
@@ -951,13 +1072,16 @@ def ensure_phase_branch(repo, branch, base=None, integration_only=False):
                     f"{base!r}",
                     dirty=carried,
                     hint="commit or stash the work, or move the checkout to the "
-                         f"base branch {base!r} yourself, then rerun; nothing "
-                         "was switched")
+                    f"base branch {base!r} yourself, then rerun; nothing "
+                    "was switched",
+                )
         else:
             return blocked(
-                info, f"checkout is on {here!r}, not the phase branch or {base!r}",
+                info,
+                f"checkout is on {here!r}, not the phase branch or {base!r}",
                 hint="a phase's work lives on its own branch; moving it is an "
-                     "operator decision, so nothing was switched")
+                "operator decision, so nothing was switched",
+            )
     exists_rc, _, _ = git(repo, "rev-parse", "--verify", f"refs/heads/{branch}")
     if exists_rc == 0:
         # The branch is left over from an earlier run of this same phase. Its
@@ -966,16 +1090,26 @@ def ensure_phase_branch(repo, branch, base=None, integration_only=False):
         # can be joined.
         rc, _, err = git(repo, "checkout", branch)
         if rc != 0:
-            return blocked(info, f"could not check out {branch!r}: {err or out}",
-                           hint="resolve by hand; nothing was switched")
-        return dict(info, ok=True, action="reused-phase-branch",
-                    after=git(repo, "rev-parse", "HEAD")[1],
-                    after_branch=branch,
-                    hint=f"resumed the existing {branch}")
+            return blocked(
+                info,
+                f"could not check out {branch!r}: {err or out}",
+                hint="resolve by hand; nothing was switched",
+            )
+        return dict(
+            info,
+            ok=True,
+            action="reused-phase-branch",
+            after=git(repo, "rev-parse", "HEAD")[1],
+            after_branch=branch,
+            hint=f"resumed the existing {branch}",
+        )
     rc, out, err = git(repo, "checkout", "-b", branch, base)
     if rc != 0:
-        return blocked(info, f"could not create {branch!r}: {err or out}",
-                       hint="resolve by hand; nothing was switched")
+        return blocked(
+            info,
+            f"could not create {branch!r}: {err or out}",
+            hint="resolve by hand; nothing was switched",
+        )
     # Publish the new branch and give it an upstream straight away. Two
     # reasons, both load-bearing: the sync helper refuses a branch with no
     # upstream, and a branch with no remote copy is the state the phase branch
@@ -984,15 +1118,21 @@ def ensure_phase_branch(repo, branch, base=None, integration_only=False):
     rc, out, err = git(repo, "push", "-q", "-u", remote, branch)
     if rc != 0:
         return blocked(
-            info, f"could not publish {branch!r} to {remote}: {err or out}",
+            info,
+            f"could not publish {branch!r} to {remote}: {err or out}",
             hint="the phase branch must exist on the remote before the phase "
-                 "starts; resolve by hand")
-    return dict(info, ok=True, action="created-phase-branch",
-                after=git(repo, "rev-parse", "HEAD")[1],
-                after_branch=branch,
-                carried=dirty_paths(repo),
-                hint=f"created {branch} from {base} and published it, "
-                     f"carrying the phase's uncommitted work")
+            "starts; resolve by hand",
+        )
+    return dict(
+        info,
+        ok=True,
+        action="created-phase-branch",
+        after=git(repo, "rev-parse", "HEAD")[1],
+        after_branch=branch,
+        carried=dirty_paths(repo),
+        hint=f"created {branch} from {base} and published it, "
+        f"carrying the phase's uncommitted work",
+    )
 
 
 def branch_phase_checkouts(root, branch, base=None):
@@ -1028,10 +1168,15 @@ def branch_phase_checkouts(root, branch, base=None):
     root = Path(root).resolve()
     private = board_repo(root)
     targets = [root] + ([private] if is_git_repo(private) else [])
-    return [ensure_phase_branch(r, branch,
-                                base=(None if r == private else base),
-                                integration_only=(r == private))
-            for r in targets]
+    return [
+        ensure_phase_branch(
+            r,
+            branch,
+            base=(None if r == private else base),
+            integration_only=(r == private),
+        )
+        for r in targets
+    ]
 
 
 # Run artifacts the running engine rewrites in place while a step runs.
@@ -1089,12 +1234,15 @@ def publish_dirt(dirty, root=None, phase=None):
     """
     if root is not None and phase is not None:
         run = phase_run_dir(root, phase).resolve()
+
         def engine_artifact(path):
             candidate = Path(path)
             if not candidate.is_absolute():
                 candidate = Path(root) / candidate
-            return (candidate.resolve().parent == run
-                    and candidate.name in ENGINE_WRITTEN_RUN_ARTIFACTS)
+            return (
+                candidate.resolve().parent == run
+                and candidate.name in ENGINE_WRITTEN_RUN_ARTIFACTS
+            )
     else:
         engine_artifact = is_engine_written_run_artifact
     real = [p for p in dirty if not engine_artifact(p)]
@@ -1115,12 +1263,16 @@ def _commit_and_push_run_state(repo, message, pathspec="runs"):
     _, staged, _ = git(repo, "diff", "--cached", "--name-only")
     if staged:
         prefix = pathspec.rstrip("/") + "/"
-        outside = [p for p in staged.splitlines()
-                   if p != pathspec and not p.startswith(prefix)]
+        outside = [
+            p for p in staged.splitlines() if p != pathspec and not p.startswith(prefix)
+        ]
         if outside:
-            return blocked(info, "staged changes exist outside the current phase",
-                           staged=outside,
-                           hint="commit or unstage them before publishing")
+            return blocked(
+                info,
+                "staged changes exist outside the current phase",
+                staged=outside,
+                hint="commit or unstage them before publishing",
+            )
     rc, _, err = git(repo, "add", "-A", "--", pathspec)
     if rc != 0:
         return blocked(info, f"could not stage {pathspec}: {err}")
@@ -1134,16 +1286,22 @@ def _commit_and_push_run_state(repo, message, pathspec="runs"):
         rc, out, err = git(repo, "push", remote, branch)
         if rc == 0:
             after = git(repo, "rev-parse", "HEAD")[1]
-            return dict(info, ok=True, action="committed-and-pushed",
-                        after=after, hint=message)
+            return dict(
+                info, ok=True, action="committed-and-pushed", after=after, hint=message
+            )
         if attempt == 1:
             res = sync_one(repo, "start")
             if not res.get("ok"):
-                return blocked(info, "remote moved and could not be "
-                                    "integrated before pushing run state",
-                               detail=res.get("summary"))
-    return blocked(info, f"push of run state failed: {err or out}",
-                   hint="resolve the remote by hand, then rerun")
+                return blocked(
+                    info,
+                    "remote moved and could not be integrated before pushing run state",
+                    detail=res.get("summary"),
+                )
+    return blocked(
+        info,
+        f"push of run state failed: {err or out}",
+        hint="resolve the remote by hand, then rerun",
+    )
 
 
 def _phase_run_pathspec(phase, root=None):
@@ -1165,11 +1323,14 @@ def _phase_run_pathspec(phase, root=None):
         # a directory that lands outside the private checkout, and reporting it
         # as one sent a reader looking at paths when the input was missing.
         raise ConfigError(
-            f"cannot locate the run directory for phase {number}: {exc}") from exc
+            f"cannot locate the run directory for phase {number}: {exc}"
+        ) from exc
     try:
         return str(resolved.relative_to(private.resolve()))
     except ValueError as exc:
-        raise ConfigError("phase run directory must be inside the private checkout to publish") from exc
+        raise ConfigError(
+            "phase run directory must be inside the private checkout to publish"
+        ) from exc
 
 
 def commit_leftover_run_state(root, message, phase=None):
@@ -1181,18 +1342,24 @@ def commit_leftover_run_state(root, message, phase=None):
     """
     root = Path(root).resolve()
     private = board_repo(root)
-    pathspec = _phase_run_pathspec(phase, root) if phase is not None else str(runs_dir(root).relative_to(private))
+    pathspec = (
+        _phase_run_pathspec(phase, root)
+        if phase is not None
+        else str(runs_dir(root).relative_to(private))
+    )
     results = []
     # The nested private checkout is a separate repo by design; if a host
     # lacks the global ignore for it, do not mistake it for public dirt.
-    pub_dirty = [p for p in dirty_paths(root)
-                 if not _is_private_path(root, p)]
+    pub_dirty = [p for p in dirty_paths(root) if not _is_private_path(root, p)]
     if pub_dirty:
-        results.append(blocked(
-            {"repo": str(root)},
-            "public checkout has changes outside the pipeline's run state",
-            dirty=pub_dirty,
-            hint="commit or revert them, then rerun"))
+        results.append(
+            blocked(
+                {"repo": str(root)},
+                "public checkout has changes outside the pipeline's run state",
+                dirty=pub_dirty,
+                hint="commit or revert them, then rerun",
+            )
+        )
     if is_git_repo(private):
         paths = dirty_paths(private)
         if phase is None:
@@ -1204,27 +1371,37 @@ def commit_leftover_run_state(root, message, phase=None):
             # only staged paths outside this phase are dangerous because a
             # commit would carry them accidentally.
             _, staged, _ = git(private, "diff", "--cached", "--name-only")
-            outside = [p for p in staged.splitlines()
-                       if p != pathspec and not p.startswith(prefix)]
-            inside = [p for p in paths
-                      if p == pathspec or p.startswith(prefix)]
+            outside = [
+                p
+                for p in staged.splitlines()
+                if p != pathspec and not p.startswith(prefix)
+            ]
+            inside = [p for p in paths if p == pathspec or p.startswith(prefix)]
         if outside:
-            results.append(blocked(
-                {"repo": str(private)},
-                "private checkout has changes outside the current phase"
-                if phase is not None else "private checkout has changes outside runs/",
-                dirty=outside,
-                hint="commit or move them before publishing this phase"))
+            results.append(
+                blocked(
+                    {"repo": str(private)},
+                    "private checkout has changes outside the current phase"
+                    if phase is not None
+                    else "private checkout has changes outside runs/",
+                    dirty=outside,
+                    hint="commit or move them before publishing this phase",
+                )
+            )
         elif inside:
-            results.append(_commit_and_push_run_state(
-                private, message, pathspec=pathspec))
+            results.append(
+                _commit_and_push_run_state(private, message, pathspec=pathspec)
+            )
         else:
-            results.append({"repo": str(private), "ok": True,
-                            "action": "clean"})
+            results.append({"repo": str(private), "ok": True, "action": "clean"})
     ok = all(r.get("ok") for r in results)
-    return {"ok": ok, "mode": "start-clean", "repos": results,
-            "pathspec": pathspec,
-            "summary": summarize(results, "start-clean")}
+    return {
+        "ok": ok,
+        "mode": "start-clean",
+        "repos": results,
+        "pathspec": pathspec,
+        "summary": summarize(results, "start-clean"),
+    }
 
 
 def _published_head(results, repo):
@@ -1242,8 +1419,7 @@ def phase_receipt(repo, number):
     human. A receipt that does not parse is treated as absent, not as
     completion: an unreadable receipt must never read as a merged phase.
     """
-    path = (phase_run_dir(repo, number)
-            / "publication.json")
+    path = phase_run_dir(repo, number) / "publication.json"
     try:
         data = json.loads(path.read_text())
     except (OSError, ValueError):
@@ -1316,14 +1492,21 @@ def phase_work_on_integration(root, phase, receipt=None):
     ``reason``.
     """
     root = Path(root).resolve()
-    info = {"phase": f"{int(phase):06d}", "on_integration": False,
-            "confirmed_by": None, "reason": "no publication receipt"}
+    info = {
+        "phase": f"{int(phase):06d}",
+        "on_integration": False,
+        "confirmed_by": None,
+        "reason": "no publication receipt",
+    }
     receipt = receipt if receipt is not None else phase_receipt(root, phase)
     if not receipt:
         return info
     if receipt.get("state") == "published":
-        info.update(on_integration=True, confirmed_by="receipt",
-                    reason="the receipt already records the merge")
+        info.update(
+            on_integration=True,
+            confirmed_by="receipt",
+            reason="the receipt already records the merge",
+        )
         return info
     integration = receipt.get("integration_branch") or integration_branch(root)
     head = receipt.get("public_head")
@@ -1337,23 +1520,33 @@ def phase_work_on_integration(root, phase, receipt=None):
     github = {"state": "not-asked", "detail": "no pull request reference"}
     if ref.get("number"):
         state, detail = gh_pull_request_state(
-            ref["number"], ref.get("owner"), ref.get("repo"), ref.get("host"))
+            ref["number"], ref.get("owner"), ref.get("repo"), ref.get("host")
+        )
         github = {"state": state, "detail": detail}
         if state == "merged":
-            info.update(on_integration=True, confirmed_by="github",
-                        reason=f"GitHub reports pull request {ref['number']} merged")
+            info.update(
+                on_integration=True,
+                confirmed_by="github",
+                reason=f"GitHub reports pull request {ref['number']} merged",
+            )
             info["github"] = github
             return info
     info["github"] = github
     if head and is_git_repo(root):
         if _head_carried_locally(root, head, (integration,)):
-            info.update(on_integration=True, confirmed_by="commit-id",
-                        reason=f"the published head {head[:12]} is on {integration}")
+            info.update(
+                on_integration=True,
+                confirmed_by="commit-id",
+                reason=f"the published head {head[:12]} is on {integration}",
+            )
             return info
         if head_tree_on_integration(root, head, integration):
-            info.update(on_integration=True, confirmed_by="content",
-                        reason=f"the published content {head[:12]} is on "
-                               f"{integration} under another commit")
+            info.update(
+                on_integration=True,
+                confirmed_by="content",
+                reason=f"the published content {head[:12]} is on "
+                f"{integration} under another commit",
+            )
             return info
     info["reason"] = "nothing confirms the phase was merged"
     return info
@@ -1376,9 +1569,11 @@ def awaiting_review(repo, number):
     receipt = phase_receipt(repo, number)
     if not receipt or receipt.get("state") != "awaiting_review":
         return None
-    return {"branch": receipt.get("branch"),
-            "pull_request": receipt.get("pull_request"),
-            "head": receipt.get("public_head")}
+    return {
+        "branch": receipt.get("branch"),
+        "pull_request": receipt.get("pull_request"),
+        "head": receipt.get("public_head"),
+    }
 
 
 def _run_phase_number(entry):
@@ -1451,10 +1646,12 @@ def open_predecessor(root, phase):
         if phase_work_on_integration(root, number)["on_integration"]:
             continue
         if best is None or number > best["phase"]:
-            best = {"phase": number,
-                    "branch": review["branch"],
-                    "pull_request": review.get("pull_request"),
-                    "head": review.get("head")}
+            best = {
+                "phase": number,
+                "branch": review["branch"],
+                "pull_request": review.get("pull_request"),
+                "head": review.get("head"),
+            }
     return best
 
 
@@ -1471,7 +1668,8 @@ def open_predecessor(root, phase):
 # from another host still only ever confirms the phase's own pull request.
 _PULL_REQUEST_URL_RE = re.compile(
     r"^https?://(?P<host>[^/]+)/(?P<owner>[^/]+)/(?P<repo>[^/]+)"
-    r"/pull/(?P<number>\d+)(?:[/?#].*)?$")
+    r"/pull/(?P<number>\d+)(?:[/?#].*)?$"
+)
 
 
 def pull_request_ref(url):
@@ -1489,10 +1687,12 @@ def pull_request_ref(url):
     match = _PULL_REQUEST_URL_RE.match(str(url or "").strip())
     if not match:
         return None
-    return {"host": match.group("host"),
-            "owner": match.group("owner"),
-            "repo": match.group("repo"),
-            "number": int(match.group("number"))}
+    return {
+        "host": match.group("host"),
+        "owner": match.group("owner"),
+        "repo": match.group("repo"),
+        "number": int(match.group("number")),
+    }
 
 
 def gh_pull_request_state(number, owner, repo, host=None):
@@ -1518,11 +1718,20 @@ def gh_pull_request_state(number, owner, repo, host=None):
     target = f"{owner}/{repo}"
     if host and host not in ("github.com",):
         target = f"{host}/{target}"
-    argv = [gh_binary(), "pr", "view", str(int(number)), "--repo", target,
-            "--json", "state,mergedAt,mergeCommit"]
+    argv = [
+        gh_binary(),
+        "pr",
+        "view",
+        str(int(number)),
+        "--repo",
+        target,
+        "--json",
+        "state,mergedAt,mergeCommit",
+    ]
     try:
-        done = subprocess.run(argv, capture_output=True, text=True,
-                              timeout=GH_TIMEOUT_S)
+        done = subprocess.run(
+            argv, capture_output=True, text=True, timeout=GH_TIMEOUT_S
+        )
     except FileNotFoundError:
         return "unknown", "gh is not installed"
     except subprocess.TimeoutExpired:
@@ -1546,8 +1755,11 @@ def gh_pull_request_state(number, owner, repo, host=None):
         # is gh's, not GitHub's, and this pipeline cannot exercise it against a
         # live pull request without a token it must not reach for.
         commit = data.get("mergeCommit")
-        oid = commit if isinstance(commit, str) else (
-            commit.get("oid") if isinstance(commit, dict) else None)
+        oid = (
+            commit
+            if isinstance(commit, str)
+            else (commit.get("oid") if isinstance(commit, dict) else None)
+        )
         return "merged", oid or str(data.get("mergedAt") or "")
     if state in {"OPEN", "CLOSED"}:
         # CLOSED is a closed-without-merging pull request, which is a real
@@ -1586,7 +1798,8 @@ def _commit_phase_receipt(root, phase):
     return _commit_and_push_run_state(
         private,
         f"pipeline: publish completion receipt for phase {int(phase):06d}",
-        pathspec=_phase_run_pathspec(phase, root))
+        pathspec=_phase_run_pathspec(phase, root),
+    )
 
 
 def mark_phase_published(root, phase, public_commit=None, private_commit=None):
@@ -1627,16 +1840,23 @@ def mark_phase_published(root, phase, public_commit=None, private_commit=None):
     if not receipt:
         return blocked(info, "no publication receipt for this phase")
     if receipt.get("state") == "published":
-        return dict(info, ok=True, action="already-published",
-                    hint="this phase is already recorded as merged")
+        return dict(
+            info,
+            ok=True,
+            action="already-published",
+            hint="this phase is already recorded as merged",
+        )
     if receipt.get("state") != "awaiting_review":
-        return blocked(info, f"receipt state is {receipt.get('state')!r}, "
-                             "not awaiting review")
+        return blocked(
+            info, f"receipt state is {receipt.get('state')!r}, not awaiting review"
+        )
     merged = {}
     confirmed_by = {}
     github = {"state": "not-asked", "detail": "no pull request reference"}
-    for label, checkout, want in (("public", root, public_commit),
-                                  ("private", private, private_commit)):
+    for label, checkout, want in (
+        ("public", root, public_commit),
+        ("private", private, private_commit),
+    ):
         head = receipt.get(f"{label}_head")
         if not head:
             return blocked(info, f"receipt has no {label} head to verify")
@@ -1656,8 +1876,8 @@ def mark_phase_published(root, phase, public_commit=None, private_commit=None):
                 ref = pull_request_ref(receipt.get("pull_request")) or {}
             if ref.get("number"):
                 state, detail = gh_pull_request_state(
-                    ref["number"], ref.get("owner"), ref.get("repo"),
-                    ref.get("host"))
+                    ref["number"], ref.get("owner"), ref.get("repo"), ref.get("host")
+                )
                 github = {"state": state, "detail": detail}
                 if state == "merged":
                     merged[label] = detail or f"pull-request-{ref['number']}"
@@ -1684,8 +1904,7 @@ def mark_phase_published(root, phase, public_commit=None, private_commit=None):
             confirmed_by[label] = "commit-id"
         else:
             git(checkout, "fetch", "--prune", "origin", timeout=FETCH_TIMEOUT_S)
-            found = _head_carried_locally(
-                checkout, head, (f"origin/{target}",))
+            found = _head_carried_locally(checkout, head, (f"origin/{target}",))
             if found:
                 merged[label] = found
                 confirmed_by[label] = "commit-id"
@@ -1693,21 +1912,26 @@ def mark_phase_published(root, phase, public_commit=None, private_commit=None):
             # Which check answered is reported, because the two answer for
             # different reasons and an operator reading a stalled line needs to
             # know whether GitHub said no or could not be asked.
-            reason = (f"the {label} head {head[:12]} is not on the integration "
-                      "branch, so the pull request has not been merged")
+            reason = (
+                f"the {label} head {head[:12]} is not on the integration "
+                "branch, so the pull request has not been merged"
+            )
             if label == "public" and github["state"] == "not-merged":
                 reason += " (GitHub reports the pull request as not merged)"
             elif label == "public" and github["state"] == "unknown":
                 reason += (
                     f" (GitHub could not be asked: {github['detail']}). The "
                     "squash-merge check is degraded, so a squash-merged phase "
-                    "will keep waiting until gh works again")
+                    "will keep waiting until gh works again"
+                )
             return blocked(
-                info, reason,
+                info,
+                reason,
                 github=github,
                 hint="merge the pull request, then rerun; a receipt is never "
-                     "edited into claiming a merge that did not happen")
-    path = (phase_run_dir(root, phase) / "publication.json")
+                "edited into claiming a merge that did not happen",
+            )
+    path = phase_run_dir(root, phase) / "publication.json"
     data = dict(receipt)
     data["state"] = "published"
     data["public_commit"] = merged["public"]
@@ -1718,8 +1942,9 @@ def mark_phase_published(root, phase, public_commit=None, private_commit=None):
     # own integration branch directly — so its head is always confirmed by the
     # commit-id test. A single value would claim GitHub vouched for a head it
     # was never asked about, which defeats the field's whole purpose.
-    data["merge_confirmed_by"] = {k: confirmed_by.get(k, "commit-id")
-                                  for k in ("public", "private")}
+    data["merge_confirmed_by"] = {
+        k: confirmed_by.get(k, "commit-id") for k in ("public", "private")
+    }
     data.pop("engine_written_at_publish", None)
     try:
         original = path.read_text()
@@ -1742,21 +1967,27 @@ def mark_phase_published(root, phase, public_commit=None, private_commit=None):
             path.write_text(original)
             return blocked(
                 info,
-                "could not commit the published receipt: "
-                f"{committed.get('blockers')}",
+                f"could not commit the published receipt: {committed.get('blockers')}",
                 hint="the receipt was restored to awaiting_review; the merge "
-                     "check retries on the next tick")
+                "check retries on the next tick",
+            )
         return blocked(
             info,
             "the published receipt was committed but the push failed: "
             f"{committed.get('blockers')}",
             hint="the working tree is clean and the receipt is committed; the "
-                 "next sync pushes it")
-    return dict(info, ok=True, action="marked-published",
-                public_commit=merged["public"], private_commit=merged["private"],
-                confirmed_by=data["merge_confirmed_by"],
-                receipt_committed=committed.get("action"),
-                hint="the phase's commits are on the integration branch")
+            "next sync pushes it",
+        )
+    return dict(
+        info,
+        ok=True,
+        action="marked-published",
+        public_commit=merged["public"],
+        private_commit=merged["private"],
+        confirmed_by=data["merge_confirmed_by"],
+        receipt_committed=committed.get("action"),
+        hint="the phase's commits are on the integration branch",
+    )
 
 
 def _head_carried_locally(checkout, head, candidates):
@@ -1827,12 +2058,20 @@ def tidy_published_checkout(repo, base=None):
     if not is_git_repo(repo):
         return blocked(info, "not a git working tree")
     if not here or here == base:
-        return dict(info, ok=True, action="nothing-to-tidy",
-                    hint="the checkout is not on an unreviewed phase branch")
+        return dict(
+            info,
+            ok=True,
+            action="nothing-to-tidy",
+            hint="the checkout is not on an unreviewed phase branch",
+        )
     receipt = receipt_for_branch(repo, here)
     if not receipt:
-        return dict(info, ok=True, action="no-receipt-for-branch",
-                    hint=f"{here} has no publication receipt; leaving it alone")
+        return dict(
+            info,
+            ok=True,
+            action="no-receipt-for-branch",
+            hint=f"{here} has no publication receipt; leaving it alone",
+        )
     # A branch shared by a reservation group answers for the group, not for the
     # one member whose receipt happened to be found first. The checkout may only
     # leave while every member is published, because the members still to run
@@ -1840,17 +2079,26 @@ def tidy_published_checkout(repo, base=None):
     members = list(receipt.get("group") or [])
     if members:
         if not _group_all_published(repo, members):
-            return dict(info, ok=True, action="group-not-yet-published",
-                        group=members,
-                        hint=f"{here} carries a reservation group; the checkout "
-                             "stays on it until every member is published")
+            return dict(
+                info,
+                ok=True,
+                action="group-not-yet-published",
+                group=members,
+                hint=f"{here} carries a reservation group; the checkout "
+                "stays on it until every member is published",
+            )
         return return_to_integration(repo, base=base)
     state = receipt.get("state")
     if state != "published":
-        return dict(info, ok=True, action="phase-not-yet-published",
-                    phase=receipt.get("phase"), receipt_state=state,
-                    hint=f"{here} belongs to phase {receipt.get('phase')}, "
-                         f"still {state}; the checkout stays put")
+        return dict(
+            info,
+            ok=True,
+            action="phase-not-yet-published",
+            phase=receipt.get("phase"),
+            receipt_state=state,
+            hint=f"{here} belongs to phase {receipt.get('phase')}, "
+            f"still {state}; the checkout stays put",
+        )
     return return_to_integration(repo, base=base)
 
 
@@ -1880,32 +2128,49 @@ def return_to_integration(repo, base=None):
         return blocked(info, "cannot read the working tree status")
     if dirty.strip():
         return blocked(
-            info, "the working tree has uncommitted changes",
+            info,
+            "the working tree has uncommitted changes",
             hint="commit, stash, or discard them by hand; switching branches "
-                 "with uncommitted work is how that work gets lost")
+            "with uncommitted work is how that work gets lost",
+        )
     rc, _, _ = git(repo, "rev-parse", "--verify", base)
     if rc != 0:
-        return blocked(info, f"integration branch {base!r} does not exist",
-                       hint="the integration branch is missing; refusing to "
-                            "move the checkout with no destination")
+        return blocked(
+            info,
+            f"integration branch {base!r} does not exist",
+            hint="the integration branch is missing; refusing to "
+            "move the checkout with no destination",
+        )
     here = current_branch(repo)
     if here == base:
-        return dict(info, ok=True, action="already-on-integration-branch",
-                    hint=f"already on {base}")
+        return dict(
+            info,
+            ok=True,
+            action="already-on-integration-branch",
+            hint=f"already on {base}",
+        )
     if not here:
-        return blocked(info, "the current branch is not readable",
-                       hint="a detached HEAD is an operator decision, not "
-                            "something to guess at")
+        return blocked(
+            info,
+            "the current branch is not readable",
+            hint="a detached HEAD is an operator decision, not something to guess at",
+        )
     rc, _, err = git(repo, "checkout", base)
     if rc != 0:
         return blocked(info, f"could not check out {base!r}: {err.strip()}")
-    return dict(info, ok=True, action="returned-to-integration-branch",
-                before=here, after=base,
-                hint=f"left {here} and returned to {base}")
+    return dict(
+        info,
+        ok=True,
+        action="returned-to-integration-branch",
+        before=here,
+        after=base,
+        hint=f"left {here} and returned to {base}",
+    )
 
 
 def _phase_reservations_now():
     from argus.phase_reservations import _now
+
     return _now()
 
 
@@ -1919,6 +2184,7 @@ def _declared_group(root, phase):
     with no roadmap folder to read, are the ordinary single-phase case.
     """
     from argus import roadmap_source
+
     folder = roadmap_folder(root)
     if not Path(folder).is_dir():
         return None
@@ -1928,8 +2194,8 @@ def _declared_group(root, phase):
         return None
     except Exception as exc:  # noqa: BLE001 - reported as a configuration error
         raise ConfigError(
-            f"cannot read the reservation group of phase {int(phase):06d}: "
-            f"{exc}") from exc
+            f"cannot read the reservation group of phase {int(phase):06d}: {exc}"
+        ) from exc
 
 
 def _member_published(root, member):
@@ -1951,8 +2217,7 @@ def _group_all_published(root, members):
     which is the answer that keeps the checkout where the group needs it.
     """
     members = list(members or ())
-    return bool(members) and all(
-        _member_published(root, member) for member in members)
+    return bool(members) and all(_member_published(root, member) for member in members)
 
 
 def _group_pull_request(root, group, branch, phase):
@@ -1981,8 +2246,9 @@ def _group_pull_request(root, group, branch, phase):
     return None
 
 
-def _write_publication_receipt(root, phase, reservation, results,
-                               engine_written=(), pull_request=None):
+def _write_publication_receipt(
+    root, phase, reservation, results, engine_written=(), pull_request=None
+):
     private = board_repo(root)
     run_dir = phase_run_dir(root, phase)
     if not run_dir.is_dir():
@@ -2000,9 +2266,12 @@ def _write_publication_receipt(root, phase, reservation, results,
     # used only until a member of this group has recorded one.
     group = _declared_group(root, phase)
     if group:
-        pull_request = (_group_pull_request(
-            root, group["group"], public_branch, phase) or pull_request)
+        pull_request = (
+            _group_pull_request(root, group["group"], public_branch, phase)
+            or pull_request
+        )
     from argus.phase_reservations import _now
+
     receipt = {
         "version": 1,
         "phase": f"{int(phase):06d}",
@@ -2045,7 +2314,8 @@ def _write_publication_receipt(root, phase, reservation, results,
         rc_b, base_head, _ = git(root, "rev-parse", "--verify", f"refs/heads/{base}")
         if rc_b != 0:
             rc_b, base_head, _ = git(
-                root, "rev-parse", "--verify", f"refs/remotes/origin/{base}")
+                root, "rev-parse", "--verify", f"refs/remotes/origin/{base}"
+            )
         receipt["stacked_on"] = {
             "phase": f"{int(carried['phase']):06d}",
             "branch": base,
@@ -2071,19 +2341,27 @@ def _write_publication_receipt(root, phase, reservation, results,
     path = run_dir / "publication.json"
     path.write_text(json.dumps(receipt, indent=2, sort_keys=True) + "\n")
     pushed = commit_leftover_run_state(
-        root, f"pipeline: publish completion receipt for phase {int(phase):06d}",
-        phase=phase)
+        root,
+        f"pipeline: publish completion receipt for phase {int(phase):06d}",
+        phase=phase,
+    )
     if not pushed.get("ok"):
         raise ConfigError(
-            f"publication receipt was not pushed: {pushed.get('summary', 'unknown error')}")
+            f"publication receipt was not pushed: {pushed.get('summary', 'unknown error')}"
+        )
     receipt["private_commit"] = private_commit
     receipt["path"] = str(path)
     return receipt, pushed
 
 
-def _load_phase_reservation(root, phase, reservation_file=None,
-                             machine_id=None, reservation_id=None,
-                             generation=None):
+def _load_phase_reservation(
+    root,
+    phase,
+    reservation_file=None,
+    machine_id=None,
+    reservation_id=None,
+    generation=None,
+):
     if reservation_file is None:
         reservation_file = phase_run_dir(root, phase) / "reservation.json"
     try:
@@ -2106,16 +2384,30 @@ def _push_one(repo):
         return blocked({"repo": str(repo)}, why)
     rc, out, err = git(repo, "push", remote, branch)
     if rc != 0:
-        return blocked({"repo": str(repo)},
-                       f"push failed: {err or out}",
-                       hint="resolve the remote and rerun; never force-push")
-    return {"repo": str(repo), "ok": True, "action": "pushed",
-            "after": git(repo, "rev-parse", "HEAD")[1]}
+        return blocked(
+            {"repo": str(repo)},
+            f"push failed: {err or out}",
+            hint="resolve the remote and rerun; never force-push",
+        )
+    return {
+        "repo": str(repo),
+        "ok": True,
+        "action": "pushed",
+        "after": git(repo, "rev-parse", "HEAD")[1],
+    }
 
 
-def publish_phase(root, phase, *, reservation_file=None, machine_id=None,
-                  reservation_id=None, generation=None, commit_run_state=True,
-                  pull_request=None):
+def publish_phase(
+    root,
+    phase,
+    *,
+    reservation_file=None,
+    machine_id=None,
+    reservation_id=None,
+    generation=None,
+    commit_run_state=True,
+    pull_request=None,
+):
     """Check the phase fence, take the short publication lock, and publish.
 
     The caller must commit the phase's product changes first, on the phase's own
@@ -2140,20 +2432,37 @@ def publish_phase(root, phase, *, reservation_file=None, machine_id=None,
             ReservationFenced,
             ReservationStore,
         )
+
         reservation = _load_phase_reservation(
-            root, phase, reservation_file, machine_id, reservation_id, generation)
+            root, phase, reservation_file, machine_id, reservation_id, generation
+        )
         store = ReservationStore(root)
         store.assert_owner(reservation)
         store.acquire_publication(reservation)
     except PublicationBusy as exc:
-        return {"ok": False, "mode": "publish", "state": "PUBLICATION_BUSY",
-                "error": str(exc), "phase": f"{int(phase):06d}"}
+        return {
+            "ok": False,
+            "mode": "publish",
+            "state": "PUBLICATION_BUSY",
+            "error": str(exc),
+            "phase": f"{int(phase):06d}",
+        }
     except ReservationFenced as exc:
-        return {"ok": False, "mode": "publish", "state": "FENCED",
-                "error": str(exc), "phase": f"{int(phase):06d}"}
+        return {
+            "ok": False,
+            "mode": "publish",
+            "state": "FENCED",
+            "error": str(exc),
+            "phase": f"{int(phase):06d}",
+        }
     except Exception as exc:  # noqa: BLE001 - normalize boundary errors
-        return {"ok": False, "mode": "publish", "state": "COORDINATION_UNAVAILABLE",
-                "error": str(exc), "phase": f"{int(phase):06d}"}
+        return {
+            "ok": False,
+            "mode": "publish",
+            "state": "COORDINATION_UNAVAILABLE",
+            "error": str(exc),
+            "phase": f"{int(phase):06d}",
+        }
 
     results = []
     outcome = None
@@ -2161,19 +2470,26 @@ def publish_phase(root, phase, *, reservation_file=None, machine_id=None,
     try:
         if commit_run_state:
             clean = commit_leftover_run_state(
-                root, f"pipeline: publish run state for phase {int(phase):06d}",
-                phase=phase)
+                root,
+                f"pipeline: publish run state for phase {int(phase):06d}",
+                phase=phase,
+            )
             results.append(clean)
             if not clean["ok"]:
-                outcome = {"ok": False, "mode": "publish",
-                           "phase": f"{int(phase):06d}", "state": "BLOCKED",
-                           "repos": results, "summary": clean["summary"]}
+                outcome = {
+                    "ok": False,
+                    "mode": "publish",
+                    "phase": f"{int(phase):06d}",
+                    "state": "BLOCKED",
+                    "repos": results,
+                    "summary": clean["summary"],
+                }
         if outcome is None:
-            dirty = [p for p in dirty_paths(root)
-                     if not _is_private_path(root, p)]
+            dirty = [p for p in dirty_paths(root) if not _is_private_path(root, p)]
             if is_git_repo(board_repo(root)):
-                dirty += [str(board_repo(root) / p)
-                          for p in dirty_paths(board_repo(root))]
+                dirty += [
+                    str(board_repo(root) / p) for p in dirty_paths(board_repo(root))
+                ]
             # The engine that is publishing is the engine that rewrites the
             # heartbeat marker, so a clean-tree requirement tests a directory
             # that is still being written. The marker is already committed and
@@ -2183,11 +2499,16 @@ def publish_phase(root, phase, *, reservation_file=None, machine_id=None,
             real, engine = publish_dirt(dirty, root=root, phase=phase)
             engine_churn = engine
             if real:
-                outcome = {"ok": False, "mode": "publish",
-                           "phase": f"{int(phase):06d}", "state": "BLOCKED",
-                           "repos": results,
-                           "error": "working tree is dirty after phase cleanup",
-                           "dirty": real, "engine_written": engine}
+                outcome = {
+                    "ok": False,
+                    "mode": "publish",
+                    "phase": f"{int(phase):06d}",
+                    "state": "BLOCKED",
+                    "repos": results,
+                    "error": "working tree is dirty after phase cleanup",
+                    "dirty": real,
+                    "engine_written": engine,
+                }
         if outcome is None:
             # The authoritative integration-branch resync, and the one that
             # cannot be dodged by ordering. `sync_all(root, "push")` below only
@@ -2204,20 +2525,30 @@ def publish_phase(root, phase, *, reservation_file=None, machine_id=None,
             resync = mode_resync(root)
             results.append(resync)
             if not resync["ok"]:
-                outcome = {"ok": False, "mode": "publish",
-                           "phase": f"{int(phase):06d}", "state": "BLOCKED",
-                           "repos": results, "summary": resync["summary"],
-                           "error": "the integration branch did not merge into "
-                                    "the phase branch; resolve the named paths, "
-                                    "rerun the gates the merge invalidated, and "
-                                    "rerun this helper"}
+                outcome = {
+                    "ok": False,
+                    "mode": "publish",
+                    "phase": f"{int(phase):06d}",
+                    "state": "BLOCKED",
+                    "repos": results,
+                    "summary": resync["summary"],
+                    "error": "the integration branch did not merge into "
+                    "the phase branch; resolve the named paths, "
+                    "rerun the gates the merge invalidated, and "
+                    "rerun this helper",
+                }
         if outcome is None:
             sync = sync_all(root, "push")
             results.append(sync)
             if not sync["ok"]:
-                outcome = {"ok": False, "mode": "publish",
-                           "phase": f"{int(phase):06d}", "state": "BLOCKED",
-                           "repos": results, "summary": sync["summary"]}
+                outcome = {
+                    "ok": False,
+                    "mode": "publish",
+                    "phase": f"{int(phase):06d}",
+                    "state": "BLOCKED",
+                    "repos": results,
+                    "summary": sync["summary"],
+                }
         if outcome is None:
             for checkout in (root, board_repo(root)):
                 if not is_git_repo(checkout):
@@ -2226,35 +2557,46 @@ def publish_phase(root, phase, *, reservation_file=None, machine_id=None,
                 pushed = _push_one(checkout)
                 results.append(pushed)
                 if not pushed.get("ok"):
-                    outcome = {"ok": False, "mode": "publish",
-                               "phase": f"{int(phase):06d}", "state": "BLOCKED",
-                               "repos": results,
-                               "summary": summarize([pushed], "publish")}
+                    outcome = {
+                        "ok": False,
+                        "mode": "publish",
+                        "phase": f"{int(phase):06d}",
+                        "state": "BLOCKED",
+                        "repos": results,
+                        "summary": summarize([pushed], "publish"),
+                    }
                     break
         if outcome is None:
-            push_results = [r for r in results
-                            if isinstance(r, dict) and "repo" in r]
+            push_results = [r for r in results if isinstance(r, dict) and "repo" in r]
             # AWAITING_REVIEW, not PUBLISHED. The phase's commits are on its
             # own branch; a human merges the pull request. The exit code is
             # still 0, because publishing the branch is what this helper does,
             # and it did it.
-            outcome = {"ok": True, "mode": "publish",
-                       "phase": f"{int(phase):06d}", "state": "AWAITING_REVIEW",
-                       "branch": current_branch(root),
-                       "repos": results,
-                       "engine_written": engine_churn,
-                       "summary": summarize(push_results, "publish")}
+            outcome = {
+                "ok": True,
+                "mode": "publish",
+                "phase": f"{int(phase):06d}",
+                "state": "AWAITING_REVIEW",
+                "branch": current_branch(root),
+                "repos": results,
+                "engine_written": engine_churn,
+                "summary": summarize(push_results, "publish"),
+            }
         if outcome.get("ok") and commit_run_state:
             receipt, receipt_result = _write_publication_receipt(
-                root, phase, reservation, results,
+                root,
+                phase,
+                reservation,
+                results,
                 engine_written=engine_churn,
-                pull_request=pull_request)
+                pull_request=pull_request,
+            )
             results.append(receipt_result)
             outcome["receipt"] = receipt
             outcome["repos"] = results
             outcome["summary"] = summarize(
-                [r for r in results if isinstance(r, dict) and "repo" in r],
-                "publish")
+                [r for r in results if isinstance(r, dict) and "repo" in r], "publish"
+            )
             # A warning, never a block. This phase was built on an earlier
             # phase's branch, so its pull request carries that phase's work.
             # Merging this one alone lands code that was never reviewed as its
@@ -2269,16 +2611,23 @@ def publish_phase(root, phase, *, reservation_file=None, machine_id=None,
                     f"which is phase {carried['phase']:06d} and is still waiting "
                     "for review. Merging this pull request also lands that "
                     "phase's work, which has not been reviewed as its own "
-                    "change. Review both, or merge that one first.")
+                    "change. Review both, or merge that one first."
+                )
     except Exception as exc:  # noqa: BLE001 - publication is fail-closed
-        outcome = {"ok": False, "mode": "publish",
-                   "phase": f"{int(phase):06d}", "state": "BLOCKED",
-                   "repos": results, "error": str(exc)}
+        outcome = {
+            "ok": False,
+            "mode": "publish",
+            "phase": f"{int(phase):06d}",
+            "state": "BLOCKED",
+            "repos": results,
+            "error": str(exc),
+        }
     try:
         store.release_publication(reservation)
     except Exception as exc:  # noqa: BLE001 - a stale lock must be visible
-        outcome = dict(outcome or {"ok": False, "mode": "publish",
-                                   "phase": f"{int(phase):06d}"})
+        outcome = dict(
+            outcome or {"ok": False, "mode": "publish", "phase": f"{int(phase):06d}"}
+        )
         outcome["ok"] = False
         outcome["state"] = "COORDINATION_UNAVAILABLE"
         outcome["error"] = f"could not release publication lock: {exc}"
@@ -2291,8 +2640,7 @@ def summarize(results, mode):
         if r.get("ok"):
             parts.append(f"{r['repo']}: {r.get('action', 'ok')}")
         else:
-            parts.append(f"{r['repo']}: BLOCKED "
-                         f"({'; '.join(r.get('blockers', []))})")
+            parts.append(f"{r['repo']}: BLOCKED ({'; '.join(r.get('blockers', []))})")
     head = f"{mode} sync {'ok' if all(r.get('ok') for r in results) else 'BLOCKED'}"
     return f"{head}: " + "; ".join(parts)
 
@@ -2317,12 +2665,20 @@ def _init_remote(tmp, name):
     exactly the way it finds ``master`` in production.
     """
     remote = tmp / f"{name}-remote.git"
-    subprocess.run([git_binary(), "init", "--bare", "-q", str(remote)],
-                   check=True, capture_output=True, text=True)
+    subprocess.run(
+        [git_binary(), "init", "--bare", "-q", str(remote)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
     git(remote, "symbolic-ref", "HEAD", "refs/heads/main")
     seed = tmp / f"{name}-seed"
-    subprocess.run([git_binary(), "clone", "-q", str(remote), str(seed)],
-                   check=True, capture_output=True, text=True)
+    subprocess.run(
+        [git_binary(), "clone", "-q", str(remote), str(seed)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
     git(seed, "config", "user.email", "sync-test@example.com")
     git(seed, "config", "user.name", "sync test")
     git(seed, "checkout", "-q", "-b", "main")
@@ -2331,8 +2687,12 @@ def _init_remote(tmp, name):
     git(seed, "commit", "-q", "-m", "init")
     git(seed, "push", "-q", "-u", "origin", "main")
     work = tmp / name
-    subprocess.run([git_binary(), "clone", "-q", str(remote), str(work)],
-                   check=True, capture_output=True, text=True)
+    subprocess.run(
+        [git_binary(), "clone", "-q", str(remote), str(work)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
     git(work, "config", "user.email", "sync-test@example.com")
     git(work, "config", "user.name", "sync test")
     git(work, "checkout", "-q", "-b", "main")
@@ -2343,8 +2703,12 @@ def _init_remote(tmp, name):
 def _remote_commit(remote, tmp, name, content="two\n"):
     """Push one commit to the remote from a throwaway clone."""
     other = tmp / f"other-{name}"
-    subprocess.run([git_binary(), "clone", "-q", str(remote), str(other)],
-                   check=True, capture_output=True, text=True)
+    subprocess.run(
+        [git_binary(), "clone", "-q", str(remote), str(other)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
     git(other, "config", "user.email", "sync-test@example.com")
     git(other, "config", "user.name", "sync test")
     (other / "a.txt").write_text(content)
@@ -2359,9 +2723,18 @@ def _local_commit(work, name):
     git(work, "commit", "-q", "-m", f"local {name}")
 
 
-def _configure_self_test(pub, board, *, pipeline=None, roadmap=None, runs=None,
-                         include=("phase-*.md",), exclude=(),
-                         number_input="phase_number", file_input="phase_file"):
+def _configure_self_test(
+    pub,
+    board,
+    *,
+    pipeline=None,
+    roadmap=None,
+    runs=None,
+    include=("phase-*.md",),
+    exclude=(),
+    number_input="phase_number",
+    file_input="phase_file",
+):
     pub = Path(pub).resolve()
     board = Path(board).resolve()
     try:
@@ -2375,23 +2748,25 @@ def _configure_self_test(pub, board, *, pipeline=None, roadmap=None, runs=None,
             current = exclude_file.read_text(encoding="utf-8")
             if entry not in current.splitlines():
                 exclude_file.write_text(current + entry + "\n", encoding="utf-8")
-    conventions.configure({
-        "repo-root": pub,
-        "pipeline": pipeline,
-        "roadmap-dir": Path(roadmap or Path(board) / "roadmap"),
-        "driver.runs": Path(runs or Path(board) / "runs"),
-        "driver.include": list(include),
-        "driver.exclude": list(exclude),
-        "number-input": number_input,
-        "file-input": file_input,
-        "machine.id": "self-test",
-        "commands.git": "git",
-        "commands.gh": "gh",
-        "board.repo": board,
-        "board.file": board / "claims.json",
-        "board.branch": "main",
-        "board.remote": "origin",
-    })
+    conventions.configure(
+        {
+            "repo-root": pub,
+            "pipeline": pipeline,
+            "roadmap-dir": Path(roadmap or Path(board) / "roadmap"),
+            "driver.runs": Path(runs or Path(board) / "runs"),
+            "driver.include": list(include),
+            "driver.exclude": list(exclude),
+            "number-input": number_input,
+            "file-input": file_input,
+            "machine.id": "self-test",
+            "commands.git": "git",
+            "commands.gh": "gh",
+            "board.repo": board,
+            "board.file": board / "claims.json",
+            "board.branch": "main",
+            "board.remote": "origin",
+        }
+    )
 
 
 def _publication_receipt_check(base):
@@ -2401,13 +2776,18 @@ def _publication_receipt_check(base):
     nested = pub / BOARD_REL
     nested.parent.mkdir(parents=True, exist_ok=True)
     private_remote, _ = _init_remote(d, "priv")
-    subprocess.run([git_binary(), "clone", "-q", str(private_remote), str(nested)],
-                   check=True, capture_output=True, text=True)
+    subprocess.run(
+        [git_binary(), "clone", "-q", str(private_remote), str(nested)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
     git(nested, "config", "user.email", "sync-test@example.com")
     git(nested, "config", "user.name", "sync test")
     _configure_self_test(pub, nested)
     try:
         from argus.phase_reservations import ReservationStore, save_reservation_file
+
         store = ReservationStore(pub, branch="main")
         reservation = store.reserve(100440, "server-01")
         run_dir = nested / "runs" / "phase-100440"
@@ -2424,9 +2804,11 @@ def _publication_receipt_check(base):
         # the whole point of a phase branch: nothing reaches the integration
         # branch until a person merges, so the phase is not finished.
         from argus.next_phase import publication_receipt_done
+
         if publication_receipt_done(pub, 100440):
             return False, "an unmerged phase's receipt reads as done"
         from argus.gitsync import awaiting_review
+
         review = awaiting_review(pub, 100440)
         if not review or review.get("branch") is None:
             return False, f"receipt does not name a branch to review: {review}"
@@ -2437,8 +2819,9 @@ def _publication_receipt_check(base):
             return False, "the board accepted an unmerged phase as complete"
         except Exception:  # noqa: BLE001 - any refusal is the point
             pass
-        return store.read()[0]["phases"]["100440"]["status"] != "completed", \
-            "an unmerged phase cannot be recorded as complete"
+        return store.read()[0]["phases"]["100440"][
+            "status"
+        ] != "completed", "an unmerged phase cannot be recorded as complete"
     except Exception as exc:  # noqa: BLE001 - self-test reports the failure
         return False, str(exc)
 
@@ -2459,8 +2842,12 @@ def _group_publication_check(base):
     nested = pub / BOARD_REL
     nested.parent.mkdir(parents=True, exist_ok=True)
     private_remote, _ = _init_remote(d, "priv")
-    subprocess.run([git_binary(), "clone", "-q", str(private_remote),
-                    str(nested)], check=True, capture_output=True, text=True)
+    subprocess.run(
+        [git_binary(), "clone", "-q", str(private_remote), str(nested)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
     git(nested, "config", "user.email", "sync-test@example.com")
     git(nested, "config", "user.name", "sync test")
     # The declaration lives in the phase documents, so where a group is read
@@ -2471,12 +2858,13 @@ def _group_publication_check(base):
         (roadmap / f"phase-{number:06d}-{behaviour}.md").write_text(
             f"# {number}. Group member\n\n- [ ] Work to do.\n\n"
             "### Reservation Group\n\n`together: 100020, 100030`\n",
-            encoding="utf-8")
+            encoding="utf-8",
+        )
     _configure_self_test(pub, nested, roadmap=roadmap)
     members = ["100020", "100030"]
     try:
-        from argus.phase_reservations import (
-            ReservationStore, save_reservation_file)
+        from argus.phase_reservations import ReservationStore, save_reservation_file
+
         store = ReservationStore(pub, branch="main")
         records = store.reserve_group(members, "server-01")
         git(nested, "fetch", "-q", "origin")
@@ -2506,29 +2894,44 @@ def _group_publication_check(base):
         if not all(receipts.values()):
             return False, "a member published without a receipt of its own"
         if {r.get("branch") for r in receipts.values()} != {branch}:
-            return False, ("the members did not publish on one branch: "
-                           f"{[r.get('branch') for r in receipts.values()]}")
+            return False, (
+                "the members did not publish on one branch: "
+                f"{[r.get('branch') for r in receipts.values()]}"
+            )
         if {r.get("pull_request") for r in receipts.values()} != {url}:
-            return False, ("the members did not record the same pull request: "
-                           f"{[r.get('pull_request') for r in receipts.values()]}")
+            return False, (
+                "the members did not record the same pull request: "
+                f"{[r.get('pull_request') for r in receipts.values()]}"
+            )
         for number, receipt in receipts.items():
             if list(receipt.get("group") or []) != members:
-                return False, (f"phase {number}'s receipt does not record the "
-                               f"group it belongs to: {receipt.get('group')}")
+                return False, (
+                    f"phase {number}'s receipt does not record the "
+                    f"group it belongs to: {receipt.get('group')}"
+                )
         # A merged member must not take the checkout off the group branch: the
         # members that have not run yet still need it.
         half = mode_published(pub, 100020)
         if half.get("state") != "PUBLISHED-GROUP-PENDING":
-            return False, ("a half-published group did not leave the checkout "
-                           f"where the rest of the group needs it: {half.get('state')}")
+            return False, (
+                "a half-published group did not leave the checkout "
+                f"where the rest of the group needs it: {half.get('state')}"
+            )
         if current_branch(pub) != branch:
-            return False, (f"the checkout left the group branch for "
-                           f"{current_branch(pub)}")
+            return False, (
+                f"the checkout left the group branch for {current_branch(pub)}"
+            )
         done = mode_published(pub, 100030)
         if done.get("state") != "PUBLISHED":
-            return False, f"the finished group did not tidy the checkout: {done.get('state')}"
+            return (
+                False,
+                f"the finished group did not tidy the checkout: {done.get('state')}",
+            )
         if current_branch(pub) == branch:
-            return False, "the checkout stayed on the group branch once every member was published"
+            return (
+                False,
+                "the checkout stayed on the group branch once every member was published",
+            )
         return True, "one branch, one pull request, one receipt per member"
     except Exception as exc:  # noqa: BLE001 - self-test reports the failure
         return False, str(exc)
@@ -2547,12 +2950,17 @@ def _publish_fixture(base, name, phase):
     nested = pub / BOARD_REL
     nested.parent.mkdir(parents=True, exist_ok=True)
     private_remote, _ = _init_remote(d, "priv")
-    subprocess.run([git_binary(), "clone", "-q", str(private_remote), str(nested)],
-                   check=True, capture_output=True, text=True)
+    subprocess.run(
+        [git_binary(), "clone", "-q", str(private_remote), str(nested)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
     git(nested, "config", "user.email", "sync-test@example.com")
     git(nested, "config", "user.name", "sync test")
     _configure_self_test(pub, nested)
     from argus.phase_reservations import ReservationStore, save_reservation_file
+
     store = ReservationStore(pub, branch="main")
     reservation = store.reserve(phase, "server-01")
     # The coordination transaction pushes onto the same branch the working tree
@@ -2591,11 +2999,18 @@ def _portable_publication_check(base):
         pipeline.write_text(
             "inputs:\n  ticket: {type: int, required: true}\n"
             "  document: {type: str, required: true}\n"
-            "run_dir: " + str(private / "artifacts" / "item-{ticket:06d}") + "\n")
+            "run_dir: " + str(private / "artifacts" / "item-{ticket:06d}") + "\n"
+        )
         _configure_self_test(
-            pub, private, pipeline=pipeline, roadmap=roadmap,
-            runs=run.parent, include=("release_*.md",),
-            number_input="ticket", file_input="document")
+            pub,
+            private,
+            pipeline=pipeline,
+            roadmap=roadmap,
+            runs=run.parent,
+            include=("release_*.md",),
+            number_input="ticket",
+            file_input="document",
+        )
         git(private, "add", "-A")
         git(private, "commit", "-q", "-m", "custom private layout")
         git(private, "push", "-q", "origin", "main")
@@ -2611,15 +3026,19 @@ def _portable_publication_check(base):
             return False, f"custom publication failed: {result}"
         branch = phase_branch(document.name)
         predecessor = open_predecessor(pub, phase + 1)
-        recorded = git(private, "show", f"HEAD:artifacts/item-{phase:06d}/publication.json")
+        recorded = git(
+            private, "show", f"HEAD:artifacts/item-{phase:06d}/publication.json"
+        )
         return (
             receipt.get("path") == str(run / "publication.json")
             and phase_receipt(pub, phase).get("branch") == branch
             and receipt_for_branch(pub, branch).get("phase") == str(phase)
-            and predecessor is not None and predecessor["phase"] == phase
+            and predecessor is not None
+            and predecessor["phase"] == phase
             and recorded[0] == 0,
             "custom phase, typed inputs, run directory, private checkout, "
-            "reservation, receipt, and predecessor use the configured layout")
+            "reservation, receipt, and predecessor use the configured layout",
+        )
     except Exception as exc:
         return False, str(exc)
 
@@ -2647,6 +3066,7 @@ class _Heartbeat:
 
         try:
             from glide import nudge
+
             self.using_glide = nudge.ACTIVITY_NAME == "activity"
         except ImportError:
             self.using_glide = False
@@ -2658,8 +3078,7 @@ class _Heartbeat:
             while not stop.is_set():
                 seq[0] += 1
                 try:
-                    marker.write_text(
-                        f"harness output at {1758800000 + seq[0]}\n")
+                    marker.write_text(f"harness output at {1758800000 + seq[0]}\n")
                 except OSError:
                     pass
                 stop.wait(self.period)
@@ -2701,13 +3120,18 @@ def _publish_while_writing_check(base):
             result = publish_phase(pub, 100441)
     finally:
         conventions.override({"board.branch": old_branch})
-    ok = (result.get("ok") and result.get("state") == "AWAITING_REVIEW"
-          and first != second)
-    detail = (f"first={first.strip()!r} second={second.strip()!r} "
-              f"state={result.get('state')} "
-              f"engine_written={result.get('engine_written')} "
-              f"summary={result.get('summary')} error={result.get('error')} "
-              f"dirty={result.get('dirty')}")
+    ok = (
+        result.get("ok")
+        and result.get("state") == "AWAITING_REVIEW"
+        and first != second
+    )
+    detail = (
+        f"first={first.strip()!r} second={second.strip()!r} "
+        f"state={result.get('state')} "
+        f"engine_written={result.get('engine_written')} "
+        f"summary={result.get('summary')} error={result.get('error')} "
+        f"dirty={result.get('dirty')}"
+    )
     if not ok:
         return False, detail
     # The marker is still committed and pushed, exclusion or not.
@@ -2735,20 +3159,28 @@ def _publish_still_refuses_check(base):
         pub, _nested, _run = _publish_fixture(base, "publish-dirt-source", 100442)
         (pub / "a.txt").write_text("one\nunreviewed edit\n")
         res = publish_phase(pub, 100442)
-        results.append(("a modified tracked source file still blocks",
-                        (not res.get("ok")) and "outside the pipeline's run state"
-                        in res.get("summary", ""),
-                        res.get("summary", str(res))[:200]))
+        results.append(
+            (
+                "a modified tracked source file still blocks",
+                (not res.get("ok"))
+                and "outside the pipeline's run state" in res.get("summary", ""),
+                res.get("summary", str(res))[:200],
+            )
+        )
 
         # 2. A staged change in the private checkout, outside the phase.
         pub, nested, _run = _publish_fixture(base, "publish-dirt-staged", 100443)
         (nested / "stray.txt").write_text("unreviewed\n")
         git(nested, "add", "stray.txt")
         res = publish_phase(pub, 100443)
-        results.append(("a staged change outside the phase still blocks",
-                        (not res.get("ok")) and "outside the current phase"
-                        in res.get("summary", ""),
-                        res.get("summary", str(res))[:200]))
+        results.append(
+            (
+                "a staged change outside the phase still blocks",
+                (not res.get("ok"))
+                and "outside the current phase" in res.get("summary", ""),
+                res.get("summary", str(res))[:200],
+            )
+        )
 
         # 3. A staged change inside the phase's own run directory is the phase's
         # own evidence, so it is committed rather than refused. Asserted as
@@ -2756,12 +3188,17 @@ def _publish_still_refuses_check(base):
         pub, nested, run_dir = _publish_fixture(base, "publish-inside", 100445)
         (run_dir / "findings.json").write_text('{"open": []}\n')
         res = publish_phase(pub, 100445)
-        pushed = "runs/phase-100445/findings.json" in git(
-            nested, "ls-files", "runs")[1].splitlines()
-        results.append(("a new file inside the phase's run directory is "
-                        "published, not blocked",
-                        bool(res.get("ok")) and pushed,
-                        f"state={res.get('state')} committed={pushed}"))
+        pushed = (
+            "runs/phase-100445/findings.json"
+            in git(nested, "ls-files", "runs")[1].splitlines()
+        )
+        results.append(
+            (
+                "a new file inside the phase's run directory is published, not blocked",
+                bool(res.get("ok")) and pushed,
+                f"state={res.get('state')} committed={pushed}",
+            )
+        )
     finally:
         conventions.override({"board.branch": old_branch})
 
@@ -2783,20 +3220,39 @@ def _publish_still_refuses_check(base):
         ("runs/activity", False),
         ("runs/phase-1/nested/activity", False),
     ]
-    wrong = [(p, want, is_engine_written_run_artifact(p))
-             for p, want in unit if is_engine_written_run_artifact(p) != want]
-    results.append(("the engine-written exemption is exactly two run artifacts",
-                    not wrong, f"mismatches={wrong}"))
+    wrong = [
+        (p, want, is_engine_written_run_artifact(p))
+        for p, want in unit
+        if is_engine_written_run_artifact(p) != want
+    ]
+    results.append(
+        (
+            "the engine-written exemption is exactly two run artifacts",
+            not wrong,
+            f"mismatches={wrong}",
+        )
+    )
 
-    real, engine = publish_dirt([f"{BOARD_REL}/runs/phase-1/activity",
-                                 "crates/store/src/lib.rs",
-                                 f"{BOARD_REL}/runs/phase-1/reminders.log",
-                                 "runs/phase-1/notes.md"])
-    results.append(("publish_dirt reports the excluded set instead of dropping it",
-                    real == ["crates/store/src/lib.rs", "runs/phase-1/notes.md"]
-                    and engine == [f"{BOARD_REL}/runs/phase-1/activity",
-                                   f"{BOARD_REL}/runs/phase-1/reminders.log"],
-                    f"real={real} engine={engine}"))
+    real, engine = publish_dirt(
+        [
+            f"{BOARD_REL}/runs/phase-1/activity",
+            "crates/store/src/lib.rs",
+            f"{BOARD_REL}/runs/phase-1/reminders.log",
+            "runs/phase-1/notes.md",
+        ]
+    )
+    results.append(
+        (
+            "publish_dirt reports the excluded set instead of dropping it",
+            real == ["crates/store/src/lib.rs", "runs/phase-1/notes.md"]
+            and engine
+            == [
+                f"{BOARD_REL}/runs/phase-1/activity",
+                f"{BOARD_REL}/runs/phase-1/reminders.log",
+            ],
+            f"real={real} engine={engine}",
+        )
+    )
     return results
 
 
@@ -2815,21 +3271,31 @@ def _phase_branch_checks(base):
     git(work, "add", "c.txt")
     blob = git(work, "rev-parse", ":c.txt")[1]
     res = ensure_phase_branch(work, branch, base="main")
-    results.append(("a phase branch is created from the integration branch and "
-                    "carries the staged baseline",
-                    res["ok"] and res["action"] == "created-phase-branch"
-                    and current_branch(work) == branch
-                    and git(work, "rev-parse", ":c.txt")[1] == blob
-                    and (work / "c.txt").read_text() == "staged baseline\n",
-                    f"branch={current_branch(work)} {res.get('action')}"))
+    results.append(
+        (
+            "a phase branch is created from the integration branch and "
+            "carries the staged baseline",
+            res["ok"]
+            and res["action"] == "created-phase-branch"
+            and current_branch(work) == branch
+            and git(work, "rev-parse", ":c.txt")[1] == blob
+            and (work / "c.txt").read_text() == "staged baseline\n",
+            f"branch={current_branch(work)} {res.get('action')}",
+        )
+    )
 
     # 2. Idempotent: a second tick must not move or recreate anything.
     head = git(work, "rev-parse", "HEAD")[1]
     res2 = ensure_phase_branch(work, branch, base="main")
-    results.append(("creating it again is a no-op",
-                    res2["ok"] and res2["action"] == "already-on-phase-branch"
-                    and git(work, "rev-parse", "HEAD")[1] == head,
-                    f"action={res2.get('action')}"))
+    results.append(
+        (
+            "creating it again is a no-op",
+            res2["ok"]
+            and res2["action"] == "already-on-phase-branch"
+            and git(work, "rev-parse", "HEAD")[1] == head,
+            f"action={res2.get('action')}",
+        )
+    )
 
     # 3. A leftover branch from an earlier run of the same phase is resumed,
     #    not replaced, so the phase's own commits are not orphaned.
@@ -2840,29 +3306,42 @@ def _phase_branch_checks(base):
     git(work, "checkout", "-q", "main")
     git(work, "push", "-q", "origin", "main")
     res3 = ensure_phase_branch(work, branch, base="main")
-    results.append(("a leftover phase branch is resumed, not recreated",
-                    res3["ok"] and res3["action"] == "reused-phase-branch"
-                    and current_branch(work) == branch
-                    and git(work, "rev-parse", "HEAD")[1] == earlier,
-                    f"action={res3.get('action')} head={res3.get('after')}"))
+    results.append(
+        (
+            "a leftover phase branch is resumed, not recreated",
+            res3["ok"]
+            and res3["action"] == "reused-phase-branch"
+            and current_branch(work) == branch
+            and git(work, "rev-parse", "HEAD")[1] == earlier,
+            f"action={res3.get('action')} head={res3.get('after')}",
+        )
+    )
 
     # 4. A checkout sitting on some other branch is a hard stop. Moving a
     #    working tree that holds unreviewed work between branches is the
     #    operation that can leave that work in pieces.
     git(work, "checkout", "-q", "-b", "someone-elses-work")
     res4 = ensure_phase_branch(work, branch, base="main")
-    results.append(("a checkout on another branch is never switched silently",
-                    (not res4["ok"]) and "not the phase branch" in
-                    res4["blockers"][-1]
-                    and current_branch(work) == "someone-elses-work",
-                    f"blockers={res4.get('blockers')}"))
+    results.append(
+        (
+            "a checkout on another branch is never switched silently",
+            (not res4["ok"])
+            and "not the phase branch" in res4["blockers"][-1]
+            and current_branch(work) == "someone-elses-work",
+            f"blockers={res4.get('blockers')}",
+        )
+    )
 
     # 5. A missing integration branch stops rather than inventing a start point.
     git(work, "checkout", "-q", "main")
     res5 = ensure_phase_branch(work, "phase/100999-nothing-here", base="no-such-base")
-    results.append(("a missing integration branch refuses",
-                    (not res5["ok"]) and "does not exist" in res5["blockers"][-1],
-                    f"blockers={res5.get('blockers')}"))
+    results.append(
+        (
+            "a missing integration branch refuses",
+            (not res5["ok"]) and "does not exist" in res5["blockers"][-1],
+            f"blockers={res5.get('blockers')}",
+        )
+    )
 
     # 6. A checkout that is reviewed on the integration branch rather than as a
     #    pull request is left alone. It must not be moved onto a phase branch,
@@ -2871,28 +3350,40 @@ def _phase_branch_checks(base):
     #    not exist yet, so the check can prove nothing was created.
     fresh = "phase/100440-never-created"
     res6 = ensure_phase_branch(work, fresh, base="main", integration_only=True)
-    results.append(("an integration-branch checkout is left where it is, and no "
-                    "branch is created for it",
-                    res6["ok"] and res6["action"] == "stays-on-integration-branch"
-                    and current_branch(work) == "main"
-                    and git(work, "rev-parse", "--verify",
-                             f"refs/heads/{fresh}")[0] != 0,
-                    f"branch={current_branch(work)} {res6.get('action')}"))
+    results.append(
+        (
+            "an integration-branch checkout is left where it is, and no "
+            "branch is created for it",
+            res6["ok"]
+            and res6["action"] == "stays-on-integration-branch"
+            and current_branch(work) == "main"
+            and git(work, "rev-parse", "--verify", f"refs/heads/{fresh}")[0] != 0,
+            f"branch={current_branch(work)} {res6.get('action')}",
+        )
+    )
 
     # 7. It is still fail-closed: a checkout sitting on some other branch is a
     #    stop, and a missing integration branch is a stop. Silence here would
     #    let run state be published from an unexpected place.
     git(work, "checkout", "-q", "-b", "unrelated-work")
     res7 = ensure_phase_branch(work, branch, base="main", integration_only=True)
-    results.append(("an integration-branch checkout on another branch refuses",
-                    (not res7["ok"]) and "not 'main'" in res7["blockers"][-1]
-                    and current_branch(work) == "unrelated-work",
-                    f"blockers={res7.get('blockers')}"))
-    res8 = ensure_phase_branch(work, branch, base="no-such-base",
-                               integration_only=True)
-    results.append(("an integration-branch checkout with no base refuses",
-                    (not res8["ok"]) and "does not exist" in res8["blockers"][-1],
-                    f"blockers={res8.get('blockers')}"))
+    results.append(
+        (
+            "an integration-branch checkout on another branch refuses",
+            (not res7["ok"])
+            and "not 'main'" in res7["blockers"][-1]
+            and current_branch(work) == "unrelated-work",
+            f"blockers={res7.get('blockers')}",
+        )
+    )
+    res8 = ensure_phase_branch(work, branch, base="no-such-base", integration_only=True)
+    results.append(
+        (
+            "an integration-branch checkout with no base refuses",
+            (not res8["ok"]) and "does not exist" in res8["blockers"][-1],
+            f"blockers={res8.get('blockers')}",
+        )
+    )
     return results
 
 
@@ -2908,15 +3399,18 @@ def _phase_branch_name_checks(base):
     results = []
     fixture = base / "branch-name"
     _configure_self_test(
-        fixture, fixture / BOARD_REL,
-        roadmap=Path(BOARD_REL) / "roadmap")
+        fixture, fixture / BOARD_REL, roadmap=Path(BOARD_REL) / "roadmap"
+    )
     name = "phase-100440-backup-archive-format-and-directory.md"
     branch = phase_branch_for(100440, name)
-    results.append((
-        "the branch carries the behaviour and no phase number",
-        branch == "feature/backup-archive-format-and-directory"
-        and "100440" not in branch,
-        f"branch={branch}"))
+    results.append(
+        (
+            "the branch carries the behaviour and no phase number",
+            branch == "feature/backup-archive-format-and-directory"
+            and "100440" not in branch,
+            f"branch={branch}",
+        )
+    )
 
     # The wrong roadmap file must still be refused, or a phase could be launched
     # on another phase's branch.
@@ -2925,10 +3419,13 @@ def _phase_branch_name_checks(base):
         wrong = None
     except ConfigError as exc:
         wrong = str(exc)
-    results.append((
-        "a roadmap file for another phase is still refused",
-        wrong is not None and "100440" in wrong and "100841" in wrong,
-        f"error={wrong}"))
+    results.append(
+        (
+            "a roadmap file for another phase is still refused",
+            wrong is not None and "100440" in wrong and "100841" in wrong,
+            f"error={wrong}",
+        )
+    )
 
     # The behaviour is the only thing separating two phases now, so a duplicate
     # must stop the launch: otherwise the second phase would resume the first
@@ -2940,17 +3437,23 @@ def _phase_branch_name_checks(base):
     clash_name = "phase-100460-backup-archive-format-and-directory.md"
     (roadmap / clash_name).write_text("x\n")
     clash = assert_phase_branch_unique(root, 100440, name)
-    results.append((
-        "a behaviour another phase also claims is refused",
-        (not clash["ok"]) and clash_name in clash["blockers"][-1],
-        f"blockers={clash.get('blockers')}"))
+    results.append(
+        (
+            "a behaviour another phase also claims is refused",
+            (not clash["ok"]) and clash_name in clash["blockers"][-1],
+            f"blockers={clash.get('blockers')}",
+        )
+    )
 
     (roadmap / clash_name).unlink()
     unique = assert_phase_branch_unique(root, 100440, name)
-    results.append((
-        "a behaviour only this phase claims is accepted",
-        unique["ok"] and unique.get("action") == "phase-branch-name-unique",
-        f"action={unique.get('action')}"))
+    results.append(
+        (
+            "a behaviour only this phase claims is accepted",
+            unique["ok"] and unique.get("action") == "phase-branch-name-unique",
+            f"action={unique.get('action')}",
+        )
+    )
 
     # The folder the phases were chosen from is the folder that has to be
     # scanned. Reading the derived one instead would leave a collision inside a
@@ -2962,18 +3465,24 @@ def _phase_branch_name_checks(base):
     (elsewhere / name).write_text("x\n")
     (elsewhere / clash_name).write_text("x\n")
     same_name_only_in_derived = assert_phase_branch_unique(
-        named, 100440, name, elsewhere)
-    results.append((
-        "a behaviour another phase in the configured folder claims is refused",
-        (not same_name_only_in_derived["ok"])
-        and clash_name in same_name_only_in_derived["blockers"][-1],
-        f"blockers={same_name_only_in_derived.get('blockers')}"))
-    relative = assert_phase_branch_unique(
-        named, 100440, name, "other-roadmap")
-    results.append((
-        "a relative configured folder resolves against the repository root",
-        (not relative["ok"]) and clash_name in relative["blockers"][-1],
-        f"blockers={relative.get('blockers')}"))
+        named, 100440, name, elsewhere
+    )
+    results.append(
+        (
+            "a behaviour another phase in the configured folder claims is refused",
+            (not same_name_only_in_derived["ok"])
+            and clash_name in same_name_only_in_derived["blockers"][-1],
+            f"blockers={same_name_only_in_derived.get('blockers')}",
+        )
+    )
+    relative = assert_phase_branch_unique(named, 100440, name, "other-roadmap")
+    results.append(
+        (
+            "a relative configured folder resolves against the repository root",
+            (not relative["ok"]) and clash_name in relative["blockers"][-1],
+            f"blockers={relative.get('blockers')}",
+        )
+    )
 
     # And the mode itself, not only the helper it calls. The helper taking a
     # folder is worth nothing if the mode drops it on the way, and the mode is
@@ -2983,11 +3492,15 @@ def _phase_branch_name_checks(base):
     # folder would carry on to try to cut a branch in a directory that is not a
     # repository, which is a different failure.
     refused = mode_branch(named, 100440, name, "other-roadmap")
-    results.append((
-        "the branch mode scans the configured folder and refuses the collision",
-        (not refused["ok"]) and refused.get("mode") == "branch"
-        and clash_name in str(refused.get("repos")),
-        f"ok={refused.get('ok')} blockers={refused.get('repos')}"))
+    results.append(
+        (
+            "the branch mode scans the configured folder and refuses the collision",
+            (not refused["ok"])
+            and refused.get("mode") == "branch"
+            and clash_name in str(refused.get("repos")),
+            f"ok={refused.get('ok')} blockers={refused.get('repos')}",
+        )
+    )
     return results
 
 
@@ -3018,46 +3531,60 @@ def _branch_pair_checks(base):
 
     # The public checkout holds the product code, so it is the one that moves.
     public = by_repo[pub.resolve()]
-    results.append(("the public checkout is put on the phase branch",
-                    public["ok"] and current_branch(pub) == branch
-                    and git(pub, "rev-parse", "--verify",
-                            f"refs/heads/{branch}")[0] == 0,
-                    f"branch={current_branch(pub)} {public.get('action')}"))
+    results.append(
+        (
+            "the public checkout is put on the phase branch",
+            public["ok"]
+            and current_branch(pub) == branch
+            and git(pub, "rev-parse", "--verify", f"refs/heads/{branch}")[0] == 0,
+            f"branch={current_branch(pub)} {public.get('action')}",
+        )
+    )
 
     # The private checkout holds run state, so it stays on the integration
     # branch and gets no phase branch of its own. A branch created here would
     # strand run state on a ref nobody merges.
     private = by_repo[nested.resolve()]
-    results.append(("the private checkout stays on the integration branch and "
-                    "no phase branch is created for it",
-                    private["ok"]
-                    and private["action"] == "stays-on-integration-branch"
-                    and current_branch(nested) == INTEGRATION_BRANCH
-                    and git(nested, "rev-parse", "--verify",
-                            f"refs/heads/{branch}")[0] != 0,
-                    f"branch={current_branch(nested)} {private.get('action')}"))
+    results.append(
+        (
+            "the private checkout stays on the integration branch and "
+            "no phase branch is created for it",
+            private["ok"]
+            and private["action"] == "stays-on-integration-branch"
+            and current_branch(nested) == INTEGRATION_BRANCH
+            and git(nested, "rev-parse", "--verify", f"refs/heads/{branch}")[0] != 0,
+            f"branch={current_branch(nested)} {private.get('action')}",
+        )
+    )
 
     # The two must not be swapped. Assert the paths as well as the branches, so
     # a future swap cannot pass by leaving both checkouts on the same branch.
-    results.append(("the two checkouts are branched by role, not by accident",
-                    len(made) == 2
-                    and Path(made[0]["repo"]).resolve() == pub.resolve()
-                    and made[0]["action"] == "created-phase-branch"
-                    and made[1]["action"] == "stays-on-integration-branch",
-                    f"public={made[0].get('action')} "
-                    f"private={made[1].get('action')}"))
+    results.append(
+        (
+            "the two checkouts are branched by role, not by accident",
+            len(made) == 2
+            and Path(made[0]["repo"]).resolve() == pub.resolve()
+            and made[0]["action"] == "created-phase-branch"
+            and made[1]["action"] == "stays-on-integration-branch",
+            f"public={made[0].get('action')} private={made[1].get('action')}",
+        )
+    )
 
     # The receipt is what the driver logs, so it has to name where each
     # checkout ended up rather than the branch that was asked for. The driver
     # built its log line from the top-level "branch", which is one string
     # shared by both checkouts, and that is how a swapped pair logged as a
     # correct launch.
-    results.append(("the receipt reports where each checkout actually is",
-                    public.get("after_branch") == branch
-                    and private.get("after_branch") == INTEGRATION_BRANCH
-                    and public.get("after_branch") != private.get("after_branch"),
-                    f"public={public.get('after_branch')} "
-                    f"private={private.get('after_branch')}"))
+    results.append(
+        (
+            "the receipt reports where each checkout actually is",
+            public.get("after_branch") == branch
+            and private.get("after_branch") == INTEGRATION_BRANCH
+            and public.get("after_branch") != private.get("after_branch"),
+            f"public={public.get('after_branch')} "
+            f"private={private.get('after_branch')}",
+        )
+    )
 
     # A refusal must say where the checkout was too, because a refusal is the
     # case where the operator reads this receipt to find out what to undo.
@@ -3065,12 +3592,15 @@ def _branch_pair_checks(base):
     stuck = branch_phase_checkouts(pub, branch)
     stuck_private = {Path(r["repo"]).resolve(): r for r in stuck}[nested.resolve()]
     git(nested, "checkout", "-q", INTEGRATION_BRANCH)
-    results.append(("a refused checkout still reports the branch it is stuck on",
-                    (not stuck_private["ok"])
-                    and stuck_private.get("after_branch")
-                    == "someones-unfinished-work",
-                    f"ok={stuck_private.get('ok')} "
-                    f"after_branch={stuck_private.get('after_branch')}"))
+    results.append(
+        (
+            "a refused checkout still reports the branch it is stuck on",
+            (not stuck_private["ok"])
+            and stuck_private.get("after_branch") == "someones-unfinished-work",
+            f"ok={stuck_private.get('ok')} "
+            f"after_branch={stuck_private.get('after_branch')}",
+        )
+    )
     return results
 
 
@@ -3090,6 +3620,7 @@ class _StubGH:
 
     def __call__(self, argv, **kwargs):
         import types
+
         # Only gh is stubbed. Everything else in this module runs git through
         # the same subprocess.run, so a stub that swallowed those would make
         # every git call under test fail, which is a failure in the harness
@@ -3118,9 +3649,15 @@ class _StubGH:
 
 def _gh_says(state, extra=""):
     """A ``gh pr view --json state`` response body."""
-    return {"stdout": json.dumps({"state": state,
-                                  "mergedAt": extra or None,
-                                  "mergeCommit": {"oid": "0" * 40}})}
+    return {
+        "stdout": json.dumps(
+            {
+                "state": state,
+                "mergedAt": extra or None,
+                "mergeCommit": {"oid": "0" * 40},
+            }
+        )
+    }
 
 
 def _sequencing_checks(base):
@@ -3137,45 +3674,71 @@ def _sequencing_checks(base):
     try:
         # --- Item 2: the pull request reference is parsed at receipt time. ---
         parsed = [
-            ("https://github.com/example-org/example-repo/pull/42",
-             ("github.com", "example-org", "example-repo", 42)),
-            ("https://github.com/example-org/example-repo/pull/42/files",
-             ("github.com", "example-org", "example-repo", 42)),
-            ("https://github.com/example-org/example-repo/pull/42#issuecomment-1",
-             ("github.com", "example-org", "example-repo", 42)),
-            ("http://ghe.example.com/example-org/example-repo/pull/7",
-             ("ghe.example.com", "example-org", "example-repo", 7)),
+            (
+                "https://github.com/example-org/example-repo/pull/42",
+                ("github.com", "example-org", "example-repo", 42),
+            ),
+            (
+                "https://github.com/example-org/example-repo/pull/42/files",
+                ("github.com", "example-org", "example-repo", 42),
+            ),
+            (
+                "https://github.com/example-org/example-repo/pull/42#issuecomment-1",
+                ("github.com", "example-org", "example-repo", 42),
+            ),
+            (
+                "http://ghe.example.com/example-org/example-repo/pull/7",
+                ("ghe.example.com", "example-org", "example-repo", 7),
+            ),
         ]
         wrong = []
         for url, want in parsed:
             ref = pull_request_ref(url)
-            got = ((ref["host"], ref["owner"], ref["repo"], ref["number"])
-                   if ref else None)
+            got = (
+                (ref["host"], ref["owner"], ref["repo"], ref["number"]) if ref else None
+            )
             if got != want:
                 wrong.append((url, got, want))
         # The negative direction matters more: a string that is not a pull
         # request URL must yield None so the check is skipped, never a number
         # guessed from the wrong field.
-        for url in ("", "not a url", "https://github.com/example-org/example-repo/issues/42",
-                    "https://github.com/example-org/example-repo/pull/abc", None):
+        for url in (
+            "",
+            "not a url",
+            "https://github.com/example-org/example-repo/issues/42",
+            "https://github.com/example-org/example-repo/pull/abc",
+            None,
+        ):
             if pull_request_ref(url) is not None:
                 wrong.append((url, "parsed", None))
-        results.append((
-            "a pull request URL yields owner, repo and number; anything else "
-            "yields no reference",
-            not wrong, f"mismatches={wrong}"))
+        results.append(
+            (
+                "a pull request URL yields owner, repo and number; anything else "
+                "yields no reference",
+                not wrong,
+                f"mismatches={wrong}",
+            )
+        )
 
         # --- Item 1: three answers, and unknown is never merged. ---
         with _StubGH(_gh_says("MERGED", "2026-01-01T00:00:00Z")):
             state, detail = gh_pull_request_state(42, "example-org", "example-repo")
-        results.append((
-            "gh reporting MERGED is the merged answer",
-            state == "merged" and detail == "0" * 40,
-            f"state={state} detail={detail}"))
+        results.append(
+            (
+                "gh reporting MERGED is the merged answer",
+                state == "merged" and detail == "0" * 40,
+                f"state={state} detail={detail}",
+            )
+        )
         with _StubGH(_gh_says("OPEN")):
             state, _ = gh_pull_request_state(42, "example-org", "example-repo")
-        results.append(("gh reporting OPEN is the not-merged answer",
-                        state == "not-merged", f"state={state}"))
+        results.append(
+            (
+                "gh reporting OPEN is the not-merged answer",
+                state == "not-merged",
+                f"state={state}",
+            )
+        )
         # Exit 4 is gh's documented "authentication required", exit 1 a general
         # failure. Both must read unknown, or a token that cannot read pull
         # requests would look like a phase that was never merged... which is
@@ -3183,26 +3746,45 @@ def _sequencing_checks(base):
         for code in (1, 4):
             with _StubGH({"returncode": code, "stderr": "account name here"}):
                 state, detail = gh_pull_request_state(42, "example-org", "example-repo")
-            results.append((
-                f"gh exiting {code} is unknown, not a merge",
-                state == "unknown" and "account name" not in detail,
-                f"state={state} detail={detail}"))
+            results.append(
+                (
+                    f"gh exiting {code} is unknown, not a merge",
+                    state == "unknown" and "account name" not in detail,
+                    f"state={state} detail={detail}",
+                )
+            )
         with _StubGH(FileNotFoundError()):
             state, _ = gh_pull_request_state(42, "example-org", "example-repo")
-        results.append(("gh missing is unknown, not a merge",
-                        state == "unknown", f"state={state}"))
+        results.append(
+            ("gh missing is unknown, not a merge", state == "unknown", f"state={state}")
+        )
         with _StubGH(subprocess.TimeoutExpired(cmd="gh", timeout=GH_TIMEOUT_S)):
             state, _ = gh_pull_request_state(42, "example-org", "example-repo")
-        results.append(("gh timing out is unknown, not a merge",
-                        state == "unknown", f"state={state}"))
+        results.append(
+            (
+                "gh timing out is unknown, not a merge",
+                state == "unknown",
+                f"state={state}",
+            )
+        )
         with _StubGH({"stdout": "not json"}):
             state, _ = gh_pull_request_state(42, "example-org", "example-repo")
-        results.append(("unreadable gh output is unknown, not a merge",
-                        state == "unknown", f"state={state}"))
+        results.append(
+            (
+                "unreadable gh output is unknown, not a merge",
+                state == "unknown",
+                f"state={state}",
+            )
+        )
         with _StubGH({"stdout": json.dumps({"state": "WHATEVER"})}):
             state, _ = gh_pull_request_state(42, "example-org", "example-repo")
-        results.append(("an unrecognised gh state is unknown, not a merge",
-                        state == "unknown", f"state={state}"))
+        results.append(
+            (
+                "an unrecognised gh state is unknown, not a merge",
+                state == "unknown",
+                f"state={state}",
+            )
+        )
 
         # --- Item 1 end to end: a squash merge, recognised by GitHub. ---
         # Five commits, squashed into one, which is the case the commit-id test
@@ -3214,14 +3796,26 @@ def _sequencing_checks(base):
             (pub / f"part-{step}.txt").write_text(f"phase work {step}\n")
             git(pub, "add", f"part-{step}.txt")
             git(pub, "commit", "-q", "-m", f"phase 100451 step {step}")
-        res = publish_phase(pub, 100451,
-                            pull_request="https://github.com/example-org/example-repo/pull/900")
+        res = publish_phase(
+            pub,
+            100451,
+            pull_request="https://github.com/example-org/example-repo/pull/900",
+        )
         ref = (res.get("receipt") or {}).get("pull_request_ref")
-        results.append((
-            "the receipt records the parsed pull request alongside the URL",
-            res.get("ok") and ref == {"host": "github.com", "owner": "example-org",
-                                      "repo": "example-repo", "number": 900},
-            f"ref={ref}"))
+        results.append(
+            (
+                "the receipt records the parsed pull request alongside the URL",
+                res.get("ok")
+                and ref
+                == {
+                    "host": "github.com",
+                    "owner": "example-org",
+                    "repo": "example-repo",
+                    "number": 900,
+                },
+                f"ref={ref}",
+            )
+        )
         # The human merges onto whichever branch this repository actually calls
         # its integration branch, read the same way the receipt read it. Naming
         # "main" here instead would merge into a branch the receipt never
@@ -3241,36 +3835,45 @@ def _sequencing_checks(base):
         # is the pre-existing behaviour and the reason the check exists.
         with _StubGH(_gh_says("OPEN")):
             blocked_open = mark_phase_published(pub, 100451)
-        results.append((
-            "a squash merge with GitHub reporting OPEN stays blocked",
-            (not blocked_open["ok"])
-            and phase_receipt(pub, 100451).get("state") == "awaiting_review"
-            and "not merged" in (blocked_open.get("blockers") or [""])[-1],
-            f"blockers={blocked_open.get('blockers')}"))
+        results.append(
+            (
+                "a squash merge with GitHub reporting OPEN stays blocked",
+                (not blocked_open["ok"])
+                and phase_receipt(pub, 100451).get("state") == "awaiting_review"
+                and "not merged" in (blocked_open.get("blockers") or [""])[-1],
+                f"blockers={blocked_open.get('blockers')}",
+            )
+        )
         with _StubGH({"returncode": 4}):
             blocked_unknown = mark_phase_published(pub, 100451)
-        results.append((
-            "a squash merge with GitHub unreachable stays blocked rather than "
-            "being assumed merged",
-            (not blocked_unknown["ok"])
-            and phase_receipt(pub, 100451).get("state") == "awaiting_review"
-            and "could not be asked" in (
-                (blocked_unknown.get("blockers") or [""])[-1]),
-            f"blockers={blocked_unknown.get('blockers')}"))
+        results.append(
+            (
+                "a squash merge with GitHub unreachable stays blocked rather than "
+                "being assumed merged",
+                (not blocked_unknown["ok"])
+                and phase_receipt(pub, 100451).get("state") == "awaiting_review"
+                and "could not be asked"
+                in ((blocked_unknown.get("blockers") or [""])[-1]),
+                f"blockers={blocked_unknown.get('blockers')}",
+            )
+        )
         with _StubGH(_gh_says("MERGED")):
             marked = mark_phase_published(pub, 100451)
         published = phase_receipt(pub, 100451)
-        results.append((
-            "a squash merge is recorded once GitHub reports the pull request "
-            "merged, and the receipt says which proof covered which checkout",
-            marked["ok"]
-            and marked.get("confirmed_by") == {"public": "github",
-                                               "private": "commit-id"}
-            and published.get("state") == "published"
-            and published.get("merge_confirmed_by")
-            == {"public": "github", "private": "commit-id"},
-            f"ok={marked.get('ok')} by={marked.get('confirmed_by')} "
-            f"receipt={published.get('merge_confirmed_by')}"))
+        results.append(
+            (
+                "a squash merge is recorded once GitHub reports the pull request "
+                "merged, and the receipt says which proof covered which checkout",
+                marked["ok"]
+                and marked.get("confirmed_by")
+                == {"public": "github", "private": "commit-id"}
+                and published.get("state") == "published"
+                and published.get("merge_confirmed_by")
+                == {"public": "github", "private": "commit-id"},
+                f"ok={marked.get('ok')} by={marked.get('confirmed_by')} "
+                f"receipt={published.get('merge_confirmed_by')}",
+            )
+        )
 
         # --- Item 1 fallback: a merge performed outside GitHub. ---
         pub2, nested2, _run2 = _publish_fixture(base, "squash-offsite", 100452)
@@ -3290,15 +3893,18 @@ def _sequencing_checks(base):
         with _StubGH({"returncode": 1}):
             offsite = mark_phase_published(pub2, 100452)
         offsite_receipt = phase_receipt(pub2, 100452)
-        results.append((
-            "a merge commit is still recognised when GitHub cannot be asked",
-            offsite["ok"]
-            and offsite.get("confirmed_by") == {"public": "commit-id",
-                                                 "private": "commit-id"}
-            and offsite_receipt.get("merge_confirmed_by")
-            == {"public": "commit-id", "private": "commit-id"},
-            f"ok={offsite.get('ok')} by={offsite.get('confirmed_by')} "
-            f"receipt={offsite_receipt.get('merge_confirmed_by')}"))
+        results.append(
+            (
+                "a merge commit is still recognised when GitHub cannot be asked",
+                offsite["ok"]
+                and offsite.get("confirmed_by")
+                == {"public": "commit-id", "private": "commit-id"}
+                and offsite_receipt.get("merge_confirmed_by")
+                == {"public": "commit-id", "private": "commit-id"},
+                f"ok={offsite.get('ok')} by={offsite.get('confirmed_by')} "
+                f"receipt={offsite_receipt.get('merge_confirmed_by')}",
+            )
+        )
 
         # --- Item 5: the integration branch merged into the phase branch. ---
         d = base / "resync"
@@ -3310,21 +3916,31 @@ def _sequencing_checks(base):
         git(work, "commit", "-q", "-m", "phase commit")
         before = git(work, "rev-parse", "HEAD")[1]
         noop = resync_integration(work, base="main")
-        results.append((
-            "a resync with an unmoved integration branch does not move the phase "
-            "branch",
-            noop["ok"] and noop["action"] == "phase-ahead"
-            and git(work, "rev-parse", "HEAD")[1] == before,
-            f"action={noop.get('action')} relation={noop.get('relation')}"))
+        results.append(
+            (
+                "a resync with an unmoved integration branch does not move the phase "
+                "branch",
+                noop["ok"]
+                and noop["action"] == "phase-ahead"
+                and git(work, "rev-parse", "HEAD")[1] == before,
+                f"action={noop.get('action')} relation={noop.get('relation')}",
+            )
+        )
         # Integration branch moves, disjoint paths: a plain merge, no rebase.
         _remote_commit(remote, d, "w")
         clean = resync_integration(work, base="main")
         parents = git(work, "rev-list", "--parents", "-n1", "HEAD")[1].split()
-        results.append((
-            "a resync merges an advanced integration branch without rebasing",
-            clean["ok"] and clean["action"] == "merged" and len(parents) == 3
-            and (work / "phase.txt").is_file() and (work / "a.txt").is_file(),
-            f"action={clean.get('action')} parents={parents}"))
+        results.append(
+            (
+                "a resync merges an advanced integration branch without rebasing",
+                clean["ok"]
+                and clean["action"] == "merged"
+                and len(parents) == 3
+                and (work / "phase.txt").is_file()
+                and (work / "a.txt").is_file(),
+                f"action={clean.get('action')} parents={parents}",
+            )
+        )
         # Now both sides own the same path with different content: a real
         # conflict, which must be left in place and named so an agent can
         # finish it rather than the pipeline cleaning it up.
@@ -3335,8 +3951,12 @@ def _sequencing_checks(base):
         # a.txt and this case needs the integration branch to take the other
         # side on a path the phase already owns.
         other = d / "other-w2"
-        subprocess.run([git_binary(), "clone", "-q", str(remote), str(other)],
-                       check=True, capture_output=True, text=True)
+        subprocess.run(
+            [git_binary(), "clone", "-q", str(remote), str(other)],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
         git(other, "config", "user.email", "sync-test@example.com")
         git(other, "config", "user.name", "sync test")
         (other / "clash.txt").write_text("the integration branch's side\n")
@@ -3344,32 +3964,42 @@ def _sequencing_checks(base):
         git(other, "commit", "-q", "-m", "integration takes a side")
         git(other, "push", "-q", "origin", "main")
         clash = resync_integration(work, base="main")
-        results.append((
-            "a resync conflict is left in place with the paths named",
-            (not clash["ok"]) and clash.get("conflicted") == ["clash.txt"]
-            and (work / ".git" / "MERGE_HEAD").exists()
-            and "<<<<<<<" in (work / "clash.txt").read_text()
-            and "git commit" in (clash.get("hint") or ""),
-            f"action={clash.get('action')} "
-            f"conflicted={clash.get('conflicted')} "
-            f"blockers={clash.get('blockers')}"))
+        results.append(
+            (
+                "a resync conflict is left in place with the paths named",
+                (not clash["ok"])
+                and clash.get("conflicted") == ["clash.txt"]
+                and (work / ".git" / "MERGE_HEAD").exists()
+                and "<<<<<<<" in (work / "clash.txt").read_text()
+                and "git commit" in (clash.get("hint") or ""),
+                f"action={clash.get('action')} "
+                f"conflicted={clash.get('conflicted')} "
+                f"blockers={clash.get('blockers')}",
+            )
+        )
         # The agent is expected to finish it; assert the recipe the finalize
         # prompt gives actually works, so the instruction is not folklore.
         (work / "clash.txt").write_text("resolved by the phase agent\n")
         git(work, "add", "clash.txt")
         rc_finish, _, err_finish = git(work, "commit", "--no-edit")
-        results.append((
-            "the conflict the resync leaves can be finished the way the prompt "
-            "instructs",
-            rc_finish == 0 and not (work / ".git" / "MERGE_HEAD").exists(),
-            f"rc={rc_finish} err={err_finish}"))
+        results.append(
+            (
+                "the conflict the resync leaves can be finished the way the prompt "
+                "instructs",
+                rc_finish == 0 and not (work / ".git" / "MERGE_HEAD").exists(),
+                f"rc={rc_finish} err={err_finish}",
+            )
+        )
         # The private checkout is always on the integration branch, so it is a
         # named no-op rather than a second integration.
-        results.append((
-            "a checkout already on the integration branch is a named no-op",
-            resync_integration(work, base="main")["action"]
-            in {"already-on-integration-branch", "phase-ahead"},
-            "reported, not dropped"))
+        results.append(
+            (
+                "a checkout already on the integration branch is a named no-op",
+                resync_integration(work, base="main")["action"]
+                in {"already-on-integration-branch", "phase-ahead"},
+                "reported, not dropped",
+            )
+        )
 
         # --- Item 3 and 7: a phase built on an open predecessor. ---
         pub3, nested3, _run3 = _publish_fixture(base, "stack-base", 100453)
@@ -3380,44 +4010,62 @@ def _sequencing_checks(base):
         git(pub3, "add", "first.txt")
         git(pub3, "commit", "-q", "-m", "phase 100453: the first change")
         first = publish_phase(
-            pub3, 100453, pull_request="https://github.com/example-org/example-repo/pull/901")
-        results.append((
-            "a phase with no open predecessor publishes with no warning",
-            first.get("ok") and "warning" not in first,
-            f"warning={first.get('warning')}"))
+            pub3,
+            100453,
+            pull_request="https://github.com/example-org/example-repo/pull/901",
+        )
+        results.append(
+            (
+                "a phase with no open predecessor publishes with no warning",
+                first.get("ok") and "warning" not in first,
+                f"warning={first.get('warning')}",
+            )
+        )
         predecessor = open_predecessor(pub3, 100454)
-        results.append((
-            "an open predecessor is found for the next phase",
-            (predecessor or {}).get("phase") == 100453
-            and predecessor["branch"] == branch_first,
-            f"predecessor={predecessor}"))
+        results.append(
+            (
+                "an open predecessor is found for the next phase",
+                (predecessor or {}).get("phase") == 100453
+                and predecessor["branch"] == branch_first,
+                f"predecessor={predecessor}",
+            )
+        )
         # The checkout is left on the predecessor's branch by publish_phase,
         # which is the state the driver is in when it branches the next phase,
         # so the fixture must not move it. ensure_phase_branch refuses to switch
         # a checkout that is on neither the phase branch nor its base, and that
         # refusal is correct here.
-        made = branch_phase_checkouts(pub3, branch_second,
-                                      base=(predecessor or {}).get("branch"))
-        first_on_second = git(pub3, "rev-list", "--count",
-                              f"{branch_first}..{branch_second}")[1].strip()
-        results.append((
-            "the next phase branch is cut from the open predecessor, so it "
-            "contains the predecessor's code",
-            all(m["ok"] for m in made) and first_on_second == "0"
-            and (pub3 / "first.txt").is_file(),
-            f"commits ahead of predecessor={first_on_second} "
-            f"results={[m.get('action') for m in made]} "
-            f"blockers={[m.get('blockers') for m in made]}"))
+        made = branch_phase_checkouts(
+            pub3, branch_second, base=(predecessor or {}).get("branch")
+        )
+        first_on_second = git(
+            pub3, "rev-list", "--count", f"{branch_first}..{branch_second}"
+        )[1].strip()
+        results.append(
+            (
+                "the next phase branch is cut from the open predecessor, so it "
+                "contains the predecessor's code",
+                all(m["ok"] for m in made)
+                and first_on_second == "0"
+                and (pub3 / "first.txt").is_file(),
+                f"commits ahead of predecessor={first_on_second} "
+                f"results={[m.get('action') for m in made]} "
+                f"blockers={[m.get('blockers') for m in made]}",
+            )
+        )
         # The private checkout stays on the integration branch even while the
         # public one is built on a predecessor. Asserted, because passing the
         # predecessor's base to it stops every launch and reads as a broken
         # pipeline rather than as a wiring mistake.
         private_actions = [m.get("action") for m in made[1:]]
-        results.append((
-            "the private checkout is not moved onto the predecessor's branch",
-            private_actions in ([], ["stays-on-integration-branch"])
-            and current_branch(nested3) == "main",
-            f"actions={private_actions} branch={current_branch(nested3)}"))
+        results.append(
+            (
+                "the private checkout is not moved onto the predecessor's branch",
+                private_actions in ([], ["stays-on-integration-branch"])
+                and current_branch(nested3) == "main",
+                f"actions={private_actions} branch={current_branch(nested3)}",
+            )
+        )
         # Without the predecessor as base the phase would be built from the
         # integration branch, which does not have the code. Compared directly
         # rather than by creating a second branch, because the checkout is
@@ -3425,25 +4073,29 @@ def _sequencing_checks(base):
         # would test the wrong thing.
         on_integration = git(pub3, "ls-tree", "--name-only", "main")[1].split()
         on_phase = git(pub3, "ls-tree", "--name-only", branch_second)[1].split()
-        results.append((
-            "cutting from the integration branch instead would leave the "
-            "predecessor's code behind",
-            "first.txt" not in on_integration and "first.txt" in on_phase,
-            f"integration={sorted(on_integration)} "
-            f"phase={sorted(on_phase)}"))
+        results.append(
+            (
+                "cutting from the integration branch instead would leave the "
+                "predecessor's code behind",
+                "first.txt" not in on_integration and "first.txt" in on_phase,
+                f"integration={sorted(on_integration)} phase={sorted(on_phase)}",
+            )
+        )
         # Item 7: publishing on top of an unmerged predecessor warns. The second
         # phase needs its own reservation, because publication is fenced per
         # phase and that fence is the point of the helper. This runs while the
         # predecessor's branch still exists, because the receipt's record of
         # which commit it was stacked on is only obtainable then.
         from argus.phase_reservations import ReservationStore, save_reservation_file
+
         store3 = ReservationStore(pub3, branch="main")
         git(nested3, "fetch", "-q", "origin")
         git(nested3, "merge", "-q", "--ff-only", "origin/main")
         run_dir3 = nested3 / "runs" / "phase-100454"
         run_dir3.mkdir(parents=True, exist_ok=True)
-        save_reservation_file(run_dir3 / "reservation.json",
-                              store3.reserve(100454, "server-01"))
+        save_reservation_file(
+            run_dir3 / "reservation.json", store3.reserve(100454, "server-01")
+        )
         (run_dir3 / "run.json").write_text('{"state":"completed"}\n')
         (run_dir3 / "finalize-task-r1.log").write_text("log\nFINALIZE_DONE\n")
         git(nested3, "add", "-A")
@@ -3451,24 +4103,33 @@ def _sequencing_checks(base):
         git(nested3, "push", "-q", "origin", "main")
         git(pub3, "checkout", "-q", branch_second)
         second_res = publish_phase(
-            pub3, 100454, pull_request="https://github.com/example-org/example-repo/pull/902")
+            pub3,
+            100454,
+            pull_request="https://github.com/example-org/example-repo/pull/902",
+        )
         carries = second_res.get("carries_open_phase") or {}
         second_receipt = phase_receipt(pub3, 100454)
         stacked = second_receipt.get("stacked_on") or {}
-        results.append((
-            "publishing on top of an unmerged predecessor warns that the pull "
-            "request carries that work",
-            second_res.get("ok")
-            and carries.get("branch") == branch_first
-            and "still waiting for review" in (second_res.get("warning") or ""),
-            f"carries={carries} warning={second_res.get('warning')}"))
-        results.append((
-            "the receipt records the predecessor it was stacked on, with the "
-            "commit, so a rewritten predecessor is detectable later",
-            stacked.get("branch") == branch_first
-            and stacked.get("phase") == "100453"
-            and stacked.get("head") == git(pub3, "rev-parse", branch_first)[1],
-            f"stacked_on={stacked}"))
+        results.append(
+            (
+                "publishing on top of an unmerged predecessor warns that the pull "
+                "request carries that work",
+                second_res.get("ok")
+                and carries.get("branch") == branch_first
+                and "still waiting for review" in (second_res.get("warning") or ""),
+                f"carries={carries} warning={second_res.get('warning')}",
+            )
+        )
+        results.append(
+            (
+                "the receipt records the predecessor it was stacked on, with the "
+                "commit, so a rewritten predecessor is detectable later",
+                stacked.get("branch") == branch_first
+                and stacked.get("phase") == "100453"
+                and stacked.get("head") == git(pub3, "rev-parse", branch_first)[1],
+                f"stacked_on={stacked}",
+            )
+        )
 
         # A predecessor naming a branch that is gone stops the launch rather
         # than quietly falling back to the integration branch. Checked through
@@ -3480,19 +4141,23 @@ def _sequencing_checks(base):
         git(pub3, "push", "-q", "origin", "--delete", branch_first)
         still_named = awaiting_review(pub3, 100453)
         highest = open_predecessor(pub3, 100455)
-        results.append((
-            "a predecessor whose branch is gone is still reported, so the "
-            "launch step can refuse instead of falling back to the "
-            "integration branch",
-            (still_named or {}).get("branch") == branch_first
-            and git(pub3, "rev-parse", "--verify",
-                    f"refs/heads/{branch_first}")[0] != 0
-            and (highest or {}).get("branch") == branch_second,
-            f"awaiting_review(100453)={still_named} "
-            f"open_predecessor(100455)={highest}"))
+        results.append(
+            (
+                "a predecessor whose branch is gone is still reported, so the "
+                "launch step can refuse instead of falling back to the "
+                "integration branch",
+                (still_named or {}).get("branch") == branch_first
+                and git(pub3, "rev-parse", "--verify", f"refs/heads/{branch_first}")[0]
+                != 0
+                and (highest or {}).get("branch") == branch_second,
+                f"awaiting_review(100453)={still_named} "
+                f"open_predecessor(100455)={highest}",
+            )
+        )
     except Exception as exc:  # noqa: BLE001 - the self-test reports the failure
-        results.append(("reliable-sequencing checks ran to completion",
-                        False, repr(exc)))
+        results.append(
+            ("reliable-sequencing checks ran to completion", False, repr(exc))
+        )
     finally:
         conventions.override({"board.branch": old_branch})
     return results
@@ -3519,18 +4184,27 @@ def _tidy_and_dispatch_checks(base):
         git(pub, "commit", "-q", "-m", "phase 100455: the change")
         disp = mode_resync(pub)
         role_paths = {pub.resolve(): "public", nested.resolve(): "private"}
-        roles = [role_paths.get(Path(r.get("repo", "")).resolve(), "unknown")
-                 for r in disp.get("repos", [])]
-        results.append((
-            "the resync dispatch reports both checkouts, and the private one "
-            "as a named no-op rather than dropping it",
-            disp["ok"] and len(roles) == 2 and set(roles) == {"public", "private"}
-            and any(r.get("action") in {"phase-ahead", "up-to-date",
-                                        "already-on-integration-branch"}
+        roles = [
+            role_paths.get(Path(r.get("repo", "")).resolve(), "unknown")
+            for r in disp.get("repos", [])
+        ]
+        results.append(
+            (
+                "the resync dispatch reports both checkouts, and the private one "
+                "as a named no-op rather than dropping it",
+                disp["ok"]
+                and len(roles) == 2
+                and set(roles) == {"public", "private"}
+                and any(
+                    r.get("action")
+                    in {"phase-ahead", "up-to-date", "already-on-integration-branch"}
                     for r in disp["repos"]
-                    if Path(r.get("repo", "")).resolve() == nested.resolve()),
-            f"ok={disp.get('ok')} roles={roles} "
-            f"actions={[r.get('action') for r in disp.get('repos', [])]}"))
+                    if Path(r.get("repo", "")).resolve() == nested.resolve()
+                ),
+                f"ok={disp.get('ok')} roles={roles} "
+                f"actions={[r.get('action') for r in disp.get('repos', [])]}",
+            )
+        )
 
         # --- mode_branch refuses when the predecessor's branch is gone. ---
         # The refusal used to live inline in main() and had no check at all.
@@ -3552,13 +4226,17 @@ def _tidy_and_dispatch_checks(base):
         # rather than naming one and hoping they agree.
         second = phase_branch_for(100457, "phase-100457-dispatch-next.md")
         good = mode_branch(pub2, 100457, "phase-100457-dispatch-next")
-        results.append((
-            "the branch dispatch cuts the next phase from the open predecessor",
-            good["ok"] and good.get("predecessor", {}).get("branch") == first
-            and "first.txt" in git(
-                pub2, "ls-tree", "--name-only", second)[1].split(),
-            f"ok={good.get('ok')} base={good.get('base')} branch={second} "
-            f"tree={git(pub2, 'ls-tree', '--name-only', second)[1].split()}"))
+        results.append(
+            (
+                "the branch dispatch cuts the next phase from the open predecessor",
+                good["ok"]
+                and good.get("predecessor", {}).get("branch") == first
+                and "first.txt"
+                in git(pub2, "ls-tree", "--name-only", second)[1].split(),
+                f"ok={good.get('ok')} base={good.get('base')} branch={second} "
+                f"tree={git(pub2, 'ls-tree', '--name-only', second)[1].split()}",
+            )
+        )
         # A predecessor that moves under the phase is reported. The existence
         # check cannot see this — a force-pushed branch still exists — so without
         # an explicit comparison a phase would silently be based on commits
@@ -3570,14 +4248,17 @@ def _tidy_and_dispatch_checks(base):
         git(pub2, "commit", "-q", "-m", "a late commit on the predecessor")
         moved = mode_branch(pub2, 100457, "phase-100457-dispatch-next")
         drift = moved.get("predecessor_moved") or {}
-        results.append((
-            "a predecessor that moved since the phase was based on it is "
-            "reported, not silently accepted",
-            moved["ok"] and drift.get("branch") == first
-            and drift.get("recorded_head") == recorded_head
-            and drift.get("current_head") == git(pub2, "rev-parse", first)[1]
-            and "force-pushed predecessor" in (moved.get("warning") or ""),
-            f"drift={drift} warning={moved.get('warning')}")
+        results.append(
+            (
+                "a predecessor that moved since the phase was based on it is "
+                "reported, not silently accepted",
+                moved["ok"]
+                and drift.get("branch") == first
+                and drift.get("recorded_head") == recorded_head
+                and drift.get("current_head") == git(pub2, "rev-parse", first)[1]
+                and "force-pushed predecessor" in (moved.get("warning") or ""),
+                f"drift={drift} warning={moved.get('warning')}",
+            )
         )
         # Now remove the predecessor's branch everywhere and try again.
         git(pub2, "checkout", "-q", "main")
@@ -3586,18 +4267,25 @@ def _tidy_and_dispatch_checks(base):
         git(pub2, "checkout", "-q", second)
         git(pub2, "branch", "-D", second)
         refusal = mode_branch(pub2, 100458, "phase-100458-dispatch-after.md")
-        results.append((
-            "the branch dispatch refuses when the predecessor's branch is gone, "
-            "rather than falling back to the integration branch",
-            (not refusal["ok"])
-            and "does not exist in this checkout" in (
-                refusal["repos"][0].get("blockers") or [""])[0]
-            and git(pub2, "rev-parse", "--verify",
-                    f"refs/heads/{first}")[0] != 0
-            and git(pub2, "rev-parse", "--verify",
-                    f"refs/heads/{phase_branch_for(100458, 'phase-100458-dispatch-after.md')}")[0] != 0,
-            f"ok={refusal.get('ok')} "
-            f"blockers={refusal.get('repos', [{}])[0].get('blockers')}"))
+        results.append(
+            (
+                "the branch dispatch refuses when the predecessor's branch is gone, "
+                "rather than falling back to the integration branch",
+                (not refusal["ok"])
+                and "does not exist in this checkout"
+                in (refusal["repos"][0].get("blockers") or [""])[0]
+                and git(pub2, "rev-parse", "--verify", f"refs/heads/{first}")[0] != 0
+                and git(
+                    pub2,
+                    "rev-parse",
+                    "--verify",
+                    f"refs/heads/{phase_branch_for(100458, 'phase-100458-dispatch-after.md')}",
+                )[0]
+                != 0,
+                f"ok={refusal.get('ok')} "
+                f"blockers={refusal.get('repos', [{}])[0].get('blockers')}",
+            )
+        )
 
         # --- The stall this whole step exists to remove. ---
         # A phase whose merge is confirmed but whose checkout cannot move:
@@ -3621,34 +4309,45 @@ def _tidy_and_dispatch_checks(base):
         (pub3 / "stray-run-artifact.log").write_text("harness noise\n")
         stalled = mode_published(pub3, 100459)
         receipt3 = phase_receipt(pub3, 100459)
-        results.append((
-            "a phase that is published but whose checkout cannot move reports "
-            "the two outcomes separately instead of calling it still waiting",
-            (not stalled["ok"])
-            and stalled.get("state") == "PUBLISHED-TIDY-PENDING"
-            and receipt3.get("state") == "published"
-            and current_branch(pub3) == branch3
-            and (pub3 / "stray-run-artifact.log").exists(),
-            f"ok={stalled.get('ok')} state={stalled.get('state')} "
-            f"branch={current_branch(pub3)}"))
+        results.append(
+            (
+                "a phase that is published but whose checkout cannot move reports "
+                "the two outcomes separately instead of calling it still waiting",
+                (not stalled["ok"])
+                and stalled.get("state") == "PUBLISHED-TIDY-PENDING"
+                and receipt3.get("state") == "published"
+                and current_branch(pub3) == branch3
+                and (pub3 / "stray-run-artifact.log").exists(),
+                f"ok={stalled.get('ok')} state={stalled.get('state')} "
+                f"branch={current_branch(pub3)}",
+            )
+        )
         # The next tick recovers, with nothing but the receipt to go on.
         (pub3 / "stray-run-artifact.log").unlink()
         tidied = mode_tidy(pub3)
-        results.append((
-            "the checkout is recovered on a later tick from the receipt alone, "
-            "so a published phase never leaves the pipeline stuck behind it",
-            tidied["ok"]
-            and current_branch(pub3) == base3
-            and any(r.get("action") == "returned-to-integration-branch"
-                    for r in tidied.get("repos", [])),
-            f"ok={tidied.get('ok')} branch={current_branch(pub3)} "
-            f"actions={[r.get('action') for r in tidied.get('repos', [])]}"))
+        results.append(
+            (
+                "the checkout is recovered on a later tick from the receipt alone, "
+                "so a published phase never leaves the pipeline stuck behind it",
+                tidied["ok"]
+                and current_branch(pub3) == base3
+                and any(
+                    r.get("action") == "returned-to-integration-branch"
+                    for r in tidied.get("repos", [])
+                ),
+                f"ok={tidied.get('ok')} branch={current_branch(pub3)} "
+                f"actions={[r.get('action') for r in tidied.get('repos', [])]}",
+            )
+        )
         # And it is idempotent, so a tick that runs it twice moves nothing.
         again = mode_tidy(pub3)
-        results.append((
-            "tidying again is a no-op",
-            again["ok"] and current_branch(pub3) == base3,
-            f"branch={current_branch(pub3)}"))
+        results.append(
+            (
+                "tidying again is a no-op",
+                again["ok"] and current_branch(pub3) == base3,
+                f"branch={current_branch(pub3)}",
+            )
+        )
 
         # --- Tidy must not move a phase that is still waiting for a human. ---
         pub4, nested4, _run4 = _publish_fixture(base, "dispatch-untidy", 100460)
@@ -3662,17 +4361,26 @@ def _tidy_and_dispatch_checks(base):
         # whose receipt still says awaiting_review must never be moved off its
         # branch, because its code is not on the integration branch yet.
         untidied = tidy_published_checkout(pub4, base=integration_branch(pub4))
-        results.append((
-            "tidy leaves a phase that is still awaiting review exactly where it "
-            "is, even though it could be moved",
-            untidied["ok"]
-            and untidied["action"] == "phase-not-yet-published"
-            and current_branch(pub4) == branch4,
-            f"action={untidied.get('action')} branch={current_branch(pub4)}"))
+        results.append(
+            (
+                "tidy leaves a phase that is still awaiting review exactly where it "
+                "is, even though it could be moved",
+                untidied["ok"]
+                and untidied["action"] == "phase-not-yet-published"
+                and current_branch(pub4) == branch4,
+                f"action={untidied.get('action')} branch={current_branch(pub4)}",
+            )
+        )
     except Exception as exc:  # noqa: BLE001 - the self-test reports the failure
         import traceback
-        results.append(("tidy-and-dispatch checks ran to completion",
-                        False, traceback.format_exc()))
+
+        results.append(
+            (
+                "tidy-and-dispatch checks ran to completion",
+                False,
+                traceback.format_exc(),
+            )
+        )
     finally:
         conventions.override({"board.branch": old_branch})
     return results
@@ -3695,6 +4403,7 @@ def _two_phase_stack_checks(base):
     conventions.override({"board.branch": "main"})
     try:
         from argus.phase_reservations import ReservationStore, save_reservation_file
+
         # 100469 is taken by the fixture itself; the two phases under test
         # are 100470 and 100471, so each needs its own reservation below.
         pub, nested, _run = _publish_fixture(base, "stack-e2e", 100469)
@@ -3713,8 +4422,9 @@ def _two_phase_stack_checks(base):
             git(nested, "merge", "-q", "--ff-only", "origin/main")
             rd = nested / "runs" / f"phase-{phase:06d}"
             rd.mkdir(parents=True, exist_ok=True)
-            save_reservation_file(rd / "reservation.json",
-                                  store.reserve(phase, "server-01"))
+            save_reservation_file(
+                rd / "reservation.json", store.reserve(phase, "server-01")
+            )
             (rd / "run.json").write_text('{"state":"completed"}\n')
             (rd / "finalize-task-r1.log").write_text("log\nFINALIZE_DONE\n")
             git(nested, "add", "-A")
@@ -3730,42 +4440,62 @@ def _two_phase_stack_checks(base):
         git(nested, "commit", "-q", "-m", "roadmap")
         git(nested, "push", "-q", "origin", integration_branch(nested))
         one_branch = mode_branch(pub, 100470, "phase-100470-stack-first.md")
-        results.append((
-            "with nothing open, a phase branches from the integration branch",
-            one_branch["ok"] and one_branch.get("base") == base_branch
-            and one_branch.get("predecessor") is None,
-            f"ok={one_branch.get('ok')} base={one_branch.get('base')} "
-            f"predecessor={one_branch.get('predecessor')}"))
+        results.append(
+            (
+                "with nothing open, a phase branches from the integration branch",
+                one_branch["ok"]
+                and one_branch.get("base") == base_branch
+                and one_branch.get("predecessor") is None,
+                f"ok={one_branch.get('ok')} base={one_branch.get('base')} "
+                f"predecessor={one_branch.get('predecessor')}",
+            )
+        )
         (pub / "first.txt").write_text("phase one's code\n")
         git(pub, "add", "first.txt")
         git(pub, "commit", "-q", "-m", "phase 100470: the first change")
         reserve(100470)
-        one = publish_phase(pub, 100470,
-                            pull_request="https://github.com/example-org/example-repo/pull/970")
-        results.append((
-            "phase one publishes and waits, carrying no earlier phase",
-            one["ok"] and one.get("state") == "AWAITING_REVIEW"
-            and not one.get("carries_open_phase") and not one.get("warning"),
-            f"ok={one.get('ok')} state={one.get('state')} "
-            f"warning={one.get('warning')}"))
+        one = publish_phase(
+            pub,
+            100470,
+            pull_request="https://github.com/example-org/example-repo/pull/970",
+        )
+        results.append(
+            (
+                "phase one publishes and waits, carrying no earlier phase",
+                one["ok"]
+                and one.get("state") == "AWAITING_REVIEW"
+                and not one.get("carries_open_phase")
+                and not one.get("warning"),
+                f"ok={one.get('ok')} state={one.get('state')} "
+                f"warning={one.get('warning')}",
+            )
+        )
 
         # Phase two starts while phase one is still open.
         two_branch = mode_branch(pub, 100471, "phase-100471-stack-second.md")
-        results.append((
-            "phase two branches off phase one's open branch, not off the "
-            "integration branch, and inherits its code",
-            two_branch["ok"] and two_branch.get("base") == first_branch
-            and "first.txt" in git(
-                pub, "ls-tree", "--name-only", second_branch)[1].split(),
-            f"ok={two_branch.get('ok')} base={two_branch.get('base')} "
-            f"tree={sorted(git(pub, 'ls-tree', '--name-only', second_branch)[1].split())}"))
+        results.append(
+            (
+                "phase two branches off phase one's open branch, not off the "
+                "integration branch, and inherits its code",
+                two_branch["ok"]
+                and two_branch.get("base") == first_branch
+                and "first.txt"
+                in git(pub, "ls-tree", "--name-only", second_branch)[1].split(),
+                f"ok={two_branch.get('ok')} base={two_branch.get('base')} "
+                f"tree={sorted(git(pub, 'ls-tree', '--name-only', second_branch)[1].split())}",
+            )
+        )
 
         # The integration branch moves underneath the open phase, from another
         # machine: exactly the situation the resync exists for.
         other = base / "stack-e2e-other"
         remote_url = git(pub, "remote", "get-url", "origin")[1]
-        subprocess.run([git_binary(), "clone", "-q", remote_url, str(other)],
-                       check=True, capture_output=True, text=True)
+        subprocess.run(
+            [git_binary(), "clone", "-q", remote_url, str(other)],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
         git(other, "config", "user.email", "e2e@example.com")
         git(other, "config", "user.name", "e2e")
         git(other, "checkout", "-q", base_branch)
@@ -3774,30 +4504,46 @@ def _two_phase_stack_checks(base):
         git(other, "commit", "-q", "-m", "another machine lands a change")
         git(other, "push", "-q", "origin", base_branch)
         resynced = mode_resync(pub)
-        public_resync = next((r for r in resynced.get("repos", [])
-                              if Path(r.get("repo", "")).resolve() == pub.resolve()),
-                             {})
-        results.append((
-            "a commit that landed on the integration branch while a phase was "
-            "open is merged into that phase's branch",
-            resynced["ok"] and public_resync.get("action") == "merged"
-            and (pub / "from-elsewhere.txt").is_file()
-            and (pub / "first.txt").is_file(),
-            f"action={public_resync.get('action')} "
-            f"actions={[r.get('action') for r in resynced.get('repos', [])]}"))
+        public_resync = next(
+            (
+                r
+                for r in resynced.get("repos", [])
+                if Path(r.get("repo", "")).resolve() == pub.resolve()
+            ),
+            {},
+        )
+        results.append(
+            (
+                "a commit that landed on the integration branch while a phase was "
+                "open is merged into that phase's branch",
+                resynced["ok"]
+                and public_resync.get("action") == "merged"
+                and (pub / "from-elsewhere.txt").is_file()
+                and (pub / "first.txt").is_file(),
+                f"action={public_resync.get('action')} "
+                f"actions={[r.get('action') for r in resynced.get('repos', [])]}",
+            )
+        )
 
         (pub / "second.txt").write_text("phase two's code\n")
         git(pub, "add", "second.txt")
         git(pub, "commit", "-q", "-m", "phase 100471: the second change")
         reserve(100471)
         two = publish_phase(
-            pub, 100471, pull_request="https://github.com/example-org/example-repo/pull/971")
+            pub,
+            100471,
+            pull_request="https://github.com/example-org/example-repo/pull/971",
+        )
         carried = two.get("carries_open_phase") or {}
-        results.append((
-            "phase two publishes carrying phase one's unmerged work, and says so",
-            two["ok"] and carried.get("branch") == first_branch
-            and "still waiting for review" in (two.get("warning") or ""),
-            f"carries={carried} warning={two.get('warning')}"))
+        results.append(
+            (
+                "phase two publishes carrying phase one's unmerged work, and says so",
+                two["ok"]
+                and carried.get("branch") == first_branch
+                and "still waiting for review" in (two.get("warning") or ""),
+                f"carries={carried} warning={two.get('warning')}",
+            )
+        )
 
         # The human squash-merges phase one, which is what GitHub's button does
         # by default and the case the commit-id check alone cannot see.
@@ -3807,25 +4553,32 @@ def _two_phase_stack_checks(base):
         git(pub, "push", "-q", "origin", base_branch)
         with _StubGH(_gh_says("MERGED")):
             first_done = mode_published(pub, 100470)
-        results.append((
-            "a squash-merged first phase resolves the check and tidies the "
-            "checkout",
-            first_done["ok"] and first_done.get("state") == "PUBLISHED"
-            and phase_receipt(pub, 100470).get("state") == "published"
-            and current_branch(pub) == base_branch,
-            f"ok={first_done.get('ok')} state={first_done.get('state')} "
-            f"branch={current_branch(pub)}"))
+        results.append(
+            (
+                "a squash-merged first phase resolves the check and tidies the "
+                "checkout",
+                first_done["ok"]
+                and first_done.get("state") == "PUBLISHED"
+                and phase_receipt(pub, 100470).get("state") == "published"
+                and current_branch(pub) == base_branch,
+                f"ok={first_done.get('ok')} state={first_done.get('state')} "
+                f"branch={current_branch(pub)}",
+            )
+        )
 
         # Phase two is still open, still stacked, and the next phase's base is
         # still phase two rather than phase one.
-        results.append((
-            "phase two stays open after phase one merges, and the next phase "
-            "would stack on phase two",
-            awaiting_review(pub, 100471) is not None
-            and (open_predecessor(pub, 100472) or {}).get("branch")
-            == second_branch,
-            f"awaiting_review(100471)={awaiting_review(pub, 100471)} "
-            f"next base={(open_predecessor(pub, 100472) or {}).get('branch')}"))
+        results.append(
+            (
+                "phase two stays open after phase one merges, and the next phase "
+                "would stack on phase two",
+                awaiting_review(pub, 100471) is not None
+                and (open_predecessor(pub, 100472) or {}).get("branch")
+                == second_branch,
+                f"awaiting_review(100471)={awaiting_review(pub, 100471)} "
+                f"next base={(open_predecessor(pub, 100472) or {}).get('branch')}",
+            )
+        )
 
         # The integration branch holds the checkout again. That is what the
         # workflow asks a person to do once a pull request is open, and what the
@@ -3846,17 +4599,21 @@ def _two_phase_stack_checks(base):
         third_branch = phase_branch_for(100472, third_roadmap)
         started_on_integration = current_branch(pub) == base_branch
         three = mode_branch(pub, 100472, third_roadmap)
-        results.append((
-            "a phase launches onto an open predecessor's branch while the "
-            "checkout sits on the integration branch, with no person moving it",
-            started_on_integration and three["ok"]
-            and three.get("base") == second_branch
-            and current_branch(pub) == third_branch
-            and "second.txt" in git(
-                pub, "ls-tree", "--name-only", third_branch)[1].split(),
-            f"started_on_integration={started_on_integration} "
-            f"ok={three.get('ok')} base={three.get('base')} "
-            f"branch={current_branch(pub)} summary={three.get('summary')}"))
+        results.append(
+            (
+                "a phase launches onto an open predecessor's branch while the "
+                "checkout sits on the integration branch, with no person moving it",
+                started_on_integration
+                and three["ok"]
+                and three.get("base") == second_branch
+                and current_branch(pub) == third_branch
+                and "second.txt"
+                in git(pub, "ls-tree", "--name-only", third_branch)[1].split(),
+                f"started_on_integration={started_on_integration} "
+                f"ok={three.get('ok')} base={three.get('base')} "
+                f"branch={current_branch(pub)} summary={three.get('summary')}",
+            )
+        )
 
         # The same launch with uncommitted work on the integration branch is a
         # stop, not a switch. Cutting the branch from a different commit would
@@ -3870,19 +4627,29 @@ def _two_phase_stack_checks(base):
         git(nested, "commit", "-q", "-m", "roadmap")
         git(nested, "push", "-q", "origin", integration_branch(nested))
         four = mode_branch(pub, 100473, fourth_roadmap)
-        results.append((
-            "uncommitted work on the integration branch still stops the launch",
-            (not four["ok"])
-            and current_branch(pub) == base_branch
-            and (pub / "uncommitted.txt").read_text() == "work in progress\n"
-            and not git(pub, "rev-parse", "--verify",
-                        f"refs/heads/{phase_branch_for(100473, fourth_roadmap)}")[0] == 0,
-            f"ok={four.get('ok')} branch={current_branch(pub)} "
-            f"summary={four.get('summary')}"))
+        results.append(
+            (
+                "uncommitted work on the integration branch still stops the launch",
+                (not four["ok"])
+                and current_branch(pub) == base_branch
+                and (pub / "uncommitted.txt").read_text() == "work in progress\n"
+                and not git(
+                    pub,
+                    "rev-parse",
+                    "--verify",
+                    f"refs/heads/{phase_branch_for(100473, fourth_roadmap)}",
+                )[0]
+                == 0,
+                f"ok={four.get('ok')} branch={current_branch(pub)} "
+                f"summary={four.get('summary')}",
+            )
+        )
     except Exception:  # noqa: BLE001 - the self-test reports the failure
         import traceback
-        results.append(("two-phase stack checks ran to completion",
-                        False, traceback.format_exc()))
+
+        results.append(
+            ("two-phase stack checks ran to completion", False, traceback.format_exc())
+        )
     finally:
         conventions.override({"board.branch": old_branch})
     return results
@@ -3907,6 +4674,7 @@ def _receipt_carry_checks(base):
     conventions.override({"board.branch": "main"})
     try:
         from argus.phase_reservations import ReservationStore, save_reservation_file
+
         # 100490 is taken by the fixture itself, so the second phase under test
         # is 100491 and needs its own reservation below.
         pub, nested, _run = _publish_fixture(base, "receipt-carry", 100490)
@@ -3920,8 +4688,9 @@ def _receipt_carry_checks(base):
             git(nested, "merge", "-q", "--ff-only", "origin/main")
             rd = nested / "runs" / f"phase-{phase:06d}"
             rd.mkdir(parents=True, exist_ok=True)
-            save_reservation_file(rd / "reservation.json",
-                                  store.reserve(phase, "server-01"))
+            save_reservation_file(
+                rd / "reservation.json", store.reserve(phase, "server-01")
+            )
             (rd / "run.json").write_text('{"state":"completed"}\n')
             (rd / "finalize-task-r1.log").write_text("log\nFINALIZE_DONE\n")
             # Phase-scoped, never `add -A`: a blanket add would sweep up the
@@ -3937,13 +4706,19 @@ def _receipt_carry_checks(base):
         (pub / "first.txt").write_text("phase one\n")
         git(pub, "add", "first.txt")
         git(pub, "commit", "-q", "-m", "phase 100490: the first change")
-        one = publish_phase(pub, 100490,
-                            pull_request="https://github.com/example-org/example-repo/pull/990")
-        results.append((
-            "the first phase publishes and waits for review",
-            one["ok"] and one.get("state") == "AWAITING_REVIEW",
-            f"ok={one.get('ok')} state={one.get('state')} "
-            f"summary={one.get('summary')}"))
+        one = publish_phase(
+            pub,
+            100490,
+            pull_request="https://github.com/example-org/example-repo/pull/990",
+        )
+        results.append(
+            (
+                "the first phase publishes and waits for review",
+                one["ok"] and one.get("state") == "AWAITING_REVIEW",
+                f"ok={one.get('ok')} state={one.get('state')} "
+                f"summary={one.get('summary')}",
+            )
+        )
 
         # The human squash-merges phase one, and the merge check records it.
         integration = integration_branch(pub)
@@ -3956,12 +4731,16 @@ def _receipt_carry_checks(base):
         git(nested, "push", "-q", "origin", integration_branch(nested))
         with _StubGH(_gh_says("MERGED")):
             done = mode_published(pub, 100490)
-        results.append((
-            "the merge check marks the merged phase published",
-            done["ok"] and done.get("state") == "PUBLISHED"
-            and phase_receipt(pub, 100490).get("state") == "published",
-            f"ok={done.get('ok')} state={done.get('state')} "
-            f"summary={done.get('summary')}"))
+        results.append(
+            (
+                "the merge check marks the merged phase published",
+                done["ok"]
+                and done.get("state") == "PUBLISHED"
+                and phase_receipt(pub, 100490).get("state") == "published",
+                f"ok={done.get('ok')} state={done.get('state')} "
+                f"summary={done.get('summary')}",
+            )
+        )
 
         # The next phase publishes. Before the fix the merged phase's
         # uncommitted receipt was still dirt here, so this refused with
@@ -3971,21 +4750,29 @@ def _receipt_carry_checks(base):
         git(pub, "add", "second.txt")
         git(pub, "commit", "-q", "-m", "phase 100491: the second change")
         reserve(100491)
-        two = publish_phase(pub, 100491,
-                            pull_request="https://github.com/example-org/example-repo/pull/991")
+        two = publish_phase(
+            pub,
+            100491,
+            pull_request="https://github.com/example-org/example-repo/pull/991",
+        )
         blocked_dirty = "working tree is dirty after phase cleanup" in str(two)
-        results.append((
-            "a different phase publishes after a merged phase is marked "
-            "published",
-            two["ok"] and two.get("state") == "AWAITING_REVIEW"
-            and not blocked_dirty,
-            f"ok={two.get('ok')} state={two.get('state')} "
-            f"blocked_dirty={blocked_dirty} error={two.get('error')} "
-            f"dirty={two.get('dirty')}"))
+        results.append(
+            (
+                "a different phase publishes after a merged phase is marked published",
+                two["ok"]
+                and two.get("state") == "AWAITING_REVIEW"
+                and not blocked_dirty,
+                f"ok={two.get('ok')} state={two.get('state')} "
+                f"blocked_dirty={blocked_dirty} error={two.get('error')} "
+                f"dirty={two.get('dirty')}",
+            )
+        )
     except Exception:  # noqa: BLE001 - the self-test reports the failure
         import traceback
-        results.append(("receipt carry checks ran to completion",
-                        False, traceback.format_exc()))
+
+        results.append(
+            ("receipt carry checks ran to completion", False, traceback.format_exc())
+        )
     finally:
         conventions.override({"board.branch": old_branch})
     return results
@@ -4011,22 +4798,30 @@ def _merge_gate_checks(base):
         res = publish_phase(pub, 100446, pull_request="https://example/pr/1")
         receipt = res.get("receipt", {})
         # 1. finalize's receipt waits for a human and names the pull request.
-        results.append(("finalize records the phase as waiting for review",
-                        res["ok"] and res.get("state") == "AWAITING_REVIEW"
-                        and receipt.get("state") == "awaiting_review"
-                        and receipt.get("branch") == branch
-                        and receipt.get("pull_request") == "https://example/pr/1",
-                        f"state={res.get('state')} receipt={receipt}"))
+        results.append(
+            (
+                "finalize records the phase as waiting for review",
+                res["ok"]
+                and res.get("state") == "AWAITING_REVIEW"
+                and receipt.get("state") == "awaiting_review"
+                and receipt.get("branch") == branch
+                and receipt.get("pull_request") == "https://example/pr/1",
+                f"state={res.get('state')} receipt={receipt}",
+            )
+        )
 
         # 2. Nothing is on the integration branch yet, so completion is refused.
         res2 = mark_phase_published(pub, 100446)
-        results.append(("completion is refused before the pull request merges",
-                        (not res2["ok"]) and "not on the integration branch"
-                        in res2["blockers"][-1]
-                        and phase_receipt(pub, 100446).get("state")
-                        == "awaiting_review",
-                        f"blockers={res2.get('blockers')} "
-                        f"heads={res2.get('public_head') or ''}"))
+        results.append(
+            (
+                "completion is refused before the pull request merges",
+                (not res2["ok"])
+                and "not on the integration branch" in res2["blockers"][-1]
+                and phase_receipt(pub, 100446).get("state") == "awaiting_review",
+                f"blockers={res2.get('blockers')} "
+                f"heads={res2.get('public_head') or ''}",
+            )
+        )
 
         # 3. A human merges. Now the same call succeeds and the board can
         #    record the phase, which is the first moment it is finished. Merged
@@ -4040,82 +4835,117 @@ def _merge_gate_checks(base):
             git(repo, "checkout", "-q", branch)
         res3 = mark_phase_published(pub, 100446)
         published = phase_receipt(pub, 100446)
-        results.append(("completion is recorded once the merge is real",
-                        res3["ok"] and res3["action"] == "marked-published"
-                        and published.get("state") == "published"
-                        and bool(published.get("public_commit"))
-                        and bool(published.get("private_commit"))
-                        and awaiting_review(pub, 100446) is None,
-                        f"blockers={res3.get('blockers')} "
-                        f"state={published.get('state')} "
-                        f"public={published.get('public_commit')} "
-                        f"private={published.get('private_commit')}"))
+        results.append(
+            (
+                "completion is recorded once the merge is real",
+                res3["ok"]
+                and res3["action"] == "marked-published"
+                and published.get("state") == "published"
+                and bool(published.get("public_commit"))
+                and bool(published.get("private_commit"))
+                and awaiting_review(pub, 100446) is None,
+                f"blockers={res3.get('blockers')} "
+                f"state={published.get('state')} "
+                f"public={published.get('public_commit')} "
+                f"private={published.get('private_commit')}",
+            )
+        )
 
         # 3b. The rewrite must leave the private tree clean. Before the fix the
         #     receipt was written and never committed, so it stayed dirt, and
         #     the next phase's publish refused over it and the driver halted.
         #     This is the smallest reproduction of the phase-100876 incident.
         nested_dirty = dirty_paths(nested)
-        receipt_tracked = ("runs/phase-100446/publication.json"
-                           in git(nested, "ls-files", "runs")[1].splitlines())
-        results.append((
-            "marking a merged phase published leaves the private tree clean "
-            "and the receipt committed",
-            nested_dirty == [] and receipt_tracked,
-            f"dirty={nested_dirty} receipt_tracked={receipt_tracked}"))
+        receipt_tracked = (
+            "runs/phase-100446/publication.json"
+            in git(nested, "ls-files", "runs")[1].splitlines()
+        )
+        results.append(
+            (
+                "marking a merged phase published leaves the private tree clean "
+                "and the receipt committed",
+                nested_dirty == [] and receipt_tracked,
+                f"dirty={nested_dirty} receipt_tracked={receipt_tracked}",
+            )
+        )
 
         # 4. It is idempotent, and it never merges anything itself.
         head_before = git(pub, "rev-parse", "HEAD")[1]
         res4 = mark_phase_published(pub, 100446)
-        results.append(("recording a merge twice is a no-op and moves nothing",
-                        res4["ok"] and res4["action"] == "already-published"
-                        and git(pub, "rev-parse", "HEAD")[1] == head_before
-                        and current_branch(pub) == branch,
-                        f"action={res4.get('action')}"))
+        results.append(
+            (
+                "recording a merge twice is a no-op and moves nothing",
+                res4["ok"]
+                and res4["action"] == "already-published"
+                and git(pub, "rev-parse", "HEAD")[1] == head_before
+                and current_branch(pub) == branch,
+                f"action={res4.get('action')}",
+            )
+        )
 
         # 5. The public checkout is still on the phase branch. Nothing in the
         #    pipeline leaves it, so the branch after branch is where the
         #    published mode is supposed to clean up.
-        results.append(("the merged phase leaves the public checkout on its branch",
-                        current_branch(pub) == branch,
-                        f"branch={current_branch(pub)}"))
+        results.append(
+            (
+                "the merged phase leaves the public checkout on its branch",
+                current_branch(pub) == branch,
+                f"branch={current_branch(pub)}",
+            )
+        )
 
         # 6. Returning to the integration branch moves it and is a no-op twice.
         res6 = return_to_integration(pub, base="main")
-        results.append(("the public checkout returns to the integration branch",
-                        res6["ok"] and res6["action"] == "returned-to-integration-branch"
-                        and current_branch(pub) == "main"
-                        and res6.get("before") == branch,
-                        f"branch={current_branch(pub)} {res6.get('action')}"))
+        results.append(
+            (
+                "the public checkout returns to the integration branch",
+                res6["ok"]
+                and res6["action"] == "returned-to-integration-branch"
+                and current_branch(pub) == "main"
+                and res6.get("before") == branch,
+                f"branch={current_branch(pub)} {res6.get('action')}",
+            )
+        )
         res6b = return_to_integration(pub, base="main")
-        results.append(("returning again is a no-op",
-                        res6b["ok"] and res6b["action"]
-                        == "already-on-integration-branch"
-                        and current_branch(pub) == "main",
-                        f"branch={current_branch(pub)} {res6b.get('action')}"))
+        results.append(
+            (
+                "returning again is a no-op",
+                res6b["ok"]
+                and res6b["action"] == "already-on-integration-branch"
+                and current_branch(pub) == "main",
+                f"branch={current_branch(pub)} {res6b.get('action')}",
+            )
+        )
 
         # 7. A dirty tree is the one case where switching branches could lose
         #    work, so it must stop rather than carry the change across.
         (pub / "uncommitted.txt").write_text("work in progress\n")
         res7 = return_to_integration(pub, base="main")
-        results.append(("a dirty working tree refuses to switch branch",
-                        (not res7["ok"])
-                        and "uncommitted changes" in res7["blockers"][-1]
-                        and current_branch(pub) == "main"
-                        and (pub / "uncommitted.txt").exists(),
-                        f"branch={current_branch(pub)} "
-                        f"blockers={res7.get('blockers')}"))
+        results.append(
+            (
+                "a dirty working tree refuses to switch branch",
+                (not res7["ok"])
+                and "uncommitted changes" in res7["blockers"][-1]
+                and current_branch(pub) == "main"
+                and (pub / "uncommitted.txt").exists(),
+                f"branch={current_branch(pub)} blockers={res7.get('blockers')}",
+            )
+        )
         # Untracked, so removing the file is the whole cleanup. `git rm` would
         # stage the removal and leave the tree just as dirty for the next check.
         (pub / "uncommitted.txt").unlink()
 
         # 8. A missing integration branch stops rather than moving nowhere.
         res8 = return_to_integration(pub, base="no-such-base")
-        results.append(("a missing integration branch refuses to switch to",
-                        (not res8["ok"]) and "does not exist" in res8["blockers"][-1]
-                        and current_branch(pub) == "main",
-                        f"branch={current_branch(pub)} "
-                        f"blockers={res8.get('blockers')}"))
+        results.append(
+            (
+                "a missing integration branch refuses to switch to",
+                (not res8["ok"])
+                and "does not exist" in res8["blockers"][-1]
+                and current_branch(pub) == "main",
+                f"branch={current_branch(pub)} blockers={res8.get('blockers')}",
+            )
+        )
     finally:
         conventions.override({"board.branch": old})
     return results
@@ -4151,6 +4981,7 @@ def _stale_receipt_checks(base):
     conventions.override({"board.branch": "main"})
     try:
         from argus.phase_reservations import ReservationStore, save_reservation_file
+
         # The fixture takes 100484 for its own coordination board, so the two
         # phases under test are 100485 and 100486.
         pub, nested, _run = _publish_fixture(base, "stale-receipt", 100484)
@@ -4175,18 +5006,27 @@ def _stale_receipt_checks(base):
         git(pub, "commit", "-q", "-m", "phase 100485: the first change")
         rd = nested / "runs" / "phase-100485"
         rd.mkdir(parents=True, exist_ok=True)
-        save_reservation_file(rd / "reservation.json", store.reserve(100485, "server-01"))
+        save_reservation_file(
+            rd / "reservation.json", store.reserve(100485, "server-01")
+        )
         (rd / "run.json").write_text('{"state":"completed"}\n')
         git(nested, "add", "-A")
         git(nested, "commit", "-q", "-m", "run state 100485")
         git(nested, "push", "-q", "origin", integration_branch(nested))
-        one = publish_phase(pub, 100485,
-                            pull_request="https://github.com/example-org/example-repo/pull/980")
-        results.append((
-            "the phase under test published and is waiting for a human",
-            one["ok"] and one.get("state") == "AWAITING_REVIEW"
-            and phase_receipt(pub, 100485).get("state") == "awaiting_review",
-            f"ok={one.get('ok')} state={one.get('state')}"))
+        one = publish_phase(
+            pub,
+            100485,
+            pull_request="https://github.com/example-org/example-repo/pull/980",
+        )
+        results.append(
+            (
+                "the phase under test published and is waiting for a human",
+                one["ok"]
+                and one.get("state") == "AWAITING_REVIEW"
+                and phase_receipt(pub, 100485).get("state") == "awaiting_review",
+                f"ok={one.get('ok')} state={one.get('state')}",
+            )
+        )
 
         # The human squash-merges it. The commit the phase pushed is gone from
         # history, which is precisely why the commit-id test cannot see this.
@@ -4194,13 +5034,17 @@ def _stale_receipt_checks(base):
         git(pub, "merge", "-q", "--squash", first)
         git(pub, "commit", "-q", "-m", "phase 100485 (squashed by a human)")
         git(pub, "push", "-q", "origin", base_branch)
-        results.append((
-            "the squash really did rewrite history, so the commit-id test alone "
-            "cannot see the merge",
-            not _head_carried_locally(pub, phase_receipt(pub, 100485)["public_head"],
-                                      (base_branch,))
-            and (pub / "first.txt").is_file(),
-            "the phase head is no longer an ancestor of the integration branch"))
+        results.append(
+            (
+                "the squash really did rewrite history, so the commit-id test alone "
+                "cannot see the merge",
+                not _head_carried_locally(
+                    pub, phase_receipt(pub, 100485)["public_head"], (base_branch,)
+                )
+                and (pub / "first.txt").is_file(),
+                "the phase head is no longer an ancestor of the integration branch",
+            )
+        )
 
         # A receipt written before the reference was recorded. This is what the
         # pipeline's own older receipts look like, and it is the case where
@@ -4213,45 +5057,62 @@ def _stale_receipt_checks(base):
         git(nested, "add", "-A")
         git(nested, "commit", "-q", "-m", "receipt without a parsed reference")
         git(nested, "push", "-q", "origin", integration_branch(nested))
-        results.append((
-            "the receipt under test carries no parsed reference, so the old "
-            "code never asks GitHub about it",
-            (phase_receipt(pub, 100485) or {}).get("pull_request_ref") is None
-            and bool((phase_receipt(pub, 100485) or {}).get("pull_request")),
-            f"ref={(phase_receipt(pub, 100485) or {}).get('pull_request_ref')}"))
+        results.append(
+            (
+                "the receipt under test carries no parsed reference, so the old "
+                "code never asks GitHub about it",
+                (phase_receipt(pub, 100485) or {}).get("pull_request_ref") is None
+                and bool((phase_receipt(pub, 100485) or {}).get("pull_request")),
+                f"ref={(phase_receipt(pub, 100485) or {}).get('pull_request_ref')}",
+            )
+        )
 
         # GitHub knows the merge. The number is in the URL and nowhere else.
         with _StubGH(_gh_says("MERGED", "2026-06-01T00:00:00Z")) as gh:
             done = mode_published(pub, 100485)
-        results.append((
-            "a merged phase with a stale receipt is marked published even "
-            "though its receipt recorded no pull request reference",
-            done["ok"] and done.get("state") == "PUBLISHED"
-            and phase_receipt(pub, 100485).get("state") == "published",
-            f"ok={done.get('ok')} state={done.get('state')} "
-            f"gh_calls={len(gh.calls)} "
-            f"blockers={[b for r in done.get('repos', []) for b in r.get('blockers', [])]}"))
-        results.append((
-            "GitHub was asked about the pull request named only in the URL",
-            any("980" in " ".join(str(a) for a in call) for call in gh.calls),
-            f"calls={gh.calls}"))
+        results.append(
+            (
+                "a merged phase with a stale receipt is marked published even "
+                "though its receipt recorded no pull request reference",
+                done["ok"]
+                and done.get("state") == "PUBLISHED"
+                and phase_receipt(pub, 100485).get("state") == "published",
+                f"ok={done.get('ok')} state={done.get('state')} "
+                f"gh_calls={len(gh.calls)} "
+                f"blockers={[b for r in done.get('repos', []) for b in r.get('blockers', [])]}",
+            )
+        )
+        results.append(
+            (
+                "GitHub was asked about the pull request named only in the URL",
+                any("980" in " ".join(str(a) for a in call) for call in gh.calls),
+                f"calls={gh.calls}",
+            )
+        )
 
         # The point of the whole exercise: the next phase is no longer stacked
         # on a branch whose content is already on the integration branch.
-        results.append((
-            "after the merge is recorded, the next phase is not stacked on the "
-            "merged phase's branch",
-            open_predecessor(pub, 100486) is None,
-            f"predecessor={open_predecessor(pub, 100486)}"))
+        results.append(
+            (
+                "after the merge is recorded, the next phase is not stacked on the "
+                "merged phase's branch",
+                open_predecessor(pub, 100486) is None,
+                f"predecessor={open_predecessor(pub, 100486)}",
+            )
+        )
         two = mode_branch(pub, 100486, "phase-100486-after-stale.md")
-        results.append((
-            "the next phase branches from the integration branch and inherits "
-            "the merged phase's code",
-            two["ok"] and two.get("base") == base_branch
-            and "first.txt" in git(
-                pub, "ls-tree", "--name-only", second)[1].split(),
-            f"ok={two.get('ok')} base={two.get('base')} "
-            f"predecessor={two.get('predecessor')}"))
+        results.append(
+            (
+                "the next phase branches from the integration branch and inherits "
+                "the merged phase's code",
+                two["ok"]
+                and two.get("base") == base_branch
+                and "first.txt"
+                in git(pub, "ls-tree", "--name-only", second)[1].split(),
+                f"ok={two.get('ok')} base={two.get('base')} "
+                f"predecessor={two.get('predecessor')}",
+            )
+        )
 
         # The harder case, and the one that actually stalled the line: GitHub
         # cannot be asked at all. The receipt stays stale, because only GitHub or
@@ -4283,13 +5144,17 @@ def _stale_receipt_checks(base):
         # from — which shows up as a publish that silently writes no receipt.
         store3 = ReservationStore(pub3, branch="main")
         save_reservation_file(
-            rd3 / "reservation.json", store3.reserve(100613, "server-01"))
+            rd3 / "reservation.json", store3.reserve(100613, "server-01")
+        )
         (rd3 / "run.json").write_text('{"state":"completed"}\n')
         git(nested3, "add", "-A")
         git(nested3, "commit", "-q", "-m", "run state 100613")
         git(nested3, "push", "-q", "origin", integration_branch(nested3))
-        publish_phase(pub3, 100613,
-                      pull_request="https://github.com/example-org/example-repo/pull/981")
+        publish_phase(
+            pub3,
+            100613,
+            pull_request="https://github.com/example-org/example-repo/pull/981",
+        )
         git(pub3, "checkout", "-q", base3)
         git(pub3, "merge", "-q", "--squash", branch3)
         git(pub3, "commit", "-q", "-m", "phase 100613 (squashed)")
@@ -4302,32 +5167,44 @@ def _stale_receipt_checks(base):
         git(nested3, "push", "-q", "origin", integration_branch(nested3))
         with _StubGH({"returncode": 4}):
             nogh = mode_published(pub3, 100613)
-        results.append((
-            "with GitHub unreachable the receipt is not rewritten, because "
-            "only GitHub or the pull request's own commit may say merged",
-            (not nogh["ok"])
-            and (phase_receipt(pub3, 100613) or {}).get("state")
-            == "awaiting_review",
-            f"ok={nogh.get('ok')} "
-            f"state={(phase_receipt(pub3, 100613) or {}).get('state')}"))
-        results.append((
-            "with GitHub unreachable the next phase still branches from the "
-            "integration branch, because the code is already on it",
-            open_predecessor(pub3, 100614) is None,
-            f"predecessor={open_predecessor(pub3, 100614)}"))
+        results.append(
+            (
+                "with GitHub unreachable the receipt is not rewritten, because "
+                "only GitHub or the pull request's own commit may say merged",
+                (not nogh["ok"])
+                and (phase_receipt(pub3, 100613) or {}).get("state")
+                == "awaiting_review",
+                f"ok={nogh.get('ok')} "
+                f"state={(phase_receipt(pub3, 100613) or {}).get('state')}",
+            )
+        )
+        results.append(
+            (
+                "with GitHub unreachable the next phase still branches from the "
+                "integration branch, because the code is already on it",
+                open_predecessor(pub3, 100614) is None,
+                f"predecessor={open_predecessor(pub3, 100614)}",
+            )
+        )
         three = mode_branch(pub3, 100614, "phase-100614-after-no-gh.md")
-        results.append((
-            "a phase launched on a host that cannot ask GitHub inherits the "
-            "merged phase's code instead of refusing to launch",
-            three["ok"] and three.get("base") == base3
-            and "landed.txt" in git(
-                pub3, "ls-tree", "--name-only", next3)[1].split(),
-            f"ok={three.get('ok')} base={three.get('base')} "
-            f"blockers={[b for r in three.get('repos', []) for b in r.get('blockers', [])]}"))
+        results.append(
+            (
+                "a phase launched on a host that cannot ask GitHub inherits the "
+                "merged phase's code instead of refusing to launch",
+                three["ok"]
+                and three.get("base") == base3
+                and "landed.txt"
+                in git(pub3, "ls-tree", "--name-only", next3)[1].split(),
+                f"ok={three.get('ok')} base={three.get('base')} "
+                f"blockers={[b for r in three.get('repos', []) for b in r.get('blockers', [])]}",
+            )
+        )
     except Exception:  # noqa: BLE001 - the self-test reports the failure
         import traceback
-        results.append(("stale-receipt checks ran to completion",
-                        False, traceback.format_exc()))
+
+        results.append(
+            ("stale-receipt checks ran to completion", False, traceback.format_exc())
+        )
     finally:
         conventions.override({"board.branch": old_branch})
     return results
@@ -4354,12 +5231,15 @@ def _tree_proof_checks(base):
     git(pub, "checkout", "-q", integration)
     git(pub, "merge", "-q", "--squash", branch)
     git(pub, "commit", "-q", "-m", "phase 100482 (squashed)")
-    results.append((
-        "a squash-merged phase's content is on the integration branch even "
-        "though its commit is not",
-        _head_carried_locally(pub, head, (integration,)) is None
-        and head_tree_on_integration(pub, head, integration),
-        f"head={head[:12]}"))
+    results.append(
+        (
+            "a squash-merged phase's content is on the integration branch even "
+            "though its commit is not",
+            _head_carried_locally(pub, head, (integration,)) is None
+            and head_tree_on_integration(pub, head, integration),
+            f"head={head[:12]}",
+        )
+    )
 
     # The negative direction: a tree that was never merged must not be found.
     other = phase_branch_for(100483, "phase-100483-unmerged.md")
@@ -4369,30 +5249,35 @@ def _tree_proof_checks(base):
     git(pub, "commit", "-q", "-m", "phase 100483: not merged")
     unmerged_head = git(pub, "rev-parse", "HEAD")[1]
     git(pub, "checkout", "-q", integration)
-    results.append((
-        "content that was never merged is not found on the integration branch",
-        not head_tree_on_integration(pub, unmerged_head, integration),
-        f"head={unmerged_head[:12]}"))
+    results.append(
+        (
+            "content that was never merged is not found on the integration branch",
+            not head_tree_on_integration(pub, unmerged_head, integration),
+            f"head={unmerged_head[:12]}",
+        )
+    )
     return results
 
 
 def self_test_checks():
     """Run checks with explicit temporary layout settings."""
-    conventions.configure({
-        "repo-root": Path("."),
-        "pipeline": None,
-        "roadmap-dir": BOARD_REL / "roadmap",
-        "driver.runs": BOARD_REL / "runs",
-        "driver.include": ["phase-*.md"],
-        "driver.exclude": [],
-        "machine.id": "self-test",
-        "commands.git": "git",
-        "commands.gh": "gh",
-        "board.repo": BOARD_REL,
-        "board.file": Path("claims.json"),
-        "board.branch": "main",
-        "board.remote": "origin",
-    })
+    conventions.configure(
+        {
+            "repo-root": Path("."),
+            "pipeline": None,
+            "roadmap-dir": BOARD_REL / "roadmap",
+            "driver.runs": BOARD_REL / "runs",
+            "driver.include": ["phase-*.md"],
+            "driver.exclude": [],
+            "machine.id": "self-test",
+            "commands.git": "git",
+            "commands.gh": "gh",
+            "board.repo": BOARD_REL,
+            "board.file": Path("claims.json"),
+            "board.branch": "main",
+            "board.remote": "origin",
+        }
+    )
     return _self_test_checks()
 
 
@@ -4407,11 +5292,15 @@ def _self_test_checks():
     remote, work = _init_remote(d, "w")
     _remote_commit(remote, d, "w")
     res = sync_one(work, "start")
-    _check(checks, "sync: stale start fast-forwards",
-           res["ok"] and res["action"] == "fast-forwarded"
-           and res["relation"] == "behind"
-           and (work / "a.txt").read_text() == "two\n",
-           f"action={res.get('action')} relation={res.get('relation')}")
+    _check(
+        checks,
+        "sync: stale start fast-forwards",
+        res["ok"]
+        and res["action"] == "fast-forwarded"
+        and res["relation"] == "behind"
+        and (work / "a.txt").read_text() == "two\n",
+        f"action={res.get('action')} relation={res.get('relation')}",
+    )
 
     # 2. diverged start is merged cleanly, accepting remote changes while
     # keeping every local commit.
@@ -4423,14 +5312,18 @@ def _self_test_checks():
     _remote_commit(remote, d, "w")
     res = sync_one(work, "start")
     parents = git(work, "rev-list", "--parents", "-n1", "HEAD")[1].split()
-    _check(checks, "sync: diverged start merges and keeps local work",
-           res["ok"] and res["action"] == "merged"
-           and res["relation"] == "diverged"
-           and git(work, "rev-parse", "HEAD^1")[1] == head_before
-           and (work / "b.txt").is_file()
-           and (work / "a.txt").read_text() == "two\n"
-           and len(parents) == 3,
-           f"action={res.get('action')} parents={parents}")
+    _check(
+        checks,
+        "sync: diverged start merges and keeps local work",
+        res["ok"]
+        and res["action"] == "merged"
+        and res["relation"] == "diverged"
+        and git(work, "rev-parse", "HEAD^1")[1] == head_before
+        and (work / "b.txt").is_file()
+        and (work / "a.txt").read_text() == "two\n"
+        and len(parents) == 3,
+        f"action={res.get('action')} parents={parents}",
+    )
 
     # 2b. a conflicting divergence is aborted and halts, preserving local work.
     d = base / "conflict"
@@ -4441,11 +5334,15 @@ def _self_test_checks():
     git(work, "commit", "-q", "-m", "local change")
     _remote_commit(remote, d, "w", content="remote change\n")
     res = sync_one(work, "start")
-    _check(checks, "sync: conflicting start aborts and preserves local work",
-           (not res["ok"]) and res.get("conflicted") == ["a.txt"]
-           and (work / "a.txt").read_text() == "local change\n"
-           and not (work / ".git" / "MERGE_HEAD").exists(),
-           f"conflicted={res.get('conflicted')}")
+    _check(
+        checks,
+        "sync: conflicting start aborts and preserves local work",
+        (not res["ok"])
+        and res.get("conflicted") == ["a.txt"]
+        and (work / "a.txt").read_text() == "local change\n"
+        and not (work / ".git" / "MERGE_HEAD").exists(),
+        f"conflicted={res.get('conflicted')}",
+    )
 
     # 2c. local commits ahead of the remote do not block a start; the remote
     # has nothing new and the commits publish at finalize.
@@ -4454,10 +5351,12 @@ def _self_test_checks():
     remote, work = _init_remote(d, "w")
     _local_commit(work, "w")
     res = sync_one(work, "start")
-    _check(checks, "sync: ahead start proceeds (nothing to pull)",
-           res["ok"] and res["action"] == "ahead"
-           and (work / "b.txt").is_file(),
-           f"action={res.get('action')}")
+    _check(
+        checks,
+        "sync: ahead start proceeds (nothing to pull)",
+        res["ok"] and res["action"] == "ahead" and (work / "b.txt").is_file(),
+        f"action={res.get('action')}",
+    )
 
     # 3. clean push verifies the remote is an ancestor of local HEAD.
     d = base / "push-ok"
@@ -4465,10 +5364,12 @@ def _self_test_checks():
     remote, work = _init_remote(d, "w")
     _local_commit(work, "w")
     res = sync_one(work, "push")
-    _check(checks, "sync: clean final push verifies fast-forward",
-           res["ok"] and res["action"] == "verified"
-           and res["relation"] == "ahead",
-           f"action={res.get('action')}")
+    _check(
+        checks,
+        "sync: clean final push verifies fast-forward",
+        res["ok"] and res["action"] == "verified" and res["relation"] == "ahead",
+        f"action={res.get('action')}",
+    )
 
     # 4. diverged final push merges the remote in, then push fast-forwards.
     d = base / "push-diverged"
@@ -4477,11 +5378,15 @@ def _self_test_checks():
     _local_commit(work, "w")
     _remote_commit(remote, d, "w")
     res = sync_one(work, "push")
-    _check(checks, "sync: diverged final push merges before pushing",
-           res["ok"] and res["action"] == "merged"
-           and (work / "a.txt").read_text() == "two\n"
-           and (work / "b.txt").is_file(),
-           f"action={res.get('action')}")
+    _check(
+        checks,
+        "sync: diverged final push merges before pushing",
+        res["ok"]
+        and res["action"] == "merged"
+        and (work / "a.txt").read_text() == "two\n"
+        and (work / "b.txt").is_file(),
+        f"action={res.get('action')}",
+    )
 
     # 4b. a conflicting final push leaves the conflict in place so the
     # finalize agent can resolve it (start mode aborts; push mode does not).
@@ -4493,11 +5398,15 @@ def _self_test_checks():
     git(work, "commit", "-q", "-m", "local change")
     _remote_commit(remote, d, "w", content="remote change\n")
     res = sync_one(work, "push")
-    _check(checks, "sync: conflicting final push leaves the merge to resolve",
-           (not res["ok"]) and res.get("conflicted") == ["a.txt"]
-           and "<<<<<<<" in (work / "a.txt").read_text()
-           and (work / ".git" / "MERGE_HEAD").exists(),
-           f"conflicted={res.get('conflicted')}")
+    _check(
+        checks,
+        "sync: conflicting final push leaves the merge to resolve",
+        (not res["ok"])
+        and res.get("conflicted") == ["a.txt"]
+        and "<<<<<<<" in (work / "a.txt").read_text()
+        and (work / ".git" / "MERGE_HEAD").exists(),
+        f"conflicted={res.get('conflicted')}",
+    )
 
     # 5. a remote that is ahead of local is fast-forwarded before a push.
     d = base / "push-behind"
@@ -4505,10 +5414,14 @@ def _self_test_checks():
     remote, work = _init_remote(d, "w")
     _remote_commit(remote, d, "w")
     res = sync_one(work, "push")
-    _check(checks, "sync: behind final push fast-forwards",
-           res["ok"] and res["action"] == "fast-forwarded"
-           and (work / "a.txt").read_text() == "two\n",
-           f"action={res.get('action')} relation={res.get('relation')}")
+    _check(
+        checks,
+        "sync: behind final push fast-forwards",
+        res["ok"]
+        and res["action"] == "fast-forwarded"
+        and (work / "a.txt").read_text() == "two\n",
+        f"action={res.get('action')} relation={res.get('relation')}",
+    )
 
     # 6. overlapping uncommitted edits block a fast-forward and survive it.
     d = base / "dirty"
@@ -4517,10 +5430,14 @@ def _self_test_checks():
     _remote_commit(remote, d, "w")
     (work / "a.txt").write_text("local edit\n")
     res = sync_one(work, "start")
-    _check(checks, "sync: overlapping dirty edit blocks and is preserved",
-           (not res["ok"]) and (work / "a.txt").read_text() == "local edit\n"
-           and res.get("overlapping") == ["a.txt"],
-           f"blockers={res.get('blockers')} overlapping={res.get('overlapping')}")
+    _check(
+        checks,
+        "sync: overlapping dirty edit blocks and is preserved",
+        (not res["ok"])
+        and (work / "a.txt").read_text() == "local edit\n"
+        and res.get("overlapping") == ["a.txt"],
+        f"blockers={res.get('blockers')} overlapping={res.get('overlapping')}",
+    )
 
     # 6b. The stranding case: a strictly-behind remote whose incoming commit
     # touches a different path must fast-forward over a dirty index, and the
@@ -4535,14 +5452,18 @@ def _self_test_checks():
     index_before = git(work, "diff", "--cached", "--name-only")[1]
     _remote_commit(remote, d, "w")  # touches a.txt only
     res = sync_one(work, "start")
-    _check(checks, "sync: ff over a disjoint dirty index keeps the review baseline",
-           res["ok"] and res["action"] == "fast-forwarded"
-           and git(work, "rev-parse", ":c.txt")[1] == staged_blob
-           and git(work, "diff", "--cached", "--name-only")[1] == index_before
-           and (work / "c.txt").read_text() == "staged baseline\n"
-           and (work / "a.txt").read_text() == "two\n"
-           and res.get("carried") == ["c.txt"],
-           f"action={res.get('action')} carried={res.get('carried')}")
+    _check(
+        checks,
+        "sync: ff over a disjoint dirty index keeps the review baseline",
+        res["ok"]
+        and res["action"] == "fast-forwarded"
+        and git(work, "rev-parse", ":c.txt")[1] == staged_blob
+        and git(work, "diff", "--cached", "--name-only")[1] == index_before
+        and (work / "c.txt").read_text() == "staged baseline\n"
+        and (work / "a.txt").read_text() == "two\n"
+        and res.get("carried") == ["c.txt"],
+        f"action={res.get('action')} carried={res.get('carried')}",
+    )
 
     # 6c. The same overlap must still refuse, and must leave the index
     # byte-identical: a refusal that half-integrates is worse than no attempt.
@@ -4555,13 +5476,17 @@ def _self_test_checks():
     head_before = git(work, "rev-parse", "HEAD")[1]
     _remote_commit(remote, d, "w")
     res = sync_one(work, "start")
-    _check(checks, "sync: an overlapping path refuses and the index is untouched",
-           (not res["ok"]) and res.get("overlapping") == ["a.txt"]
-           and git(work, "diff", "--cached")[1] == index_before
-           and git(work, "rev-parse", "HEAD")[1] == head_before
-           and (work / "a.txt").read_text() == "local edit\n"
-           and not (work / ".git" / "MERGE_HEAD").exists(),
-           f"overlapping={res.get('overlapping')}")
+    _check(
+        checks,
+        "sync: an overlapping path refuses and the index is untouched",
+        (not res["ok"])
+        and res.get("overlapping") == ["a.txt"]
+        and git(work, "diff", "--cached")[1] == index_before
+        and git(work, "rev-parse", "HEAD")[1] == head_before
+        and (work / "a.txt").read_text() == "local edit\n"
+        and not (work / ".git" / "MERGE_HEAD").exists(),
+        f"overlapping={res.get('overlapping')}",
+    )
 
     # 6d. An empty index must behave exactly as before: the overlap test has
     # nothing to find, so the fast-forward is the plain one.
@@ -4570,11 +5495,15 @@ def _self_test_checks():
     remote, work = _init_remote(d, "w")
     _remote_commit(remote, d, "w")
     res = sync_one(work, "start")
-    _check(checks, "sync: a clean index is unchanged by the overlap test",
-           res["ok"] and res["action"] == "fast-forwarded"
-           and res.get("carried") == []
-           and "overlapping" not in res,
-           f"action={res.get('action')} carried={res.get('carried')}")
+    _check(
+        checks,
+        "sync: a clean index is unchanged by the overlap test",
+        res["ok"]
+        and res["action"] == "fast-forwarded"
+        and res.get("carried") == []
+        and "overlapping" not in res,
+        f"action={res.get('action')} carried={res.get('carried')}",
+    )
 
     # 6e. A diverged history with an unstaged, disjoint edit: git carries it,
     # so the pipeline must let it through rather than refuse on a dirty tree.
@@ -4585,11 +5514,15 @@ def _self_test_checks():
     (work / "b.txt").write_text("b1\nremediator fix\n")
     _remote_commit(remote, d, "w")  # touches a.txt only
     res = sync_one(work, "start")
-    _check(checks, "sync: a diverged merge carries an unstaged disjoint edit",
-           res["ok"] and res["action"] == "merged"
-           and (work / "a.txt").read_text() == "two\n"
-           and (work / "b.txt").read_text() == "b1\nremediator fix\n",
-           f"action={res.get('action')} blockers={res.get('blockers')}")
+    _check(
+        checks,
+        "sync: a diverged merge carries an unstaged disjoint edit",
+        res["ok"]
+        and res["action"] == "merged"
+        and (work / "a.txt").read_text() == "two\n"
+        and (work / "b.txt").read_text() == "b1\nremediator fix\n",
+        f"action={res.get('action')} blockers={res.get('blockers')}",
+    )
 
     # 6f. A diverged history with an unstaged edit to a path the incoming
     # commits change must refuse before git runs.
@@ -4602,12 +5535,16 @@ def _self_test_checks():
     head_before = git(work, "rev-parse", "HEAD")[1]
     _remote_commit(remote, d, "w")
     res = sync_one(work, "start")
-    _check(checks, "sync: a diverged merge refuses an overlapping unstaged edit",
-           (not res["ok"]) and res.get("overlapping") == ["a.txt"]
-           and git(work, "diff", "--cached")[1] == index_before
-           and git(work, "rev-parse", "HEAD")[1] == head_before
-           and (work / "a.txt").read_text() == "a1\nlocal edit\n",
-           f"overlapping={res.get('overlapping')}")
+    _check(
+        checks,
+        "sync: a diverged merge refuses an overlapping unstaged edit",
+        (not res["ok"])
+        and res.get("overlapping") == ["a.txt"]
+        and git(work, "diff", "--cached")[1] == index_before
+        and git(work, "rev-parse", "HEAD")[1] == head_before
+        and (work / "a.txt").read_text() == "a1\nlocal edit\n",
+        f"overlapping={res.get('overlapping')}",
+    )
 
     # 7. a staged change blocks a diverged merge before any merge runs.
     d = base / "staged"
@@ -4618,11 +5555,15 @@ def _self_test_checks():
     git(work, "add", "c.txt")
     _remote_commit(remote, d, "w")
     res = sync_one(work, "start")
-    _check(checks, "sync: staged change blocks a diverged merge before git runs",
-           (not res["ok"]) and res.get("staged") == ["c.txt"]
-           and res.get("relation") == "diverged"
-           and "index to match HEAD" in res["blockers"][-1],
-           f"staged={res.get('staged')} blockers={res.get('blockers')}")
+    _check(
+        checks,
+        "sync: staged change blocks a diverged merge before git runs",
+        (not res["ok"])
+        and res.get("staged") == ["c.txt"]
+        and res.get("relation") == "diverged"
+        and "index to match HEAD" in res["blockers"][-1],
+        f"staged={res.get('staged')} blockers={res.get('blockers')}",
+    )
 
     # 7a. The private checkout is normally dirty after a phase: the runner
     # writes ledger.json/run.json after finalize's commit. When local HEAD
@@ -4638,11 +5579,14 @@ def _self_test_checks():
     git(work, "push", "-q", "origin", "main")
     (work / "runs" / "ledger.json").write_text('{"finalize": true}\n')
     res = sync_one(work, "start")
-    _check(checks, "sync: dirty run artifacts do not block an up-to-date start",
-           res["ok"] and res["action"] == "up-to-date"
-           and (work / "runs" / "ledger.json").read_text()
-           == '{"finalize": true}\n',
-           f"action={res.get('action')}")
+    _check(
+        checks,
+        "sync: dirty run artifacts do not block an up-to-date start",
+        res["ok"]
+        and res["action"] == "up-to-date"
+        and (work / "runs" / "ledger.json").read_text() == '{"finalize": true}\n',
+        f"action={res.get('action')}",
+    )
 
     # 7b. When the remote has moved, a fast-forward preserves dirty run
     # artifacts it does not touch.
@@ -4657,12 +5601,15 @@ def _self_test_checks():
     (work / "runs" / "run.json").write_text('{"state": "completed"}\n')
     _remote_commit(remote, d, "w")  # touches a.txt only
     res = sync_one(work, "start")
-    _check(checks, "sync: ff preserves unrelated dirty run artifacts",
-           res["ok"] and res["action"] == "fast-forwarded"
-           and (work / "runs" / "run.json").read_text()
-           == '{"state": "completed"}\n'
-           and (work / "a.txt").read_text() == "two\n",
-           f"action={res.get('action')}")
+    _check(
+        checks,
+        "sync: ff preserves unrelated dirty run artifacts",
+        res["ok"]
+        and res["action"] == "fast-forwarded"
+        and (work / "runs" / "run.json").read_text() == '{"state": "completed"}\n'
+        and (work / "a.txt").read_text() == "two\n",
+        f"action={res.get('action')}",
+    )
 
     # 8. sync_all fast-forwards both checkouts from their own remotes.
     d = base / "both"
@@ -4672,16 +5619,22 @@ def _self_test_checks():
     nested = pub / BOARD_REL
     nested.parent.mkdir(parents=True, exist_ok=True)
     priv_remote, _ = _init_remote(d, "priv")
-    subprocess.run([git_binary(), "clone", "-q", str(priv_remote), str(nested)],
-                   check=True, capture_output=True, text=True)
+    subprocess.run(
+        [git_binary(), "clone", "-q", str(priv_remote), str(nested)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
     git(nested, "config", "user.email", "sync-test@example.com")
     git(nested, "config", "user.name", "sync test")
     _remote_commit(priv_remote, d, "priv")
     res = sync_all(pub, "start")
-    _check(checks, "sync: both checkouts fast-forward from own remotes",
-           res["ok"] and all(r["action"] == "fast-forwarded"
-                             for r in res["repos"]),
-           res["summary"])
+    _check(
+        checks,
+        "sync: both checkouts fast-forward from own remotes",
+        res["ok"] and all(r["action"] == "fast-forwarded" for r in res["repos"]),
+        res["summary"],
+    )
 
     # 9. a shared remote URL refuses both checkouts (private/public crossing).
     d = base / "shared"
@@ -4689,12 +5642,19 @@ def _self_test_checks():
     remote, pub = _init_remote(d, "w")
     nested = pub / BOARD_REL
     nested.parent.mkdir(parents=True, exist_ok=True)
-    subprocess.run([git_binary(), "clone", "-q", str(remote), str(nested)],
-                   check=True, capture_output=True, text=True)
+    subprocess.run(
+        [git_binary(), "clone", "-q", str(remote), str(nested)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
     res = sync_all(pub, "start")
-    _check(checks, "sync: shared remote URL refuses both checkouts",
-           (not res["ok"]) and "share a Git push/fetch destination" in res["summary"],
-           res["summary"])
+    _check(
+        checks,
+        "sync: shared remote URL refuses both checkouts",
+        (not res["ok"]) and "share a Git push/fetch destination" in res["summary"],
+        res["summary"],
+    )
 
     # 9b. a private pushurl aimed at the public remote is refused.
     d = base / "pushurl"
@@ -4703,14 +5663,20 @@ def _self_test_checks():
     nested = pub / BOARD_REL
     nested.parent.mkdir(parents=True, exist_ok=True)
     private_remote, _ = _init_remote(d, "priv")
-    subprocess.run([git_binary(), "clone", "-q", str(private_remote), str(nested)],
-                   check=True, capture_output=True, text=True)
+    subprocess.run(
+        [git_binary(), "clone", "-q", str(private_remote), str(nested)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
     git(nested, "remote", "set-url", "--push", "origin", str(public_remote))
     res = sync_all(pub, "start")
-    _check(checks, "sync: public pushurl boundary refuses both checkouts",
-           (not res["ok"])
-           and "share a Git push/fetch destination" in res["summary"],
-           res["summary"])
+    _check(
+        checks,
+        "sync: public pushurl boundary refuses both checkouts",
+        (not res["ok"]) and "share a Git push/fetch destination" in res["summary"],
+        res["summary"],
+    )
 
     # 10. a fresh start commits and pushes only the private repo's runs/
     # leftovers, then the private tree is clean.
@@ -4720,8 +5686,12 @@ def _self_test_checks():
     nested = pub / BOARD_REL
     nested.parent.mkdir(parents=True, exist_ok=True)
     priv_remote, _ = _init_remote(d, "priv")
-    subprocess.run([git_binary(), "clone", "-q", str(priv_remote), str(nested)],
-                   check=True, capture_output=True, text=True)
+    subprocess.run(
+        [git_binary(), "clone", "-q", str(priv_remote), str(nested)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
     git(nested, "config", "user.email", "sync-test@example.com")
     git(nested, "config", "user.name", "sync test")
     (nested / "runs").mkdir()
@@ -4731,11 +5701,15 @@ def _self_test_checks():
     git(nested, "push", "-q", "origin", "main")
     (nested / "runs" / "ledger.json").write_text('{"finalize": true}\n')
     res = commit_leftover_run_state(pub, "pipeline: test")
-    _check(checks, "sync: start commits and pushes runs/ leftovers",
-           res["ok"] and not dirty_paths(nested)
-           and git(nested, "rev-parse", "HEAD")[1]
-           == git(nested, "rev-parse", "origin/main")[1],
-           res["summary"])
+    _check(
+        checks,
+        "sync: start commits and pushes runs/ leftovers",
+        res["ok"]
+        and not dirty_paths(nested)
+        and git(nested, "rev-parse", "HEAD")[1]
+        == git(nested, "rev-parse", "origin/main")[1],
+        res["summary"],
+    )
 
     # 10b. a dirty file outside runs/ blocks the start cleanup so a
     # half-finished edit is never auto-published.
@@ -4745,13 +5719,20 @@ def _self_test_checks():
     nested = pub / BOARD_REL
     nested.parent.mkdir(parents=True, exist_ok=True)
     priv_remote, _ = _init_remote(d, "priv")
-    subprocess.run([git_binary(), "clone", "-q", str(priv_remote), str(nested)],
-                   check=True, capture_output=True, text=True)
+    subprocess.run(
+        [git_binary(), "clone", "-q", str(priv_remote), str(nested)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
     (nested / "priv.txt").write_text("human edit\n")
     res = commit_leftover_run_state(pub, "pipeline: test")
-    _check(checks, "sync: start refuses dirty files outside runs/",
-           (not res["ok"]) and "outside runs/" in res["summary"],
-           res["summary"])
+    _check(
+        checks,
+        "sync: start refuses dirty files outside runs/",
+        (not res["ok"]) and "outside runs/" in res["summary"],
+        res["summary"],
+    )
 
     # 11. Phase-scoped cleanup publishes only the requested run directory.
     d = base / "runstate-phase"
@@ -4760,8 +5741,12 @@ def _self_test_checks():
     nested = pub / BOARD_REL
     nested.parent.mkdir(parents=True, exist_ok=True)
     priv_remote, _ = _init_remote(d, "priv")
-    subprocess.run([git_binary(), "clone", "-q", str(priv_remote), str(nested)],
-                   check=True, capture_output=True, text=True)
+    subprocess.run(
+        [git_binary(), "clone", "-q", str(priv_remote), str(nested)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
     git(nested, "config", "user.email", "sync-test@example.com")
     git(nested, "config", "user.name", "sync test")
     for number in (100440, 100601):
@@ -4771,15 +5756,26 @@ def _self_test_checks():
     git(nested, "add", "runs")
     git(nested, "commit", "-q", "-m", "run dirs")
     git(nested, "push", "-q", "origin", "main")
-    (nested / "runs" / "phase-100440" / "run.json").write_text('{"state": "completed"}\n')
+    (nested / "runs" / "phase-100440" / "run.json").write_text(
+        '{"state": "completed"}\n'
+    )
     (nested / "runs" / "phase-100601" / "run.json").write_text('{"state": "blocked"}\n')
     res = commit_leftover_run_state(pub, "pipeline: phase test", phase=100440)
-    _check(checks, "sync: cleanup is scoped to the current phase",
-           res["ok"]
-           and json.loads((nested / "runs" / "phase-100440" / "run.json").read_text())["state"] == "completed"
-           and json.loads((nested / "runs" / "phase-100601" / "run.json").read_text())["state"] == "blocked"
-           and "runs/phase-100601/run.json" in dirty_paths(nested),
-           res["summary"])
+    _check(
+        checks,
+        "sync: cleanup is scoped to the current phase",
+        res["ok"]
+        and json.loads((nested / "runs" / "phase-100440" / "run.json").read_text())[
+            "state"
+        ]
+        == "completed"
+        and json.loads((nested / "runs" / "phase-100601" / "run.json").read_text())[
+            "state"
+        ]
+        == "blocked"
+        and "runs/phase-100601/run.json" in dirty_paths(nested),
+        res["summary"],
+    )
 
     # 11b. A finished phase's closing run state is committed and pushed by
     # --mode clean, and only that phase's state. This is the defect that halted
@@ -4793,8 +5789,12 @@ def _self_test_checks():
     nested = pub / BOARD_REL
     nested.parent.mkdir(parents=True, exist_ok=True)
     priv_remote, _ = _init_remote(d, "priv")
-    subprocess.run([git_binary(), "clone", "-q", str(priv_remote), str(nested)],
-                   check=True, capture_output=True, text=True)
+    subprocess.run(
+        [git_binary(), "clone", "-q", str(priv_remote), str(nested)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
     git(nested, "config", "user.email", "sync-test@example.com")
     git(nested, "config", "user.name", "sync test")
     for number in (100440, 100601):
@@ -4812,17 +5812,19 @@ def _self_test_checks():
     (phase / "finalize-usage-r1.jsonl").write_text('{"ok": true}\n')
     (phase / "resume.json").unlink()
     # Another phase's partial record, which must be left where it is.
-    (nested / "runs" / "phase-100601" / "run.json").write_text(
-        '{"state": "blocked"}\n')
+    (nested / "runs" / "phase-100601" / "run.json").write_text('{"state": "blocked"}\n')
     (pub / "uncommitted-public.txt").write_text("mid-work\n")
     res = mode_clean(pub, 100440)
     dirty_after = dirty_paths(nested)
-    _check(checks, "sync: clean commits a finished phase's closing run state",
-           res["ok"]
-           and not [p for p in dirty_after if p.startswith("runs/phase-100440/")]
-           and "runs/phase-100601/run.json" in dirty_after
-           and json.loads((phase / "run.json").read_text())["state"] == "completed",
-           f"{res['summary']}; dirty={dirty_after}")
+    _check(
+        checks,
+        "sync: clean commits a finished phase's closing run state",
+        res["ok"]
+        and not [p for p in dirty_after if p.startswith("runs/phase-100440/")]
+        and "runs/phase-100601/run.json" in dirty_after
+        and json.loads((phase / "run.json").read_text())["state"] == "completed",
+        f"{res['summary']}; dirty={dirty_after}",
+    )
 
     # 11c. With no --phase, --mode clean is the fresh-start sweep: every phase's
     # leftover run state is landed, each scoped to its own directory, so a phase
@@ -4830,31 +5832,46 @@ def _self_test_checks():
     # phase's publish. The public checkout is mid-work and must stay untouched.
     res = mode_clean(pub)
     dirty_after_all = dirty_paths(nested)
-    _check(checks, "sync: clean with no phase lands every phase's leftover run state",
-           res["ok"]
-           and not [p for p in dirty_after_all
-                    if p.startswith("runs/phase-100440/")
-                    or p.startswith("runs/phase-100601/")]
-           and "uncommitted-public.txt" in dirty_paths(pub),
-           f"{res['summary']}; dirty={dirty_after_all}")
+    _check(
+        checks,
+        "sync: clean with no phase lands every phase's leftover run state",
+        res["ok"]
+        and not [
+            p
+            for p in dirty_after_all
+            if p.startswith("runs/phase-100440/") or p.startswith("runs/phase-100601/")
+        ]
+        and "uncommitted-public.txt" in dirty_paths(pub),
+        f"{res['summary']}; dirty={dirty_after_all}",
+    )
 
-    _check(checks, "publish: coordination failure maps to exit 2",
-           result_exit_code({"ok": False, "state": "COORDINATION_UNAVAILABLE"}) == 2
-           and result_exit_code({"ok": False, "state": "FENCED"}) == 1
-           and result_exit_code({"ok": True, "state": "PUBLISHED"}) == 0
-           and result_exit_code({"ok": True, "state": "AWAITING_REVIEW"}) == 0,
-           "state-specific exit codes")
+    _check(
+        checks,
+        "publish: coordination failure maps to exit 2",
+        result_exit_code({"ok": False, "state": "COORDINATION_UNAVAILABLE"}) == 2
+        and result_exit_code({"ok": False, "state": "FENCED"}) == 1
+        and result_exit_code({"ok": True, "state": "PUBLISHED"}) == 0
+        and result_exit_code({"ok": True, "state": "AWAITING_REVIEW"}) == 0,
+        "state-specific exit codes",
+    )
     receipt_ok, receipt_detail = _publication_receipt_check(base)
-    _check(checks, "publish: receipt-backed completion", receipt_ok,
-           receipt_detail)
+    _check(checks, "publish: receipt-backed completion", receipt_ok, receipt_detail)
 
     group_ok, group_detail = _group_publication_check(base)
-    _check(checks, "group: one branch, one pull request, one receipt per member",
-           group_ok, group_detail)
+    _check(
+        checks,
+        "group: one branch, one pull request, one receipt per member",
+        group_ok,
+        group_detail,
+    )
 
     race_ok, race_detail = _publish_while_writing_check(base)
-    _check(checks, "publish: succeeds first try with the engine writing the marker",
-           race_ok, race_detail)
+    _check(
+        checks,
+        "publish: succeeds first try with the engine writing the marker",
+        race_ok,
+        race_detail,
+    )
     for name, ok, detail in _publish_still_refuses_check(base):
         _check(checks, f"publish: {name}", ok, detail)
     for name, ok, detail in _phase_branch_name_checks(base):
@@ -4905,23 +5922,26 @@ def _handoff_checks(base):
     branch = "feature/group-cache-warm"
     made = ensure_phase_branch(pub, branch)
     if not made.get("ok"):
-        return [("the handoff fixture could not cut a phase branch", False,
-                 str(made))]
+        return [("the handoff fixture could not cut a phase branch", False, str(made))]
     (pub / "unfinished.txt").write_text("half a phase\n", encoding="utf-8")
     pushed = mode_checkpoint(pub)
     head = git(pub, "rev-parse", "HEAD")[1]
     remote_head = git(pub, "rev-parse", f"origin/{branch}")[1]
     return [
-        ("the integration branch is refused",
-         not on_integration.get("ok")
-         and "work in progress" in json.dumps(on_integration),
-         f"state={on_integration.get('state')} "
-         f"{on_integration.get('summary')}"),
-        ("work in progress is committed and pushed on the phase branch",
-         pushed.get("ok") and pushed.get("action") == "committed-and-pushed"
-         and remote_head == head,
-         f"ok={pushed.get('ok')} action={pushed.get('action')} "
-         f"remote={remote_head[:8]} head={head[:8]}"),
+        (
+            "the integration branch is refused",
+            not on_integration.get("ok")
+            and "work in progress" in json.dumps(on_integration),
+            f"state={on_integration.get('state')} {on_integration.get('summary')}",
+        ),
+        (
+            "work in progress is committed and pushed on the phase branch",
+            pushed.get("ok")
+            and pushed.get("action") == "committed-and-pushed"
+            and remote_head == head,
+            f"ok={pushed.get('ok')} action={pushed.get('action')} "
+            f"remote={remote_head[:8]} head={head[:8]}",
+        ),
     ]
 
 
@@ -4931,7 +5951,9 @@ def _write_group_phases(roadmap, members, behaviour):
     for number in members:
         (roadmap / f"phase-{number:06d}-{behaviour}.md").write_text(
             f"# {number}. Group member\n\n- [ ] Work to do.\n\n"
-            f"### Reservation Group\n\n{declaration}\n", encoding="utf-8")
+            f"### Reservation Group\n\n{declaration}\n",
+            encoding="utf-8",
+        )
 
 
 def _group_branch_collision_checks(base):
@@ -4952,10 +5974,13 @@ def _group_branch_collision_checks(base):
     _configure_self_test(pub, pub / BOARD_REL, roadmap=roadmap)
     branch = group_branch(pub, mine)
     same = assert_group_branch_unique(pub, branch, mine)
-    results.append((
-        "a group is not its own collision, and its branch comes from its lowest member",
-        same.get("ok") and branch == "feature/group-cache-warm",
-        f"ok={same.get('ok')} branch={branch} {same.get('summary')}"))
+    results.append(
+        (
+            "a group is not its own collision, and its branch comes from its lowest member",
+            same.get("ok") and branch == "feature/group-cache-warm",
+            f"ok={same.get('ok')} branch={branch} {same.get('summary')}",
+        )
+    )
 
     d = base / "group-name-clash"
     d.mkdir()
@@ -4966,18 +5991,24 @@ def _group_branch_collision_checks(base):
     _write_group_phases(roadmap, (100040, 100041), "cache-warm")
     _configure_self_test(pub, pub / BOARD_REL, roadmap=roadmap)
     clash = assert_group_branch_unique(pub, branch, ["100040", "100041"])
-    results.append((
-        "two groups deriving one branch are refused",
-        not clash.get("ok") and "also the branch for group" in json.dumps(clash),
-        f"{clash.get('summary')} {json.dumps(clash)}"))
+    results.append(
+        (
+            "two groups deriving one branch are refused",
+            not clash.get("ok") and "also the branch for group" in json.dumps(clash),
+            f"{clash.get('summary')} {json.dumps(clash)}",
+        )
+    )
     return results
 
 
 def self_test():
     checks = self_test_checks()
     ok = all(c["ok"] for c in checks)
-    print(json.dumps({"sync_self_test": "pass" if ok else "fail",
-                      "checks": checks}, indent=2))
+    print(
+        json.dumps(
+            {"sync_self_test": "pass" if ok else "fail", "checks": checks}, indent=2
+        )
+    )
     return 0 if ok else 1
 
 
@@ -5010,21 +6041,33 @@ def mode_branch(root, phase, roadmap, roadmap_dir=None, group=None):
     # only thing separating two phases' branches. A duplicate is refused here,
     # before either checkout is touched.
     unique = assert_phase_branch_unique(
-        root, phase, roadmap, roadmap_dir,
-        branch=group_branch(root, group, roadmap_dir) if group else None)
+        root,
+        phase,
+        roadmap,
+        roadmap_dir,
+        branch=group_branch(root, group, roadmap_dir) if group else None,
+    )
     if not unique["ok"]:
-        return {"ok": False, "mode": "branch",
-                "branch": unique["branch"], "repos": [unique],
-                "summary": summarize([unique], "branch")}
+        return {
+            "ok": False,
+            "mode": "branch",
+            "branch": unique["branch"],
+            "repos": [unique],
+            "summary": summarize([unique], "branch"),
+        }
     branch = unique["branch"]
     if group:
         # A group branch comes from the group's lowest member, so two groups can
         # derive one name even when no phase branch collides with it.
         shared = assert_group_branch_unique(root, branch, group, roadmap_dir)
         if not shared["ok"]:
-            return {"ok": False, "mode": "branch", "branch": branch,
-                    "repos": [unique, shared],
-                    "summary": summarize([shared], "branch")}
+            return {
+                "ok": False,
+                "mode": "branch",
+                "branch": branch,
+                "repos": [unique, shared],
+                "summary": summarize([shared], "branch"),
+            }
     # The base is the open predecessor's branch when there is one. Without this
     # the phase starts from the integration branch, which does not contain the
     # previous phase's code, and the phase fails on a symbol that is not there.
@@ -5043,11 +6086,16 @@ def mode_branch(root, phase, roadmap, roadmap_dir=None, group=None):
         predecessor = None
     base = None
     if predecessor:
-        rc, _, _ = git(root, "rev-parse", "--verify",
-                       f"refs/heads/{predecessor['branch']}")
+        rc, _, _ = git(
+            root, "rev-parse", "--verify", f"refs/heads/{predecessor['branch']}"
+        )
         if rc != 0:
-            rc, _, _ = git(root, "rev-parse", "--verify",
-                           f"refs/remotes/origin/{predecessor['branch']}")
+            rc, _, _ = git(
+                root,
+                "rev-parse",
+                "--verify",
+                f"refs/remotes/origin/{predecessor['branch']}",
+            )
         if rc != 0:
             # The branch is gone and this phase is still treated as open, so
             # there is no tree to build on and no proof the work landed. Naming
@@ -5055,41 +6103,61 @@ def mode_branch(root, phase, roadmap, roadmap_dir=None, group=None):
             # this is the refusal the line retried silently for two days, and
             # the line an operator reads has to say what to do about it.
             landed = phase_work_on_integration(root, predecessor["phase"])
-            reason = (f"predecessor phase {predecessor['phase']:06d} names base "
-                      f"{predecessor['branch']!r}, which does not exist in this "
-                      f"checkout, and nothing confirms its pull request "
-                      f"{predecessor.get('pull_request') or '(none recorded)'} "
-                      f"was merged")
+            reason = (
+                f"predecessor phase {predecessor['phase']:06d} names base "
+                f"{predecessor['branch']!r}, which does not exist in this "
+                f"checkout, and nothing confirms its pull request "
+                f"{predecessor.get('pull_request') or '(none recorded)'} "
+                f"was merged"
+            )
             if landed.get("github", {}).get("state") == "unknown":
-                reason += (f" (GitHub could not be asked: "
-                           f"{landed['github'].get('detail')}). A squash merge "
-                           f"of several commits leaves no local trace, so the "
-                           f"commit, content and patch tests cannot confirm it; "
-                           f"restore gh and rerun")
+                reason += (
+                    f" (GitHub could not be asked: "
+                    f"{landed['github'].get('detail')}). A squash merge "
+                    f"of several commits leaves no local trace, so the "
+                    f"commit, content and patch tests cannot confirm it; "
+                    f"restore gh and rerun"
+                )
             else:
-                reason += (" (its branch was deleted and no local proof of the "
-                           "merge remains: restore the branch, or let the merge "
-                           "check record the merge, then rerun)")
+                reason += (
+                    " (its branch was deleted and no local proof of the "
+                    "merge remains: restore the branch, or let the merge "
+                    "check record the merge, then rerun)"
+                )
             refusal = blocked(
-                {"repo": str(root), "branch": branch,
-                 "base": predecessor["branch"],
-                 "predecessor_phase": f"{int(predecessor['phase']):06d}",
-                 "pull_request": predecessor.get("pull_request"),
-                 "landed": landed},
+                {
+                    "repo": str(root),
+                    "branch": branch,
+                    "base": predecessor["branch"],
+                    "predecessor_phase": f"{int(predecessor['phase']):06d}",
+                    "pull_request": predecessor.get("pull_request"),
+                    "landed": landed,
+                },
                 reason,
                 hint="the phase branch is missing or was deleted; restore it, "
-                     "or let the merge check confirm the pull request, then rerun")
-            return {"ok": False, "mode": "branch", "branch": branch,
-                    "base": predecessor["branch"],
-                    "predecessor": predecessor, "repos": [refusal],
-                    "summary": summarize([refusal], "branch")}
+                "or let the merge check confirm the pull request, then rerun",
+            )
+            return {
+                "ok": False,
+                "mode": "branch",
+                "branch": branch,
+                "base": predecessor["branch"],
+                "predecessor": predecessor,
+                "repos": [refusal],
+                "summary": summarize([refusal], "branch"),
+            }
         base = predecessor["branch"]
     made = branch_phase_checkouts(root, branch, base=base)
     ok = all(m["ok"] for m in made)
-    out = {"ok": ok, "mode": "branch", "branch": branch,
-           "base": base or integration_branch(root),
-           "predecessor": predecessor,
-           "repos": made, "summary": summarize(made, "branch")}
+    out = {
+        "ok": ok,
+        "mode": "branch",
+        "branch": branch,
+        "base": base or integration_branch(root),
+        "predecessor": predecessor,
+        "repos": made,
+        "summary": summarize(made, "branch"),
+    }
     if ok and predecessor:
         # Did the predecessor move since this phase was built on it? The
         # existence check above cannot see that: a force-pushed branch still
@@ -5099,12 +6167,16 @@ def mode_branch(root, phase, roadmap, roadmap_dir=None, group=None):
         # than one phase is open at once, and refusing to launch would put the
         # line behind a human for something it can describe precisely.
         if out["base"] == predecessor["branch"]:
-            rc_h, head_now, _ = git(root, "rev-parse", "--verify",
-                                    f"refs/heads/{predecessor['branch']}")
+            rc_h, head_now, _ = git(
+                root, "rev-parse", "--verify", f"refs/heads/{predecessor['branch']}"
+            )
             if rc_h != 0:
                 rc_h, head_now, _ = git(
-                    root, "rev-parse", "--verify",
-                    f"refs/remotes/origin/{predecessor['branch']}")
+                    root,
+                    "rev-parse",
+                    "--verify",
+                    f"refs/remotes/origin/{predecessor['branch']}",
+                )
             recorded = predecessor.get("head")
             if rc_h == 0 and recorded and head_now != recorded:
                 out["predecessor_moved"] = {
@@ -5120,7 +6192,8 @@ def mode_branch(root, phase, roadmap, roadmap_dir=None, group=None):
                     "still contains the commits it was built from, but a "
                     "force-pushed predecessor means this pull request will show "
                     "changes that no longer match what the predecessor "
-                    "published")
+                    "published"
+                )
     return out
 
 
@@ -5141,35 +6214,54 @@ def mode_published(root, phase):
     root = Path(root).resolve()
     marked = mark_phase_published(root, phase)
     if not marked["ok"]:
-        return {"ok": False, "mode": "published", "state": "BLOCKED",
-                "repos": [marked], "summary": summarize([marked], "published")}
+        return {
+            "ok": False,
+            "mode": "published",
+            "state": "BLOCKED",
+            "repos": [marked],
+            "summary": summarize([marked], "published"),
+        }
     repos = [marked]
     # A member of a group does not take the checkout with it. One branch and one
     # pull request cover the whole group, so the members that have not run yet
     # still need that branch; moving the checkout to the integration branch here
     # would take it out from under the next member's launch.
     receipt = phase_receipt(root, phase)
-    members = list(receipt.get("group") or []) \
-        if isinstance(receipt, dict) else []
+    members = list(receipt.get("group") or []) if isinstance(receipt, dict) else []
     if members and not _group_all_published(root, members):
         pending = [m for m in members if not _member_published(root, m)]
-        repos.append({"repo": str(root), "ok": True,
-                      "action": "group-still-open", "group": members,
-                      "pending": pending,
-                      "hint": f"{len(pending)} member(s) of this reservation "
-                              "group are not published; the checkout stays on "
-                              "the group branch"})
-        return {"ok": True, "mode": "published",
-                "state": "PUBLISHED-GROUP-PENDING", "repos": repos,
-                "summary": summarize(repos, "published")}
+        repos.append(
+            {
+                "repo": str(root),
+                "ok": True,
+                "action": "group-still-open",
+                "group": members,
+                "pending": pending,
+                "hint": f"{len(pending)} member(s) of this reservation "
+                "group are not published; the checkout stays on "
+                "the group branch",
+            }
+        )
+        return {
+            "ok": True,
+            "mode": "published",
+            "state": "PUBLISHED-GROUP-PENDING",
+            "repos": repos,
+            "summary": summarize(repos, "published"),
+        }
     repos.append(return_to_integration(root))
     # The private checkout stays on the integration branch by design, so only
     # the public one can drift. A stop there is still a stop: report it rather
     # than claiming the phase is tidied when the checkout is not.
     ok = all(r["ok"] for r in repos)
     state = "PUBLISHED" if ok else "PUBLISHED-TIDY-PENDING"
-    return {"ok": ok, "mode": "published", "state": state,
-            "repos": repos, "summary": summarize(repos, "published")}
+    return {
+        "ok": ok,
+        "mode": "published",
+        "state": state,
+        "repos": repos,
+        "summary": summarize(repos, "published"),
+    }
 
 
 def mode_resync(root):
@@ -5179,12 +6271,15 @@ def mode_resync(root):
     # one is always on the integration branch and reports itself as a no-op,
     # which is named rather than dropped so the two stay distinguishable in the
     # run record.
-    targets = [root] + ([board_repo(root)]
-                        if is_git_repo(board_repo(root)) else [])
+    targets = [root] + ([board_repo(root)] if is_git_repo(board_repo(root)) else [])
     repos = [resync_integration(r) for r in targets]
     ok = all(r["ok"] for r in repos)
-    return {"ok": ok, "mode": "resync", "repos": repos,
-            "summary": summarize(repos, "resync")}
+    return {
+        "ok": ok,
+        "mode": "resync",
+        "repos": repos,
+        "summary": summarize(repos, "resync"),
+    }
 
 
 def mode_tidy(root):
@@ -5195,8 +6290,12 @@ def mode_tidy(root):
     if is_git_repo(nested):
         repos.append(tidy_published_checkout(nested))
     ok = all(r["ok"] for r in repos)
-    return {"ok": ok, "mode": "tidy", "repos": repos,
-            "summary": summarize(repos, "tidy")}
+    return {
+        "ok": ok,
+        "mode": "tidy",
+        "repos": repos,
+        "summary": summarize(repos, "tidy"),
+    }
 
 
 def _run_phase_numbers(root):
@@ -5238,8 +6337,13 @@ def mode_clean(root, phase=None):
     root = Path(root).resolve()
     private = board_repo(root)
     if not is_git_repo(private):
-        return {"ok": True, "mode": "clean", "repos": [], "pathspec": "runs",
-                "summary": f"clean sync ok: no private checkout at {private}"}
+        return {
+            "ok": True,
+            "mode": "clean",
+            "repos": [],
+            "pathspec": "runs",
+            "summary": f"clean sync ok: no private checkout at {private}",
+        }
     if phase is None:
         # Only phases with leftover dirt are committed. A phase already clean
         # would make `git commit` report "no changes added to commit" while a
@@ -5260,20 +6364,40 @@ def mode_clean(root, phase=None):
             if any(p == pathspec or p.startswith(prefix) for p in dirty):
                 numbers.append(number)
         if not numbers:
-            return {"ok": True, "mode": "clean", "repos": [], "pathspec": "runs",
-                    "summary": "clean sync ok: no leftover run state"}
-        results = [_commit_and_push_run_state(
-            private, f"runs: close out phase {number:06d} run state",
-            pathspec=_phase_run_pathspec(number, root)) for number in numbers]
+            return {
+                "ok": True,
+                "mode": "clean",
+                "repos": [],
+                "pathspec": "runs",
+                "summary": "clean sync ok: no leftover run state",
+            }
+        results = [
+            _commit_and_push_run_state(
+                private,
+                f"runs: close out phase {number:06d} run state",
+                pathspec=_phase_run_pathspec(number, root),
+            )
+            for number in numbers
+        ]
         ok = all(res.get("ok") for res in results)
-        return {"ok": ok, "mode": "clean", "repos": results, "pathspec": "runs",
-                "summary": summarize(results, "clean")}
+        return {
+            "ok": ok,
+            "mode": "clean",
+            "repos": results,
+            "pathspec": "runs",
+            "summary": summarize(results, "clean"),
+        }
     pathspec = _phase_run_pathspec(phase, root)
     res = _commit_and_push_run_state(
-        private, f"runs: close out phase {int(phase):06d} run state",
-        pathspec=pathspec)
-    return {"ok": bool(res.get("ok")), "mode": "clean", "repos": [res],
-            "pathspec": pathspec, "summary": summarize([res], "clean")}
+        private, f"runs: close out phase {int(phase):06d} run state", pathspec=pathspec
+    )
+    return {
+        "ok": bool(res.get("ok")),
+        "mode": "clean",
+        "repos": [res],
+        "pathspec": pathspec,
+        "summary": summarize([res], "clean"),
+    }
 
 
 def mode_checkpoint(root):
@@ -5292,20 +6416,24 @@ def mode_checkpoint(root):
     root = Path(root).resolve()
     info = {"repo": str(root)}
     if not is_git_repo(root):
-        return dict(info, ok=True, action="checkpoint-skipped",
-                    hint="not a git working tree")
+        return dict(
+            info, ok=True, action="checkpoint-skipped", hint="not a git working tree"
+        )
     branch, remote, _remote_branch, why = resolve_upstream(root)
     if why:
         return blocked(info, why)
     if branch == integration_branch(root):
-        return blocked(info, f"refusing to push work in progress on {branch!r}",
-                       hint="a handoff is the phase branch, not the integration "
-                            "branch")
+        return blocked(
+            info,
+            f"refusing to push work in progress on {branch!r}",
+            hint="a handoff is the phase branch, not the integration branch",
+        )
     rc, out, err = git(root, "add", "-A")
     if rc != 0:
         return blocked(info, f"could not stage the checkout: {err or out}")
-    rc, out, err = git(root, "commit", "-q", "-m",
-                       f"checkpoint: work in progress on {branch}")
+    rc, out, err = git(
+        root, "commit", "-q", "-m", f"checkpoint: work in progress on {branch}"
+    )
     action = "committed-and-pushed"
     if rc != 0:
         combined = err or out
@@ -5322,52 +6450,81 @@ def mode_checkpoint(root):
 
 def main():
     ap = argparse.ArgumentParser(description="Fail-closed git sync.")
-    ap.add_argument("--root", "--repo-root", dest="config_repo_root",
-                    help="repo root; syncs it and the configured private checkout")
+    ap.add_argument(
+        "--root",
+        "--repo-root",
+        dest="config_repo_root",
+        help="repo root; syncs it and the configured private checkout",
+    )
     ap.add_argument("--config")
     ap.add_argument("--driver", dest="config_driver")
     ap.add_argument("--roadmap-dir", dest="config_roadmap_dir")
     ap.add_argument("--phase-glob", dest="config_phase_glob", action="append")
-    ap.add_argument("--repo", default=None,
-                    help="sync one checkout instead of --root")
-    ap.add_argument("--mode",
-                    choices=["start", "push", "publish", "branch", "published",
-                             "resync", "tidy", "clean", "checkpoint"],
-                    default="start",
-                    help="start: sync before a phase; push: verify a "
-                         "fast-forward; publish: claim-check and push a phase's "
-                         "branch; branch: put the public checkout on the phase "
-                         "branch; published: confirm a human merged the pull "
-                         "request, mark the phase published, and return the "
-                         "public checkout to the integration branch; resync: "
-                         "merge the integration branch into the phase branch, "
-                         "leaving a conflict for the agent to finish; tidy: "
-                         "return a checkout to the integration branch when the "
-                         "phase it is on is already recorded as published; "
-                         "clean: commit and push leftover private run state, "
-                         "for one --phase or for every phase when it is omitted; "
-                         "checkpoint: commit and push a checkout's work in "
-                         "progress on the branch it is on, for a release handoff")
-    ap.add_argument("--phase", default=None,
-                    help="phase number for --mode publish or --mode clean")
-    ap.add_argument("--reservation-file", default=None,
-                    help="phase-local reservation.json for --mode publish")
+    ap.add_argument("--repo", default=None, help="sync one checkout instead of --root")
+    ap.add_argument(
+        "--mode",
+        choices=[
+            "start",
+            "push",
+            "publish",
+            "branch",
+            "published",
+            "resync",
+            "tidy",
+            "clean",
+            "checkpoint",
+        ],
+        default="start",
+        help="start: sync before a phase; push: verify a "
+        "fast-forward; publish: claim-check and push a phase's "
+        "branch; branch: put the public checkout on the phase "
+        "branch; published: confirm a human merged the pull "
+        "request, mark the phase published, and return the "
+        "public checkout to the integration branch; resync: "
+        "merge the integration branch into the phase branch, "
+        "leaving a conflict for the agent to finish; tidy: "
+        "return a checkout to the integration branch when the "
+        "phase it is on is already recorded as published; "
+        "clean: commit and push leftover private run state, "
+        "for one --phase or for every phase when it is omitted; "
+        "checkpoint: commit and push a checkout's work in "
+        "progress on the branch it is on, for a release handoff",
+    )
+    ap.add_argument(
+        "--phase", default=None, help="phase number for --mode publish or --mode clean"
+    )
+    ap.add_argument(
+        "--reservation-file",
+        default=None,
+        help="phase-local reservation.json for --mode publish",
+    )
     ap.add_argument("--machine-id", default=None)
     ap.add_argument("--reservation-id", default=None)
     ap.add_argument("--generation", type=int, default=None)
-    ap.add_argument("--self-test", action="store_true",
-                    help="run stubbed-remote checks and exit")
-    ap.add_argument("--roadmap", default=None,
-                    help="phase roadmap file name, for --mode branch")
-    ap.add_argument("--group", action="append", default=None,
-                    help="a member of the reservation group this branch covers, "
-                         "for --mode branch; repeat once per member")
-    ap.add_argument("--branch", default=None,
-                    help="the branch the public checkout must be on, for the "
-                         "start and push modes")
-    ap.add_argument("--pull-request", default=None,
-                    help="pull request URL finalize opened, recorded in the "
-                         "receipt for --mode publish")
+    ap.add_argument(
+        "--self-test", action="store_true", help="run stubbed-remote checks and exit"
+    )
+    ap.add_argument(
+        "--roadmap", default=None, help="phase roadmap file name, for --mode branch"
+    )
+    ap.add_argument(
+        "--group",
+        action="append",
+        default=None,
+        help="a member of the reservation group this branch covers, "
+        "for --mode branch; repeat once per member",
+    )
+    ap.add_argument(
+        "--branch",
+        default=None,
+        help="the branch the public checkout must be on, for the start and push modes",
+    )
+    ap.add_argument(
+        "--pull-request",
+        default=None,
+        help="pull request URL finalize opened, recorded in the "
+        "receipt for --mode publish",
+    )
     args = ap.parse_args()
     if args.self_test:
         return self_test()
@@ -5377,20 +6534,27 @@ def main():
         if args.mode == "branch":
             if args.phase is None or not args.roadmap:
                 raise ConfigError(
-                    "--phase and --roadmap are required with --mode branch")
-            out = mode_branch(args.root, args.phase, args.roadmap,
-                              conventions.setting("roadmap-dir"),
-                              group=args.group)
+                    "--phase and --roadmap are required with --mode branch"
+                )
+            out = mode_branch(
+                args.root,
+                args.phase,
+                args.roadmap,
+                conventions.setting("roadmap-dir"),
+                group=args.group,
+            )
         elif args.mode == "publish":
             if args.phase is None:
                 raise ConfigError("--phase is required with --mode publish")
             out = publish_phase(
-                Path(args.root).resolve(), args.phase,
+                Path(args.root).resolve(),
+                args.phase,
                 reservation_file=args.reservation_file,
                 machine_id=args.machine_id,
                 reservation_id=args.reservation_id,
                 generation=args.generation,
-                pull_request=args.pull_request)
+                pull_request=args.pull_request,
+            )
         elif args.mode == "published":
             if args.phase is None:
                 raise ConfigError("--phase is required with --mode published")
@@ -5404,16 +6568,27 @@ def main():
         elif args.mode == "checkpoint":
             out = mode_checkpoint(args.root)
         elif args.repo:
-            res = sync_one(Path(args.repo).resolve(), args.mode,
-                           branch=args.branch)
-            out = {"ok": res["ok"], "mode": args.mode, "repos": [res],
-                   "summary": summarize([res], args.mode)}
+            res = sync_one(Path(args.repo).resolve(), args.mode, branch=args.branch)
+            out = {
+                "ok": res["ok"],
+                "mode": args.mode,
+                "repos": [res],
+                "summary": summarize([res], args.mode),
+            }
         else:
-            out = sync_all(Path(args.root).resolve(), args.mode,
-                           branch=args.branch)
+            out = sync_all(Path(args.root).resolve(), args.mode, branch=args.branch)
     except (ArgusConfigError, ConfigError, ValueError) as e:
-        print(json.dumps({"ok": False, "mode": args.mode,
-                          "state": "config_error", "error": str(e)}, indent=2))
+        print(
+            json.dumps(
+                {
+                    "ok": False,
+                    "mode": args.mode,
+                    "state": "config_error",
+                    "error": str(e),
+                },
+                indent=2,
+            )
+        )
         return 2
     print(json.dumps(out, indent=2))
     return result_exit_code(out)

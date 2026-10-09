@@ -95,18 +95,24 @@ def _held_group(store, key, remainder, machine_id):
         return None
     records = state.get("phases", {})
     mine = records.get(key) or {}
-    if (mine.get("machine_id") != machine_id
-            or mine.get("status") not in ACTIVE_STATUSES):
+    if (
+        mine.get("machine_id") != machine_id
+        or mine.get("status") not in ACTIVE_STATUSES
+    ):
         return None
     reservation_id = mine.get("reservation_id")
     if not reservation_id:
         return None
-    if any((records.get(member) or {}).get("reservation_id") != reservation_id
-           for member in remainder):
+    if any(
+        (records.get(member) or {}).get("reservation_id") != reservation_id
+        for member in remainder
+    ):
         return None
-    return {"reservation_id": reservation_id,
-            "generation": mine.get("generation"),
-            "status": mine.get("status")}
+    return {
+        "reservation_id": reservation_id,
+        "generation": mine.get("generation"),
+        "status": mine.get("status"),
+    }
 
 
 def _request(repo, roadmap, phase, machine_id, *, store=None):
@@ -148,11 +154,11 @@ def _request(repo, roadmap, phase, machine_id, *, store=None):
         records = store.reserve_group(remainder, machine_id, **(held or {}))
         for record in records:
             try:
-                save_reservation_file(
-                    reservation_file(repo, record["phase"]), record)
+                save_reservation_file(reservation_file(repo, record["phase"]), record)
             except OSError as exc:
                 raise CoordinationError(
-                    f"could not persist phase reservation token: {exc}") from exc
+                    f"could not persist phase reservation token: {exc}"
+                ) from exc
     except ReservationCooldown as exc:
         return {
             "state": "COOLDOWN",
@@ -190,14 +196,19 @@ def _held_token(repo, phase, args):
     token = load_reservation_file(reservation_file(repo, key)) or {}
     machine_id = args.machine_id or token.get("machine_id")
     reservation_id = args.reservation_id or token.get("reservation_id")
-    generation = (args.generation if args.generation is not None
-                  else token.get("generation"))
+    generation = (
+        args.generation if args.generation is not None else token.get("generation")
+    )
     if not machine_id or not reservation_id or generation is None:
         raise CoordinationError(
             f"phase {key} has no reservation token; pass --machine-id, "
-            "--reservation-id and --generation, or request the group first")
-    return {"machine_id": machine_id, "reservation_id": reservation_id,
-            "generation": generation}
+            "--reservation-id and --generation, or request the group first"
+        )
+    return {
+        "machine_id": machine_id,
+        "reservation_id": reservation_id,
+        "generation": generation,
+    }
 
 
 def _release(repo, phase, args, *, store=None):
@@ -208,13 +219,18 @@ def _release(repo, phase, args, *, store=None):
         reservation = _held_token(repo, key, args)
         released = store.release_group(reservation)
     except ReservationFenced as exc:
-        return {"state": "FENCED", "phase": key, "error": str(exc)}, \
-            REQUEST_EXIT["FENCED"]
+        return {"state": "FENCED", "phase": key, "error": str(exc)}, REQUEST_EXIT[
+            "FENCED"
+        ]
     except CoordinationError as exc:
-        return {"state": "COORDINATION_UNAVAILABLE", "phase": key,
-                "error": str(exc)}, REQUEST_EXIT["COORDINATION_UNAVAILABLE"]
-    return {"state": "RELEASED", "phase": key, "released": released}, \
-        REQUEST_EXIT["RELEASED"]
+        return {
+            "state": "COORDINATION_UNAVAILABLE",
+            "phase": key,
+            "error": str(exc),
+        }, REQUEST_EXIT["COORDINATION_UNAVAILABLE"]
+    return {"state": "RELEASED", "phase": key, "released": released}, REQUEST_EXIT[
+        "RELEASED"
+    ]
 
 
 def _renew(repo, phase, args, *, store=None):
@@ -225,32 +241,53 @@ def _renew(repo, phase, args, *, store=None):
         reservation = _held_token(repo, key, args)
         records = store.renew_group(reservation, args.status)
     except ReservationFenced as exc:
-        return {"state": "FENCED", "phase": key, "error": str(exc)}, \
-            REQUEST_EXIT["FENCED"]
+        return {"state": "FENCED", "phase": key, "error": str(exc)}, REQUEST_EXIT[
+            "FENCED"
+        ]
     except CoordinationError as exc:
-        return {"state": "COORDINATION_UNAVAILABLE", "phase": key,
-                "error": str(exc)}, REQUEST_EXIT["COORDINATION_UNAVAILABLE"]
-    return {"state": "RENEWED", "phase": key,
-            "members": [record["phase"] for record in records]}, \
-        REQUEST_EXIT["RENEWED"]
+        return {
+            "state": "COORDINATION_UNAVAILABLE",
+            "phase": key,
+            "error": str(exc),
+        }, REQUEST_EXIT["COORDINATION_UNAVAILABLE"]
+    return {
+        "state": "RENEWED",
+        "phase": key,
+        "members": [record["phase"] for record in records],
+    }, REQUEST_EXIT["RENEWED"]
 
 
 def build_parser():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--phase", default=None,
-                        help="one phase in the group to request, release or renew")
-    parser.add_argument("--machine-id", default=None,
-                        help="the requesting agent's machine id")
-    parser.add_argument("--release", action="store_true",
-                        help="give this machine's whole group back")
-    parser.add_argument("--renew", action="store_true",
-                        help="refresh this machine's whole group")
-    parser.add_argument("--status", default=None,
-                        help="the status a renewal sets, for --renew")
-    parser.add_argument("--reservation-id", dest="reservation_id", default=None,
-                        help="the fence to act on when no token is present")
-    parser.add_argument("--generation", type=int, default=None,
-                        help="the fence generation when no token is present")
+    parser.add_argument(
+        "--phase",
+        default=None,
+        help="one phase in the group to request, release or renew",
+    )
+    parser.add_argument(
+        "--machine-id", default=None, help="the requesting agent's machine id"
+    )
+    parser.add_argument(
+        "--release", action="store_true", help="give this machine's whole group back"
+    )
+    parser.add_argument(
+        "--renew", action="store_true", help="refresh this machine's whole group"
+    )
+    parser.add_argument(
+        "--status", default=None, help="the status a renewal sets, for --renew"
+    )
+    parser.add_argument(
+        "--reservation-id",
+        dest="reservation_id",
+        default=None,
+        help="the fence to act on when no token is present",
+    )
+    parser.add_argument(
+        "--generation",
+        type=int,
+        default=None,
+        help="the fence generation when no token is present",
+    )
     parser.add_argument("--repo-root", dest="config_repo_root")
     parser.add_argument("--roadmap-dir", dest="config_roadmap_dir")
     parser.add_argument("--phase-glob", dest="config_phase_glob", action="append")
@@ -267,13 +304,13 @@ def main(argv=None):
         # so `--self-test` still runs the checks the Makefile and the fault
         # harness expect from this file.
         from argus.phase_group_selftest import self_test
+
         return self_test()
     if not args.phase:
         print("phase_group: --phase is required", file=sys.stderr)
         return 2
     if not (args.release or args.renew) and not args.machine_id:
-        print("phase_group: --machine-id is required for a request",
-              file=sys.stderr)
+        print("phase_group: --machine-id is required for a request", file=sys.stderr)
         return 2
     try:
         phase = f"{int(args.phase):06d}"

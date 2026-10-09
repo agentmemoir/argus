@@ -46,6 +46,7 @@ claims nothing. It is the seam the group request program will use.
 including the fail-closed paths, and needs neither the network nor a real
 board.
 """
+
 import argparse
 import io
 import json
@@ -59,6 +60,7 @@ if not __package__:
     import _bootstrap  # noqa: F401 - register the source package
 from argus import conventions
 from argus.config import ConfigError
+
 # Re-exported rather than moved out from under one caller: the publishing tool's
 # self-test imports publication_receipt_done from this module by name.
 from argus.phase_reservations import (  # noqa: E402 - path set just above
@@ -120,7 +122,8 @@ def _self_test_configuration():
         (repo / "roadmap").mkdir()
         (repo / "roadmap" / "index.md").write_text("Plan ready\n")
         (repo / "roadmap" / "phase-100440-first.md").write_text(
-            "- [ ] Required approval is obtained.\n")
+            "- [ ] Required approval is obtained.\n"
+        )
 
         # Unconfigured is the roadmap source reading the derived folder, which
         # is what the source returns when the caller gives it a folder.
@@ -173,21 +176,26 @@ def _self_test_configuration():
     # lines to the --check report that runs it.
     with tempfile.TemporaryDirectory() as tmp:
         for argv, expected in (
-                (["--repo", tmp, "--source", "issues"], "unknown work source"),
-                (["--repo", tmp, "--roadmap", str(Path(tmp) / "absent")],
-                 "configured roadmap folder"),
+            (["--repo", tmp, "--source", "issues"], "unknown work source"),
+            (
+                ["--repo", tmp, "--roadmap", str(Path(tmp) / "absent")],
+                "configured roadmap folder",
+            ),
         ):
             out, err = io.StringIO(), io.StringIO()
             with redirect_stdout(out), redirect_stderr(err):
-                code = main(argv, _settings={
-                    "repo-root": Path(tmp),
-                    "pipeline": None,
-                    "roadmap-dir": Path(tmp) / "roadmap",
-                    "driver.include": ["phase-*.md"],
-                    "driver.exclude": [],
-                    "driver.runs": Path(tmp) / "runs",
-                    "machine.id": "self-test",
-                })
+                code = main(
+                    argv,
+                    _settings={
+                        "repo-root": Path(tmp),
+                        "pipeline": None,
+                        "roadmap-dir": Path(tmp) / "roadmap",
+                        "driver.include": ["phase-*.md"],
+                        "driver.exclude": [],
+                        "driver.runs": Path(tmp) / "runs",
+                        "machine.id": "self-test",
+                    },
+                )
             assert code == 2, (argv, code)
             assert expected in err.getvalue(), (argv, err.getvalue())
             assert out.getvalue() == "", (argv, out.getvalue())
@@ -200,25 +208,40 @@ def _self_test_configuration():
         repo = Path(tmp)
         (repo / "roadmap").mkdir()
         (repo / "roadmap" / "phase-100460-first.md").write_text(
-            "- [ ] Required approval is obtained.\n")
+            "- [ ] Required approval is obtained.\n"
+        )
         (repo / "roadmap" / "work-100461-renamed.md").write_text(
-            "- [ ] Required approval is obtained.\n")
+            "- [ ] Required approval is obtained.\n"
+        )
         (repo / "roadmap" / "work-100462-skip.md").write_text(
-            "- [ ] Required approval is obtained.\n")
+            "- [ ] Required approval is obtained.\n"
+        )
         out, err = io.StringIO(), io.StringIO()
         with redirect_stdout(out), redirect_stderr(err):
-            code = main(["--repo", str(repo), "--source", "roadmap",
-                         "--roadmap", str(repo / "roadmap"), "--verbose",
-                         "--phase-glob", "phase-*.md",
-                         "--phase-glob", "work-*.md"], _settings={
-                             "repo-root": repo,
-                             "pipeline": None,
-                             "roadmap-dir": repo / "roadmap",
-                             "driver.include": ["ignored-*.md"],
-                             "driver.exclude": ["work-100462-skip.md"],
-                             "driver.runs": repo / "runs",
-                             "machine.id": "self-test",
-                         })
+            code = main(
+                [
+                    "--repo",
+                    str(repo),
+                    "--source",
+                    "roadmap",
+                    "--roadmap",
+                    str(repo / "roadmap"),
+                    "--verbose",
+                    "--phase-glob",
+                    "phase-*.md",
+                    "--phase-glob",
+                    "work-*.md",
+                ],
+                _settings={
+                    "repo-root": repo,
+                    "pipeline": None,
+                    "roadmap-dir": repo / "roadmap",
+                    "driver.include": ["ignored-*.md"],
+                    "driver.exclude": ["work-100462-skip.md"],
+                    "driver.runs": repo / "runs",
+                    "machine.id": "self-test",
+                },
+            )
         assert code == 0, (code, err.getvalue())
         assert "phase-100460-first.md" in err.getvalue(), err.getvalue()
         assert "work-100461-renamed.md" in err.getvalue(), err.getvalue()
@@ -239,7 +262,8 @@ def _self_test_group_query():
         roadmap.mkdir()
         for number in (100010, 100020, 100030):
             (roadmap / f"phase-{number}-x.md").write_text(
-                "### Reservation Group\n\n`together: 100010, 100020, 100030`\n")
+                "### Reservation Group\n\n`together: 100010, 100020, 100030`\n"
+            )
         (roadmap / "phase-100040-y.md").write_text("## 1. Objective\n")
         rundir = repo / "runs" / "phase-100010"
         rundir.mkdir(parents=True)
@@ -261,8 +285,9 @@ def _self_test_group_query():
         assert result["state"] == "GROUP", result
         assert result["group"] == ["100010", "100020", "100030"], result
         assert result["remainder"] == ["100020", "100030"], result
-        assert not (repo / "vault").exists(), \
+        assert not (repo / "vault").exists(), (
             "the group query must not create a board checkout"
+        )
 
         out, err = io.StringIO(), io.StringIO()
         with redirect_stdout(out), redirect_stderr(err):
@@ -276,44 +301,75 @@ def _self_test_group_query():
 
 def main(argv=None, *, _settings=None):
     parser = argparse.ArgumentParser(
-        description="Next piece of work, from the configured work source.")
+        description="Next piece of work, from the configured work source."
+    )
     parser.add_argument("--repo-root", "--repo", dest="config_repo_root")
-    parser.add_argument("--source", default=None,
-                        help="work source to ask (default: roadmap)")
-    parser.add_argument("--phase-glob", dest="config_phase_glob", action="append",
-                        help="work-item file glob (repeatable)")
+    parser.add_argument(
+        "--source", default=None, help="work source to ask (default: roadmap)"
+    )
+    parser.add_argument(
+        "--phase-glob",
+        dest="config_phase_glob",
+        action="append",
+        help="work-item file glob (repeatable)",
+    )
     parser.add_argument("--roadmap-dir", "--roadmap", dest="config_roadmap_dir")
     parser.add_argument("--driver", dest="config_driver")
     parser.add_argument("--config")
     parser.add_argument("--self-test", action="store_true")
-    parser.add_argument("--verbose", action="store_true",
-                        help="print per-signal evidence for every phase to stderr")
-    parser.add_argument("--audit", action="store_true",
-                        help="report index.md drift; exit 0 when clean, 1 when "
-                             "drift is found")
-    parser.add_argument("--fix-index", action="store_true",
-                        help="with --audit, annotate index.md rows for phases "
-                             "that have a completion marker but are not "
-                             "indexed Complete; a drift in the other "
-                             "direction is never repaired automatically")
-    parser.add_argument("--server", action="store_true",
-                        help="select and reserve the lowest incomplete phase")
-    parser.add_argument("--read-only", action="store_true",
-                        help="with --server, inspect claims without writing")
-    parser.add_argument("--machine-id", default=None,
-                        help="stable host ID used by --server")
-    parser.add_argument("--json", action="store_true",
-                        help="with --server, print a machine-readable result")
-    parser.add_argument("--resolve-group", dest="resolve_group", metavar="PHASE",
-                        default=None,
-                        help="read-only: print the reservation group this "
-                             "phase belongs to, and the members still "
-                             "unfinished; claims nothing")
-    parser.add_argument("--migrate-board", action="store_true",
-                        help="create the coordination branch if the remote does "
-                             "not have it yet, then stop. This is the only "
-                             "named step that creates it, so a caller says out "
-                             "loud that it means to write")
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="print per-signal evidence for every phase to stderr",
+    )
+    parser.add_argument(
+        "--audit",
+        action="store_true",
+        help="report index.md drift; exit 0 when clean, 1 when drift is found",
+    )
+    parser.add_argument(
+        "--fix-index",
+        action="store_true",
+        help="with --audit, annotate index.md rows for phases "
+        "that have a completion marker but are not "
+        "indexed Complete; a drift in the other "
+        "direction is never repaired automatically",
+    )
+    parser.add_argument(
+        "--server",
+        action="store_true",
+        help="select and reserve the lowest incomplete phase",
+    )
+    parser.add_argument(
+        "--read-only",
+        action="store_true",
+        help="with --server, inspect claims without writing",
+    )
+    parser.add_argument(
+        "--machine-id", default=None, help="stable host ID used by --server"
+    )
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        help="with --server, print a machine-readable result",
+    )
+    parser.add_argument(
+        "--resolve-group",
+        dest="resolve_group",
+        metavar="PHASE",
+        default=None,
+        help="read-only: print the reservation group this "
+        "phase belongs to, and the members still "
+        "unfinished; claims nothing",
+    )
+    parser.add_argument(
+        "--migrate-board",
+        action="store_true",
+        help="create the coordination branch if the remote does "
+        "not have it yet, then stop. This is the only "
+        "named step that creates it, so a caller says out "
+        "loud that it means to write",
+    )
     args = parser.parse_args(argv)
     if args.self_test:
         try:
@@ -369,12 +425,14 @@ def main(argv=None, *, _settings=None):
         try:
             created = ReservationStore(repo).migrate_board()
         except CoordinationError as exc:
-            print(json.dumps(
-                {"state": "COORDINATION_UNAVAILABLE", "error": str(exc)},
-                sort_keys=True))
+            print(
+                json.dumps(
+                    {"state": "COORDINATION_UNAVAILABLE", "error": str(exc)},
+                    sort_keys=True,
+                )
+            )
             return 2
-        print(json.dumps({"state": "BOARD_READY", "created": created},
-                         sort_keys=True))
+        print(json.dumps({"state": "BOARD_READY", "created": created}, sort_keys=True))
         return 0
     try:
         source = resolve(args.source, repo, roadmap)
@@ -385,7 +443,8 @@ def main(argv=None, *, _settings=None):
         try:
             result = source.select(
                 args.machine_id or conventions.setting("machine.id"),
-                reserve=not args.read_only)
+                reserve=not args.read_only,
+            )
         except CoordinationError as exc:
             result = {"state": "COORDINATION_UNAVAILABLE", "error": str(exc)}
             print(json.dumps(result, sort_keys=True))
@@ -397,12 +456,14 @@ def main(argv=None, *, _settings=None):
     if args.verbose:
         for item in source.candidates():
             s = source.signals(item)
-            print(f"{item[0]}\t{item[1].name}\trun={int(s['run'])} "
-                  f"ledger={int(s['ledger'])} log={int(s['finalize_log'])} "
-                  f"publication={int(s['publication'])} "
-                  f"box={int(s['approval'])} index={int(s['index'])} "
-                  f"decision={int(s['needs_decision'])}",
-                  file=sys.stderr)
+            print(
+                f"{item[0]}\t{item[1].name}\trun={int(s['run'])} "
+                f"ledger={int(s['ledger'])} log={int(s['finalize_log'])} "
+                f"publication={int(s['publication'])} "
+                f"box={int(s['approval'])} index={int(s['index'])} "
+                f"decision={int(s['needs_decision'])}",
+                file=sys.stderr,
+            )
     nxt = source.select_next()
     if nxt is None:
         return 1

@@ -58,7 +58,9 @@ SELF = Path(__file__).resolve()
 HERE = SELF.parents[1]
 
 #: Directories that are not part of the published package.
-SKIP_DIRS = frozenset({"__pycache__", ".git", ".pytest_cache", "dist", "build", ".venv", "target"})
+SKIP_DIRS = frozenset(
+    {"__pycache__", ".git", ".pytest_cache", "dist", "build", ".venv", "target"}
+)
 
 #: The only notification targets a shipped file may name. A real one belongs to
 #: the machine that receives the notices, in a file that is not part of the
@@ -68,7 +70,8 @@ CHANNEL_PLACEHOLDERS = frozenset({"", "discord:000000000000000000"})
 
 #: A home directory that names its user.
 HOME_PATH = re.compile(
-    r"(?<![A-Za-z0-9_.-])(?:/Users/|/home/|C:\\Users\\)[A-Za-z0-9._-]+")
+    r"(?<![A-Za-z0-9_.-])(?:/Users/|/home/|C:\\Users\\)[A-Za-z0-9._-]+"
+)
 
 #: A notification or account id: sixteen or more digits in a row.
 LONG_ID = re.compile(r"(?<!\d)(\d{16,})(?!\d)")
@@ -76,7 +79,8 @@ LONG_ID = re.compile(r"(?<!\d)(\d{16,})(?!\d)")
 #: A driver default that writes a value into a notification setting. ``:-`` is
 #: an empty default; only ``:=`` with something after it is a value.
 NOTIFY_DEFAULT = re.compile(
-    r"\b(?:HERMES_PROFILE_NAME|DISCORD_CHANNEL|DISCORD_FALLBACK_CHANNEL):=[^}]")
+    r"\b(?:HERMES_PROFILE_NAME|DISCORD_CHANNEL|DISCORD_FALLBACK_CHANNEL):=[^}]"
+)
 
 #: A notification profile or channel written as a literal in a shipped file.
 PROFILE_LITERAL = re.compile(r'"profile"\s*:\s*"([^"]*)"')
@@ -98,16 +102,17 @@ def scan(name: str, text: str) -> list[str]:
             if not _is_placeholder_digits(match.group(1)):
                 findings.append(f"{name}:{number}: numeric id {match.group(1)!r}")
         for match in NOTIFY_DEFAULT.finditer(line):
-            findings.append(
-                f"{name}:{number}: notification default {match.group(0)!r}")
+            findings.append(f"{name}:{number}: notification default {match.group(0)!r}")
         for match in PROFILE_LITERAL.finditer(line):
             if match.group(1) not in PROFILE_PLACEHOLDERS:
                 findings.append(
-                    f"{name}:{number}: notification profile {match.group(1)!r}")
+                    f"{name}:{number}: notification profile {match.group(1)!r}"
+                )
         for match in CHANNEL_LITERAL.finditer(line):
             if match.group(1) not in CHANNEL_PLACEHOLDERS:
                 findings.append(
-                    f"{name}:{number}: notification channel {match.group(1)!r}")
+                    f"{name}:{number}: notification channel {match.group(1)!r}"
+                )
     return findings
 
 
@@ -129,9 +134,19 @@ def _shipped_paths() -> set[Path] | None:
     """
     try:
         result = subprocess.run(
-            ["git", "-C", str(HERE), "ls-files", "--cached", "--others",
-             "--exclude-standard"],
-            capture_output=True, text=True, timeout=30)
+            [
+                "git",
+                "-C",
+                str(HERE),
+                "ls-files",
+                "--cached",
+                "--others",
+                "--exclude-standard",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
     except (OSError, subprocess.SubprocessError):
         return None
     if result.returncode != 0:
@@ -177,8 +192,7 @@ def test_published_folder_has_no_identifier():
     findings: list[str] = []
     for path in published_files():
         findings.extend(scan(str(path.relative_to(HERE)), _text(path)))
-    check(not findings,
-          "identifiers in the published folder:\n" + "\n".join(findings))
+    check(not findings, "identifiers in the published folder:\n" + "\n".join(findings))
 
 
 def test_the_patterns_fire_and_do_not_overreach():
@@ -189,32 +203,32 @@ def test_the_patterns_fire_and_do_not_overreach():
     rather than by a reader who learns to skip the gate.
     """
     cases = (
-        ("/Users/example/notes.md", 1),          # a home path
-        ("/home/example/work", 1),               # a home path
-        ("discord:1234567890123456789", 1),      # an id, not a placeholder
-        ("HERMES_PROFILE_NAME:=someone", 1),     # a value written as a default
-        ('"profile": "someone-here"', 1),        # a real profile literal
-        ('"channel": "someone-channel"', 1),     # a real channel literal
-        ("/opt/homebrew/bin/python3", 0),        # a tool path, not a home
-        ("~/code/project", 0),                   # no login name
-        ("discord:000000000000000000", 0),       # the placeholder id
-        ("phase 100010", 0),                     # six digits is a phase number
+        ("/Users/example/notes.md", 1),  # a home path
+        ("/home/example/work", 1),  # a home path
+        ("discord:1234567890123456789", 1),  # an id, not a placeholder
+        ("HERMES_PROFILE_NAME:=someone", 1),  # a value written as a default
+        ('"profile": "someone-here"', 1),  # a real profile literal
+        ('"channel": "someone-channel"', 1),  # a real channel literal
+        ("/opt/homebrew/bin/python3", 0),  # a tool path, not a home
+        ("~/code/project", 0),  # no login name
+        ("discord:000000000000000000", 0),  # the placeholder id
+        ("phase 100010", 0),  # six digits is a phase number
         ('PROFILE="${HERMES_PROFILE_NAME:-}"', 0),  # an empty default
-        ('"profile": "example-profile"', 0),     # a documented placeholder
+        ('"profile": "example-profile"', 0),  # a documented placeholder
         ('"channel": "discord:000000000000000000"', 0),
         ("an ordinary sentence about phases, ids and profiles", 0),
         ("the roadmap folder is /srv/roadmap", 0),
     )
     for sample, expected in cases:
         actual = len(scan("fixture", sample))
-        check(actual == expected,
-              f"{sample!r}: the scan found {actual}, want {expected}")
+        check(
+            actual == expected, f"{sample!r}: the scan found {actual}, want {expected}"
+        )
 
 
 TESTS = (
     ("published folder has no identifier", test_published_folder_has_no_identifier),
-    ("patterns fire and do not overreach",
-     test_the_patterns_fire_and_do_not_overreach),
+    ("patterns fire and do not overreach", test_the_patterns_fire_and_do_not_overreach),
 )
 
 

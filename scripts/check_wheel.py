@@ -53,15 +53,18 @@ def main(argv: list[str]) -> int:
     expected = package_files()
     with zipfile.ZipFile(wheel) as archive:
         shipped = {
-            name[len(PACKAGE) + 1:]
+            name[len(PACKAGE) + 1 :]
             for name in archive.namelist()
             if name.startswith(f"{PACKAGE}/") and not name.endswith("/")
         }
 
-    problems = [f"development file in the wheel: {rel}"
-                for rel in sorted(shipped - expected)]
-    problems += [f"package file missing from the wheel: {rel}"
-                 for rel in sorted(expected - shipped)]
+    problems = [
+        f"development file in the wheel: {rel}" for rel in sorted(shipped - expected)
+    ]
+    problems += [
+        f"package file missing from the wheel: {rel}"
+        for rel in sorted(expected - shipped)
+    ]
     if problems:
         for line in problems:
             print(line, file=sys.stderr)

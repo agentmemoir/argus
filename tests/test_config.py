@@ -37,13 +37,21 @@ BASE = {
     },
     "machine": {"id-file": "machine.id"},
     "commands": {
-        "glide": "glide", "git": "git", "tmux": "tmux",
-        "python": "/usr/bin/python3", "hermes": "hermes", "gh": "gh",
+        "glide": "glide",
+        "git": "git",
+        "tmux": "tmux",
+        "python": "/usr/bin/python3",
+        "hermes": "hermes",
+        "gh": "gh",
     },
     "tmux": {
-        "session": "development", "width": 164, "height": 56,
-        "idle-window": "idle", "phase-window": "phase",
-        "idle-script": "phase-tmux-idle.sh", "refresh": 15,
+        "session": "development",
+        "width": 164,
+        "height": 56,
+        "idle-window": "idle",
+        "phase-window": "phase",
+        "idle-script": "phase-tmux-idle.sh",
+        "refresh": 15,
     },
 }
 
@@ -88,7 +96,10 @@ def expect_error(call, needle):
 def run_cli(args, cwd):
     return subprocess.run(
         [sys.executable, "-m", "argus.config", *args],
-        cwd=cwd, text=True, capture_output=True)
+        cwd=cwd,
+        text=True,
+        capture_output=True,
+    )
 
 
 def test_comments_are_ignored():
@@ -104,8 +115,10 @@ def test_comment_markers_inside_strings_are_kept():
     with tempfile.TemporaryDirectory() as tmp:
         path = write(tmp, json.dumps(document))
         config = cfgmod.load(str(path))
-        check(config.get("commands.gh") == 'a//b/*c*/d quote" slash',
-              config.get("commands.gh"))
+        check(
+            config.get("commands.gh") == 'a//b/*c*/d quote" slash',
+            config.get("commands.gh"),
+        )
 
 
 def test_relative_path_resolves_against_config_dir():
@@ -114,8 +127,7 @@ def test_relative_path_resolves_against_config_dir():
         config = cfgmod.load(str(path))
         base = Path(tmp).resolve()
         check(config.get("repo-root") == base / "project", config.get("repo-root"))
-        check(config.get("pipeline") == base / "pipeline.yaml",
-              config.get("pipeline"))
+        check(config.get("pipeline") == base / "pipeline.yaml", config.get("pipeline"))
         check(config.get("driver.runs") == base / "runs", config.get("driver.runs"))
         check(config.path == path.resolve(), config.path)
 
@@ -134,23 +146,29 @@ def test_flag_overrides_file_and_records_source():
     other = Path(tempfile.gettempdir()).resolve() / "argus-elsewhere"
     with tempfile.TemporaryDirectory() as tmp:
         path = write(tmp, json.dumps(BASE))
-        config = cfgmod.load(str(path), {
-            "repo-root": str(other),
-            "roadmap-dir": str(other),
-            "phase-glob": "work-*.md",
-            "driver": "roadmap",
-        })
+        config = cfgmod.load(
+            str(path),
+            {
+                "repo-root": str(other),
+                "roadmap-dir": str(other),
+                "phase-glob": "work-*.md",
+                "driver": "roadmap",
+            },
+        )
         check(config.get("repo-root") == other, config.get("repo-root"))
         check(config.source("repo-root") == "flag", config.source("repo-root"))
         check(config.get("roadmap-dir") == other, config.get("roadmap-dir"))
         check(config.source("roadmap-dir") == "flag", config.source("roadmap-dir"))
         check(config.get("driver.provider") == "roadmap", config.get("driver.provider"))
-        check(config.source("driver.provider") == "flag",
-              config.source("driver.provider"))
-        check(config.get("driver.include") == ["work-*.md"],
-              config.get("driver.include"))
-        check(config.source("driver.include") == "flag",
-              config.source("driver.include"))
+        check(
+            config.source("driver.provider") == "flag", config.source("driver.provider")
+        )
+        check(
+            config.get("driver.include") == ["work-*.md"], config.get("driver.include")
+        )
+        check(
+            config.source("driver.include") == "flag", config.source("driver.include")
+        )
         check(config.source("driver.runs") == "file", config.source("driver.runs"))
 
 
@@ -215,21 +233,19 @@ def test_sample_loads_with_every_schema_key():
         for field in cfgmod.SCHEMA:
             key = cfgmod._REPORT_KEY.get(field.key, field.key)
             check(key in config.values, f"sample missing {key}")
-        check(config.get("repo-root") == base / "project",
-              config.get("repo-root"))
-        check(config.get("roadmap-dir") == base / "plans",
-              config.get("roadmap-dir"))
-        check(config.get("board.repo") == base,
-              config.get("board.repo"))
-        check(config.get("board.file") == "claims.json",
-              config.get("board.file"))
-        check(config.get("driver.recover-own-claim") is False,
-              config.get("driver.recover-own-claim"))
+        check(config.get("repo-root") == base / "project", config.get("repo-root"))
+        check(config.get("roadmap-dir") == base / "plans", config.get("roadmap-dir"))
+        check(config.get("board.repo") == base, config.get("board.repo"))
+        check(config.get("board.file") == "claims.json", config.get("board.file"))
+        check(
+            config.get("driver.recover-own-claim") is False,
+            config.get("driver.recover-own-claim"),
+        )
         check(config.get("notify.disabled") is False, config.get("notify.disabled"))
-        check(config.get("machine.id") == "sample-machine",
-              config.get("machine.id"))
-        check(all(source == "file" for source in config.sources.values()),
-              config.sources)
+        check(config.get("machine.id") == "sample-machine", config.get("machine.id"))
+        check(
+            all(source == "file" for source in config.sources.values()), config.sources
+        )
 
 
 def test_machine_id_is_read_from_a_file():
@@ -252,7 +268,7 @@ def test_machine_id_is_read_from_a_file():
         # A missing key names the key.
         document = copy.deepcopy(BASE)
         del document["machine"]
-        path = (Path(tmp) / "config.json")
+        path = Path(tmp) / "config.json"
         path.write_text(json.dumps(document), encoding="utf-8")
         expect_error(lambda: cfgmod.load(str(path)), "machine.id-file")
 
@@ -293,8 +309,10 @@ def test_json_format():
         data = json.loads(result.stdout)
         check(set(data) == {"path", "values", "sources"}, sorted(data))
         check(data["path"] == str(path.resolve()), data["path"])
-        check(data["values"]["repo-root"] == str(base / "project"),
-              data["values"]["repo-root"])
+        check(
+            data["values"]["repo-root"] == str(base / "project"),
+            data["values"]["repo-root"],
+        )
         check(data["sources"]["driver.runs"] == "file", data["sources"])
 
 
@@ -313,10 +331,21 @@ def test_cli_flag_beats_file():
     with tempfile.TemporaryDirectory() as tmp:
         path = write(tmp, json.dumps(BASE))
         other = (Path(tmp) / "other").resolve()
-        result = run_cli([
-            "--config", str(path), "--repo-root", str(other),
-            "--phase-glob", "work-*.md", "--driver", "roadmap",
-            "--format", "shell"], tmp)
+        result = run_cli(
+            [
+                "--config",
+                str(path),
+                "--repo-root",
+                str(other),
+                "--phase-glob",
+                "work-*.md",
+                "--driver",
+                "roadmap",
+                "--format",
+                "shell",
+            ],
+            tmp,
+        )
         check(result.returncode == 0, result.stderr)
         check("ARGUS_SOURCE_REPO='flag'" in result.stdout, result.stdout)
         check(f"REPO={shlex.quote(str(other))}" in result.stdout, result.stdout)

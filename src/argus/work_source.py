@@ -42,6 +42,7 @@ same reason. These scripts are run by path out of a checkout and are not
 installed as a distribution, so there is no metadata for a plugin system to
 discover. Adding a source is one line in ``SOURCES``.
 """
+
 from abc import ABC, abstractmethod
 import importlib
 from pathlib import Path
@@ -100,8 +101,8 @@ def resolve(name, repo, roadmap=None):
     key = name or DEFAULT_SOURCE
     if key not in SOURCES:
         raise WorkSourceError(
-            f"unknown work source {key!r}; this build knows "
-            f"{', '.join(source_names())}")
+            f"unknown work source {key!r}; this build knows {', '.join(source_names())}"
+        )
     factory = implementation(key)
     try:
         return factory(Path(repo), roadmap)
@@ -112,14 +113,16 @@ def resolve(name, repo, roadmap=None):
 
 
 def self_test():
-    previous = conventions.configure({
-        "repo-root": Path("."),
-        "pipeline": None,
-        "roadmap-dir": Path("."),
-        "driver.include": ["phase-*.md"],
-        "driver.exclude": [],
-        "driver.runs": Path("runs"),
-    })
+    previous = conventions.configure(
+        {
+            "repo-root": Path("."),
+            "pipeline": None,
+            "roadmap-dir": Path("."),
+            "driver.include": ["phase-*.md"],
+            "driver.exclude": [],
+            "driver.runs": Path("runs"),
+        }
+    )
     try:
         _self_test()
     finally:

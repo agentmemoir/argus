@@ -116,7 +116,9 @@ def can_execute(directory: str) -> bool:
     except OSError:
         return False
     try:
-        done = subprocess.run([probe], capture_output=True, text=True, timeout=10, check=False)  # noqa: S603
+        done = subprocess.run(
+            [probe], capture_output=True, text=True, timeout=10, check=False
+        )  # noqa: S603
     except (OSError, subprocess.SubprocessError):
         return False
     finally:
@@ -206,5 +208,7 @@ def exec_tempdir(
     """
     created = make_exec_dir(probe, parents)
     if not created:
-        raise unittest.SkipTest(f"no temporary directory on this host permits running {purpose}")
+        raise unittest.SkipTest(
+            f"no temporary directory on this host permits running {purpose}"
+        )
     return _OwnedDirectory(created)

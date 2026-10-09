@@ -176,8 +176,9 @@ def strip_comments(text):
                 if text[index] == "\n":
                     out.append("\n")
                     index += 1
-                elif (text[index] == "*" and index + 1 < length
-                      and text[index + 1] == "/"):
+                elif (
+                    text[index] == "*" and index + 1 < length and text[index + 1] == "/"
+                ):
                     index += 2
                     closed = True
                     break
@@ -217,8 +218,8 @@ def load(config_path=None, overrides=None):
         path = Path("config.json")
         if not path.is_file():
             raise ConfigError(
-                f"no configuration file: pass --config, or create "
-                f"'{path.resolve()}'")
+                f"no configuration file: pass --config, or create '{path.resolve()}'"
+            )
         path = path.resolve()
     else:
         path = Path(config_path)
@@ -230,7 +231,8 @@ def load(config_path=None, overrides=None):
         text = path.read_text(encoding="utf-8")
     except OSError as exc:
         raise ConfigError(
-            f"cannot read config file '{path}': {exc.strerror or exc}") from exc
+            f"cannot read config file '{path}': {exc.strerror or exc}"
+        ) from exc
 
     try:
         cleaned = strip_comments(text)
@@ -242,7 +244,8 @@ def load(config_path=None, overrides=None):
     except json.JSONDecodeError as exc:
         raise ConfigError(
             f"cannot parse config file '{path}' at line {exc.lineno} "
-            f"column {exc.colno}: {exc.msg}") from exc
+            f"column {exc.colno}: {exc.msg}"
+        ) from exc
 
     if not isinstance(raw, dict):
         raise ConfigError(f"config file '{path}' must hold a JSON object")
@@ -348,7 +351,8 @@ def _read_machine_id(path):
         text = path.read_text(encoding="utf-8")
     except OSError as exc:
         raise ConfigError(
-            f"cannot read machine id file '{path}': {exc.strerror or exc}") from exc
+            f"cannot read machine id file '{path}': {exc.strerror or exc}"
+        ) from exc
     for line in text.splitlines():
         if line.strip():
             return line.strip()
@@ -358,13 +362,14 @@ def _read_machine_id(path):
 def _check_value(field, value, required):
     if required and field.type == "str-list" and not value:
         raise ConfigError(
-            f"invalid value for key '{field.key}': list must not be empty")
+            f"invalid value for key '{field.key}': list must not be empty"
+        )
     if required and field.type in ("str", "path") and value == "":
         raise ConfigError(f"missing required key '{field.key}'")
     if field.key == "driver.state" and "/" in value:
         raise ConfigError(
-            "invalid value for key 'driver.state': must be a folder name, "
-            "not a path")
+            "invalid value for key 'driver.state': must be a folder name, not a path"
+        )
 
 
 def _shell_value(value):
@@ -407,9 +412,7 @@ def report_lines(config):
         key = _REPORT_KEY.get(field.key, field.key)
         if key not in config.values:
             continue
-        lines.append(
-            f"{key}\t{config.sources[key]}\t"
-            f"{_render(config.values[key])}")
+        lines.append(f"{key}\t{config.sources[key]}\t{_render(config.values[key])}")
     return lines
 
 
@@ -417,21 +420,22 @@ def _json_view(config):
     values = {}
     for key, value in config.values.items():
         values[key] = str(value) if isinstance(value, Path) else value
-    return {"path": str(config.path), "values": values,
-            "sources": dict(config.sources)}
+    return {"path": str(config.path), "values": values, "sources": dict(config.sources)}
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(
         prog="argus.config",
-        description="Load an Argus configuration and print it for a caller.")
+        description="Load an Argus configuration and print it for a caller.",
+    )
     parser.add_argument("--config", help="config file; defaults to ./config.json")
     parser.add_argument("--repo-root")
     parser.add_argument("--roadmap-dir")
     parser.add_argument("--phase-glob", action="append")
     parser.add_argument("--driver")
-    parser.add_argument("--format", choices=("shell", "json", "report"),
-                        default="report")
+    parser.add_argument(
+        "--format", choices=("shell", "json", "report"), default="report"
+    )
     args = parser.parse_args(argv)
 
     overrides = {}

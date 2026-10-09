@@ -42,6 +42,7 @@ returns it under ``awaiting_review`` so the driver can still run the merge
 check, which is the only thing that turns a finished pull request into a
 finished phase.
 """
+
 import json
 import re
 import sys
@@ -106,7 +107,8 @@ def resolve_roadmap(repo, configured=None):
         base = Path(repo) / base
     if not base.is_dir():
         raise RoadmapUnavailable(
-            f"configured roadmap folder {base} is missing or is not a directory")
+            f"configured roadmap folder {base} is missing or is not a directory"
+        )
     return base
 
 
@@ -185,7 +187,9 @@ def needs_decision(repo, number):
 def ledger_steps(repo, number, phase_file=None):
     """Parsed steps map from ledger.json, or None when missing/unusable."""
     try:
-        ledger = json.loads((run_dir(repo, number, phase_file) / "ledger.json").read_text())
+        ledger = json.loads(
+            (run_dir(repo, number, phase_file) / "ledger.json").read_text()
+        )
     except (OSError, ValueError):
         return None
     if not isinstance(ledger, dict):
@@ -226,10 +230,12 @@ def publication_receipt_done(repo, number, phase_file=None):
         data = json.loads(path.read_text())
     except (OSError, ValueError):
         return False
-    return (isinstance(data, dict)
-            and data.get("version") == 1
-            and data.get("state") == "published"
-            and data.get("phase") == f"{int(number):06d}")
+    return (
+        isinstance(data, dict)
+        and data.get("version") == 1
+        and data.get("state") == "published"
+        and data.get("phase") == f"{int(number):06d}"
+    )
 
 
 def finalize_log_done(repo, number, phase_file=None):
@@ -313,9 +319,11 @@ def is_done(repo, number, path, index_done):
     corroborating the box with them would leave the box unable to change any
     verdict: the tick would be read and then ignored.
     """
-    if (run_completed(repo, number, path)
-            or (file_approved(path) and phase_attempted(repo, number, path))
-            or publication_receipt_done(repo, number, path)):
+    if (
+        run_completed(repo, number, path)
+        or (file_approved(path) and phase_attempted(repo, number, path))
+        or publication_receipt_done(repo, number, path)
+    ):
         return True
     if ledger_present(repo, number, path):
         # The ledger is runner-maintained and re-verified on resume; when it
@@ -325,10 +333,12 @@ def is_done(repo, number, path, index_done):
     if finalize_log_done(repo, number, path):
         return True
     if number in index_done:
-        print(f"warning: phase {number} is marked Complete in index.md but has "
-              f"no run.json/ledger/publication/finalize-log marker; treating it "
-              f"as done",
-              file=sys.stderr)
+        print(
+            f"warning: phase {number} is marked Complete in index.md but has "
+            f"no run.json/ledger/publication/finalize-log marker; treating it "
+            f"as done",
+            file=sys.stderr,
+        )
         return True
     return False
 
@@ -378,28 +388,41 @@ def audit(repo, roadmap, apply_index=False):
     drifted = []
     for number, path in candidates(repo, roadmap):
         s = signals(repo, number, path, index_done)
-        markers = (s["run"] or s["ledger"] or s["finalize_log"]
-                   or s["publication"] or s["approval"])
+        markers = (
+            s["run"]
+            or s["ledger"]
+            or s["finalize_log"]
+            or s["publication"]
+            or s["approval"]
+        )
         indexed = number in index_done
         if indexed and not markers:
-            print(f"drift: phase {number} indexed Complete but has no marker "
-                  f"({path.name})")
+            print(
+                f"drift: phase {number} indexed Complete but has no marker "
+                f"({path.name})"
+            )
             issues += 1
         elif markers and not indexed:
-            print(f"drift: phase {number} has completion markers but index is "
-                  f"not Complete ({path.name})")
+            print(
+                f"drift: phase {number} has completion markers but index is "
+                f"not Complete ({path.name})"
+            )
             issues += 1
             drifted.append((number, path))
         if s["needs_decision"] and not indexed:
             # Reported, not counted: this is not index drift, it is a phase the
             # selector is passing over until a person decides. Naming it here is
             # what stops the skip being silent.
-            print(f"decision: phase {number} ended needing a decision and is "
-                  f"not selected ({path.name})")
+            print(
+                f"decision: phase {number} ended needing a decision and is "
+                f"not selected ({path.name})"
+            )
     if apply_index and drifted:
         applied, skipped = _annotate_index_complete(repo, roadmap, drifted)
-        print(f"index: marked {applied} entr(ies) Complete"
-              + (f", {skipped} left for a human" if skipped else ""))
+        print(
+            f"index: marked {applied} entr(ies) Complete"
+            + (f", {skipped} left for a human" if skipped else "")
+        )
     return issues
 
 
@@ -606,8 +629,7 @@ GROUP_HEADING_RE = re.compile(r"^#{2,3} ")
 
 #: The first ``together:`` line of a group section. The value may be wrapped
 #: in backticks; the capture is the comma-separated phase list.
-GROUP_TOGETHER_RE = re.compile(
-    r"^\s*`?together\s*:\s*(.+?)`?\s*$", re.IGNORECASE)
+GROUP_TOGETHER_RE = re.compile(r"^\s*`?together\s*:\s*(.+?)`?\s*$", re.IGNORECASE)
 
 #: One member of a ``together:`` list, a six-digit phase number.
 GROUP_TOKEN_RE = re.compile(r"^\d{6}$")
@@ -679,12 +701,13 @@ def _parse_group_members(path, number):
         text = Path(path).read_text(encoding="utf-8", errors="replace")
     except OSError as exc:
         raise ReservationGroupError(
-            f"cannot read phase document {path}: {exc}",
-            document=path) from exc
+            f"cannot read phase document {path}: {exc}", document=path
+        ) from exc
     body = _group_section(text)
     if body is None:
         raise ReservationGroupMissing(
-            f"{path} has no '### Reservation Group' section", document=path)
+            f"{path} has no '### Reservation Group' section", document=path
+        )
     value = None
     for line in body.splitlines():
         match = GROUP_TOGETHER_RE.match(line)
@@ -693,21 +716,25 @@ def _parse_group_members(path, number):
             break
     if value is None:
         raise ReservationGroupMissing(
-            f"{path} has no together declaration", document=path)
+            f"{path} has no together declaration", document=path
+        )
     members = []
     for raw in value.split(","):
         token = raw.strip().strip("`").strip()
         if not GROUP_TOKEN_RE.match(token):
             raise ReservationGroupError(
-                f"{path} together declaration has an invalid phase number "
-                f"{token!r}", document=path)
+                f"{path} together declaration has an invalid phase number {token!r}",
+                document=path,
+            )
         members.append(token)
     if not members:
         raise ReservationGroupError(
-            f"{path} together declaration lists no phases", document=path)
+            f"{path} together declaration lists no phases", document=path
+        )
     if len(set(members)) != len(members):
         raise ReservationGroupError(
-            f"{path} together declaration repeats a phase", document=path)
+            f"{path} together declaration repeats a phase", document=path
+        )
     return members
 
 
@@ -776,35 +803,38 @@ def resolve_group(repo, roadmap, phase):
     folder = resolve_roadmap(repo, roadmap)
     path = _phase_file(folder, number)
     if path is None:
-        raise ReservationGroupError(
-            f"phase {number:06d} has no document in {folder}")
+        raise ReservationGroupError(f"phase {number:06d} has no document in {folder}")
     key = f"{number:06d}"
     declared = _parse_group_members(path, number)
     if key not in declared:
         raise ReservationGroupError(
-            f"{path} together declaration does not list phase {key}",
-            document=path)
+            f"{path} together declaration does not list phase {key}", document=path
+        )
     for member in declared:
         member_number = int(member)
         member_path = _phase_file(folder, member_number)
         if member_path is None:
             raise ReservationGroupError(
-                f"group member {member} has no phase document in {folder}")
+                f"group member {member} has no phase document in {folder}"
+            )
         member_declared = _parse_group_members(member_path, member_number)
         if set(member_declared) != set(declared):
             raise ReservationGroupError(
-                f"{member_path} declares {member_declared}, expected "
-                f"{declared}", document=member_path)
+                f"{member_path} declares {member_declared}, expected {declared}",
+                document=member_path,
+            )
     index_done = index_complete(repo, folder)
     members = []
     for member in declared:
         member_number = int(member)
         member_path = _phase_file(folder, member_number)
-        members.append({
-            "phase": member,
-            "path": reported_path(repo, member_path),
-            "done": is_done(repo, member_number, member_path, index_done),
-        })
+        members.append(
+            {
+                "phase": member,
+                "path": reported_path(repo, member_path),
+                "done": is_done(repo, member_number, member_path, index_done),
+            }
+        )
     remainder = [entry["phase"] for entry in members if not entry["done"]]
     return {
         "state": "GROUP",
@@ -836,8 +866,7 @@ def resolve_group_or_none(repo, roadmap, phase):
     return resolve_group(repo, roadmap, phase)
 
 
-def _select_group(repo, number, path, group, machine_id, store, *, reserve,
-                  reviews):
+def _select_group(repo, number, path, group, machine_id, store, *, reserve, reviews):
     """Claim a declared group's unfinished members, or report why not.
 
     The remainder drops completed members. A member whose pull request is open
@@ -852,12 +881,14 @@ def _select_group(repo, number, path, group, machine_id, store, *, reserve,
     for member in remainder:
         review = _awaiting_review(repo, int(member))
         if review:
-            reviews.append({
-                "phase": member,
-                "branch": review.get("branch"),
-                "pull_request": review.get("pull_request"),
-                "head": review.get("head"),
-            })
+            reviews.append(
+                {
+                    "phase": member,
+                    "branch": review.get("branch"),
+                    "pull_request": review.get("pull_request"),
+                    "head": review.get("head"),
+                }
+            )
         else:
             claimable.append(member)
     if not claimable:
@@ -901,7 +932,8 @@ def _select_group(repo, number, path, group, machine_id, store, *, reserve,
             save_reservation_file(token_path, record)
         except OSError as exc:
             raise CoordinationError(
-                f"could not persist phase reservation token: {exc}") from exc
+                f"could not persist phase reservation token: {exc}"
+            ) from exc
     lead = next((r for r in records if r["phase"] == key), records[0])
     result = _reservation_result(number, path, lead)
     result["path"] = reported_path(repo, path)
@@ -1028,12 +1060,14 @@ def select_server_phase(repo, machine_id, *, reserve=True, store=None, roadmap=N
         # in the only state that matters.
         review = _awaiting_review(repo, number)
         if review:
-            reviews.append({
-                "phase": key,
-                "branch": review.get("branch"),
-                "pull_request": review.get("pull_request"),
-                "head": review.get("head"),
-            })
+            reviews.append(
+                {
+                    "phase": key,
+                    "branch": review.get("branch"),
+                    "pull_request": review.get("pull_request"),
+                    "head": review.get("head"),
+                }
+            )
             continue
         if not done:
             # An open decision gate is checked before anything else that can
@@ -1066,19 +1100,25 @@ def select_server_phase(repo, machine_id, *, reserve=True, store=None, roadmap=N
             if status in {"completed", "accepted"}:
                 if done:
                     continue
-                return finish({
-                    "state": "COORDINATION_INCONSISTENT",
-                    "phase": key,
-                    "path": reported_path(repo, path),
-                    "error": (f"coordination says {status} but no completion "
-                              "evidence exists"),
-                })
+                return finish(
+                    {
+                        "state": "COORDINATION_INCONSISTENT",
+                        "phase": key,
+                        "path": reported_path(repo, path),
+                        "error": (
+                            f"coordination says {status} but no completion "
+                            "evidence exists"
+                        ),
+                    }
+                )
             if ended:
-                decisions.append({
-                    "phase": key,
-                    "path": reported_path(repo, path),
-                    "state": ended,
-                })
+                decisions.append(
+                    {
+                        "phase": key,
+                        "path": reported_path(repo, path),
+                        "state": ended,
+                    }
+                )
                 continue
             if status in {"claimed", "running", "paused", "blocked"}:
                 return finish(held_answer())
@@ -1086,11 +1126,13 @@ def select_server_phase(repo, machine_id, *, reserve=True, store=None, roadmap=N
         if done:
             continue
         if ended:
-            decisions.append({
-                "phase": key,
-                "path": reported_path(repo, path),
-                "state": ended,
-            })
+            decisions.append(
+                {
+                    "phase": key,
+                    "path": reported_path(repo, path),
+                    "state": ended,
+                }
+            )
             continue
         # A phase may declare a reservation group. The group is claimed as one
         # unit under one reservation id, and the answer carries the array. A
@@ -1111,8 +1153,15 @@ def select_server_phase(repo, machine_id, *, reserve=True, store=None, roadmap=N
             return finish(result)
         if group is not None:
             selected = _select_group(
-                repo, number, path, group, machine_id, store,
-                reserve=reserve, reviews=reviews)
+                repo,
+                number,
+                path,
+                group,
+                machine_id,
+                store,
+                reserve=reserve,
+                reviews=reviews,
+            )
             if selected is None:
                 continue
             return finish(selected)
@@ -1121,22 +1170,23 @@ def select_server_phase(repo, machine_id, *, reserve=True, store=None, roadmap=N
             result["path"] = reported_path(repo, path)
             return finish(result)
         try:
-            record = store.reserve(number, machine_id,
-                                   run_id=f"phase-{key}")
+            record = store.reserve(number, machine_id, run_id=f"phase-{key}")
         except ReservationConflict as exc:
             # The push race lost.  Read the winner rather than attempting an
             # overwrite or silently selecting a later phase.
             latest, _latest_commit = store.read()
             winner = latest.get("phases", {}).get(key, {})
-            return finish({
-                "state": "WAIT_FOR_CLAIM",
-                "phase": key,
-                "path": reported_path(repo, path),
-                "owner": winner.get("machine_id", exc.record.get("machine_id")),
-                "status": winner.get("status", exc.record.get("status")),
-                "reservation_id": winner.get("reservation_id"),
-                "generation": winner.get("generation"),
-            })
+            return finish(
+                {
+                    "state": "WAIT_FOR_CLAIM",
+                    "phase": key,
+                    "path": reported_path(repo, path),
+                    "owner": winner.get("machine_id", exc.record.get("machine_id")),
+                    "status": winner.get("status", exc.record.get("status")),
+                    "reservation_id": winner.get("reservation_id"),
+                    "generation": winner.get("generation"),
+                }
+            )
         result = _reservation_result(number, path, record)
         result["path"] = reported_path(repo, path)
         # The token is written beside the store's own checkout, never beside
@@ -1149,7 +1199,8 @@ def select_server_phase(repo, machine_id, *, reserve=True, store=None, roadmap=N
             save_reservation_file(token_path, record)
         except OSError as exc:
             raise CoordinationError(
-                f"could not persist phase reservation token: {exc}") from exc
+                f"could not persist phase reservation token: {exc}"
+            ) from exc
         return finish(result)
     return finish({"state": "NO_PHASE"})
 
@@ -1173,8 +1224,9 @@ class RoadmapSource(WorkSource):
 
     def select(self, machine_id=None, *, reserve=True, store=None):
         """Return the next claimable phase as a result dict, claiming it."""
-        return select_server_phase(self.repo, machine_id, reserve=reserve,
-                                   store=store, roadmap=self.roadmap)
+        return select_server_phase(
+            self.repo, machine_id, reserve=reserve, store=store, roadmap=self.roadmap
+        )
 
     def select_next(self):
         """The lowest incomplete phase, or None. Never claims anything."""
@@ -1195,21 +1247,23 @@ class RoadmapSource(WorkSource):
 
 
 def self_test():
-    conventions.configure({
-        "repo-root": Path("."),
-        "roadmap-dir": Path("roadmap"),
-        "driver.runs": Path("runs"),
-        "driver.include": ["phase-*.md"],
-        "driver.exclude": [],
-        "pipeline": None,
-        "machine.id": "self-test",
-        "board.repo": BOARD_REL,
-        "board.file": Path("claims.json"),
-        "board.branch": "fixture-claims",
-        "board.remote": "origin",
-        "commands.git": "git",
-        "commands.gh": "gh",
-    })
+    conventions.configure(
+        {
+            "repo-root": Path("."),
+            "roadmap-dir": Path("roadmap"),
+            "driver.runs": Path("runs"),
+            "driver.include": ["phase-*.md"],
+            "driver.exclude": [],
+            "pipeline": None,
+            "machine.id": "self-test",
+            "board.repo": BOARD_REL,
+            "board.file": Path("claims.json"),
+            "board.branch": "fixture-claims",
+            "board.remote": "origin",
+            "commands.git": "git",
+            "commands.gh": "gh",
+        }
+    )
     with tempfile.TemporaryDirectory() as tmp:
         # A reservation group is declared in a fenced ``### Reservation Group``
         # section, read with the same section shape as a decision gate, and is
@@ -1220,12 +1274,15 @@ def self_test():
         repo = Path(tmp).resolve()
         roadmap = repo / "roadmap"
         roadmap.mkdir()
-        old = conventions.override({
-            "driver.include": ["phase-*.md"],
-            "driver.exclude": [],
-            "driver.runs": repo / "runs",
-        })
+        old = conventions.override(
+            {
+                "driver.include": ["phase-*.md"],
+                "driver.exclude": [],
+                "driver.runs": repo / "runs",
+            }
+        )
         try:
+
             def write_phase(name, together=None):
                 text = "## 1. Objective\n"
                 if together is not None:
@@ -1235,12 +1292,12 @@ def self_test():
 
             # A symmetric three-member group with one member finished: the
             # remainder is the other two, in declaration order.
-            for name in ("phase-100410-a.md", "phase-100420-b.md",
-                         "phase-100430-c.md"):
+            for name in ("phase-100410-a.md", "phase-100420-b.md", "phase-100430-c.md"):
                 write_phase(name, "100410, 100420, 100430")
             (repo / "runs" / "phase-100410").mkdir(parents=True)
             (repo / "runs" / "phase-100410" / "run.json").write_text(
-                json.dumps({"state": "completed"}))
+                json.dumps({"state": "completed"})
+            )
             got = resolve_group(repo, roadmap, 100420)
             assert got["state"] == "GROUP", got
             assert got["group"] == ["100410", "100420", "100430"], got
@@ -1253,10 +1310,10 @@ def self_test():
             for number in (100420, 100430):
                 rd = repo / "runs" / f"phase-{number}"
                 rd.mkdir(parents=True, exist_ok=True)
-                (rd / "run.json").write_text(
-                    json.dumps({"state": "completed"}))
-            assert resolve_group(repo, roadmap, 100430)["remainder"] == [], \
+                (rd / "run.json").write_text(json.dumps({"state": "completed"}))
+            assert resolve_group(repo, roadmap, 100430)["remainder"] == [], (
                 resolve_group(repo, roadmap, 100430)
+            )
 
             # A phase with no group section is refused, and the message says
             # which section is missing.
@@ -1326,21 +1383,26 @@ def self_test():
         (repo / "runs" / "phase-100030").mkdir(parents=True)
         (repo / "runs" / "phase-100040").mkdir(parents=True)
         (repo / "roadmap" / "phase-100010-alpha.md").write_text(
-            "- [x] Required approval is obtained.\n")
+            "- [x] Required approval is obtained.\n"
+        )
         (repo / "roadmap" / "phase-100020-appendix-notes.md").write_text("x\n")
         (repo / "roadmap" / "phase-100020-beta.md").write_text(
-            "- [ ] Required approval is obtained.\n")
+            "- [ ] Required approval is obtained.\n"
+        )
         (repo / "roadmap" / "phase-100030-gamma.md").write_text("x\n")
         (repo / "runs" / "phase-100030" / "run.json").write_text(
-            json.dumps({"state": "completed"}))
+            json.dumps({"state": "completed"})
+        )
         # 100040: only index.md marks it Complete (template drift case).
         (repo / "roadmap" / "phase-100040-delta.md").write_text("x\n")
         (repo / "runs" / "phase-100040" / "run.json").write_text(
-            json.dumps({"state": "rejected"}))
+            json.dumps({"state": "rejected"})
+        )
         (repo / "roadmap" / "index.md").write_text(
             "| 100040 | `1×` | [x](phase-100040-delta.md) | Complete — PASS |\n"
             "| 100020 | `1×` | [x](phase-100020-beta.md) | Plan ready |\n"
-            "## 100010. alpha · `1×` · **Complete** · [x](phase-100010-alpha.md)\n")
+            "## 100010. alpha · `1×` · **Complete** · [x](phase-100010-alpha.md)\n"
+        )
         got = select_next(repo, repo / "roadmap")
         assert got is not None and got[0] == 100020, got
         assert got[1].name == "phase-100020-beta.md", got
@@ -1349,26 +1411,32 @@ def self_test():
         # phase is one nothing ever ran and the tick is ignored.
         (repo / "runs" / "phase-100020").mkdir(parents=True)
         (repo / "runs" / "phase-100020" / "run.json").write_text(
-            json.dumps({"state": "rejected"}))
+            json.dumps({"state": "rejected"})
+        )
         (repo / "roadmap" / "phase-100020-beta.md").write_text(
-            "- [x] Required approval is obtained.\n")
-        assert select_next(repo, repo / "roadmap") is None, \
-            select_next(repo, repo / "roadmap")
+            "- [x] Required approval is obtained.\n"
+        )
+        assert select_next(repo, repo / "roadmap") is None, select_next(
+            repo, repo / "roadmap"
+        )
     with tempfile.TemporaryDirectory() as tmp:
         # Parked phases stay visible in the roadmap but are never selected.
         repo = Path(tmp).resolve()
         (repo / "roadmap").mkdir()
         (repo / "roadmap" / "phase-100010-alpha.md").write_text(
-            "- [x] Required approval is obtained.\n")
+            "- [x] Required approval is obtained.\n"
+        )
         (repo / "roadmap" / "phase-900999-parked.md").write_text("x\n")
         (repo / "roadmap" / "index.md").write_text("Plan ready\n")
         parked_rd = repo / "runs" / "phase-100010"
         parked_rd.mkdir(parents=True)
         (parked_rd / "run.json").write_text(json.dumps({"state": "rejected"}))
-        assert select_next(repo, repo / "roadmap") is None, \
-            select_next(repo, repo / "roadmap")
-        assert [n for n, _ in candidates(repo, repo / "roadmap")] == [100010], \
+        assert select_next(repo, repo / "roadmap") is None, select_next(
+            repo, repo / "roadmap"
+        )
+        assert [n for n, _ in candidates(repo, repo / "roadmap")] == [100010], (
             candidates(repo, repo / "roadmap")
+        )
     with tempfile.TemporaryDirectory() as tmp:
         # A ticked approval box on a phase nothing ever ran does not finish it.
         # The box records that a gate was passed; only the pipeline's own records
@@ -1380,28 +1448,33 @@ def self_test():
         (repo / "roadmap").mkdir()
         phase = repo / "roadmap" / "phase-100010-alpha.md"
         phase.write_text("- [x] Required approval is obtained.\n")
-        assert not phase_attempted(repo, 100010), \
+        assert not phase_attempted(repo, 100010), (
             "a phase with no run directory has not been attempted"
-        assert not is_done(repo, 100010, phase, set()), \
+        )
+        assert not is_done(repo, 100010, phase, set()), (
             "a ticked approval box must not finish a phase nothing ever ran"
-        assert select_next(repo, repo / "roadmap") is not None, \
+        )
+        assert select_next(repo, repo / "roadmap") is not None, (
             "a phase with only a ticked approval box is still offered"
+        )
         # The box is still reported, so the audit output shows why a human
         # believes the phase is finished.
-        assert signals(repo, 100010, phase, set())["approval"] is True, \
-            signals(repo, 100010, phase, set())
+        assert signals(repo, 100010, phase, set())["approval"] is True, signals(
+            repo, 100010, phase, set()
+        )
         # Once the pipeline has run the phase, the same box closes it out. A
         # rejected run is not completion on its own, so this is the tick doing
         # the work, which is the operator close-out this rule exists to keep.
         rd = repo / "runs" / "phase-100010"
         rd.mkdir(parents=True)
         (rd / "run.json").write_text(json.dumps({"state": "rejected"}))
-        assert phase_attempted(repo, 100010), \
+        assert phase_attempted(repo, 100010), (
             "a run directory is proof the phase was reached"
-        assert not run_completed(repo, 100010), \
-            "a rejected run is not completion"
-        assert is_done(repo, 100010, phase, set()), \
+        )
+        assert not run_completed(repo, 100010), "a rejected run is not completion"
+        assert is_done(repo, 100010, phase, set()), (
             "a ticked box closes out a phase the pipeline already ran"
+        )
     with tempfile.TemporaryDirectory() as tmp:
         # Each machine signal on its own phase: ledger-only and log-only each
         # count; a ledger without finalize outranks a stale DONE log; BLOCKED
@@ -1413,7 +1486,8 @@ def self_test():
         rd = repo / "runs" / "phase-100010"
         rd.mkdir(parents=True)
         (rd / "ledger.json").write_text(
-            json.dumps({"steps": {"finalize": {"signal": "FINALIZE_DONE"}}}))
+            json.dumps({"steps": {"finalize": {"signal": "FINALIZE_DONE"}}})
+        )
         # The runner writes the digest form, not the bare word. This case is
         # the one that regressed: with an exact `== "FINALIZE_DONE"` compare,
         # the real shape never matched, so every finished phase read as
@@ -1423,31 +1497,37 @@ def self_test():
         rd_digest = repo / "runs" / "phase-100070"
         rd_digest.mkdir(parents=True)
         (rd_digest / "ledger.json").write_text(
-            json.dumps({"steps": {"finalize": {"signal": "FINALIZE_DONE 3d0dbe62"}}}))
+            json.dumps({"steps": {"finalize": {"signal": "FINALIZE_DONE 3d0dbe62"}}})
+        )
         assert ledger_finalized(repo, 100070), "a digested FINALIZE_DONE must count"
         # A near miss must not: same prefix, different word.
         rd_near = repo / "runs" / "phase-100080"
         rd_near.mkdir(parents=True)
         (rd_near / "ledger.json").write_text(
-            json.dumps({"steps": {"finalize": {"signal": "FINALIZE_DONEA 3d0dbe62"}}}))
+            json.dumps({"steps": {"finalize": {"signal": "FINALIZE_DONEA 3d0dbe62"}}})
+        )
         assert not ledger_finalized(repo, 100080), "FINALIZE_DONEA is not FINALIZE_DONE"
         (repo / "roadmap" / "phase-100020-beta.md").write_text(unchecked)
         rd2 = repo / "runs" / "phase-100020"
         rd2.mkdir(parents=True)
         (rd2 / "finalize-task-r1.log").write_text(
-            "2026-01-01T00:00:00Z close-out complete\nFINALIZE_DONE r1nonce\n")
+            "2026-01-01T00:00:00Z close-out complete\nFINALIZE_DONE r1nonce\n"
+        )
         (repo / "roadmap" / "phase-100030-gamma.md").write_text(unchecked)
         rd3 = repo / "runs" / "phase-100030"
         rd3.mkdir(parents=True)
         (rd3 / "ledger.json").write_text(
-            json.dumps({"steps": {"developer": {"signal": "DEVELOPER_DONE"}}}))
+            json.dumps({"steps": {"developer": {"signal": "DEVELOPER_DONE"}}})
+        )
         (rd3 / "finalize-task-r1.log").write_text(
-            "2026-01-01T00:00:00Z close-out complete\nFINALIZE_DONE\n")
+            "2026-01-01T00:00:00Z close-out complete\nFINALIZE_DONE\n"
+        )
         (repo / "roadmap" / "phase-100040-delta.md").write_text(unchecked)
         rd4 = repo / "runs" / "phase-100040"
         rd4.mkdir(parents=True)
         (rd4 / "finalize-task-r1.log").write_text(
-            "2026-01-01T00:00:00Z close-out blocked\nFINALIZE_BLOCKED: trouble\n")
+            "2026-01-01T00:00:00Z close-out blocked\nFINALIZE_BLOCKED: trouble\n"
+        )
         (repo / "roadmap" / "phase-100050-epsilon.md").write_text(unchecked)
         (repo / "runs" / "phase-100050").mkdir(parents=True)
         (repo / "roadmap" / "phase-100060-zeta.md").write_text(unchecked)
@@ -1463,18 +1543,22 @@ def self_test():
         priv_map.mkdir(parents=True)
         priv_wf.mkdir(parents=True)
         (priv_map / "phase-100010-alpha.md").write_text(
-            "- [ ] Required approval is obtained.\n")
+            "- [ ] Required approval is obtained.\n"
+        )
         (priv_map / "index.md").write_text("Plan ready\n")
-        conventions.override({
-            "roadmap-dir": BOARD_REL / "roadmap",
-            "driver.runs": BOARD_REL / "runs",
-        })
+        conventions.override(
+            {
+                "roadmap-dir": BOARD_REL / "roadmap",
+                "driver.runs": BOARD_REL / "runs",
+            }
+        )
         assert RoadmapSource(repo).roadmap == priv_map
         assert runs_dir(repo) == priv_wf.parent, runs_dir(repo)
         got = select_next(repo, priv_map)
         assert got is not None and got[0] == 100010, got
         assert got[1].relative_to(repo) == (
-            BOARD_REL / "roadmap" / "phase-100010-alpha.md"), got
+            BOARD_REL / "roadmap" / "phase-100010-alpha.md"
+        ), got
     with tempfile.TemporaryDirectory() as tmp:
         # A named roadmap folder is read instead of the derived one, and a
         # folder that cannot be read is an error rather than a quiet fallback
@@ -1492,7 +1576,8 @@ def self_test():
         # answer, so the difference cannot come from anything else.
         for folder, number in ((repo / BOARD_REL / "roadmap", 100010), (named, 100020)):
             (folder / f"phase-{number:00d}-x.md").write_text(
-                "- [ ] Required approval is obtained.\n")
+                "- [ ] Required approval is obtained.\n"
+            )
         source = RoadmapSource(repo, named)
         assert source.roadmap == named, source.roadmap
         got = source.select_next()
@@ -1523,15 +1608,17 @@ def self_test():
         assert external.roadmap == outside, external.roadmap
         got = external.select_next()
         assert got is not None and got[0] == 100460, got
-        assert reported_path(repo, got[1]) == str(outside / "phase-100460-external.md"), \
-            reported_path(repo, got[1])
+        assert reported_path(repo, got[1]) == str(
+            outside / "phase-100460-external.md"
+        ), reported_path(repo, got[1])
         # Inside the repository it is still reported relative, unchanged.
         assert reported_path(repo, named / "phase-100020-named.md") == str(
-            BOARD_REL / "elsewhere" / "phase-100020-named.md"), \
-            reported_path(repo, named / "phase-100020-named.md")
+            BOARD_REL / "elsewhere" / "phase-100020-named.md"
+        ), reported_path(repo, named / "phase-100020-named.md")
         # The file's value selects the roadmap when no CLI override is passed.
         assert RoadmapSource(repo).roadmap == repo / BOARD_REL / "roadmap"
     with tempfile.TemporaryDirectory() as tmp:
+
         class FakeStore:
             def __init__(self, private=None):
                 self.state = {"version": 1, "phases": {}}
@@ -1578,27 +1665,34 @@ def self_test():
         for number in (100440, 100460, 100601):
             (repo / "roadmap" / f"phase-{number}-synthetic.md").write_text("x\\n")
         fake = FakeStore(private=repo / BOARD_REL)
-        got = select_server_phase(repo, "server-01", store=fake,
-                                  roadmap=repo / "roadmap")
+        got = select_server_phase(
+            repo, "server-01", store=fake, roadmap=repo / "roadmap"
+        )
         assert got["state"] == "RESERVED" and got["phase"] == "100440", got
         fake.state["phases"]["100440"]["status"] = "completed"
         (repo / BOARD_REL / "runs" / "phase-100440").mkdir(parents=True, exist_ok=True)
         (repo / BOARD_REL / "runs" / "phase-100440" / "run.json").write_text(
-            json.dumps({"state": "completed"}))
+            json.dumps({"state": "completed"})
+        )
         fake.state["phases"]["100601"] = {
-            "status": "claimed", "machine_id": "local-01",
-            "reservation_id": "rsv-local", "generation": 1,
+            "status": "claimed",
+            "machine_id": "local-01",
+            "reservation_id": "rsv-local",
+            "generation": 1,
             "run_id": "phase-100601",
         }
-        got = select_server_phase(repo, "server-01", store=fake,
-                                  roadmap=repo / "roadmap")
+        got = select_server_phase(
+            repo, "server-01", store=fake, roadmap=repo / "roadmap"
+        )
         assert got["state"] == "RESERVED" and got["phase"] == "100460", got
         fake.state["phases"]["100460"]["status"] = "completed"
         (repo / BOARD_REL / "runs" / "phase-100460").mkdir(parents=True, exist_ok=True)
         (repo / BOARD_REL / "runs" / "phase-100460" / "run.json").write_text(
-            json.dumps({"state": "completed"}))
-        got = select_server_phase(repo, "server-01", store=fake, reserve=False,
-                                  roadmap=repo / "roadmap")
+            json.dumps({"state": "completed"})
+        )
+        got = select_server_phase(
+            repo, "server-01", store=fake, reserve=False, roadmap=repo / "roadmap"
+        )
         assert got["state"] == "WAIT_FOR_CLAIM" and got["phase"] == "100601", got
 
         # An operator close-out ticks the approval box but cannot produce a
@@ -1613,11 +1707,13 @@ def self_test():
         (repo / "roadmap" / "phase-100620-synthetic.md").write_text("x\\n")
         (repo / BOARD_REL / "runs" / "phase-100601").mkdir(parents=True, exist_ok=True)
         (repo / BOARD_REL / "runs" / "phase-100601" / "run.json").write_text(
-            json.dumps({"state": "rejected"}))
+            json.dumps({"state": "rejected"})
+        )
         p601 = repo / "roadmap" / "phase-100601-synthetic.md"
         p601.write_text("- [x] Required approval is obtained\n")
-        got = select_server_phase(repo, "server-01", store=fake, reserve=False,
-                                  roadmap=repo / "roadmap")
+        got = select_server_phase(
+            repo, "server-01", store=fake, reserve=False, roadmap=repo / "roadmap"
+        )
         assert got["state"] == "AVAILABLE" and got["phase"] == "100620", got
         p601.write_text("x\n")
 
@@ -1626,8 +1722,9 @@ def self_test():
         # inconsistency, not a silent pass.
         (repo / BOARD_REL / "runs" / "phase-100601").mkdir(parents=True, exist_ok=True)
         fake.state["phases"]["100601"]["status"] = "completed"
-        got = select_server_phase(repo, "server-01", store=fake, reserve=False,
-                                  roadmap=repo / "roadmap")
+        got = select_server_phase(
+            repo, "server-01", store=fake, reserve=False, roadmap=repo / "roadmap"
+        )
         assert got["state"] == "COORDINATION_INCONSISTENT", got
 
         class FailingStore(FakeStore):
@@ -1635,8 +1732,9 @@ def self_test():
                 raise CoordinationError("coordination push failed")
 
         try:
-            select_server_phase(repo, "server-01", store=FailingStore(),
-                                roadmap=repo / "roadmap")
+            select_server_phase(
+                repo, "server-01", store=FailingStore(), roadmap=repo / "roadmap"
+            )
             launch_refused = False
         except CoordinationError:
             launch_refused = True
@@ -1649,27 +1747,28 @@ def self_test():
         repo = Path(tmp).resolve()
         (repo / "roadmap").mkdir()
         (repo / BOARD_REL).mkdir(parents=True)
-        together = ("### Reservation Group\n\n"
-                    "`together: 100010, 100020, 100030`\n")
+        together = "### Reservation Group\n\n`together: 100010, 100020, 100030`\n"
         for number in (100010, 100020, 100030):
-            (repo / "roadmap" / f"phase-{number}-synthetic.md").write_text(
-                together)
+            (repo / "roadmap" / f"phase-{number}-synthetic.md").write_text(together)
         fake = FakeStore(private=repo / BOARD_REL)
-        got = select_server_phase(repo, "server-01", store=fake,
-                                  roadmap=repo / "roadmap")
+        got = select_server_phase(
+            repo, "server-01", store=fake, roadmap=repo / "roadmap"
+        )
         assert got["state"] == "RESERVED", got
         assert got["group"] == ["100010", "100020", "100030"], got
-        assert [member["phase"] for member in got["members"]] == \
-            ["100010", "100020", "100030"], got
-        assert len({member["reservation_id"]
-                    for member in got["members"]}) == 1, got
+        assert [member["phase"] for member in got["members"]] == [
+            "100010",
+            "100020",
+            "100030",
+        ], got
+        assert len({member["reservation_id"] for member in got["members"]}) == 1, got
         for member in got["members"]:
-            token = json.loads(
-                reservation_file(repo, member["phase"]).read_text())
+            token = json.loads(reservation_file(repo, member["phase"]).read_text())
             assert token["reservation_id"] == member["reservation_id"], token
         # The whole group is held now, so the same selection waits for it.
-        got = select_server_phase(repo, "server-01", store=fake, reserve=False,
-                                  roadmap=repo / "roadmap")
+        got = select_server_phase(
+            repo, "server-01", store=fake, reserve=False, roadmap=repo / "roadmap"
+        )
         assert got["state"] == "WAIT_FOR_CLAIM", got
     with tempfile.TemporaryDirectory() as tmp:
         # A single phase that declares no group is still selected alone and
@@ -1677,11 +1776,11 @@ def self_test():
         repo = Path(tmp).resolve()
         (repo / "roadmap").mkdir()
         (repo / BOARD_REL).mkdir(parents=True)
-        (repo / "roadmap" / "phase-100010-plain.md").write_text(
-            "## 1. Objective\n")
+        (repo / "roadmap" / "phase-100010-plain.md").write_text("## 1. Objective\n")
         fake = FakeStore(private=repo / BOARD_REL)
-        got = select_server_phase(repo, "server-01", store=fake,
-                                  roadmap=repo / "roadmap")
+        got = select_server_phase(
+            repo, "server-01", store=fake, roadmap=repo / "roadmap"
+        )
         assert got["state"] == "RESERVED" and got["phase"] == "100010", got
         assert "members" not in got and "group" not in got, got
     with tempfile.TemporaryDirectory() as tmp:
@@ -1693,9 +1792,11 @@ def self_test():
         repo = Path(tmp).resolve()
         (repo / "roadmap").mkdir()
         (repo / BOARD_REL / "runs").mkdir(parents=True)
-        for number, state in ((100010, "rejected"),
-                              (100020, "remedy_escalated"),
-                              (100030, "completed")):
+        for number, state in (
+            (100010, "rejected"),
+            (100020, "remedy_escalated"),
+            (100030, "completed"),
+        ):
             (repo / "roadmap" / f"phase-{number}-synthetic.md").write_text("x\n")
             run_dir = repo / BOARD_REL / "runs" / f"phase-{number:06d}"
             run_dir.mkdir(parents=True)
@@ -1708,18 +1809,27 @@ def self_test():
             def read(self):
                 return {"phases": {}}, "fake"
 
-        got = select_server_phase(repo, "server-01",
-                                  store=EmptyStore(private=repo / BOARD_REL),
-                                  reserve=False, roadmap=repo / "roadmap")
+        got = select_server_phase(
+            repo,
+            "server-01",
+            store=EmptyStore(private=repo / BOARD_REL),
+            reserve=False,
+            roadmap=repo / "roadmap",
+        )
         assert got["state"] == "NO_PHASE", got
         skipped = got.get("needs_decision") or []
         assert [e["phase"] for e in skipped] == ["100010", "100020"], skipped
-        assert [e["state"] for e in skipped] == ["rejected", "remedy_escalated"], skipped
+        assert [e["state"] for e in skipped] == ["rejected", "remedy_escalated"], (
+            skipped
+        )
         assert needs_decision(repo, 100010) == "rejected"
         assert needs_decision(repo, 100030) is None
-        assert signals(
-            repo, 100020, repo / "roadmap" / "phase-100020-synthetic.md",
-            set())["needs_decision"] is True
+        assert (
+            signals(
+                repo, 100020, repo / "roadmap" / "phase-100020-synthetic.md", set()
+            )["needs_decision"]
+            is True
+        )
     with tempfile.TemporaryDirectory() as tmp:
         # An open decision gate stops the selector before it reserves. This is
         # the 100817 regression: the gate was real, the developer stopped on it
@@ -1761,10 +1871,12 @@ def self_test():
             "### Decision Gates\n"
             "| Gate | Issue | State | Choice | Untaken branch |\n"
             "|---|---|---|---|---|\n"
-            "| Which option ships | #1 | `open` | — | — |\n")
+            "| Which option ships | #1 | `open` | — | — |\n"
+        )
         store = FakeGateStore(private=repo / BOARD_REL)
-        got = select_server_phase(repo, "server-01", store=store,
-                                  roadmap=repo / "roadmap")
+        got = select_server_phase(
+            repo, "server-01", store=store, roadmap=repo / "roadmap"
+        )
         assert got["state"] == "BLOCKED_ON_GATE", got
         assert got["phase"] == "100440", got
         assert store.reserved == [], "an open gate must not reserve a phase"
@@ -1781,9 +1893,11 @@ def self_test():
             "| Gate | Issue | State | Choice | Untaken branch |\n"
             "|---|---|---|---|---|\n"
             "| Which option ships | #1 | `recorded` 2026-09-28 "
-            "| Option 1 | Option 2 |\n")
-        got = select_server_phase(repo, "server-01", store=store,
-                                  roadmap=repo / "roadmap")
+            "| Option 1 | Option 2 |\n"
+        )
+        got = select_server_phase(
+            repo, "server-01", store=store, roadmap=repo / "roadmap"
+        )
         assert got["state"] == "RESERVED" and got["phase"] == "100440", got
         assert store.reserved == [100440], store.reserved
 
@@ -1793,13 +1907,16 @@ def self_test():
             "### Decision Gates\n"
             "| Gate | Issue | State | Choice | Untaken branch |\n"
             "|---|---|---|---|---|\n"
-            "| Which option ships | #1 | `recorded` 2026-09-28 | — | — |\n")
-        assert gate_block(100440, gate_plan) is not None, \
+            "| Which option ships | #1 | `recorded` 2026-09-28 | — | — |\n"
+        )
+        assert gate_block(100440, gate_plan) is not None, (
             "recorded with an empty choice must fail closed"
+        )
     with tempfile.TemporaryDirectory() as tmp:
         # Exercise the real Git-backed store through the selector rather than
         # relying only on FakeStore for cross-machine ordering.
         from argus.phase_reservations import _git_test_repo, _self_test_receipt
+
         remote, clients = _git_test_repo(Path(tmp).resolve(), "real-ordering")
         repo = Path(tmp).resolve() / "root"
         nested = repo / BOARD_REL
@@ -1811,15 +1928,16 @@ def self_test():
         roadmap = nested / "roadmap"
         store_server = ReservationStore(repo, private_repo=clients[0])
         store_local = ReservationStore(repo, private_repo=clients[1])
-        first = select_server_phase(repo, "server-01", store=store_server,
-                                    roadmap=roadmap)
+        first = select_server_phase(
+            repo, "server-01", store=store_server, roadmap=roadmap
+        )
         assert first["state"] == "RESERVED" and first["phase"] == "100440", first
         local = store_local.reserve(100601, "local-01")
         (nested / "runs" / "phase-100601").mkdir()
         (nested / "runs" / "phase-100601" / "run.json").write_text(
-            json.dumps({"state": "completed"}))
-        old_runs = conventions.override({
-            "driver.runs": store_local.private / "runs"})
+            json.dumps({"state": "completed"})
+        )
+        old_runs = conventions.override({"driver.runs": store_local.private / "runs"})
         try:
             local_receipt = _self_test_receipt(store_local, local)
             store_local.set_status(local, "completed", evidence_path=local_receipt)
@@ -1829,35 +1947,41 @@ def self_test():
         server["phase"] = "100440"
         (nested / "runs" / "phase-100440").mkdir(exist_ok=True)
         (nested / "runs" / "phase-100440" / "run.json").write_text(
-            json.dumps({"state": "completed"}))
-        old_runs = conventions.override({
-            "driver.runs": store_server.private / "runs"})
+            json.dumps({"state": "completed"})
+        )
+        old_runs = conventions.override({"driver.runs": store_server.private / "runs"})
         try:
             server_receipt = _self_test_receipt(store_server, server)
             store_server.set_status(server, "completed", evidence_path=server_receipt)
         finally:
             conventions.configure(old_runs)
-        following = select_server_phase(repo, "server-01", store=store_server,
-                                        roadmap=roadmap)
-        assert following["state"] == "RESERVED" and following["phase"] == "100460", following
+        following = select_server_phase(
+            repo, "server-01", store=store_server, roadmap=roadmap
+        )
+        assert following["state"] == "RESERVED" and following["phase"] == "100460", (
+            following
+        )
         following_record = dict(store_server.read()[0]["phases"]["100460"])
         following_record["phase"] = "100460"
         (nested / "runs" / "phase-100460").mkdir(exist_ok=True)
         (nested / "runs" / "phase-100460" / "run.json").write_text(
-            json.dumps({"state": "completed"}))
-        old_runs = conventions.override({
-            "driver.runs": store_server.private / "runs"})
+            json.dumps({"state": "completed"})
+        )
+        old_runs = conventions.override({"driver.runs": store_server.private / "runs"})
         try:
-            following_receipt = _self_test_receipt(
-                store_server, following_record)
+            following_receipt = _self_test_receipt(store_server, following_record)
             store_server.set_status(
-                following_record, "completed", evidence_path=following_receipt)
+                following_record, "completed", evidence_path=following_receipt
+            )
         finally:
             conventions.configure(old_runs)
         store_local.reserve(100602, "local-01")
-        waiting = select_server_phase(repo, "server-01", store=store_server,
-                                      roadmap=roadmap)
-        assert waiting["state"] == "WAIT_FOR_CLAIM" and waiting["phase"] == "100602", waiting
+        waiting = select_server_phase(
+            repo, "server-01", store=store_server, roadmap=roadmap
+        )
+        assert waiting["state"] == "WAIT_FOR_CLAIM" and waiting["phase"] == "100602", (
+            waiting
+        )
 
         # A phase whose pull request is open is finished work, not queue work.
         # It is never offered for another run, and the line no longer stops
@@ -1866,21 +1990,27 @@ def self_test():
         # behaviour waited here for a human, which meant an abandoned pull
         # request parked every later phase with no way back.
         review_phase = 100590
-        review_file = (roadmap / f"phase-{review_phase}-awaiting-review.md")
+        review_file = roadmap / f"phase-{review_phase}-awaiting-review.md"
         review_file.write_text("- [ ] Required approval is obtained.\n")
-        (nested / "runs" / f"phase-{review_phase}").mkdir(parents=True,
-                                                          exist_ok=True)
+        (nested / "runs" / f"phase-{review_phase}").mkdir(parents=True, exist_ok=True)
         (nested / "runs" / f"phase-{review_phase}" / "publication.json").write_text(
-            json.dumps({"version": 1, "phase": f"{review_phase:06d}",
-                        "state": "awaiting_review",
-                        "branch": "feature/awaiting-review",
-                        "pull_request": "https://example/pr/9",
-                        "public_head": "0" * 40,
-                        "private_head": "0" * 40}))
+            json.dumps(
+                {
+                    "version": 1,
+                    "phase": f"{review_phase:06d}",
+                    "state": "awaiting_review",
+                    "branch": "feature/awaiting-review",
+                    "pull_request": "https://example/pr/9",
+                    "public_head": "0" * 40,
+                    "private_head": "0" * 40,
+                }
+            )
+        )
         later_file = roadmap / "phase-100591-after-review.md"
         later_file.write_text("- [ ] Required approval is obtained.\n")
-        review = select_server_phase(repo, "server-01", store=store_server,
-                                     roadmap=roadmap)
+        review = select_server_phase(
+            repo, "server-01", store=store_server, roadmap=roadmap
+        )
         # The line moves past the open pull request...
         assert review["state"] == "RESERVED" and review["phase"] == "100591", review
         # ...and says which phase it moved past, or nothing would ever run the
@@ -1893,8 +2023,9 @@ def self_test():
         # skip is about the queue, not about the phase's completion.
         assert not is_done(repo, review_phase, review_file, set())
         # And it must never be handed out for a run of its own.
-        offered = select_server_phase(repo, "server-01", store=store_server,
-                                      reserve=False, roadmap=roadmap)
+        offered = select_server_phase(
+            repo, "server-01", store=store_server, reserve=False, roadmap=roadmap
+        )
         assert offered["phase"] == "100591", offered
         # The skipped phase rides along on an outcome that does not launch
         # either. That is the case that matters: a tick whose selection is
@@ -1904,24 +2035,30 @@ def self_test():
         drained_record["phase"] = "100591"
         (nested / "runs" / "phase-100591").mkdir(exist_ok=True)
         (nested / "runs" / "phase-100591" / "run.json").write_text(
-            json.dumps({"state": "completed"}))
-        old_runs = conventions.override({
-            "driver.runs": store_server.private / "runs"})
+            json.dumps({"state": "completed"})
+        )
+        old_runs = conventions.override({"driver.runs": store_server.private / "runs"})
         try:
             store_server.set_status(
-                drained_record, "completed",
-                evidence_path=_self_test_receipt(store_server, drained_record))
+                drained_record,
+                "completed",
+                evidence_path=_self_test_receipt(store_server, drained_record),
+            )
         finally:
             conventions.configure(old_runs)
-        drained = select_server_phase(repo, "server-01", store=store_server,
-                                      roadmap=roadmap)
-        assert [e["phase"] for e in (drained.get("awaiting_review") or [])] \
-            == [f"{review_phase:06d}"], drained
+        drained = select_server_phase(
+            repo, "server-01", store=store_server, roadmap=roadmap
+        )
+        assert [e["phase"] for e in (drained.get("awaiting_review") or [])] == [
+            f"{review_phase:06d}"
+        ], drained
         # And on the one outcome that is not a launch at all.
-        drained_state = select_server_phase(repo, "server-01", store=store_server,
-                                            reserve=False, roadmap=roadmap)
-        assert [e["phase"] for e in (drained_state.get("awaiting_review") or [])] \
-            == [f"{review_phase:06d}"], drained_state
+        drained_state = select_server_phase(
+            repo, "server-01", store=store_server, reserve=False, roadmap=roadmap
+        )
+        assert [e["phase"] for e in (drained_state.get("awaiting_review") or [])] == [
+            f"{review_phase:06d}"
+        ], drained_state
 
     with tempfile.TemporaryDirectory() as tmp:
         # The config names the board and run folder. A store that was given a
@@ -1940,22 +2077,23 @@ def self_test():
         (nested / "roadmap" / f"phase-{number}-hermetic.md").write_text("x\n")
         own_private = _git_test_repo(case, "hermetic")[1][0]
         (own_private / "runs").mkdir(exist_ok=True)
-        conventions.override({
-            "repo-root": repo,
-            "roadmap-dir": BOARD_REL / "roadmap",
-            "driver.runs": BOARD_REL / "runs",
-            "board.repo": decoy,
-        })
+        conventions.override(
+            {
+                "repo-root": repo,
+                "roadmap-dir": BOARD_REL / "roadmap",
+                "driver.runs": BOARD_REL / "runs",
+                "board.repo": decoy,
+            }
+        )
         assert conventions.board_repo(repo) == decoy.resolve()
         store = ReservationStore(repo, private_repo=own_private)
         assert store.private == own_private.resolve(), store.private
-        got = select_server_phase(repo, "server-01", store=store,
-                                  roadmap=nested / "roadmap")
+        got = select_server_phase(
+            repo, "server-01", store=store, roadmap=nested / "roadmap"
+        )
         assert got["state"] == "RESERVED" and got["phase"] == str(number), got
-        assert not (decoy / "runs" / f"phase-{number}"
-                    / "reservation.json").exists()
-        assert (nested / "runs" / f"phase-{number}"
-                / "reservation.json").exists()
+        assert not (decoy / "runs" / f"phase-{number}" / "reservation.json").exists()
+        assert (nested / "runs" / f"phase-{number}" / "reservation.json").exists()
 
     # The class the registry hands the driver must reach the same answer as the
     # functions, or the driver is being served by a different code path than
@@ -1985,4 +2123,5 @@ def self_test():
 
 def _self_test_publisher_lookup():
     from argus.gitsync import awaiting_review
+
     assert _gitsync(Path(".")) is awaiting_review

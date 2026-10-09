@@ -41,10 +41,12 @@ def configure_from_file(config_path=None, overrides=None):
 def configure_from_args(args):
     """Load settings and the four shared CLI overrides from parsed arguments."""
     overrides = {}
-    for key, name in (("repo-root", "config_repo_root"),
-                      ("roadmap-dir", "config_roadmap_dir"),
-                      ("phase-glob", "config_phase_glob"),
-                      ("driver", "config_driver")):
+    for key, name in (
+        ("repo-root", "config_repo_root"),
+        ("roadmap-dir", "config_roadmap_dir"),
+        ("phase-glob", "config_phase_glob"),
+        ("driver", "config_driver"),
+    ):
         value = getattr(args, name, None)
         if value is not None:
             overrides[key] = value

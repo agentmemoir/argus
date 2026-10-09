@@ -9,7 +9,8 @@ from pathlib import Path
 if "argus" not in sys.modules:
     folder = Path(__file__).resolve().parent
     spec = importlib.util.spec_from_file_location(
-        "argus", folder / "__init__.py", submodule_search_locations=[str(folder)])
+        "argus", folder / "__init__.py", submodule_search_locations=[str(folder)]
+    )
     package = importlib.util.module_from_spec(spec)
     sys.modules["argus"] = package
     spec.loader.exec_module(package)

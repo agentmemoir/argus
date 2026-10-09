@@ -126,7 +126,8 @@ def record_escalation(phase_dir: Path, phase: str | None = None) -> dict:
         "resume": RESUME,
     }
     (phase_dir / RECORD_NAME).write_text(
-        json.dumps(record, indent=2, sort_keys=True) + "\n")
+        json.dumps(record, indent=2, sort_keys=True) + "\n"
+    )
     return record
 
 
@@ -169,9 +170,15 @@ def run(args) -> int:
             released = "rejected"
         except Exception as exc:  # noqa: BLE001 - a release failure is reported
             released = "failed"
-            reason = str(exc).splitlines()[0][:200] if str(exc) else exc.__class__.__name__
-    result = {"ok": True, "record": record["record"], "released": released,
-              "release_error": reason}
+            reason = (
+                str(exc).splitlines()[0][:200] if str(exc) else exc.__class__.__name__
+            )
+    result = {
+        "ok": True,
+        "record": record["record"],
+        "released": released,
+        "release_error": reason,
+    }
     print(json.dumps(result, indent=2, sort_keys=True))
     return 0
 
@@ -199,15 +206,28 @@ def self_test() -> int:
     with tempfile.TemporaryDirectory() as tmp:
         phase_dir = Path(tmp) / "phase-100901"
         phase_dir.mkdir()
-        (phase_dir / "run.json").write_text(json.dumps({
-            "state": "remedy_escalated",
-            "events": [
-                {"step": "approver", "signal": "REMEDY_REJECTED: F-01 aaa11111"},
-                {"step": "remediator", "signal": "REMEDIATOR_DONE bbb22222"},
-                {"step": "approver", "signal": "REMEDY_REJECTED: NEW-04 c0eb2c73"},
-            ],
-        }) + "\n")
-        (phase_dir / "approver-task-r3.log").write_text("REMEDY_REJECTED: NEW-04 c0eb2c73\n")
+        (phase_dir / "run.json").write_text(
+            json.dumps(
+                {
+                    "state": "remedy_escalated",
+                    "events": [
+                        {
+                            "step": "approver",
+                            "signal": "REMEDY_REJECTED: F-01 aaa11111",
+                        },
+                        {"step": "remediator", "signal": "REMEDIATOR_DONE bbb22222"},
+                        {
+                            "step": "approver",
+                            "signal": "REMEDY_REJECTED: NEW-04 c0eb2c73",
+                        },
+                    ],
+                }
+            )
+            + "\n"
+        )
+        (phase_dir / "approver-task-r3.log").write_text(
+            "REMEDY_REJECTED: NEW-04 c0eb2c73\n"
+        )
         record = record_escalation(phase_dir, "100901")
         assert record["state"] == "remedy_escalated", record
         assert record["via"] == "exhausted", record
@@ -221,7 +241,9 @@ def self_test() -> int:
         bare = Path(tmp) / "phase-100902"
         bare.mkdir()
         record = record_escalation(bare, "100902")
-        assert record["open_findings"] == [] and record["approver_signal"] is None, record
+        assert record["open_findings"] == [] and record["approver_signal"] is None, (
+            record
+        )
         assert (bare / RECORD_NAME).is_file()
         checks += 1
     print(f"remedy_escalation self-test: pass ({checks} checks)")

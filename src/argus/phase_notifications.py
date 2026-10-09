@@ -18,6 +18,7 @@ if __package__ in {None, ""}:
 from argus.config import ConfigError
 from argus.conventions import phase_file_parts, phase_run_dir
 from argus import conventions
+
 _SECRET = re.compile(
     r"(?i)\b(?:api[_-]?key|authorization|bearer|password|secret|token)\s*[:=]\s*\S+"
 )
@@ -112,7 +113,10 @@ def format_duration(seconds: float) -> str:
 def default_run_json(phase_file: str | Path) -> Path:
     """Return the run record the pipeline writes for this phase."""
     number, _, _ = parse_phase_file(phase_file)
-    return phase_run_dir(conventions.setting("repo-root"), int(number), phase_file) / "run.json"
+    return (
+        phase_run_dir(conventions.setting("repo-root"), int(number), phase_file)
+        / "run.json"
+    )
 
 
 def stage_timings(run_json: Path) -> list[tuple[str, float]]:
@@ -211,11 +215,12 @@ def format_notification(
             )
         heading = f"{label} stopped."
         run_dir = shlex.quote(str((run_json or default_run_json(phase_file)).parent))
-        code = f" The driver is halted with exit code {exit_code}." if exit_code is not None else " The driver is halted."
-        return (
-            f"{heading}{code} For more info, run:\n\n"
-            f"```\nls -la {run_dir}\n```"
+        code = (
+            f" The driver is halted with exit code {exit_code}."
+            if exit_code is not None
+            else " The driver is halted."
         )
+        return f"{heading}{code} For more info, run:\n\n```\nls -la {run_dir}\n```"
     if event == "escalated":
         # The remedy loop ran out of rounds with findings still open. This is a
         # record about a budget, not a verdict, so the message says the line
@@ -242,8 +247,16 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--event",
         required=True,
-        choices=["started", "completed", "interrupted", "released", "stopped",
-                 "stopped-signal", "stalled", "escalated"],
+        choices=[
+            "started",
+            "completed",
+            "interrupted",
+            "released",
+            "stopped",
+            "stopped-signal",
+            "stalled",
+            "escalated",
+        ],
     )
     parser.add_argument("--reason")
     parser.add_argument("--exit-code", type=int)
@@ -252,7 +265,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--group",
         action="append",
         default=None,
-        help="a phase in the reservation group, repeatable; adds a group clause")
+        help="a phase in the reservation group, repeatable; adds a group clause",
+    )
     parser.add_argument("--config")
     parser.add_argument("--driver", dest="config_driver")
     parser.add_argument("--repo-root", dest="config_repo_root")
@@ -274,8 +288,11 @@ def main(argv: list[str] | None = None) -> int:
             args.event,
             reason=args.reason,
             exit_code=args.exit_code,
-            quiet_minutes=(args.quiet_minutes if args.quiet_minutes is not None
-                           else conventions.setting("driver.quiet-minutes")),
+            quiet_minutes=(
+                args.quiet_minutes
+                if args.quiet_minutes is not None
+                else conventions.setting("driver.quiet-minutes")
+            ),
             group=args.group,
         )
     )

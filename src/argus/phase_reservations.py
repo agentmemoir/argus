@@ -62,9 +62,12 @@ def state_rel():
             path = path.resolve().relative_to(Path(board).resolve())
         except ValueError as exc:
             raise CoordinationError(
-                "coordination file must stay inside its configured repository") from exc
+                "coordination file must stay inside its configured repository"
+            ) from exc
     if not path.parts or ".." in path.parts or path.parts[0] == ".git":
-        raise CoordinationError("coordination file must be a safe repository-relative path")
+        raise CoordinationError(
+            "coordination file must be a safe repository-relative path"
+        )
     return path
 
 
@@ -74,7 +77,9 @@ def state_path(repo):
     try:
         path.resolve().relative_to(root)
     except ValueError as exc:
-        raise CoordinationError("coordination file must stay inside its repository") from exc
+        raise CoordinationError(
+            "coordination file must stay inside its repository"
+        ) from exc
     return path
 
 
@@ -89,10 +94,18 @@ SELF_TEST_BRANCH = "fixture-claims"
 #: cannot say which branch it considers its default.
 INTEGRATION_FALLBACK = "master"
 COORDINATION_VERSION = 1
-STATUSES = frozenset({
-    "claimed", "running", "paused", "blocked", "completed", "rejected",
-    "accepted", "expired",
-})
+STATUSES = frozenset(
+    {
+        "claimed",
+        "running",
+        "paused",
+        "blocked",
+        "completed",
+        "rejected",
+        "accepted",
+        "expired",
+    }
+)
 ACTIVE_STATUSES = frozenset({"claimed", "running", "paused", "blocked"})
 #: A claim a window closed on. It is neither active nor terminal: the old owner
 #: is fenced, and after the cooldown the group can be claimed again.
@@ -158,7 +171,8 @@ class ReservationConflict(CoordinationError):
         status = self.record.get("status", "unknown")
         super().__init__(
             f"phase {phase} is unavailable ({self.reason}; "
-            f"owner={owner}, status={status})")
+            f"owner={owner}, status={status})"
+        )
 
 
 class ReservationFenced(CoordinationError):
@@ -179,8 +193,8 @@ class ReservationCooldown(CoordinationError):
         self.remaining_seconds = int(remaining_seconds)
         self.record = record or {}
         super().__init__(
-            f"phase {phase} is in cooldown; "
-            f"{self.remaining_seconds} second(s) left")
+            f"phase {phase} is in cooldown; {self.remaining_seconds} second(s) left"
+        )
 
 
 class PublicationBusy(CoordinationError):
@@ -250,13 +264,19 @@ def _validate_machine_id(machine_id):
     if not isinstance(machine_id, str) or not MACHINE_ID_RE.fullmatch(machine_id):
         raise CoordinationError(
             "machine_id must contain only letters, numbers, '.', '_' or '-' "
-            "and be at most 128 characters")
+            "and be at most 128 characters"
+        )
     return machine_id
 
 
 def _validate_branch(branch):
-    if (not isinstance(branch, str) or not BRANCH_RE.fullmatch(branch)
-            or ".." in branch or "//" in branch or branch.endswith("/")):
+    if (
+        not isinstance(branch, str)
+        or not BRANCH_RE.fullmatch(branch)
+        or ".." in branch
+        or "//" in branch
+        or branch.endswith("/")
+    ):
         raise CoordinationError(f"invalid coordination branch: {branch!r}")
     return branch
 
@@ -268,17 +288,22 @@ def _validate_remote(remote):
 
 
 def _validate_reservation_id(reservation_id):
-    if not isinstance(reservation_id, str) \
-            or not RESERVATION_ID_RE.fullmatch(reservation_id):
+    if not isinstance(reservation_id, str) or not RESERVATION_ID_RE.fullmatch(
+        reservation_id
+    ):
         raise CoordinationError(
             "reservation_id must contain only letters, numbers, '.', '_' or "
-            "'-' and be at most 128 characters")
+            "'-' and be at most 128 characters"
+        )
     return reservation_id
 
 
 def _validate_generation(generation):
-    if isinstance(generation, bool) or not isinstance(generation, int) \
-            or generation < 1:
+    if (
+        isinstance(generation, bool)
+        or not isinstance(generation, int)
+        or generation < 1
+    ):
         raise CoordinationError("generation must be a positive integer")
     return generation
 
@@ -306,13 +331,17 @@ def _git(repo, *args, timeout=GIT_TIMEOUT_S):
     try:
         result = subprocess.run(
             [git_binary(), "-C", str(repo), *args],
-            capture_output=True, text=True, timeout=timeout, env=env,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            env=env,
         )
     except FileNotFoundError as exc:
         raise CoordinationUnavailable("git is not on PATH") from exc
     except subprocess.TimeoutExpired as exc:
         raise CoordinationUnavailable(
-            f"git {' '.join(args)} timed out after {timeout}s") from exc
+            f"git {' '.join(args)} timed out after {timeout}s"
+        ) from exc
     return result.returncode, result.stdout.strip(), result.stderr.strip()
 
 
@@ -341,31 +370,27 @@ def _canonical_remote_url(value):
     parsed = urllib.parse.urlsplit(value)
     if not parsed.scheme:
         return value
-    return urllib.parse.urlunsplit((
-        parsed.scheme.lower(),
-        parsed.netloc.lower(),
-        parsed.path.rstrip("/") or "/",
-        parsed.query,
-        parsed.fragment,
-    ))
+    return urllib.parse.urlunsplit(
+        (
+            parsed.scheme.lower(),
+            parsed.netloc.lower(),
+            parsed.path.rstrip("/") or "/",
+            parsed.query,
+            parsed.fragment,
+        )
+    )
 
 
 def _remote_url_sets(root, private, remote):
-    public_fetch = {
-        _canonical_remote_url(url)
-        for url in _remote_urls(root, remote)
-    }
+    public_fetch = {_canonical_remote_url(url) for url in _remote_urls(root, remote)}
     public_push = {
-        _canonical_remote_url(url)
-        for url in _remote_urls(root, remote, push=True)
+        _canonical_remote_url(url) for url in _remote_urls(root, remote, push=True)
     }
     private_fetch = {
-        _canonical_remote_url(url)
-        for url in _remote_urls(private, remote)
+        _canonical_remote_url(url) for url in _remote_urls(private, remote)
     }
     private_push = {
-        _canonical_remote_url(url)
-        for url in _remote_urls(private, remote, push=True)
+        _canonical_remote_url(url) for url in _remote_urls(private, remote, push=True)
     }
     return public_fetch, public_push, private_fetch, private_push
 
@@ -375,14 +400,20 @@ def _assert_private_boundary(root, private, remote):
     if not public_is_repo:
         return
     public_fetch, public_push, private_fetch, private_push = _remote_url_sets(
-        root, private, remote)
+        root, private, remote
+    )
     if not public_fetch or not public_push or not private_fetch or not private_push:
         raise CoordinationUnavailable(
-            "cannot prove separate public/private Git destinations")
-    if public_push & private_push or public_push & private_fetch \
-            or public_fetch & private_push:
+            "cannot prove separate public/private Git destinations"
+        )
+    if (
+        public_push & private_push
+        or public_push & private_fetch
+        or public_fetch & private_push
+    ):
         raise CoordinationUnavailable(
-            "public and private repositories share a Git push/fetch destination")
+            "public and private repositories share a Git push/fetch destination"
+        )
 
 
 def _head(repo):
@@ -399,7 +430,8 @@ def _validate_state(state):
         raise CoordinationUnavailable("coordination state is not an object")
     if state.get("version") != COORDINATION_VERSION:
         raise CoordinationUnavailable(
-            f"unsupported coordination state version: {state.get('version')!r}")
+            f"unsupported coordination state version: {state.get('version')!r}"
+        )
     phases = state.get("phases")
     if not isinstance(phases, dict):
         raise CoordinationUnavailable("coordination state.phases is not an object")
@@ -410,29 +442,29 @@ def _validate_state(state):
             raise CoordinationUnavailable(f"phase {key} record is not an object")
         for field in ("status", "machine_id", "reservation_id"):
             if not isinstance(record.get(field), str) or not record[field]:
-                raise CoordinationUnavailable(
-                    f"phase {key} has an invalid {field}")
+                raise CoordinationUnavailable(f"phase {key} has an invalid {field}")
         _validate_machine_id(record["machine_id"])
         _validate_reservation_id(record["reservation_id"])
         _validate_status(record["status"])
         _validate_generation(record.get("generation"))
         for field in ("claimed_at", "heartbeat_at", "expires_at", "run_id"):
-            if field in record and record[field] is not None \
-                    and not isinstance(record[field], str):
-                raise CoordinationUnavailable(
-                    f"phase {key} has an invalid {field}")
+            if (
+                field in record
+                and record[field] is not None
+                and not isinstance(record[field], str)
+            ):
+                raise CoordinationUnavailable(f"phase {key} has an invalid {field}")
         if "base_revisions" in record and not isinstance(
-                record["base_revisions"], dict):
-            raise CoordinationUnavailable(
-                f"phase {key} has invalid base_revisions")
+            record["base_revisions"], dict
+        ):
+            raise CoordinationUnavailable(f"phase {key} has invalid base_revisions")
     publication = state.get("publication")
     if publication is not None:
         if not isinstance(publication, dict):
             raise CoordinationUnavailable("publication lock is not an object")
         for field in ("machine_id", "reservation_id", "phase", "generation"):
             if field not in publication:
-                raise CoordinationUnavailable(
-                    f"publication lock is missing {field}")
+                raise CoordinationUnavailable(f"publication lock is missing {field}")
         _validate_machine_id(publication["machine_id"])
         _validate_reservation_id(publication["reservation_id"])
         _phase_key(publication["phase"])
@@ -448,13 +480,13 @@ def _read_state_file(path, *, allow_missing=True):
             return _empty_state()
         raise CoordinationUnavailable("coordination state file is missing")
     except OSError as exc:
-        raise CoordinationUnavailable(
-            f"cannot read coordination state: {exc}") from exc
+        raise CoordinationUnavailable(f"cannot read coordination state: {exc}") from exc
     try:
         state = json.loads(raw)
     except ValueError as exc:
         raise CoordinationUnavailable(
-            f"coordination state does not parse: {exc}") from exc
+            f"coordination state does not parse: {exc}"
+        ) from exc
     return _validate_state(state)
 
 
@@ -466,9 +498,11 @@ def _write_state_file(path, state):
 
 
 def _owner_matches(record, machine_id, reservation_id, generation):
-    return (record.get("machine_id") == machine_id
-            and record.get("reservation_id") == reservation_id
-            and record.get("generation") == generation)
+    return (
+        record.get("machine_id") == machine_id
+        and record.get("reservation_id") == reservation_id
+        and record.get("generation") == generation
+    )
 
 
 def _reservation_from_record(record):
@@ -550,8 +584,9 @@ def _expire_records(state, moment):
         reservation_id = record.get("reservation_id")
         if not reservation_id:
             continue
-        groups.setdefault(
-            (record.get("machine_id"), reservation_id), []).append((key, record))
+        groups.setdefault((record.get("machine_id"), reservation_id), []).append(
+            (key, record)
+        )
     expired = []
     for members in groups.values():
         if not any(_claim_window_passed(record, moment) for _key, record in members):
@@ -560,16 +595,28 @@ def _expire_records(state, moment):
         for key, record in members:
             record["status"] = EXPIRED_STATUS
             record[COOLDOWN_UNTIL_FIELD] = until
-            expired.append({
-                "phase": key,
-                "machine_id": record.get("machine_id"),
-                "reservation_id": record.get("reservation_id"),
-            })
+            expired.append(
+                {
+                    "phase": key,
+                    "machine_id": record.get("machine_id"),
+                    "reservation_id": record.get("reservation_id"),
+                }
+            )
     return expired
 
 
-def _claim_one(state, key, machine_id, reservation_id, generation, run_id,
-               revisions, status, number, now=None):
+def _claim_one(
+    state,
+    key,
+    machine_id,
+    reservation_id,
+    generation,
+    run_id,
+    revisions,
+    status,
+    number,
+    now=None,
+):
     """Write or refresh one claim in ``state``; return its phase record.
 
     One helper backs both ``reserve`` and ``reserve_group`` so a single claim
@@ -589,8 +636,8 @@ def _claim_one(state, key, machine_id, reservation_id, generation, run_id,
             # and is overwritten below with a fresh reservation.
         elif existing.get("status") in TERMINAL_STATUSES:
             raise ReservationConflict(
-                number, existing,
-                f"phase is retained as {existing.get('status')}")
+                number, existing, f"phase is retained as {existing.get('status')}"
+            )
         elif _owner_matches(existing, machine_id, reservation_id, generation):
             existing["status"] = status
             existing["heartbeat_at"] = _iso(now)
@@ -642,7 +689,8 @@ def _resolve_private_repo(repo_root, private_repo=None):
         raise CoordinationUnavailable("reservation board repository is not configured")
     if not private.is_dir() or not _is_git_repo(private):
         raise CoordinationUnavailable(
-            f"configured board checkout is unavailable: {private}")
+            f"configured board checkout is unavailable: {private}"
+        )
     return root, private
 
 
@@ -654,13 +702,13 @@ def _integration_branch(private, remote):
     branch used to work only because the two were the same ref.
     """
     rc, out, _err = _git(
-        private, "symbolic-ref", "--quiet", "--short",
-        f"refs/remotes/{remote}/HEAD")
+        private, "symbolic-ref", "--quiet", "--short", f"refs/remotes/{remote}/HEAD"
+    )
     # --short answers with the remote-tracking short name, which still carries
     # the remote prefix; only the branch half is a branch.
     named = out.strip()
     if rc == 0 and named.startswith(f"{remote}/"):
-        named = named[len(remote) + 1:]
+        named = named[len(remote) + 1 :]
     if rc == 0 and named:
         return named
     return INTEGRATION_FALLBACK
@@ -684,21 +732,34 @@ def _integration_ref(private, remote):
     """
     branch = _integration_branch(private, remote)
     remote_ref = f"refs/remotes/{remote}/{branch}"
-    _git(private, "fetch", "--quiet", remote,
-         f"+refs/heads/{branch}:{remote_ref}", timeout=FETCH_TIMEOUT_S)
+    _git(
+        private,
+        "fetch",
+        "--quiet",
+        remote,
+        f"+refs/heads/{branch}:{remote_ref}",
+        timeout=FETCH_TIMEOUT_S,
+    )
     rc, commit, err = _git(private, "rev-parse", "--verify", remote_ref)
     if rc == 0 and commit.strip():
         return commit.strip()
     raise CoordinationUnavailable(
         f"cannot resolve the integration branch {branch!r} on {remote}, "
         f"which is the only commit a new coordination branch may be seeded "
-        f"from: {_safe_detail(err or commit)}")
+        f"from: {_safe_detail(err or commit)}"
+    )
 
 
 def _board_branch_exists(private, remote, branch):
     rc, _out, _err = _git(
-        private, "ls-remote", "--exit-code", "--heads", remote, branch,
-        timeout=FETCH_TIMEOUT_S)
+        private,
+        "ls-remote",
+        "--exit-code",
+        "--heads",
+        remote,
+        branch,
+        timeout=FETCH_TIMEOUT_S,
+    )
     return rc == 0
 
 
@@ -725,18 +786,23 @@ def ensure_board_branch(private, remote, branch):
         return False
     source = _integration_ref(private, remote)
     rc, _out, err = _git(
-        private, "push", remote, f"{source}:refs/heads/{branch}",
-        timeout=FETCH_TIMEOUT_S)
+        private,
+        "push",
+        remote,
+        f"{source}:refs/heads/{branch}",
+        timeout=FETCH_TIMEOUT_S,
+    )
     if rc == 0:
-        print(f"coordination branch {branch!r} seeded from {source[:12]}",
-              file=sys.stderr)
+        print(
+            f"coordination branch {branch!r} seeded from {source[:12]}", file=sys.stderr
+        )
         return True
     # Losing the seed race is success: the other machine made the branch.
     if _board_branch_exists(private, remote, branch):
         return False
     raise CoordinationUnavailable(
-        f"cannot create coordination branch {branch!r} on {remote}: "
-        f"{_safe_detail(err)}")
+        f"cannot create coordination branch {branch!r} on {remote}: {_safe_detail(err)}"
+    )
 
 
 def _fetch_branch_ref(private, remote, branch):
@@ -752,32 +818,47 @@ def _fetch_branch_ref(private, remote, branch):
     remote_ref = f"refs/remotes/{remote}/{branch}"
     refspec = f"+refs/heads/{branch}:{remote_ref}"
     rc, out, err = _git(
-        private, "fetch", "--prune", remote, refspec, timeout=FETCH_TIMEOUT_S)
+        private, "fetch", "--prune", remote, refspec, timeout=FETCH_TIMEOUT_S
+    )
     if rc != 0:
         if not _board_branch_exists(private, remote, branch):
             raise CoordinationUnavailable(
-                f"coordination branch {branch!r} does not exist on {remote}")
+                f"coordination branch {branch!r} does not exist on {remote}"
+            )
         raise CoordinationUnavailable(
-            f"coordination fetch failed: {_safe_detail(err or out)}")
+            f"coordination fetch failed: {_safe_detail(err or out)}"
+        )
     rc, commit, err = _git(private, "rev-parse", "--verify", remote_ref)
     if rc != 0 or not commit:
         raise CoordinationUnavailable(
-            f"coordination branch {branch!r} does not exist on {remote}")
+            f"coordination branch {branch!r} does not exist on {remote}"
+        )
     return remote_ref, commit
 
 
 def _state_initialized(private, ref):
     shallow_rc, shallow_out, _shallow_err = _git(
-        private, "rev-parse", "--is-shallow-repository")
+        private, "rev-parse", "--is-shallow-repository"
+    )
     if shallow_rc == 0 and shallow_out.strip() == "true":
         raise CoordinationUnavailable(
-            "coordination state history is unavailable in a shallow repository")
+            "coordination state history is unavailable in a shallow repository"
+        )
     rc, out, err = _git(
-        private, "log", "--diff-filter=A", "--format=%H", "-n", "1",
-        ref, "--", state_rel().as_posix())
+        private,
+        "log",
+        "--diff-filter=A",
+        "--format=%H",
+        "-n",
+        "1",
+        ref,
+        "--",
+        state_rel().as_posix(),
+    )
     if rc != 0:
         raise CoordinationUnavailable(
-            f"cannot inspect coordination state history: {_safe_detail(err or out)}")
+            f"cannot inspect coordination state history: {_safe_detail(err or out)}"
+        )
     return bool(out.strip())
 
 
@@ -810,12 +891,12 @@ def _detached_worktree(private, ref):
     """Yield a disposable checkout without taking the phase branch."""
     parent = Path(tempfile.mkdtemp(prefix=WORKTREE_PREFIX))
     checkout = _Checkout(private, parent, parent / "checkout")
-    rc, _, err = _git(
-        private, "worktree", "add", "--detach", str(checkout.path), ref)
+    rc, _, err = _git(private, "worktree", "add", "--detach", str(checkout.path), ref)
     if rc != 0:
         shutil.rmtree(parent, ignore_errors=True)
         raise CoordinationUnavailable(
-            f"cannot create coordination worktree: {_safe_detail(err)}")
+            f"cannot create coordination worktree: {_safe_detail(err)}"
+        )
     try:
         yield checkout
         kept = checkout.keep
@@ -831,8 +912,10 @@ def _detached_worktree(private, ref):
     if kept:
         # Deliberate: the local commit is the only copy of a board state the
         # remote never received, so it stays for a person to read.
-        print(f"coordination checkout kept for inspection: {checkout.parent}",
-              file=sys.stderr)
+        print(
+            f"coordination checkout kept for inspection: {checkout.parent}",
+            file=sys.stderr,
+        )
         return
     _remove_checkout(checkout)
 
@@ -859,14 +942,18 @@ def _remove_checkout(checkout):
     # function created and no transaction is using has no value, then prune in
     # case the force left an entry behind.
     forced, _, _ = _git(
-        checkout.private, "worktree", "remove", "--force", str(checkout.path))
+        checkout.private, "worktree", "remove", "--force", str(checkout.path)
+    )
     _git(checkout.private, "worktree", "prune")
     if forced == 0:
         shutil.rmtree(checkout.parent, ignore_errors=True)
         return
-    print(f"coordination checkout could not be removed and is still at "
-          f"{checkout.parent}; the sweep clears it once it is "
-          f"{WORKTREE_SWEEP_AGE_S // 60} minutes old", file=sys.stderr)
+    print(
+        f"coordination checkout could not be removed and is still at "
+        f"{checkout.parent}; the sweep clears it once it is "
+        f"{WORKTREE_SWEEP_AGE_S // 60} minutes old",
+        file=sys.stderr,
+    )
 
 
 def sweep_stale_worktrees(now=None, age_s=WORKTREE_SWEEP_AGE_S, root=None):
@@ -882,8 +969,11 @@ def sweep_stale_worktrees(now=None, age_s=WORKTREE_SWEEP_AGE_S, root=None):
     leaving a slow disk loss that nobody attributes.
     """
     parent = Path(root) if root is not None else Path(tempfile.gettempdir())
-    moment = now if now is not None else _datetime.datetime.now(
-        _datetime.timezone.utc).timestamp()
+    moment = (
+        now
+        if now is not None
+        else _datetime.datetime.now(_datetime.timezone.utc).timestamp()
+    )
     removed, reclaimed = 0, 0
     try:
         candidates = list(parent.glob(f"{WORKTREE_PREFIX}*"))
@@ -920,14 +1010,14 @@ def _commit_state(checkout, message):
     rc, _, err = _git(checkout, "add", "--", state_rel().as_posix())
     if rc != 0:
         raise CoordinationUnavailable(
-            f"cannot stage coordination state: {_safe_detail(err)}")
+            f"cannot stage coordination state: {_safe_detail(err)}"
+        )
     rc, out, err = _git(checkout, "commit", "-q", "-m", message)
     if rc != 0:
         combined = _safe_detail(f"{out} {err}")
         if "nothing to commit" in combined.lower():
             return None
-        raise CoordinationUnavailable(
-            f"coordination state commit failed: {combined}")
+        raise CoordinationUnavailable(f"coordination state commit failed: {combined}")
     rc, commit, _ = _git(checkout, "rev-parse", "HEAD")
     if rc != 0 or not commit:
         raise CoordinationUnavailable("coordination commit has no revision")
@@ -946,14 +1036,18 @@ def _transaction(private, remote, branch, mutate, message):
     if swept:
         # A leak then reads as a number on the tick that found it, rather than
         # as a disk filling up that nobody attributes to anything.
-        print(f"coordination sweep removed {swept} stale checkout(s), "
-              f"{reclaimed // (1024 * 1024)} MB reclaimed", file=sys.stderr)
+        print(
+            f"coordination sweep removed {swept} stale checkout(s), "
+            f"{reclaimed // (1024 * 1024)} MB reclaimed",
+            file=sys.stderr,
+        )
     for attempt in range(MAX_TRANSACTION_ATTEMPTS):
         ref, _commit = _fetch_branch_ref(private, remote, branch)
         initialized = _state_initialized(private, ref)
         with _detached_worktree(private, ref) as checkout:
             state = _read_state_file(
-                state_path(checkout.path), allow_missing=not initialized)
+                state_path(checkout.path), allow_missing=not initialized
+            )
             mutation = mutate(state)
             if not mutation.changed:
                 return mutation.value
@@ -962,21 +1056,25 @@ def _transaction(private, remote, branch, mutate, message):
             if new_commit is None:
                 return mutation.value
             rc, out, err = _git(
-                checkout.path, "push", remote, f"HEAD:refs/heads/{branch}",
-                timeout=FETCH_TIMEOUT_S)
+                checkout.path,
+                "push",
+                remote,
+                f"HEAD:refs/heads/{branch}",
+                timeout=FETCH_TIMEOUT_S,
+            )
             # The final attempt's commit exists and the remote refused it, so its
             # folder holds the only copy of a board state nobody else has. The
             # earlier attempts are not kept: each one holds an intermediate state
             # the final attempt already superseded, and each is a whole checkout
             # of the private repository, so keeping them costs four directories
             # per rejected transaction to preserve nothing the last one lacks.
-            checkout.keep = (
-                rc != 0 and attempt == MAX_TRANSACTION_ATTEMPTS - 1)
+            checkout.keep = rc != 0 and attempt == MAX_TRANSACTION_ATTEMPTS - 1
         if rc == 0:
             return mutation.value
         last_error = _safe_detail(f"{out} {err}")
     raise CoordinationUnavailable(
-        f"coordination state push failed after retries: {last_error or 'unknown error'}")
+        f"coordination state push failed after retries: {last_error or 'unknown error'}"
+    )
 
 
 def _base_revisions(root, private):
@@ -1010,27 +1108,32 @@ class ReservationStore:
         ref, commit = _fetch_branch_ref(self.private, self.remote, self.branch)
         initialized = _state_initialized(self.private, ref)
         exists_rc, _, _ = _git(
-            self.private, "cat-file", "-e", f"{ref}:{state_rel().as_posix()}")
+            self.private, "cat-file", "-e", f"{ref}:{state_rel().as_posix()}"
+        )
         if exists_rc != 0:
             if initialized:
                 raise CoordinationUnavailable(
-                    "coordination state file was deleted from an initialized board")
+                    "coordination state file was deleted from an initialized board"
+                )
             # A board may be initialized before its first claim. The commit
             # must exist, but an absent state file is an empty state.
             return _empty_state(), commit
         rc, raw, err = _git(self.private, "show", f"{ref}:{state_rel().as_posix()}")
         if rc != 0:
             raise CoordinationUnavailable(
-                f"cannot read coordination state: {_safe_detail(err or raw)}")
+                f"cannot read coordination state: {_safe_detail(err or raw)}"
+            )
         try:
             state = json.loads(raw)
         except ValueError as exc:
             raise CoordinationUnavailable(
-                f"coordination state does not parse: {exc}") from exc
+                f"coordination state does not parse: {exc}"
+            ) from exc
         return _validate_state(state), commit
 
-    def _reserve_mutation(self, phase, machine_id, reservation_id, generation,
-                          run_id, revisions, status):
+    def _reserve_mutation(
+        self, phase, machine_id, reservation_id, generation, run_id, revisions, status
+    ):
         key, number = _phase_key(phase)
         machine_id = _validate_machine_id(machine_id)
         _validate_status(status)
@@ -1039,15 +1142,31 @@ class ReservationStore:
 
         def mutate(state):
             record = _claim_one(
-                state, key, machine_id, reservation_id, generation,
-                run_id or f"phase-{key}", revisions, status, number)
-            return _Mutation(True, _reservation_from_record(
-                {**record, "_phase": key}))
+                state,
+                key,
+                machine_id,
+                reservation_id,
+                generation,
+                run_id or f"phase-{key}",
+                revisions,
+                status,
+                number,
+            )
+            return _Mutation(True, _reservation_from_record({**record, "_phase": key}))
 
         return mutate
 
-    def reserve(self, phase, machine_id, *, reservation_id=None, generation=None,
-                run_id=None, base_revisions=None, status="claimed"):
+    def reserve(
+        self,
+        phase,
+        machine_id,
+        *,
+        reservation_id=None,
+        generation=None,
+        run_id=None,
+        base_revisions=None,
+        status="claimed",
+    ):
         key, number = _phase_key(phase)
         machine_id = _validate_machine_id(machine_id)
         reservation_id = reservation_id or f"rsv-{secrets.token_hex(12)}"
@@ -1056,15 +1175,34 @@ class ReservationStore:
         _validate_generation(generation)
         revisions = base_revisions or _base_revisions(self.root, self.private)
         mutate = self._reserve_mutation(
-            number, machine_id, reservation_id, generation,
-            run_id or f"phase-{key}", revisions, status)
+            number,
+            machine_id,
+            reservation_id,
+            generation,
+            run_id or f"phase-{key}",
+            revisions,
+            status,
+        )
         return _transaction(
-            self.private, self.remote, self.branch, mutate,
-            f"phase coordination: reserve {key} for {machine_id}")
+            self.private,
+            self.remote,
+            self.branch,
+            mutate,
+            f"phase coordination: reserve {key} for {machine_id}",
+        )
 
-    def reserve_group(self, phases, machine_id, *, reservation_id=None,
-                      generation=None, run_ids=None, base_revisions=None,
-                      status="claimed", now=None):
+    def reserve_group(
+        self,
+        phases,
+        machine_id,
+        *,
+        reservation_id=None,
+        generation=None,
+        run_ids=None,
+        base_revisions=None,
+        status="claimed",
+        now=None,
+    ):
         """Claim every phase in ``phases`` in one board write, or claim none.
 
         The members share one reservation id, so the driver fences the whole
@@ -1089,8 +1227,7 @@ class ReservationStore:
         for phase in phases:
             key, _number = _phase_key(phase)
             if key in keys:
-                raise CoordinationError(
-                    f"phase {key} appears twice in one group claim")
+                raise CoordinationError(f"phase {key} appears twice in one group claim")
             keys.append(key)
         if not keys:
             raise CoordinationError("a group claim needs at least one phase")
@@ -1116,16 +1253,27 @@ class ReservationStore:
             for key in keys:
                 number = int(key)
                 record = _claim_one(
-                    state, key, machine_id, reservation_id, generation,
-                    run_ids.get(key), revisions, status, number, moment)
-                records.append(_reservation_from_record(
-                    {**record, "_phase": key}))
+                    state,
+                    key,
+                    machine_id,
+                    reservation_id,
+                    generation,
+                    run_ids.get(key),
+                    revisions,
+                    status,
+                    number,
+                    moment,
+                )
+                records.append(_reservation_from_record({**record, "_phase": key}))
             return _Mutation(True, records)
 
         return _transaction(
-            self.private, self.remote, self.branch, mutate,
-            f"phase coordination: reserve group "
-            f"[{','.join(keys)}] for {machine_id}")
+            self.private,
+            self.remote,
+            self.branch,
+            mutate,
+            f"phase coordination: reserve group [{','.join(keys)}] for {machine_id}",
+        )
 
     def expire_stale(self, now=None):
         """Return every stale group to the queue under a cooldown stamp.
@@ -1145,8 +1293,12 @@ class ReservationStore:
             return _Mutation(bool(expired), expired)
 
         return _transaction(
-            self.private, self.remote, self.branch, mutate,
-            "phase coordination: expire stale claims")
+            self.private,
+            self.remote,
+            self.branch,
+            mutate,
+            "phase coordination: expire stale claims",
+        )
 
     def release_group(self, reservation, *, now=None):
         """Give one owner's whole group back, atomically, with no cooldown.
@@ -1165,28 +1317,27 @@ class ReservationStore:
         if not isinstance(reservation, dict):
             raise CoordinationError("reservation must be an object")
         machine_id = _validate_machine_id(reservation.get("machine_id"))
-        reservation_id = _validate_reservation_id(
-            reservation.get("reservation_id"))
+        reservation_id = _validate_reservation_id(reservation.get("reservation_id"))
         generation = _validate_generation(reservation.get("generation"))
         moment = _iso(_as_moment(now))
 
         def mutate(state):
             keys = sorted(
-                key for key, record in state["phases"].items()
-                if record.get("reservation_id") == reservation_id)
+                key
+                for key, record in state["phases"].items()
+                if record.get("reservation_id") == reservation_id
+            )
             if not keys:
-                raise ReservationFenced(
-                    "reservation has no current members to release")
+                raise ReservationFenced("reservation has no current members to release")
             released = []
             for key in keys:
                 record = state["phases"][key]
-                if not _owner_matches(
-                        record, machine_id, reservation_id, generation):
+                if not _owner_matches(record, machine_id, reservation_id, generation):
                     raise ReservationFenced(
-                        f"phase {key} reservation is fenced by a newer owner")
+                        f"phase {key} reservation is fenced by a newer owner"
+                    )
                 if record.get("status") == EXPIRED_STATUS:
-                    raise ReservationFenced(
-                        f"phase {key} reservation expired")
+                    raise ReservationFenced(f"phase {key} reservation expired")
                 if record.get("status") in TERMINAL_STATUSES:
                     continue
                 del state["phases"][key]
@@ -1194,9 +1345,13 @@ class ReservationStore:
             return _Mutation(bool(released), released)
 
         return _transaction(
-            self.private, self.remote, self.branch, mutate,
+            self.private,
+            self.remote,
+            self.branch,
+            mutate,
             f"phase coordination: release group "
-            f"[{reservation_id}] for {machine_id} at {moment}")
+            f"[{reservation_id}] for {machine_id} at {moment}",
+        )
 
     def renew_group(self, reservation, status=None, *, now=None):
         """Renew every member of one group under its shared reservation id.
@@ -1211,8 +1366,7 @@ class ReservationStore:
         if not isinstance(reservation, dict):
             raise CoordinationError("reservation must be an object")
         machine_id = _validate_machine_id(reservation.get("machine_id"))
-        reservation_id = _validate_reservation_id(
-            reservation.get("reservation_id"))
+        reservation_id = _validate_reservation_id(reservation.get("reservation_id"))
         generation = _validate_generation(reservation.get("generation"))
         if status is not None:
             status = _validate_status(status)
@@ -1220,22 +1374,22 @@ class ReservationStore:
 
         def mutate(state):
             keys = sorted(
-                key for key, record in state["phases"].items()
-                if record.get("reservation_id") == reservation_id)
+                key
+                for key, record in state["phases"].items()
+                if record.get("reservation_id") == reservation_id
+            )
             if not keys:
-                raise ReservationFenced(
-                    "reservation has no current members to renew")
+                raise ReservationFenced("reservation has no current members to renew")
             records = []
             refreshed = False
             for key in keys:
                 record = state["phases"][key]
-                if not _owner_matches(
-                        record, machine_id, reservation_id, generation):
+                if not _owner_matches(record, machine_id, reservation_id, generation):
                     raise ReservationFenced(
-                        f"phase {key} reservation is fenced by a newer owner")
+                        f"phase {key} reservation is fenced by a newer owner"
+                    )
                 if record.get("status") == EXPIRED_STATUS:
-                    raise ReservationFenced(
-                        f"phase {key} reservation expired")
+                    raise ReservationFenced(f"phase {key} reservation expired")
                 if record.get("status") not in TERMINAL_STATUSES:
                     if status is not None:
                         record["status"] = status
@@ -1248,16 +1402,25 @@ class ReservationStore:
             return _Mutation(refreshed, records)
 
         return _transaction(
-            self.private, self.remote, self.branch, mutate,
-            f"phase coordination: renew group [{reservation_id}] for {machine_id}")
+            self.private,
+            self.remote,
+            self.branch,
+            mutate,
+            f"phase coordination: renew group [{reservation_id}] for {machine_id}",
+        )
 
-    def _owned_mutation(self, reservation, next_status=None,
-                        evidence_path=None, accepted_reason=None, now=None):
+    def _owned_mutation(
+        self,
+        reservation,
+        next_status=None,
+        evidence_path=None,
+        accepted_reason=None,
+        now=None,
+    ):
         if not isinstance(reservation, dict):
             raise CoordinationError("reservation must be an object")
         machine_id = _validate_machine_id(reservation.get("machine_id"))
-        reservation_id = _validate_reservation_id(
-            reservation.get("reservation_id"))
+        reservation_id = _validate_reservation_id(reservation.get("reservation_id"))
         generation = _validate_generation(reservation.get("generation"))
         phase = reservation.get("phase")
         key, _number = _phase_key(phase)
@@ -1270,43 +1433,56 @@ class ReservationStore:
             if not isinstance(accepted_reason, str) or not accepted_reason.strip():
                 raise CoordinationError(
                     "accepted requires --accept-reason saying why the operator "
-                    "closed the phase without a passing checker")
+                    "closed the phase without a passing checker"
+                )
             if len(accepted_reason) > 2000:
-                raise CoordinationError("accepted reason is longer than 2000 characters")
+                raise CoordinationError(
+                    "accepted reason is longer than 2000 characters"
+                )
         elif accepted_reason is not None:
             raise CoordinationError(
-                "an acceptance reason is only valid for accepted status")
+                "an acceptance reason is only valid for accepted status"
+            )
         receipt = None
         if next_status == "completed":
             if evidence_path is None:
                 raise CoordinationError(
-                    "completed requires a published completion receipt")
+                    "completed requires a published completion receipt"
+                )
             receipt = _validate_publication_receipt(
-                evidence_path, reservation, self.private, self.remote, self.branch, repo_root=self.root)
+                evidence_path,
+                reservation,
+                self.private,
+                self.remote,
+                self.branch,
+                repo_root=self.root,
+            )
         elif evidence_path is not None:
             raise CoordinationError(
-                "publication receipts are only valid for completed status")
+                "publication receipts are only valid for completed status"
+            )
 
         def mutate(state):
             record = state["phases"].get(key)
             if record is None:
-                raise ReservationFenced(
-                    f"phase {key} has no current reservation")
+                raise ReservationFenced(f"phase {key} has no current reservation")
             if not _owner_matches(record, machine_id, reservation_id, generation):
                 raise ReservationFenced(
-                    f"phase {key} reservation is fenced by a newer owner")
+                    f"phase {key} reservation is fenced by a newer owner"
+                )
             if record.get("status") == EXPIRED_STATUS:
                 # The window closed and the group returned to the queue; a late
                 # write from the old owner must not revive it. This is the
                 # generation fence applied to expiry, not a separate mechanism.
-                raise ReservationFenced(
-                    f"phase {key} reservation expired")
+                raise ReservationFenced(f"phase {key} reservation expired")
             if record.get("status") in TERMINAL_STATUSES:
                 if next_status == record.get("status"):
-                    return _Mutation(False, _reservation_from_record(
-                        {**record, "_phase": key}))
+                    return _Mutation(
+                        False, _reservation_from_record({**record, "_phase": key})
+                    )
                 raise ReservationFenced(
-                    f"phase {key} is already {record.get('status')}")
+                    f"phase {key} is already {record.get('status')}"
+                )
             if next_status is not None:
                 record["status"] = next_status
             if next_status == "accepted":
@@ -1315,25 +1491,36 @@ class ReservationStore:
             if receipt is not None:
                 record["completion_receipt"] = receipt
             record["heartbeat_at"] = _iso(now)
-            return _Mutation(True, _reservation_from_record(
-                {**record, "_phase": key}))
+            return _Mutation(True, _reservation_from_record({**record, "_phase": key}))
 
         return mutate
 
     def renew(self, reservation, status=None):
         mutate = self._owned_mutation(reservation, status)
         return _transaction(
-            self.private, self.remote, self.branch, mutate,
-            f"phase coordination: renew {reservation['phase']}")
+            self.private,
+            self.remote,
+            self.branch,
+            mutate,
+            f"phase coordination: renew {reservation['phase']}",
+        )
 
-    def set_status(self, reservation, status, *, evidence_path=None,
-                   accepted_reason=None):
+    def set_status(
+        self, reservation, status, *, evidence_path=None, accepted_reason=None
+    ):
         mutate = self._owned_mutation(
-            reservation, status, evidence_path=evidence_path,
-            accepted_reason=accepted_reason)
+            reservation,
+            status,
+            evidence_path=evidence_path,
+            accepted_reason=accepted_reason,
+        )
         return _transaction(
-            self.private, self.remote, self.branch, mutate,
-            f"phase coordination: {status} {reservation['phase']}")
+            self.private,
+            self.remote,
+            self.branch,
+            mutate,
+            f"phase coordination: {status} {reservation['phase']}",
+        )
 
     def assert_owner(self, reservation):
         """Fetch the latest board and verify the three-part fence."""
@@ -1343,17 +1530,29 @@ class ReservationStore:
         state, _commit = self.read()
         record = state["phases"].get(key)
         if record is None or not _owner_matches(
-                record, reservation.get("machine_id"),
-                reservation.get("reservation_id"), reservation.get("generation")):
+            record,
+            reservation.get("machine_id"),
+            reservation.get("reservation_id"),
+            reservation.get("generation"),
+        ):
             raise ReservationFenced(
-                f"phase {key} is no longer owned by this reservation")
+                f"phase {key} is no longer owned by this reservation"
+            )
         if record.get("status") in TERMINAL_STATUSES:
             return dict(record)
         return dict(record)
 
-    def takeover(self, phase, machine_id, *, confirm=False, run_id=None,
-                 base_revisions=None, expected_reservation_id=None,
-                 expected_generation=None):
+    def takeover(
+        self,
+        phase,
+        machine_id,
+        *,
+        confirm=False,
+        run_id=None,
+        base_revisions=None,
+        expected_reservation_id=None,
+        expected_generation=None,
+    ):
         """Take one claim over under a new reservation id, for a whole group.
 
         A reservation id covers a whole group, so the takeover moves every member
@@ -1363,11 +1562,11 @@ class ReservationStore:
         point of the takeover and the record this returns.
         """
         if not confirm:
-            raise CoordinationError(
-                "explicit operator takeover requires confirm=true")
+            raise CoordinationError("explicit operator takeover requires confirm=true")
         if expected_reservation_id is None or expected_generation is None:
             raise CoordinationError(
-                "takeover requires the expected old reservation ID and generation")
+                "takeover requires the expected old reservation ID and generation"
+            )
         key, number = _phase_key(phase)
         machine_id = _validate_machine_id(machine_id)
         new_id = f"rsv-{secrets.token_hex(12)}"
@@ -1377,16 +1576,19 @@ class ReservationStore:
         if current is None:
             raise ReservationConflict(number, reason="phase has no claim")
         if expected_reservation_id is not None:
-            expected_reservation_id = _validate_reservation_id(
-                expected_reservation_id)
+            expected_reservation_id = _validate_reservation_id(expected_reservation_id)
         if expected_generation is not None:
             expected_generation = _validate_generation(expected_generation)
-        if ((expected_reservation_id is not None
-             and current.get("reservation_id") != expected_reservation_id)
-                or (expected_generation is not None
-                    and current.get("generation") != expected_generation)):
+        if (
+            expected_reservation_id is not None
+            and current.get("reservation_id") != expected_reservation_id
+        ) or (
+            expected_generation is not None
+            and current.get("generation") != expected_generation
+        ):
             raise ReservationFenced(
-                f"phase {key} changed; inspect the current owner before retrying")
+                f"phase {key} changed; inspect the current owner before retrying"
+            )
         expected_generation = _validate_generation(current.get("generation"))
         expected_reservation_id = current.get("reservation_id")
         # One reservation id covers a whole group, so the group is taken over as
@@ -1396,38 +1598,52 @@ class ReservationStore:
         # shared id, so the members left behind would hold a claim nobody renews
         # and a release nobody returns.
         members = sorted(
-            member for member, record in current_state["phases"].items()
-            if record.get("reservation_id") == expected_reservation_id)
+            member
+            for member, record in current_state["phases"].items()
+            if record.get("reservation_id") == expected_reservation_id
+        )
 
         def mutate(state):
             old = state["phases"].get(key)
             if old is None:
                 raise ReservationConflict(number, reason="phase has no claim")
-            if (old.get("machine_id") == machine_id
-                    and old.get("reservation_id") == new_id):
-                return _Mutation(False, _reservation_from_record(
-                    {**old, "_phase": key}))
-            if (old.get("generation") != expected_generation
-                    or old.get("reservation_id") != expected_reservation_id):
+            if (
+                old.get("machine_id") == machine_id
+                and old.get("reservation_id") == new_id
+            ):
+                return _Mutation(
+                    False, _reservation_from_record({**old, "_phase": key})
+                )
+            if (
+                old.get("generation") != expected_generation
+                or old.get("reservation_id") != expected_reservation_id
+            ):
                 raise ReservationFenced(
-                    f"phase {key} changed before takeover could commit")
+                    f"phase {key} changed before takeover could commit"
+                )
             publication = state.get("publication")
             if publication is not None:
                 raise PublicationBusy(
-                    "cannot take over a phase while its publication lock is held")
+                    "cannot take over a phase while its publication lock is held"
+                )
             if old.get("status") == "completed":
                 raise ReservationConflict(
-                    number, old, "completed reservations cannot be taken over")
+                    number, old, "completed reservations cannot be taken over"
+                )
             result = None
             for member in members:
                 record = state["phases"].get(member)
                 if record is None:
                     raise ReservationFenced(
-                        f"phase {member} changed before takeover could commit")
-                if (record.get("machine_id") != old.get("machine_id")
-                        or record.get("generation") != expected_generation):
+                        f"phase {member} changed before takeover could commit"
+                    )
+                if (
+                    record.get("machine_id") != old.get("machine_id")
+                    or record.get("generation") != expected_generation
+                ):
                     raise ReservationFenced(
-                        f"phase {member} changed before takeover could commit")
+                        f"phase {member} changed before takeover could commit"
+                    )
                 if member != key and record.get("status") in TERMINAL_STATUSES:
                     # A member that is already finished keeps its record, so a
                     # takeover never undoes published work. The phase the caller
@@ -1446,8 +1662,11 @@ class ReservationStore:
                     # each member's run directory rather than renaming them all to
                     # the phase the takeover was asked about. A run id the caller
                     # named applies to the phase it named.
-                    "run_id": (run_id if member == key and run_id
-                               else record.get("run_id") or f"phase-{member}"),
+                    "run_id": (
+                        run_id
+                        if member == key and run_id
+                        else record.get("run_id") or f"phase-{member}"
+                    ),
                     "base_revisions": revisions,
                 }
                 state["phases"][member] = new
@@ -1455,38 +1674,43 @@ class ReservationStore:
                     result = _reservation_from_record({**new, "_phase": key})
             if result is None:
                 raise ReservationConflict(
-                    number, old, "completed reservations cannot be taken over")
+                    number, old, "completed reservations cannot be taken over"
+                )
             return _Mutation(True, result)
 
         return _transaction(
-            self.private, self.remote, self.branch, mutate,
+            self.private,
+            self.remote,
+            self.branch,
+            mutate,
             f"phase coordination: explicit takeover "
-            f"[{','.join(members)}] by {machine_id}")
+            f"[{','.join(members)}] by {machine_id}",
+        )
 
     def register_running(self, phase, machine_id, *, confirm=False, run_id=None):
         """Register a pre-coordination run as an active server claim."""
         if not confirm:
-            raise CoordinationError(
-                "registering a running phase requires confirm=true")
-        return self.reserve(
-            phase, machine_id, run_id=run_id, status="running")
+            raise CoordinationError("registering a running phase requires confirm=true")
+        return self.reserve(phase, machine_id, run_id=run_id, status="running")
 
     def acquire_publication(self, reservation):
         key, _number = _phase_key(reservation.get("phase"))
         machine_id = _validate_machine_id(reservation.get("machine_id"))
-        reservation_id = _validate_reservation_id(
-            reservation.get("reservation_id"))
+        reservation_id = _validate_reservation_id(reservation.get("reservation_id"))
         generation = _validate_generation(reservation.get("generation"))
 
         def mutate(state):
             record = state["phases"].get(key)
             if record is None or not _owner_matches(
-                    record, machine_id, reservation_id, generation):
+                record, machine_id, reservation_id, generation
+            ):
                 raise ReservationFenced(
-                    f"phase {key} is no longer owned by this reservation")
+                    f"phase {key} is no longer owned by this reservation"
+                )
             if record.get("status") in TERMINAL_STATUSES:
                 raise ReservationFenced(
-                    f"phase {key} is already {record.get('status')}")
+                    f"phase {key} is already {record.get('status')}"
+                )
             current = state.get("publication")
             wanted = {
                 "phase": key,
@@ -1496,45 +1720,56 @@ class ReservationStore:
                 "acquired_at": _now(),
             }
             if current is not None:
-                same = (current.get("phase") == key
-                        and current.get("machine_id") == machine_id
-                        and current.get("reservation_id") == reservation_id
-                        and current.get("generation") == generation)
+                same = (
+                    current.get("phase") == key
+                    and current.get("machine_id") == machine_id
+                    and current.get("reservation_id") == reservation_id
+                    and current.get("generation") == generation
+                )
                 if not same:
                     raise PublicationBusy(
-                        f"publication lock is held by phase "
-                        f"{current.get('phase', '?')}")
+                        f"publication lock is held by phase {current.get('phase', '?')}"
+                    )
                 return _Mutation(False, current)
             state["publication"] = wanted
             return _Mutation(True, wanted)
 
         return _transaction(
-            self.private, self.remote, self.branch, mutate,
-            f"phase coordination: publication lock {key}")
+            self.private,
+            self.remote,
+            self.branch,
+            mutate,
+            f"phase coordination: publication lock {key}",
+        )
 
     def release_publication(self, reservation):
         key, _number = _phase_key(reservation.get("phase"))
         machine_id = _validate_machine_id(reservation.get("machine_id"))
-        reservation_id = _validate_reservation_id(
-            reservation.get("reservation_id"))
+        reservation_id = _validate_reservation_id(reservation.get("reservation_id"))
         generation = _validate_generation(reservation.get("generation"))
 
         def mutate(state):
             current = state.get("publication")
             if current is None:
                 return _Mutation(False, None)
-            same = (current.get("phase") == key
-                    and current.get("machine_id") == machine_id
-                    and current.get("reservation_id") == reservation_id
-                    and current.get("generation") == generation)
+            same = (
+                current.get("phase") == key
+                and current.get("machine_id") == machine_id
+                and current.get("reservation_id") == reservation_id
+                and current.get("generation") == generation
+            )
             if not same:
                 raise ReservationFenced("publication lock belongs to another phase")
             del state["publication"]
             return _Mutation(True, None)
 
         return _transaction(
-            self.private, self.remote, self.branch, mutate,
-            f"phase coordination: release publication lock {key}")
+            self.private,
+            self.remote,
+            self.branch,
+            mutate,
+            f"phase coordination: release publication lock {key}",
+        )
 
 
 def reservation_file(repo_root, phase):
@@ -1554,28 +1789,36 @@ def _receipt_commit(value, field):
     return value.lower()
 
 
-def _validate_publication_receipt(path, reservation, private_repo, remote, branch, *, repo_root=None):
+def _validate_publication_receipt(
+    path, reservation, private_repo, remote, branch, *, repo_root=None
+):
     path = Path(path).resolve()
     key, _number = _phase_key(reservation.get("phase"))
-    expected = (reservation_file(
-        repo_root or conventions.setting("repo-root"), _number
-    ).parent / PUBLICATION_NAME).resolve()
+    expected = (
+        reservation_file(repo_root or conventions.setting("repo-root"), _number).parent
+        / PUBLICATION_NAME
+    ).resolve()
     if path != expected:
-        raise CoordinationError("publication receipt is outside the phase run directory")
+        raise CoordinationError(
+            "publication receipt is outside the phase run directory"
+        )
     try:
         data = json.loads(path.read_text())
     except (OSError, ValueError) as exc:
-        raise CoordinationError(
-            f"publication receipt cannot be read: {exc}") from exc
-    if not isinstance(data, dict) or data.get("version") != 1 \
-            or data.get("state") != "published":
+        raise CoordinationError(f"publication receipt cannot be read: {exc}") from exc
+    if (
+        not isinstance(data, dict)
+        or data.get("version") != 1
+        or data.get("state") != "published"
+    ):
         raise CoordinationError("publication receipt is not a published receipt")
     if data.get("phase") != key:
         raise CoordinationError("publication receipt phase does not match reservation")
     owner = data.get("reservation")
     if not isinstance(owner, dict) or any(
-            owner.get(field) != reservation.get(field)
-            for field in ("machine_id", "reservation_id", "generation")):
+        owner.get(field) != reservation.get(field)
+        for field in ("machine_id", "reservation_id", "generation")
+    ):
         raise CoordinationError("publication receipt does not match reservation")
     for field in ("public_commit", "private_commit"):
         _receipt_commit(data.get(field), field)
@@ -1591,15 +1834,16 @@ def _validate_publication_receipt(path, reservation, private_repo, remote, branc
     if rc != 0:
         raise CoordinationUnavailable(
             f"publication receipt is not present on the private remote's "
-            f"{published} branch: {_safe_detail(err or raw)}")
+            f"{published} branch: {_safe_detail(err or raw)}"
+        )
     try:
         remote_data = json.loads(raw)
     except ValueError as exc:
         raise CoordinationUnavailable(
-            "remote publication receipt does not parse") from exc
+            "remote publication receipt does not parse"
+        ) from exc
     if remote_data != data:
-        raise CoordinationUnavailable(
-            "local and remote publication receipts differ")
+        raise CoordinationUnavailable("local and remote publication receipts differ")
     return {
         "path": str(path),
         "public_commit": data["public_commit"].lower(),
@@ -1659,12 +1903,20 @@ def _self_test_check(checks, name, ok, detail=""):
 def _git_test_repo(base, name, initial_state=None):
     """Create one local bare remote and one client checkout for self-tests."""
     remote = base / f"{name}-remote.git"
-    subprocess.run([git_binary(), "init", "--bare", "-q", str(remote)], check=True,
-                   capture_output=True, text=True)
+    subprocess.run(
+        [git_binary(), "init", "--bare", "-q", str(remote)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
     _git(remote, "symbolic-ref", "HEAD", "refs/heads/master")
     seed = base / f"{name}-seed"
-    subprocess.run([git_binary(), "clone", "-q", str(remote), str(seed)], check=True,
-                   capture_output=True, text=True)
+    subprocess.run(
+        [git_binary(), "clone", "-q", str(remote), str(seed)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
     _git(seed, "config", "user.email", "coordination-test@example.com")
     _git(seed, "config", "user.name", "coordination test")
     _git(seed, "checkout", "-q", "-b", "master")
@@ -1677,8 +1929,12 @@ def _git_test_repo(base, name, initial_state=None):
     clients = []
     for index in (1, 2):
         client = base / f"{name}-client-{index}"
-        subprocess.run([git_binary(), "clone", "-q", str(remote), str(client)], check=True,
-                       capture_output=True, text=True)
+        subprocess.run(
+            [git_binary(), "clone", "-q", str(remote), str(client)],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
         _git(client, "config", "user.email", "coordination-test@example.com")
         _git(client, "config", "user.name", "coordination test")
         clients.append(client)
@@ -1713,117 +1969,151 @@ def _group_lifecycle_checks(checks, base):
     records = store_a.reserve_group(members, "server-01", now=at(0))
     shared = {record["reservation_id"] for record in records}
     _self_test_check(
-        checks, "a group is claimed under one shared reservation id",
-        len(records) == 3 and len(shared) == 1, str(records))
+        checks,
+        "a group is claimed under one shared reservation id",
+        len(records) == 3 and len(shared) == 1,
+        str(records),
+    )
     try:
-        store_b.reserve_group(members, "server-02",
-                              now=at(GROUP_START_WINDOW_S - 1))
+        store_b.reserve_group(members, "server-02", now=at(GROUP_START_WINDOW_S - 1))
         early = None
     except ReservationConflict as exc:
         early = exc
     except ReservationCooldown as exc:  # pragma: no cover - clearer failure
         early = exc
     _self_test_check(
-        checks, "a live group cannot be claimed by a second machine",
-        isinstance(early, ReservationConflict), f"early={early!r}")
+        checks,
+        "a live group cannot be claimed by a second machine",
+        isinstance(early, ReservationConflict),
+        f"early={early!r}",
+    )
 
     # Past the start window the whole group expires in one sweep, and the
     # request that found it is refused during the cooldown.
     try:
-        store_b.reserve_group(members, "server-02",
-                              now=at(GROUP_START_WINDOW_S + 1))
+        store_b.reserve_group(members, "server-02", now=at(GROUP_START_WINDOW_S + 1))
         cooled = None
     except ReservationCooldown as exc:
         cooled = exc
     state, _commit = store_a.read()
     statuses = [state["phases"].get(key, {}).get("status") for key in members]
     _self_test_check(
-        checks, "an expired group is refused during the cooldown",
-        cooled is not None and cooled.remaining_seconds > 0
+        checks,
+        "an expired group is refused during the cooldown",
+        cooled is not None
+        and cooled.remaining_seconds > 0
         and statuses == [EXPIRED_STATUS] * 3,
-        f"cooled={cooled!r} statuses={statuses}")
+        f"cooled={cooled!r} statuses={statuses}",
+    )
     until = state["phases"][members[0]].get(COOLDOWN_UNTIL_FIELD)
     _self_test_check(
-        checks, "every member of the expired group shares one cooldown stamp",
+        checks,
+        "every member of the expired group shares one cooldown stamp",
         len({state["phases"][key].get(COOLDOWN_UNTIL_FIELD) for key in members}) == 1,
-        f"cooldown_until={until!r}")
+        f"cooldown_until={until!r}",
+    )
 
     # A request never shortens or extends the cooldown.
     try:
-        store_b.reserve_group(members, "server-02",
-                              now=at(GROUP_START_WINDOW_S + 2))
+        store_b.reserve_group(members, "server-02", now=at(GROUP_START_WINDOW_S + 2))
         cooled_again = None
     except ReservationCooldown as exc:
         cooled_again = exc
     state_again, _commit = store_a.read()
     until_again = state_again["phases"][members[0]].get(COOLDOWN_UNTIL_FIELD)
     _self_test_check(
-        checks, "a request during cooldown never moves the deadline",
-        cooled_again is not None and until_again == until, f"{until!r} -> {until_again!r}")
+        checks,
+        "a request during cooldown never moves the deadline",
+        cooled_again is not None and until_again == until,
+        f"{until!r} -> {until_again!r}",
+    )
 
     # A late write from the old owner is fenced after expiry.
-    late = {"machine_id": "server-01", "reservation_id": records[0]["reservation_id"],
-            "generation": records[0]["generation"]}
+    late = {
+        "machine_id": "server-01",
+        "reservation_id": records[0]["reservation_id"],
+        "generation": records[0]["generation"],
+    }
     try:
         store_a.renew_group(late, now=at(GROUP_START_WINDOW_S + 2))
         late_fenced = False
     except ReservationFenced:
         late_fenced = True
-    _self_test_check(checks, "a late renew after expiry is fenced",
-                     late_fenced, "expected ReservationFenced")
+    _self_test_check(
+        checks,
+        "a late renew after expiry is fenced",
+        late_fenced,
+        "expected ReservationFenced",
+    )
 
     # Once the cooldown passes the second machine claims the group.
     later = at(GROUP_START_WINDOW_S + GROUP_COOLDOWN_S + 1)
     after = store_b.reserve_group(members, "server-02", now=later)
     _self_test_check(
-        checks, "the group is claimable once its cooldown passes",
+        checks,
+        "the group is claimable once its cooldown passes",
         [record["phase"] for record in after] == members
         and {record["reservation_id"] for record in after}.isdisjoint(shared),
-        str(after))
+        str(after),
+    )
 
     # A running group is measured from its heartbeat. renew_group moves the
     # heartbeat for every member at once, which keeps the group alive past the
     # point its original stamp would have expired it.
     running = ["100210", "100211"]
     running_records = store_a.reserve_group(
-        running, "server-03", status="running", now=at(0))
-    running_token = {"machine_id": "server-03",
-                     "reservation_id": running_records[0]["reservation_id"],
-                     "generation": running_records[0]["generation"]}
+        running, "server-03", status="running", now=at(0)
+    )
+    running_token = {
+        "machine_id": "server-03",
+        "reservation_id": running_records[0]["reservation_id"],
+        "generation": running_records[0]["generation"],
+    }
     store_a.renew_group(running_token, now=at(GROUP_HEARTBEAT_WINDOW_S - 100))
     refreshed, _commit = store_a.read()
     _self_test_check(
-        checks, "renew_group refreshes every member's heartbeat",
+        checks,
+        "renew_group refreshes every member's heartbeat",
         len({refreshed["phases"][key]["heartbeat_at"] for key in running}) == 1,
-        f"heartbeats={[refreshed['phases'][key]['heartbeat_at'] for key in running]}")
+        f"heartbeats={[refreshed['phases'][key]['heartbeat_at'] for key in running]}",
+    )
     try:
-        store_b.reserve_group(running, "server-04",
-                              now=at(GROUP_HEARTBEAT_WINDOW_S + 1))
+        store_b.reserve_group(
+            running, "server-04", now=at(GROUP_HEARTBEAT_WINDOW_S + 1)
+        )
         still_live = None
     except ReservationCooldown as exc:
         still_live = exc
     except ReservationConflict as exc:
         still_live = exc
     _self_test_check(
-        checks, "a renewed running group is still live past its first window",
-        isinstance(still_live, ReservationConflict), f"result={still_live!r}")
+        checks,
+        "a renewed running group is still live past its first window",
+        isinstance(still_live, ReservationConflict),
+        f"result={still_live!r}",
+    )
     try:
         store_b.reserve_group(
-            running, "server-04",
-            now=at(2 * GROUP_HEARTBEAT_WINDOW_S - 99))
+            running, "server-04", now=at(2 * GROUP_HEARTBEAT_WINDOW_S - 99)
+        )
         heartbeat_expired = None
     except ReservationCooldown as exc:
         heartbeat_expired = exc
     _self_test_check(
-        checks, "a running group expires from its heartbeat, not a fixed deadline",
+        checks,
+        "a running group expires from its heartbeat, not a fixed deadline",
         heartbeat_expired is not None and heartbeat_expired.remaining_seconds > 0,
-        f"expired={heartbeat_expired!r}")
+        f"expired={heartbeat_expired!r}",
+    )
 
     # An explicit release has no cooldown and leaves published work alone.
     published = ["100220", "100221"]
     owned = store_a.reserve_group(published, "server-05", now=at(0))
-    token = {"machine_id": "server-05", "reservation_id": owned[0]["reservation_id"],
-             "generation": owned[0]["generation"]}
+    token = {
+        "machine_id": "server-05",
+        "reservation_id": owned[0]["reservation_id"],
+        "generation": owned[0]["generation"],
+    }
     old_runs = conventions.override({"driver.runs": store_a.private / "runs"})
     try:
         receipt = _self_test_receipt(store_a, owned[1])
@@ -1833,16 +2123,20 @@ def _group_lifecycle_checks(checks, base):
     released = store_a.release_group(token, now=at(0))
     after_release, _commit = store_a.read()
     _self_test_check(
-        checks, "release returns the unfinished member and keeps the published one",
+        checks,
+        "release returns the unfinished member and keeps the published one",
         released == ["100220"]
         and after_release["phases"]["100221"]["status"] == "completed"
         and "100220" not in after_release["phases"],
-        f"released={released} phases={sorted(after_release['phases'])}")
+        f"released={released} phases={sorted(after_release['phases'])}",
+    )
     immediate = store_b.reserve_group(["100220"], "server-06", now=at(0))
     _self_test_check(
-        checks, "an explicit release has no cooldown",
+        checks,
+        "an explicit release has no cooldown",
         [record["phase"] for record in immediate] == ["100220"],
-        str(immediate))
+        str(immediate),
+    )
 
     # A takeover moves the whole group. One reservation id covers every member,
     # so taking over a single member and leaving the others under the old id
@@ -1851,48 +2145,56 @@ def _group_lifecycle_checks(checks, base):
     takers = ["100230", "100231"]
     taken = store_a.reserve_group(takers, "server-08", now=at(0))
     takeover = store_a.takeover(
-        takers[1], "server-09", confirm=True,
+        takers[1],
+        "server-09",
+        confirm=True,
         expected_reservation_id=taken[0]["reservation_id"],
-        expected_generation=taken[0]["generation"])
+        expected_generation=taken[0]["generation"],
+    )
     after_takeover, _commit = store_a.read()
     _self_test_check(
-        checks, "a takeover moves the whole group under one new reservation id",
+        checks,
+        "a takeover moves the whole group under one new reservation id",
         {after_takeover["phases"][key]["reservation_id"] for key in takers}
         == {takeover["reservation_id"]}
-        and all(after_takeover["phases"][key]["machine_id"] == "server-09"
-                for key in takers)
+        and all(
+            after_takeover["phases"][key]["machine_id"] == "server-09" for key in takers
+        )
         and takeover["generation"] == taken[0]["generation"] + 1
         and takeover["reservation_id"] != taken[0]["reservation_id"],
-        str({key: after_takeover["phases"][key]["reservation_id"]
-             for key in takers}))
+        str({key: after_takeover["phases"][key]["reservation_id"] for key in takers}),
+    )
 
 
 def self_test_checks():
     """Exercise the shared board with two local clients; no network or repo state."""
     import threading
 
-    conventions.configure({
-        "repo-root": Path("."),
-        "pipeline": None,
-        "roadmap-dir": Path("roadmap"),
-        "driver.runs": Path("runs"),
-        "driver.include": ["phase-*.md"],
-        "driver.exclude": [],
-        "machine.id": "self-test",
-        "commands.git": "git",
-        "commands.gh": "gh",
-        "board.repo": Path("."),
-        "board.file": Path("claims.json"),
-        "board.branch": SELF_TEST_BRANCH,
-        "board.remote": "origin",
-    })
+    conventions.configure(
+        {
+            "repo-root": Path("."),
+            "pipeline": None,
+            "roadmap-dir": Path("roadmap"),
+            "driver.runs": Path("runs"),
+            "driver.include": ["phase-*.md"],
+            "driver.exclude": [],
+            "machine.id": "self-test",
+            "commands.git": "git",
+            "commands.gh": "gh",
+            "board.repo": Path("."),
+            "board.file": Path("claims.json"),
+            "board.branch": SELF_TEST_BRANCH,
+            "board.remote": "origin",
+        }
+    )
     checks = []
     # The hygiene fixture writes a `pre-receive` hook and git refuses to run it
     # from a `noexec` mount, so the fixture must live where the host runs a
     # script. A host whose default temporary directory is `noexec` would
     # otherwise report the hook as broken when its mode is correct.
-    base = Path(make_exec_dir()
-                or tempfile.mkdtemp(prefix="phase-reservations-selftest-"))
+    base = Path(
+        make_exec_dir() or tempfile.mkdtemp(prefix="phase-reservations-selftest-")
+    )
     try:
         remote, clients = _git_test_repo(base, "claims")
         # Each store owns a different real client checkout. The public side
@@ -1924,35 +2226,51 @@ def self_test_checks():
             thread.start()
         for thread in threads:
             thread.join()
-        _self_test_check(checks, "two clients race: one reservation wins",
-                         len(results) == 1 and len(errors) == 1
-                         and isinstance(errors[0], ReservationConflict),
-                         f"results={len(results)} errors={[type(e).__name__ for e in errors]}")
+        _self_test_check(
+            checks,
+            "two clients race: one reservation wins",
+            len(results) == 1
+            and len(errors) == 1
+            and isinstance(errors[0], ReservationConflict),
+            f"results={len(results)} errors={[type(e).__name__ for e in errors]}",
+        )
 
         state, _commit = store_a.read()
         first = state["phases"].get("100601")
-        _self_test_check(checks, "winning record is complete",
-                         bool(first and first.get("reservation_id")
-                              and first.get("generation") == 1
-                              and first.get("machine_id") in {"server-01", "local-01"}),
-                         str(first))
+        _self_test_check(
+            checks,
+            "winning record is complete",
+            bool(
+                first
+                and first.get("reservation_id")
+                and first.get("generation") == 1
+                and first.get("machine_id") in {"server-01", "local-01"}
+            ),
+            str(first),
+        )
 
         # The winner can renew/complete; a second phase can be reserved at the
         # same time without changing the first phase's ordering.
         winner_machine = first["machine_id"]
-        winner = {"phase": "100601", "machine_id": winner_machine,
-                  "reservation_id": first["reservation_id"],
-                  "generation": first["generation"]}
+        winner = {
+            "phase": "100601",
+            "machine_id": winner_machine,
+            "reservation_id": first["reservation_id"],
+            "generation": first["generation"],
+        }
         store_a.renew(winner)
         try:
             store_a.set_status(winner, "completed")
             receipt_required = False
         except CoordinationError:
             receipt_required = True
-        _self_test_check(checks, "completion requires a published receipt",
-                         receipt_required, "missing receipt refused")
-        old_runs = conventions.override({
-            "driver.runs": store_a.private / "runs"})
+        _self_test_check(
+            checks,
+            "completion requires a published receipt",
+            receipt_required,
+            "missing receipt refused",
+        )
+        old_runs = conventions.override({"driver.runs": store_a.private / "runs"})
         try:
             receipt = _self_test_receipt(store_a, winner)
             store_a.set_status(winner, "completed", evidence_path=receipt)
@@ -1960,70 +2278,102 @@ def self_test_checks():
         finally:
             conventions.configure(old_runs)
         other = store_b.reserve(100440, "server-01")
-        _self_test_check(checks, "different phases can be reserved independently",
-                         other["phase"] == "100440", str(other))
+        _self_test_check(
+            checks,
+            "different phases can be reserved independently",
+            other["phase"] == "100440",
+            str(other),
+        )
 
         # No automatic expiry: an old record remains fenced until the explicit
         # operator takeover increments its generation.
         old = store_a.reserve(100602, "local-01")
         replacement = store_a.takeover(
-            100602, "server-01", confirm=True,
+            100602,
+            "server-01",
+            confirm=True,
             expected_reservation_id=old["reservation_id"],
-            expected_generation=old["generation"])
+            expected_generation=old["generation"],
+        )
         try:
             store_a.renew(old)
             fenced = False
         except ReservationFenced:
             fenced = True
-        _self_test_check(checks, "explicit takeover fences old generation",
-                         fenced and replacement["generation"] == old["generation"] + 1,
-                         f"old={old} replacement={replacement}")
+        _self_test_check(
+            checks,
+            "explicit takeover fences old generation",
+            fenced and replacement["generation"] == old["generation"] + 1,
+            f"old={old} replacement={replacement}",
+        )
         try:
             store_a.takeover(
-                100602, "server-01", confirm=True,
+                100602,
+                "server-01",
+                confirm=True,
                 expected_reservation_id=old["reservation_id"],
-                expected_generation=old["generation"])
+                expected_generation=old["generation"],
+            )
             retry_fenced = False
         except ReservationFenced:
             retry_fenced = True
-        _self_test_check(checks, "takeover retry cannot refence replacement",
-                         retry_fenced, "expected old token")
+        _self_test_check(
+            checks,
+            "takeover retry cannot refence replacement",
+            retry_fenced,
+            "expected old token",
+        )
         rejected = store_a.reserve(100603, "local-01")
         store_a.set_status(rejected, "rejected")
         rejected_takeover = store_a.takeover(
-            100603, "server-01", confirm=True,
+            100603,
+            "server-01",
+            confirm=True,
             expected_reservation_id=rejected["reservation_id"],
-            expected_generation=rejected["generation"])
-        _self_test_check(checks, "rejected work requires explicit takeover",
-                         rejected_takeover["generation"] == rejected["generation"] + 1,
-                         f"old={rejected} replacement={rejected_takeover}")
+            expected_generation=rejected["generation"],
+        )
+        _self_test_check(
+            checks,
+            "rejected work requires explicit takeover",
+            rejected_takeover["generation"] == rejected["generation"] + 1,
+            f"old={rejected} replacement={rejected_takeover}",
+        )
 
         deleted_ok, deleted_detail = _deleted_state_check(base)
-        _self_test_check(checks, "deleted state fails closed",
-                         deleted_ok, deleted_detail)
+        _self_test_check(
+            checks, "deleted state fails closed", deleted_ok, deleted_detail
+        )
         key_ok, key_detail = _bad_phase_key_check(base)
-        _self_test_check(checks, "noncanonical phase keys fail closed",
-                         key_ok, key_detail)
+        _self_test_check(
+            checks, "noncanonical phase keys fail closed", key_ok, key_detail
+        )
 
         # A missing/failed board is unavailable, never treated as an empty
         # board that permits a launch.
-        bad = ReservationStore(
-            root_a, private_repo=clients[0], remote="does-not-exist")
+        bad = ReservationStore(root_a, private_repo=clients[0], remote="does-not-exist")
         try:
             bad.read()
             unavailable = False
         except CoordinationUnavailable:
             unavailable = True
-        _self_test_check(checks, "coordination fetch failure fails closed",
-                         unavailable, "missing remote")
+        _self_test_check(
+            checks,
+            "coordination fetch failure fails closed",
+            unavailable,
+            "missing remote",
+        )
 
         lock_contender = store_b.reserve(100604, "server-01")
         pushurl_ok, pushurl_detail = _pushurl_boundary_check(base)
-        _self_test_check(checks, "public pushurl boundary fails closed",
-                         pushurl_ok, pushurl_detail)
-        _self_test_check(checks, "publication lock blocks a valid second phase",
-                         _publication_lock_check(
-                             store_a, other, lock_contender), "claim-scoped")
+        _self_test_check(
+            checks, "public pushurl boundary fails closed", pushurl_ok, pushurl_detail
+        )
+        _self_test_check(
+            checks,
+            "publication lock blocks a valid second phase",
+            _publication_lock_check(store_a, other, lock_contender),
+            "claim-scoped",
+        )
         try:
             _group_lifecycle_checks(checks, base)
         except CoordinationError:
@@ -2033,8 +2383,11 @@ def self_test_checks():
             # self-test before it prints its verdict. A test harness cannot tell
             # a caught guard from a passing one if the run dies first.
             _self_test_check(
-                checks, "the group lifecycle fixture ran to the end", False,
-                "the lifecycle raised before it finished")
+                checks,
+                "the group lifecycle fixture ran to the end",
+                False,
+                "the lifecycle raised before it finished",
+            )
         _checkout_hygiene_checks(checks, base)
     finally:
         drop_checkouts_under(base)
@@ -2113,12 +2466,18 @@ def _checkout_hygiene_checks(checks, base):
             failed = "commit failed" in str(exc)
             detail = "commit step failed as intended"
         leaked = sorted(set(_leftover_checkouts()) - before)
-        registrations = [line for line in _worktree_entries(private).splitlines()
-                         if WORKTREE_PREFIX in line]
+        registrations = [
+            line
+            for line in _worktree_entries(private).splitlines()
+            if WORKTREE_PREFIX in line
+        ]
         _self_test_check(
-            checks, "a failed board commit leaves no checkout", failed and not leaked,
+            checks,
+            "a failed board commit leaves no checkout",
+            failed and not leaked,
             f"{detail}; {len(leaked)} leftover checkout(s), "
-            f"{len(registrations)} stale registration(s)")
+            f"{len(registrations)} stale registration(s)",
+        )
         for path in leaked:
             shutil.rmtree(path, ignore_errors=True)
         _git(private, "worktree", "prune")
@@ -2138,12 +2497,21 @@ def _checkout_hygiene_checks(checks, base):
         # A pre-receive hook on the bare remote is the honest way to reject a
         # push that git itself considers well formed.
         subprocess.run(
-            [git_binary(), "-C", str(_remote2), "config", "core.hooksPath",
-             str(sandbox / "hooks")], check=True, capture_output=True, text=True)
+            [
+                git_binary(),
+                "-C",
+                str(_remote2),
+                "config",
+                "core.hooksPath",
+                str(sandbox / "hooks"),
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
         hooks = sandbox / "hooks"
         hooks.mkdir(exist_ok=True)
-        (hooks / "pre-receive").write_text(
-            "#!/bin/sh\ncat >/dev/null\nexit 1\n")
+        (hooks / "pre-receive").write_text("#!/bin/sh\ncat >/dev/null\nexit 1\n")
         (hooks / "pre-receive").chmod(0o755)
         before_rejected = set(_leftover_checkouts())
         try:
@@ -2157,9 +2525,11 @@ def _checkout_hygiene_checks(checks, base):
         # only the last holds a state the remote refused. Keeping the earlier
         # ones is what this count exists to catch.
         _self_test_check(
-            checks, "a rejected push keeps only the final attempt's checkout",
+            checks,
+            "a rejected push keeps only the final attempt's checkout",
             raised and len(kept) == 1,
-            f"{reason}; {len(kept)} checkout(s) kept")
+            f"{reason}; {len(kept)} checkout(s) kept",
+        )
         for path in kept:
             shutil.rmtree(path, ignore_errors=True)
         _git(keeper, "worktree", "prune")
@@ -2178,18 +2548,23 @@ def _checkout_hygiene_checks(checks, base):
         removed, reclaimed = sweep_stale_worktrees(root=sweep_root)
         remaining = sorted(p.name for p in sweep_root.iterdir())
         _self_test_check(
-            checks, "the sweep takes an old checkout and spares a new one",
+            checks,
+            "the sweep takes an old checkout and spares a new one",
             removed == 1 and reclaimed > 0 and remaining == [new_dir.name],
-            f"removed {removed}, reclaimed {reclaimed} bytes, "
-            f"remaining {remaining}")
+            f"removed {removed}, reclaimed {reclaimed} bytes, remaining {remaining}",
+        )
         # Only this module's own prefix is ever touched.
         other = sweep_root / "someone-elses-directory"
         other.mkdir()
-        moment = (_datetime.datetime.now(_datetime.timezone.utc).timestamp() - 7200)
+        moment = _datetime.datetime.now(_datetime.timezone.utc).timestamp() - 7200
         os.utime(other, (moment, moment))
         sweep_stale_worktrees(root=sweep_root)
-        _self_test_check(checks, "the sweep spares a directory it did not create",
-                         other.exists(), str(other.name))
+        _self_test_check(
+            checks,
+            "the sweep spares a directory it did not create",
+            other.exists(),
+            str(other.name),
+        )
         _board_branch_checks(checks, sandbox)
     finally:
         drop_checkouts_under(sandbox)
@@ -2212,21 +2587,29 @@ def _board_branch_checks(checks, base):
 
     def integration_tip(repo):
         rc, commit, _err = _git(
-            repo, "rev-parse", "--verify",
-            f"refs/remotes/origin/{_integration_branch(repo, 'origin')}")
+            repo,
+            "rev-parse",
+            "--verify",
+            f"refs/remotes/origin/{_integration_branch(repo, 'origin')}",
+        )
         return commit.strip() if rc == 0 else None
 
     # The store reads its branch from the fixture settings. The board also has
     # to use a branch other than the integration branch, because a reservation
     # cannot leave that branch unchanged when the two branches are the same.
     store = ReservationStore(root, private_repo=private)
-    _self_test_check(checks, "the board uses its configured branch",
-                     store.branch == SELF_TEST_BRANCH, store.branch)
     _self_test_check(
-        checks, "the board's branch is not the integration branch",
+        checks,
+        "the board uses its configured branch",
+        store.branch == SELF_TEST_BRANCH,
+        store.branch,
+    )
+    _self_test_check(
+        checks,
+        "the board's branch is not the integration branch",
         SELF_TEST_BRANCH != _integration_branch(private, "origin"),
-        f"{SELF_TEST_BRANCH} vs "
-        f"{_integration_branch(private, 'origin')}")
+        f"{SELF_TEST_BRANCH} vs {_integration_branch(private, 'origin')}",
+    )
 
     # Reading the board must not be able to change the remote. Seeding used to
     # hang off the fetch, so the first read on a machine that had not migrated
@@ -2242,8 +2625,7 @@ def _board_branch_checks(checks, base):
         rc, out, _err = _git(remote, "branch", "--format=%(refname:short)")
         return sorted(out.split()) if rc == 0 else None
 
-    probe = ReservationStore(root, private_repo=private,
-                             branch="fixture-probe")
+    probe = ReservationStore(root, private_repo=private, branch="fixture-probe")
 
     # The seed source is the integration branch's tip, whatever the private
     # checkout is sitting on. A phase run puts that checkout on its own feature
@@ -2260,11 +2642,18 @@ def _board_branch_checks(checks, base):
     (seed_private / "integration.txt").write_text("integration\n")
     _git(seed_private, "add", "-A")
     _git(seed_private, "commit", "-q", "-m", "integration work")
-    _git(seed_private, "push", "-q", "origin",
-         f"HEAD:refs/heads/{_integration_branch(seed_private, 'origin')}")
+    _git(
+        seed_private,
+        "push",
+        "-q",
+        "origin",
+        f"HEAD:refs/heads/{_integration_branch(seed_private, 'origin')}",
+    )
     integration_tip_sha = _git(
-        seed_remote, "rev-parse",
-        f"refs/heads/{_integration_branch(seed_private, 'origin')}")[1].strip()
+        seed_remote,
+        "rev-parse",
+        f"refs/heads/{_integration_branch(seed_private, 'origin')}",
+    )[1].strip()
     _git(seed_private, "checkout", "-q", "-b", "phase-100712-feature")
     (seed_private / "feature.txt").write_text("feature\n")
     _git(seed_private, "add", "-A")
@@ -2276,19 +2665,29 @@ def _board_branch_checks(checks, base):
     # integration branch holds no ref for it, and that is the machine this is
     # about. Fetching before asking is what answers it; asking the checkout is
     # what would answer wrongly.
-    _git(seed_private, "update-ref", "-d",
-         f"refs/remotes/origin/{_integration_branch(seed_private, 'origin')}")
-    seed_store = ReservationStore(seed_root, private_repo=seed_private,
-                                  branch="coordination-seed-source")
+    _git(
+        seed_private,
+        "update-ref",
+        "-d",
+        f"refs/remotes/origin/{_integration_branch(seed_private, 'origin')}",
+    )
+    seed_store = ReservationStore(
+        seed_root, private_repo=seed_private, branch="coordination-seed-source"
+    )
     seed_store.migrate_board()
-    rc, seeded, _err = _git(seed_remote, "rev-parse", "refs/heads/coordination-seed-source")
+    rc, seeded, _err = _git(
+        seed_remote, "rev-parse", "refs/heads/coordination-seed-source"
+    )
     seeded_tip = seeded.strip() if rc == 0 else ""
     _self_test_check(
-        checks, "the board is seeded from the integration tip, not the checkout's branch",
-        bool(seeded_tip) and seeded_tip == integration_tip_sha
+        checks,
+        "the board is seeded from the integration tip, not the checkout's branch",
+        bool(seeded_tip)
+        and seeded_tip == integration_tip_sha
         and integration_tip_sha != feature_tip,
         f"seeded {seeded_tip[:12]}; integration {integration_tip_sha[:12]}; "
-        f"on-branch tip {feature_tip[:12]}")
+        f"on-branch tip {feature_tip[:12]}",
+    )
     shutil.rmtree(case, ignore_errors=True)
 
     before_read = remote_branches()
@@ -2300,35 +2699,51 @@ def _board_branch_checks(checks, base):
         refused = str(exc).splitlines()[0][:110]
     after_read = remote_branches()
     _self_test_check(
-        checks, "a read refuses rather than creating the board branch",
+        checks,
+        "a read refuses rather than creating the board branch",
         "does not exist" in refused and before_read == after_read,
-        f"{refused}; branches {before_read} -> {after_read}")
+        f"{refused}; branches {before_read} -> {after_read}",
+    )
 
     created = probe.migrate_board()
     _self_test_check(
-        checks, "the named migration step creates the board branch",
+        checks,
+        "the named migration step creates the board branch",
         created and remote_branches() != before_read,
-        f"created={created}; branches {remote_branches()}")
+        f"created={created}; branches {remote_branches()}",
+    )
     _self_test_check(
-        checks, "migrating twice is the same answer as migrating once",
-        probe.migrate_board() is False, "a second migration creates nothing")
+        checks,
+        "migrating twice is the same answer as migrating once",
+        probe.migrate_board() is False,
+        "a second migration creates nothing",
+    )
 
     before = integration_tip(private)
     record = store.reserve(100710, "server-01")
     after = integration_tip(private)
     _self_test_check(
-        checks, "a reservation does not move the integration branch",
+        checks,
+        "a reservation does not move the integration branch",
         before is not None and before == after,
-        f"{str(before)[:12]} -> {str(after)[:12]}")
+        f"{str(before)[:12]} -> {str(after)[:12]}",
+    )
 
     rc, state, _err = _git(
-        private, "show", f"origin/{store.branch}:{state_rel().as_posix()}")
+        private, "show", f"origin/{store.branch}:{state_rel().as_posix()}"
+    )
     held = False
     if rc == 0:
-        held = json.loads(state).get("phases", {}).get("100710", {}) \
-            .get("reservation_id") == record["reservation_id"]
-    _self_test_check(checks, "the board's own branch holds the reservation",
-                     held, f"origin/{store.branch}")
+        held = (
+            json.loads(state).get("phases", {}).get("100710", {}).get("reservation_id")
+            == record["reservation_id"]
+        )
+    _self_test_check(
+        checks,
+        "the board's own branch holds the reservation",
+        held,
+        f"origin/{store.branch}",
+    )
 
     # A phase's own commit and a board commit are now siblings on two branches,
     # so neither can be rejected as non-fast-forward by the other. Both orders
@@ -2342,19 +2757,25 @@ def _board_branch_checks(checks, base):
         race_root.mkdir()
         (race_root / "runs" / "phase-100711").mkdir(parents=True)
         (race_private / "runs" / "phase-100711").mkdir(parents=True)
-        phase_store = ReservationStore(race_root, private_repo=race_private,
-                                       branch=SELF_TEST_BRANCH)
+        phase_store = ReservationStore(
+            race_root, private_repo=race_private, branch=SELF_TEST_BRANCH
+        )
         integration = _integration_branch(race_private, "origin")
 
         def publish_run_state():
             # Run state is published from the private checkout, which is where
             # the publishing tool writes it.
             (race_private / "runs" / "phase-100711" / "run.json").write_text(
-                json.dumps({"state": "completed"}) + "\n")
+                json.dumps({"state": "completed"}) + "\n"
+            )
             _git(race_private, "add", "-A")
             _git(race_private, "commit", "-q", "-m", "run state")
-            return _git(race_private, "push", "origin",
-                        f"HEAD:refs/heads/{integration}")[0] == 0
+            return (
+                _git(race_private, "push", "origin", f"HEAD:refs/heads/{integration}")[
+                    0
+                ]
+                == 0
+            )
 
         if attempt == "board-then-phase":
             phase_store.reserve(100711, "server-01")
@@ -2365,7 +2786,9 @@ def _board_branch_checks(checks, base):
         _self_test_check(
             checks,
             f"a phase's own push survives a board commit ({attempt})",
-            phase_ok, f"pushed to {integration}: {phase_ok}")
+            phase_ok,
+            f"pushed to {integration}: {phase_ok}",
+        )
         shutil.rmtree(case, ignore_errors=True)
 
 
@@ -2376,8 +2799,12 @@ def _deleted_state_check(base):
     store = ReservationStore(root, private_repo=clients[0], branch=SELF_TEST_BRANCH)
     store.reserve(100440, "server-01")
     deleter = base / "deleted-client"
-    subprocess.run([git_binary(), "clone", "-q", str(remote), str(deleter)],
-                   check=True, capture_output=True, text=True)
+    subprocess.run(
+        [git_binary(), "clone", "-q", str(remote), str(deleter)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
     _git(deleter, "config", "user.email", "coordination-test@example.com")
     _git(deleter, "config", "user.name", "coordination test")
     # The deletion has to happen on the board's own branch. Deleting the file on
@@ -2399,10 +2826,14 @@ def _bad_phase_key_check(base):
         "version": 1,
         "phases": {
             "1": {
-                "status": "running", "machine_id": "server-01",
-                "reservation_id": "rsv-bad-key", "generation": 1,
-                "claimed_at": "x", "heartbeat_at": "x",
-                "expires_at": None, "run_id": "phase-1",
+                "status": "running",
+                "machine_id": "server-01",
+                "reservation_id": "rsv-bad-key",
+                "generation": 1,
+                "claimed_at": "x",
+                "heartbeat_at": "x",
+                "expires_at": None,
+                "run_id": "phase-1",
                 "base_revisions": {},
             }
         },
@@ -2447,15 +2878,27 @@ def _pushurl_boundary_check(base):
     public_remote = base / "public-boundary.git"
     private_remote = base / "private-boundary.git"
     for remote in (public_remote, private_remote):
-        subprocess.run([git_binary(), "init", "--bare", "-q", str(remote)],
-                       check=True, capture_output=True, text=True)
+        subprocess.run(
+            [git_binary(), "init", "--bare", "-q", str(remote)],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
         _git(remote, "symbolic-ref", "HEAD", "refs/heads/master")
     public = base / "public-boundary"
     private = base / "private-boundary"
-    subprocess.run([git_binary(), "clone", "-q", str(public_remote), str(public)],
-                   check=True, capture_output=True, text=True)
-    subprocess.run([git_binary(), "clone", "-q", str(private_remote), str(private)],
-                   check=True, capture_output=True, text=True)
+    subprocess.run(
+        [git_binary(), "clone", "-q", str(public_remote), str(public)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    subprocess.run(
+        [git_binary(), "clone", "-q", str(private_remote), str(private)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
     _git(private, "remote", "set-url", "--push", "origin", str(public_remote))
     root = public
     try:
@@ -2485,10 +2928,8 @@ def self_test():
     for item in checks:
         if not item["ok"]:
             print(f"FAIL: {item['check']} ({item['detail']})", file=sys.stderr)
-    print(f"coordination self-test: {'pass' if ok else 'FAIL'}",
-          file=sys.stderr)
-    _print_json({"coordination_self_test": "pass" if ok else "fail",
-                 "checks": checks})
+    print(f"coordination self-test: {'pass' if ok else 'FAIL'}", file=sys.stderr)
+    _print_json({"coordination_self_test": "pass" if ok else "fail", "checks": checks})
     return 0 if ok else 1
 
 
@@ -2522,25 +2963,27 @@ def main(argv=None):
     reserve.add_argument("--phase", required=True)
     reserve.add_argument("--machine-id", required=True)
     reserve.add_argument("--run-id", default=None)
-    reserve.add_argument("--status", choices=sorted(ACTIVE_STATUSES),
-                          default="claimed")
+    reserve.add_argument("--status", choices=sorted(ACTIVE_STATUSES), default="claimed")
 
-    for name, help_text in (("renew", "renew an owned reservation"),
-                            ("assert-owner", "verify the three-part fence"),
-                            ("set-status", "change an owned reservation")):
+    for name, help_text in (
+        ("renew", "renew an owned reservation"),
+        ("assert-owner", "verify the three-part fence"),
+        ("set-status", "change an owned reservation"),
+    ):
         command = sub.add_parser(name, help=help_text)
         _add_store_args(command)
         _add_reservation_args(command)
         if name == "set-status":
-            command.add_argument("--status", required=True,
-                                 choices=sorted(STATUSES))
+            command.add_argument("--status", required=True, choices=sorted(STATUSES))
             command.add_argument(
                 "--publication-receipt",
-                help="published receipt path; required for completed")
+                help="published receipt path; required for completed",
+            )
             command.add_argument(
                 "--accept-reason",
                 help="why an operator closed the phase without a passing "
-                     "checker; required for accepted, and recorded on the board")
+                "checker; required for accepted, and recorded on the board",
+            )
 
     takeover = sub.add_parser("takeover", help="explicitly take over a live claim")
     _add_store_args(takeover)
@@ -2551,7 +2994,8 @@ def main(argv=None):
     takeover.add_argument("--confirm", action="store_true")
 
     register = sub.add_parser(
-        "register-running", help="register a pre-coordination running phase")
+        "register-running", help="register a pre-coordination running phase"
+    )
     _add_store_args(register)
     register.add_argument("--phase", required=True)
     register.add_argument("--machine-id", required=True)
@@ -2559,32 +3003,40 @@ def main(argv=None):
     register.add_argument("--confirm", action="store_true")
 
     release = sub.add_parser(
-        "release-publication", help="explicitly release a stale publication lock")
+        "release-publication", help="explicitly release a stale publication lock"
+    )
     _add_store_args(release)
     _add_reservation_args(release)
     release.add_argument("--confirm", action="store_true")
 
     release_group = sub.add_parser(
         "release-group",
-        help="give one owner's whole group back at once, with no cooldown")
+        help="give one owner's whole group back at once, with no cooldown",
+    )
     _add_store_args(release_group)
     _add_token_args(release_group)
 
     renew_group = sub.add_parser(
-        "renew-group", help="renew every member of one owned group at once")
+        "renew-group", help="renew every member of one owned group at once"
+    )
     _add_store_args(renew_group)
     _add_token_args(renew_group)
     renew_group.add_argument("--status", choices=sorted(ACTIVE_STATUSES))
 
     expire = sub.add_parser(
-        "expire-stale", help="return every stale group to the queue under cooldown")
+        "expire-stale", help="return every stale group to the queue under cooldown"
+    )
     _add_store_args(expire)
 
     show = sub.add_parser("show", help="fetch and print the coordination state")
     _add_store_args(show)
     sub.add_parser("self-test", help="run hermetic two-client checks")
-    parser.add_argument("--self-test", dest="legacy_self_test", action="store_true",
-                        help=argparse.SUPPRESS)
+    parser.add_argument(
+        "--self-test",
+        dest="legacy_self_test",
+        action="store_true",
+        help=argparse.SUPPRESS,
+    )
 
     args = parser.parse_args(argv)
     if not args.command and not args.legacy_self_test:
@@ -2596,8 +3048,8 @@ def main(argv=None):
         store = _cli_store(args)
         if args.command == "reserve":
             result = store.reserve(
-                args.phase, args.machine_id, run_id=args.run_id,
-                status=args.status)
+                args.phase, args.machine_id, run_id=args.run_id, status=args.status
+            )
         elif args.command in {"renew", "assert-owner", "set-status"}:
             reservation = {
                 "phase": _phase_key(args.phase)[0],
@@ -2611,58 +3063,79 @@ def main(argv=None):
                 result = store.assert_owner(reservation)
             else:
                 result = store.set_status(
-                    reservation, args.status,
+                    reservation,
+                    args.status,
                     evidence_path=args.publication_receipt,
-                    accepted_reason=args.accept_reason)
+                    accepted_reason=args.accept_reason,
+                )
         elif args.command == "takeover":
             result = store.takeover(
-                args.phase, args.machine_id, confirm=args.confirm,
+                args.phase,
+                args.machine_id,
+                confirm=args.confirm,
                 expected_reservation_id=args.expected_reservation_id,
-                expected_generation=args.expected_generation)
+                expected_generation=args.expected_generation,
+            )
             save_reservation_file(
-                reservation_file(conventions.setting("repo-root"), args.phase),
-                result)
+                reservation_file(conventions.setting("repo-root"), args.phase), result
+            )
         elif args.command == "register-running":
             result = store.register_running(
-                args.phase, args.machine_id, run_id=args.run_id,
-                confirm=args.confirm)
+                args.phase, args.machine_id, run_id=args.run_id, confirm=args.confirm
+            )
             save_reservation_file(
-                reservation_file(conventions.setting("repo-root"), args.phase),
-                result)
+                reservation_file(conventions.setting("repo-root"), args.phase), result
+            )
         elif args.command == "release-publication":
             if not args.confirm:
                 raise CoordinationError(
-                    "releasing a publication lock requires confirm=true")
-            result = store.release_publication({
-                "phase": _phase_key(args.phase)[0],
-                "machine_id": args.machine_id,
-                "reservation_id": args.reservation_id,
-                "generation": args.generation,
-            })
+                    "releasing a publication lock requires confirm=true"
+                )
+            result = store.release_publication(
+                {
+                    "phase": _phase_key(args.phase)[0],
+                    "machine_id": args.machine_id,
+                    "reservation_id": args.reservation_id,
+                    "generation": args.generation,
+                }
+            )
         elif args.command == "release-group":
-            result = store.release_group({
-                "machine_id": args.machine_id,
-                "reservation_id": args.reservation_id,
-                "generation": args.generation,
-            })
+            result = store.release_group(
+                {
+                    "machine_id": args.machine_id,
+                    "reservation_id": args.reservation_id,
+                    "generation": args.generation,
+                }
+            )
         elif args.command == "renew-group":
-            result = store.renew_group({
-                "machine_id": args.machine_id,
-                "reservation_id": args.reservation_id,
-                "generation": args.generation,
-            }, args.status)
+            result = store.renew_group(
+                {
+                    "machine_id": args.machine_id,
+                    "reservation_id": args.reservation_id,
+                    "generation": args.generation,
+                },
+                args.status,
+            )
         elif args.command == "expire-stale":
             result = store.expire_stale()
         else:
             result, _commit = store.read()
-        _print_json({"state": "OK", "reservation": result}
-                     if args.command not in {"show"} else result)
+        _print_json(
+            {"state": "OK", "reservation": result}
+            if args.command not in {"show"}
+            else result
+        )
         return 0
     except ReservationConflict as exc:
-        _print_json({"state": "WAIT_FOR_CLAIM", "phase": exc.phase,
-                     "owner": exc.record.get("machine_id"),
-                     "status": exc.record.get("status"),
-                     "error": str(exc)})
+        _print_json(
+            {
+                "state": "WAIT_FOR_CLAIM",
+                "phase": exc.phase,
+                "owner": exc.record.get("machine_id"),
+                "status": exc.record.get("status"),
+                "error": str(exc),
+            }
+        )
         return 3
     except ReservationFenced as exc:
         _print_json({"state": "FENCED", "error": str(exc)})

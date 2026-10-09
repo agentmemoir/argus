@@ -25,11 +25,13 @@ class PhaseNotificationTests(unittest.TestCase):
         directory = tempfile.TemporaryDirectory()
         self.addCleanup(directory.cleanup)
         root = Path(directory.name).resolve()
-        previous = conventions.configure({
-            "repo-root": root,
-            "pipeline": None,
-            "driver.runs": root / "records",
-        })
+        previous = conventions.configure(
+            {
+                "repo-root": root,
+                "pipeline": None,
+                "driver.runs": root / "records",
+            }
+        )
         self.addCleanup(conventions.configure, previous)
 
     def test_title_preserves_common_capitalizations(self) -> None:
@@ -137,7 +139,9 @@ class PhaseNotificationTests(unittest.TestCase):
 
     def test_default_run_json_points_at_the_phase_run_dir(self) -> None:
         path = default_run_json("phase-100740-explain-trace-projection.md")
-        self.assertEqual(path.parent, conventions.setting("driver.runs") / "phase-100740")
+        self.assertEqual(
+            path.parent, conventions.setting("driver.runs") / "phase-100740"
+        )
         self.assertEqual(path.name, "run.json")
 
     def test_run_state_folder_comes_from_loaded_settings(self) -> None:
@@ -185,8 +189,11 @@ class PhaseNotificationTests(unittest.TestCase):
         self.assertIn("line continues", message)
         self.assertNotIn("halted", message)
         self.assertIn(
-            "cat " + str(conventions.setting("driver.runs") /
-                         "phase-100520/remedy-escalated.json"),
+            "cat "
+            + str(
+                conventions.setting("driver.runs")
+                / "phase-100520/remedy-escalated.json"
+            ),
             message,
         )
 
@@ -234,8 +241,9 @@ class PhaseNotificationTests(unittest.TestCase):
     def test_no_group_leaves_the_message_unchanged(self) -> None:
         self.assertEqual(
             format_notification("phase-100520-scale-ceilings-docs.md", "started"),
-            format_notification("phase-100520-scale-ceilings-docs.md", "started",
-                                group=[]),
+            format_notification(
+                "phase-100520-scale-ceilings-docs.md", "started", group=[]
+            ),
         )
 
 
