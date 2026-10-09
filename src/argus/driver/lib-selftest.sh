@@ -130,7 +130,12 @@ driver_self_test() {
   # the trap on its first line and leave the session behind again.
   SELFTEST_TMP="$tmp"
   export TMPDIR="$tmp"
-  TMUX_TMPDIR="$tmp/tmux"
+  # A caller may name the socket base, and the fault harness hands each run a
+  # short one. A tmux socket path is capped (103 bytes usable on macOS, 107 on
+  # Linux) while the fixture directory is not, so a deep fixture root must not
+  # decide where the socket goes. With no base named, the fixture root stays
+  # the base.
+  TMUX_TMPDIR="${TMUX_TMPDIR:-$tmp/tmux}"
   mkdir -p "$TMUX_TMPDIR"
   export TMUX_TMPDIR
   SELFTEST_SESSION="ar-driver-selftest-$$"
