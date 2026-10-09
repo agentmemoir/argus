@@ -108,10 +108,10 @@ FAULTS = (
         "breaks": "only the first member of a group is reserved, so half a "
         "group can be claimed",
         "file": "src/argus/board/store_group.py",
-        "find": "            records = []\n"
+        "find": "            records: list[Any] = []\n"
         "            for key in keys:\n"
         "                number = int(key)",
-        "replace": "            records = []\n"
+        "replace": "            records: list[Any] = []\n"
         "            for key in keys[:1]:  # FAULT: half a group "
         "is reserved\n"
         "                number = int(key)",
