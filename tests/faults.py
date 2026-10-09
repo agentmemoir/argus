@@ -95,8 +95,9 @@ FAULTS = (
         "itself instead of being refused",
         "file": "src/argus/roadmap_source.py",
         "find": "        raise ReservationGroupMissing(\n"
-        "            f\"{path} has no '### Reservation Group' section\", document=path)",
-        "replace": '        return [f"{number:06d}"]  # FAULT: a missing '
+        "            f\"{path} has no '### Reservation Group' section\", document=path\n"
+        "        )",
+        "replace": '        return [f"{_number:06d}"]  # FAULT: a missing '
         "declaration is invented",
         "check": "next_phase",
         "verdict": "next_phase self-test:",
@@ -164,8 +165,8 @@ FAULTS = (
         "branch of its own and the group publishes several",
         "file": "src/argus/gitsync.py",
         "find": "        branch=group_branch(root, group, roadmap_dir) if group "
-        "else None)",
-        "replace": "        branch=None)  # FAULT: the group's one branch is not used",
+        "else None,",
+        "replace": "        branch=None,  # FAULT: the group's one branch is not used",
         "check": "driver",
         "cases": "group_run",
         "verdict": "driver self-test:",
