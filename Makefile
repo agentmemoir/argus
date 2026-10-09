@@ -16,7 +16,7 @@ LINE_LIMIT := 350
 # migration ends. It is empty now: the last file was split.
 LINE_EXEMPT :=
 
-.PHONY: install sync lint fmt fmt-check typecheck lines check dry-run example-check \
+.PHONY: install sync lint fmt fmt-check typecheck typecheck-strict lines check dry-run example-check \
         self-test identifiers leakscan guard-faults wheel install-check
 install:
 	install -d "$(DESTDIR)$(BINDIR)"
@@ -39,6 +39,11 @@ fmt-check:
 # Type checking at mypy's default level (see pyproject.toml). CI runs it.
 typecheck:
 	$(RUN) mypy src/argus
+
+# pyright, strict: the checker behind Pylance (see pyright.json). The editor
+# uses the same level through .vscode/settings.json.
+typecheck-strict:
+	$(RUN) pyright --project pyright.json
 
 # No Python file may exceed the line limit, comments and blank lines included.
 # Nothing is exempt: a split removes its file here in the same change.

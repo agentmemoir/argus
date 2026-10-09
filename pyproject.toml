@@ -24,6 +24,7 @@ dependencies = ["pyyaml>=6.0"]
 [dependency-groups]
 dev = [
     "mypy>=1.11",
+    "pyright>=1.1.390",
     "pytest>=8.0",
     "ruff>=0.6",
 ]
