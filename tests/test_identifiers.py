@@ -25,9 +25,11 @@ folder is expected to hold none of:
 
 * a home directory that names its user (``/Users/<name>/``, ``/home/<name>/``,
   ``C:\\Users\\<name>``);
-* a notification or account id: a run of sixteen or more digits, such as a
-  Discord snowflake. A run of one repeated digit (``0000...``) is the
-  documented placeholder and is not an id;
+* a notification or account id: a run of sixteen or more digits that stands
+  outside a hexadecimal token, such as a Discord snowflake. A run of one
+  repeated digit (``0000...``) is the documented placeholder and is not an id,
+  and a run inside a 32-character-or-longer hexadecimal token is a hash, such
+  as the digests every lock file carries;
 * a notification setting given a value as its default inside the driver
   (``HERMES_PROFILE_NAME:=someone``). ``:-`` writes an empty default and is the
   shape the driver uses, so it is allowed;
@@ -76,6 +78,11 @@ HOME_PATH = re.compile(
 #: A notification or account id: sixteen or more digits in a row.
 LONG_ID = re.compile(r"(?<!\d)(\d{16,})(?!\d)")
 
+#: A long hexadecimal token: a hash or checksum, not an account id. A lock file
+#: carries many of them, and a 64-character digest often contains a run of
+#: sixteen digits by chance.
+HEX_TOKEN = re.compile(r"\b[0-9a-fA-F]{32,}\b")
+
 #: A driver default that writes a value into a notification setting. ``:-`` is
 #: an empty default; only ``:=`` with something after it is a value.
 NOTIFY_DEFAULT = re.compile(
@@ -92,6 +99,14 @@ def _is_placeholder_digits(digits: str) -> bool:
     return len(set(digits)) == 1
 
 
+def _inside_hex_token(line: str, start: int, end: int) -> bool:
+    """Whether the match lies inside a hexadecimal hash."""
+    return any(
+        token.start() <= start and end <= token.end()
+        for token in HEX_TOKEN.finditer(line)
+    )
+
+
 def scan(name: str, text: str) -> list[str]:
     """Every finding in one file, each as ``file:line: what``."""
     findings: list[str] = []
@@ -99,8 +114,11 @@ def scan(name: str, text: str) -> list[str]:
         for match in HOME_PATH.finditer(line):
             findings.append(f"{name}:{number}: home path {match.group(0)!r}")
         for match in LONG_ID.finditer(line):
-            if not _is_placeholder_digits(match.group(1)):
-                findings.append(f"{name}:{number}: numeric id {match.group(1)!r}")
+            if _is_placeholder_digits(match.group(1)):
+                continue
+            if _inside_hex_token(line, match.start(1), match.end(1)):
+                continue
+            findings.append(f"{name}:{number}: numeric id {match.group(1)!r}")
         for match in NOTIFY_DEFAULT.finditer(line):
             findings.append(f"{name}:{number}: notification default {match.group(0)!r}")
         for match in PROFILE_LITERAL.finditer(line):
@@ -206,6 +224,7 @@ def test_the_patterns_fire_and_do_not_overreach():
         ("/Users/example/notes.md", 1),  # a home path
         ("/home/example/work", 1),  # a home path
         ("discord:1234567890123456789", 1),  # an id, not a placeholder
+        ("id1234567890123456789", 1),  # an id shape in a short token
         ("HERMES_PROFILE_NAME:=someone", 1),  # a value written as a default
         ('"profile": "someone-here"', 1),  # a real profile literal
         ('"channel": "someone-channel"', 1),  # a real channel literal
@@ -213,6 +232,15 @@ def test_the_patterns_fire_and_do_not_overreach():
         ("~/code/project", 0),  # no login name
         ("discord:000000000000000000", 0),  # the placeholder id
         ("phase 100010", 0),  # six digits is a phase number
+        (
+            "sha256:5b976054553670829985ed767feb78fb6bcede0175327c4844dd5c281c1be659",
+            0,
+        ),  # a digest, not an id
+        (
+            "https://files.example.org/packages/1b/d7/"
+            "c56955934a431a0fa3e4e9aa7af4a53ceab2a61241005427545208945eb4/tool.whl",
+            0,
+        ),  # a URL path hash, not an id
         ('PROFILE="${HERMES_PROFILE_NAME:-}"', 0),  # an empty default
         ('"profile": "example-profile"', 0),  # a documented placeholder
         ('"channel": "discord:000000000000000000"', 0),

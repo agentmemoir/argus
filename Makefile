@@ -11,8 +11,8 @@ PREFIX ?= $(HOME)/.local
 BINDIR ?= $(PREFIX)/bin
 CONFIG ?= config.json
 
-.PHONY: install sync lint fmt fmt-check check dry-run example-check self-test \
-        identifiers leakscan guard-faults wheel install-check
+.PHONY: install sync lint fmt fmt-check typecheck check dry-run example-check \
+        self-test identifiers leakscan guard-faults wheel install-check
 install:
 	install -d "$(DESTDIR)$(BINDIR)"
 	ln -sf "$(CURDIR)/bin/argus" "$(DESTDIR)$(BINDIR)/argus"
@@ -30,6 +30,10 @@ fmt:
 
 fmt-check:
 	$(RUN) ruff format --check .
+
+# Type checking at mypy's default level (see pyproject.toml). CI runs it.
+typecheck:
+	$(RUN) mypy src/argus
 
 # A tick reads one configuration file, so the readiness report and the dry run
 # read the file named by CONFIG. --self-test reads no file.

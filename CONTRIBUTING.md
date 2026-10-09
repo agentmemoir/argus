@@ -21,6 +21,7 @@ Run the checks before opening a pull request:
 ```sh
 make lint          # ruff check
 make fmt-check     # formatting, 88 columns
+make typecheck     # mypy over the package
 make leakscan      # the published tree carries no host path, credential, or run state
 make example-check # the bundled example loads and passes the readiness report
 make install-check # the built wheel installs and its console script runs
@@ -31,11 +32,15 @@ make guard-faults  # break every launch guard and require a named failure
 `make wheel` builds the package and checks that the driver ships inside;
 `make install-check` installs that wheel into a clean environment and runs the
 installed console script.
-CI runs the lint and format checks, `make leakscan`, `make example-check`, `make install-check`, `make self-test`, and `make guard-faults`.
+CI runs the lint, format, and type checks, `make leakscan`, `make example-check`, `make install-check`, `make self-test`, and `make guard-faults`.
 
 ## Rules That Matter Here
 
 - **One formatter: `ruff format`, 88 columns.** Never hand-format.
+- **Types: mypy is the gate, at its default level.** `make typecheck` must
+  pass. Strict mode and a shipped `py.typed` are the target once the large
+  modules are split and annotated; until then, new code keeps the default gate
+  green.
 - **Argus names no project layout.** Every path and command comes from the
   configuration file; a missing required key stops the tick instead of a
   guessed default.

@@ -6,7 +6,7 @@ import contextlib
 import re
 from pathlib import Path
 
-_SETTINGS = {}
+_SETTINGS: dict[str, object] = {}
 _MISSING = object()
 
 

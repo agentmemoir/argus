@@ -213,13 +213,13 @@ def format_notification(
                 "Check the local run logs, then clear the halt when the stop was intentional."
             )
         heading = f"{label} stopped."
-        run_dir = shlex.quote(str((run_json or default_run_json(phase_file)).parent))
+        quoted_dir = shlex.quote(str((run_json or default_run_json(phase_file)).parent))
         code = (
             f" The driver is halted with exit code {exit_code}."
             if exit_code is not None
             else " The driver is halted."
         )
-        return f"{heading}{code} For more info, run:\n\n```\nls -la {run_dir}\n```"
+        return f"{heading}{code} For more info, run:\n\n```\nls -la {quoted_dir}\n```"
     if event == "escalated":
         # The remedy loop ran out of rounds with findings still open. This is a
         # record about a budget, not a verdict, so the message says the line

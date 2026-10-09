@@ -11,6 +11,8 @@ if "argus" not in sys.modules:
     spec = importlib.util.spec_from_file_location(
         "argus", folder / "__init__.py", submodule_search_locations=[str(folder)]
     )
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"cannot load the argus package from {folder}")
     package = importlib.util.module_from_spec(spec)
     sys.modules["argus"] = package
     spec.loader.exec_module(package)
