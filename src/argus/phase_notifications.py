@@ -12,12 +12,11 @@ import shlex
 import sys
 from pathlib import Path
 
-
 if __package__ in {None, ""}:
     import _bootstrap  # noqa: F401 - register the source package
+from argus import conventions
 from argus.config import ConfigError
 from argus.conventions import phase_file_parts, phase_run_dir
-from argus import conventions
 
 _SECRET = re.compile(
     r"(?i)\b(?:api[_-]?key|authorization|bearer|password|secret|token)\s*[:=]\s*\S+"

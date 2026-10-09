@@ -96,8 +96,8 @@ def _self_test_already_completed(checks):
 
 
 def _self_test_group_claim(checks):
-    from argus.phase_reservations import SELF_TEST_BRANCH, _git_test_repo
     from argus.exec_tempdir import make_exec_dir
+    from argus.phase_reservations import SELF_TEST_BRANCH, _git_test_repo
 
     base = Path(make_exec_dir() or tempfile.mkdtemp(prefix="phase-group-selftest-"))
     try:
@@ -219,7 +219,7 @@ def _self_test_group_claim(checks):
             def read(self):
                 return {"phases": {}}, None
 
-            def reserve_group(self, phases, machine_id, **kwargs):
+            def reserve_group(self, phases, machine_id, **kwargs):  # noqa: ARG002 - the fake mirrors the real store's signature
                 raise ReservationCooldown(phases[0], 17, {})
 
         cooling, cold_code = _request(

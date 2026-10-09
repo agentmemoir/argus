@@ -42,11 +42,10 @@ import tempfile
 import urllib.parse
 from pathlib import Path
 
-
 if __package__ in {None, ""}:
     import _bootstrap  # noqa: F401 - register the source package
-from argus.config import ConfigError
 from argus import conventions
+from argus.config import ConfigError
 from argus.conventions import board_repo, phase_run_dir
 from argus.exec_tempdir import make_exec_dir
 
@@ -209,9 +208,9 @@ class _Mutation:
 
 def _iso(moment=None):
     """Format a moment (or now) as the board's Zulu millisecond stamp."""
-    moment = moment or _datetime.datetime.now(_datetime.timezone.utc)
+    moment = moment or _datetime.datetime.now(_datetime.UTC)
     if moment.tzinfo is None:
-        moment = moment.replace(tzinfo=_datetime.timezone.utc)
+        moment = moment.replace(tzinfo=_datetime.UTC)
     return moment.isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
 
@@ -226,7 +225,7 @@ def _as_moment(value):
         return None
     if isinstance(value, _datetime.datetime):
         if value.tzinfo is None:
-            return value.replace(tzinfo=_datetime.timezone.utc)
+            return value.replace(tzinfo=_datetime.UTC)
         return value
     return _parse_moment(value, what="time")
 
@@ -240,7 +239,7 @@ def _parse_moment(value, *, what="timestamp"):
     except ValueError as exc:
         raise CoordinationUnavailable(f"invalid {what}: {value!r}") from exc
     if moment.tzinfo is None:
-        moment = moment.replace(tzinfo=_datetime.timezone.utc)
+        moment = moment.replace(tzinfo=_datetime.UTC)
     return moment
 
 
@@ -475,10 +474,10 @@ def _validate_state(state):
 def _read_state_file(path, *, allow_missing=True):
     try:
         raw = path.read_text()
-    except FileNotFoundError:
+    except FileNotFoundError as exc:
         if allow_missing:
             return _empty_state()
-        raise CoordinationUnavailable("coordination state file is missing")
+        raise CoordinationUnavailable("coordination state file is missing") from exc
     except OSError as exc:
         raise CoordinationUnavailable(f"cannot read coordination state: {exc}") from exc
     try:
@@ -494,7 +493,7 @@ def _write_state_file(path, state):
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(path.name + ".tmp")
     temporary.write_text(json.dumps(state, indent=2, sort_keys=True) + "\n")
-    os.replace(temporary, path)
+    temporary.replace(path)
 
 
 def _owner_matches(record, machine_id, reservation_id, generation):
@@ -517,7 +516,7 @@ def _reservation_from_record(record):
     }
 
 
-def _cooldown_remaining(record, number, now=None):
+def _cooldown_remaining(record, _number, now=None):
     """Seconds left in a record's claim cooldown, or 0 when none is active.
 
     Stage 3 writes ``COOLDOWN_UNTIL_FIELD`` when an expired group returns to
@@ -531,7 +530,7 @@ def _cooldown_remaining(record, number, now=None):
     if value is None:
         return 0
     until = _parse_moment(value, what=COOLDOWN_UNTIL_FIELD)
-    moment = _as_moment(now) or _datetime.datetime.now(_datetime.timezone.utc)
+    moment = _as_moment(now) or _datetime.datetime.now(_datetime.UTC)
     delta = (until - moment).total_seconds()
     if delta <= 0:
         return 0
@@ -970,9 +969,7 @@ def sweep_stale_worktrees(now=None, age_s=WORKTREE_SWEEP_AGE_S, root=None):
     """
     parent = Path(root) if root is not None else Path(tempfile.gettempdir())
     moment = (
-        now
-        if now is not None
-        else _datetime.datetime.now(_datetime.timezone.utc).timestamp()
+        now if now is not None else _datetime.datetime.now(_datetime.UTC).timestamp()
     )
     removed, reclaimed = 0, 0
     try:
@@ -1286,7 +1283,7 @@ class ReservationStore:
         ``{"phase", "machine_id", "reservation_id"}`` dicts; an empty list means
         nothing was stale and no write was made.
         """
-        moment = _as_moment(now) or _datetime.datetime.now(_datetime.timezone.utc)
+        moment = _as_moment(now) or _datetime.datetime.now(_datetime.UTC)
 
         def mutate(state):
             expired = _expire_records(state, moment)
@@ -1790,7 +1787,7 @@ def _receipt_commit(value, field):
 
 
 def _validate_publication_receipt(
-    path, reservation, private_repo, remote, branch, *, repo_root=None
+    path, reservation, private_repo, remote, _branch, *, repo_root=None
 ):
     path = Path(path).resolve()
     key, _number = _phase_key(reservation.get("phase"))
@@ -1866,7 +1863,7 @@ def save_reservation_file(path, reservation):
     }
     temporary = path.with_name(path.name + ".tmp")
     temporary.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
-    os.replace(temporary, path)
+    temporary.replace(path)
     return payload
 
 
@@ -1892,7 +1889,7 @@ def _print_json(value):
     print(json.dumps(value, indent=2, sort_keys=True))
 
 
-def _cli_store(args):
+def _cli_store(_args):
     return ReservationStore(conventions.setting("repo-root"))
 
 
@@ -1957,7 +1954,7 @@ def _group_lifecycle_checks(checks, base):
     root_b.mkdir()
     store_a = ReservationStore(root_a, private_repo=clients[0])
     store_b = ReservationStore(root_b, private_repo=clients[1])
-    epoch = _dt.datetime(2026, 10, 8, 12, 0, tzinfo=_dt.timezone.utc)
+    epoch = _dt.datetime(2026, 10, 8, 12, 0, tzinfo=_dt.UTC)
 
     def at(seconds):
         return epoch + _dt.timedelta(seconds=seconds)
@@ -2172,7 +2169,7 @@ def self_test_checks():
 
     conventions.configure(
         {
-            "repo-root": Path("."),
+            "repo-root": Path(),
             "pipeline": None,
             "roadmap-dir": Path("roadmap"),
             "driver.runs": Path("runs"),
@@ -2181,7 +2178,7 @@ def self_test_checks():
             "machine.id": "self-test",
             "commands.git": "git",
             "commands.gh": "gh",
-            "board.repo": Path("."),
+            "board.repo": Path(),
             "board.file": Path("claims.json"),
             "board.branch": SELF_TEST_BRANCH,
             "board.remote": "origin",
@@ -2543,7 +2540,7 @@ def _checkout_hygiene_checks(checks, base):
         for candidate, age in ((old_dir, 7200), (new_dir, 0)):
             candidate.mkdir()
             (candidate / "payload").write_text("x" * 4096)
-            moment = _datetime.datetime.now(_datetime.timezone.utc).timestamp() - age
+            moment = _datetime.datetime.now(_datetime.UTC).timestamp() - age
             os.utime(candidate, (moment, moment))
         removed, reclaimed = sweep_stale_worktrees(root=sweep_root)
         remaining = sorted(p.name for p in sweep_root.iterdir())
@@ -2556,7 +2553,7 @@ def _checkout_hygiene_checks(checks, base):
         # Only this module's own prefix is ever touched.
         other = sweep_root / "someone-elses-directory"
         other.mkdir()
-        moment = _datetime.datetime.now(_datetime.timezone.utc).timestamp() - 7200
+        moment = _datetime.datetime.now(_datetime.UTC).timestamp() - 7200
         os.utime(other, (moment, moment))
         sweep_stale_worktrees(root=sweep_root)
         _self_test_check(
@@ -2607,7 +2604,7 @@ def _board_branch_checks(checks, base):
     _self_test_check(
         checks,
         "the board's branch is not the integration branch",
-        SELF_TEST_BRANCH != _integration_branch(private, "origin"),
+        _integration_branch(private, "origin") != SELF_TEST_BRANCH,
         f"{SELF_TEST_BRANCH} vs {_integration_branch(private, 'origin')}",
     )
 
@@ -2762,7 +2759,7 @@ def _board_branch_checks(checks, base):
         )
         integration = _integration_branch(race_private, "origin")
 
-        def publish_run_state():
+        def publish_run_state(race_private=race_private, integration=integration):
             # Run state is published from the private checkout, which is where
             # the publishing tool writes it.
             (race_private / "runs" / "phase-100711" / "run.json").write_text(

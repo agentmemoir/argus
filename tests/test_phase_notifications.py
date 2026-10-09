@@ -10,6 +10,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from argus import conventions
 from argus.phase_notifications import (
     default_run_json,
     display_title,
@@ -17,7 +18,6 @@ from argus.phase_notifications import (
     format_notification,
     phase_label,
 )
-from argus import conventions
 
 
 class PhaseNotificationTests(unittest.TestCase):

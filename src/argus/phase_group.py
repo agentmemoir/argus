@@ -42,17 +42,13 @@ from __future__ import annotations
 
 import argparse
 import json
-import shutil
 import sys
-import tempfile
 from pathlib import Path
 
 if not __package__:
     import _bootstrap  # noqa: F401 - register the source package
 from argus import conventions
 from argus.config import ConfigError
-from argus.roadmap_source import resolve_group
-from argus.work_source import WorkSourceError
 from argus.phase_reservations import (  # noqa: E402 - path set just above
     ACTIVE_STATUSES,
     CoordinationError,
@@ -64,6 +60,8 @@ from argus.phase_reservations import (  # noqa: E402 - path set just above
     reservation_file,
     save_reservation_file,
 )
+from argus.roadmap_source import resolve_group
+from argus.work_source import WorkSourceError
 
 #: Exit code per request state. Anything unlisted is an error, so a new state
 #: cannot be mistaken for a successful claim.

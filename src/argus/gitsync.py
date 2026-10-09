@@ -82,6 +82,7 @@ Exit codes: 0 synced/verified, 1 blocked (operator decision required),
 """
 
 import argparse
+import contextlib
 import json
 import os
 import re
@@ -412,8 +413,8 @@ def git(repo, *args, timeout=GIT_TIMEOUT_S, extra_env=None, raw=False):
             timeout=timeout,
             env=env,
         )
-    except FileNotFoundError:
-        raise ConfigError("git is not on PATH")
+    except FileNotFoundError as exc:
+        raise ConfigError("git is not on PATH") from exc
     except subprocess.TimeoutExpired:
         return 124, "", f"git {' '.join(args)} timed out after {timeout}s"
     if raw:
@@ -1088,7 +1089,7 @@ def ensure_phase_branch(repo, branch, base=None, integration_only=False):
         # commits are the phase's own history, so move onto it rather than
         # creating a second one; the overlap gate decides whether the two tips
         # can be joined.
-        rc, _, err = git(repo, "checkout", branch)
+        rc, out, err = git(repo, "checkout", branch)
         if rc != 0:
             return blocked(
                 info,
@@ -1637,7 +1638,7 @@ def open_predecessor(root, phase):
     """
     root = Path(root).resolve()
     best = None
-    for number, entry in _phase_run_entries(root):
+    for number, _entry in _phase_run_entries(root):
         if number >= int(phase):
             continue
         review = awaiting_review(root, number)
@@ -3039,7 +3040,7 @@ def _portable_publication_check(base):
             "custom phase, typed inputs, run directory, private checkout, "
             "reservation, receipt, and predecessor use the configured layout",
         )
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - the self-test reports the failure
         return False, str(exc)
 
 
@@ -3077,10 +3078,8 @@ class _Heartbeat:
         def write():
             while not stop.is_set():
                 seq[0] += 1
-                try:
+                with contextlib.suppress(OSError):
                     marker.write_text(f"harness output at {1758800000 + seq[0]}\n")
-                except OSError:
-                    pass
                 stop.wait(self.period)
 
         thread = threading.Thread(target=write, daemon=True)
@@ -3111,7 +3110,7 @@ def _publish_while_writing_check(base):
     old_branch = conventions.setting("board.branch")
     conventions.override({"board.branch": "main"})
     try:
-        with _Heartbeat(run_dir) as beat:
+        with _Heartbeat(run_dir):
             time.sleep(0.4)
             marker = run_dir / "activity"
             first = marker.read_text()
@@ -3135,7 +3134,6 @@ def _publish_while_writing_check(base):
     if not ok:
         return False, detail
     # The marker is still committed and pushed, exclusion or not.
-    pushed = git(nested, "log", "-1", "--format=%s")[1]
     tracked = "activity" in git(nested, "ls-files", "runs")[1]
     committed = git(nested, "show", "HEAD:runs/phase-100441/activity")[1]
     if not tracked or not committed.strip():
@@ -3625,7 +3623,7 @@ class _StubGH:
         # the same subprocess.run, so a stub that swallowed those would make
         # every git call under test fail, which is a failure in the harness
         # rather than a finding about the code.
-        if not argv or os.path.basename(argv[0]) != "gh":
+        if not argv or Path(argv[0]).name != "gh":
             return self.saved(argv, **kwargs)
         self.calls.append(argv)
         if isinstance(self.result, Exception):
@@ -4371,7 +4369,7 @@ def _tidy_and_dispatch_checks(base):
                 f"action={untidied.get('action')} branch={current_branch(pub4)}",
             )
         )
-    except Exception as exc:  # noqa: BLE001 - the self-test reports the failure
+    except Exception:  # noqa: BLE001 - the self-test reports the failure
         import traceback
 
         results.append(
@@ -4633,13 +4631,13 @@ def _two_phase_stack_checks(base):
                 (not four["ok"])
                 and current_branch(pub) == base_branch
                 and (pub / "uncommitted.txt").read_text() == "work in progress\n"
-                and not git(
+                and git(
                     pub,
                     "rev-parse",
                     "--verify",
                     f"refs/heads/{phase_branch_for(100473, fourth_roadmap)}",
                 )[0]
-                == 0,
+                != 0,
                 f"ok={four.get('ok')} branch={current_branch(pub)} "
                 f"summary={four.get('summary')}",
             )
@@ -5000,7 +4998,7 @@ def _stale_receipt_checks(base):
         # Phase one runs to completion and publishes. The run finishing is what
         # makes the selector treat it as done, so this is the state that has to
         # be built before the merge, not after.
-        one_branch = mode_branch(pub, 100485, "phase-100485-stale-receipt.md")
+        mode_branch(pub, 100485, "phase-100485-stale-receipt.md")
         (pub / "first.txt").write_text("phase one\n")
         git(pub, "add", "first.txt")
         git(pub, "commit", "-q", "-m", "phase 100485: the first change")
@@ -5263,7 +5261,7 @@ def self_test_checks():
     """Run checks with explicit temporary layout settings."""
     conventions.configure(
         {
-            "repo-root": Path("."),
+            "repo-root": Path(),
             "pipeline": None,
             "roadmap-dir": BOARD_REL / "roadmap",
             "driver.runs": BOARD_REL / "runs",
@@ -6158,7 +6156,7 @@ def mode_branch(root, phase, roadmap, roadmap_dir=None, group=None):
         "repos": made,
         "summary": summarize(made, "branch"),
     }
-    if ok and predecessor:
+    if ok and predecessor and out["base"] == predecessor["branch"]:
         # Did the predecessor move since this phase was built on it? The
         # existence check above cannot see that: a force-pushed branch still
         # exists, so the phase would silently end up based on commits nobody
@@ -6166,34 +6164,33 @@ def mode_branch(root, phase, roadmap, roadmap_dir=None, group=None):
         # predecessor that legitimately gained commits is ordinary once more
         # than one phase is open at once, and refusing to launch would put the
         # line behind a human for something it can describe precisely.
-        if out["base"] == predecessor["branch"]:
+        rc_h, head_now, _ = git(
+            root, "rev-parse", "--verify", f"refs/heads/{predecessor['branch']}"
+        )
+        if rc_h != 0:
             rc_h, head_now, _ = git(
-                root, "rev-parse", "--verify", f"refs/heads/{predecessor['branch']}"
+                root,
+                "rev-parse",
+                "--verify",
+                f"refs/remotes/origin/{predecessor['branch']}",
             )
-            if rc_h != 0:
-                rc_h, head_now, _ = git(
-                    root,
-                    "rev-parse",
-                    "--verify",
-                    f"refs/remotes/origin/{predecessor['branch']}",
-                )
-            recorded = predecessor.get("head")
-            if rc_h == 0 and recorded and head_now != recorded:
-                out["predecessor_moved"] = {
-                    "branch": predecessor["branch"],
-                    "phase": f"{int(predecessor['phase']):06d}",
-                    "recorded_head": recorded,
-                    "current_head": head_now,
-                }
-                out["warning"] = (
-                    f"the predecessor branch {predecessor['branch']!r} has moved "
-                    f"since this phase was recorded as based on it "
-                    f"({recorded[:12]} -> {head_now[:12]}); the phase branch "
-                    "still contains the commits it was built from, but a "
-                    "force-pushed predecessor means this pull request will show "
-                    "changes that no longer match what the predecessor "
-                    "published"
-                )
+        recorded = predecessor.get("head")
+        if rc_h == 0 and recorded and head_now != recorded:
+            out["predecessor_moved"] = {
+                "branch": predecessor["branch"],
+                "phase": f"{int(predecessor['phase']):06d}",
+                "recorded_head": recorded,
+                "current_head": head_now,
+            }
+            out["warning"] = (
+                f"the predecessor branch {predecessor['branch']!r} has moved "
+                f"since this phase was recorded as based on it "
+                f"({recorded[:12]} -> {head_now[:12]}); the phase branch "
+                "still contains the commits it was built from, but a "
+                "force-pushed predecessor means this pull request will show "
+                "changes that no longer match what the predecessor "
+                "published"
+            )
     return out
 
 

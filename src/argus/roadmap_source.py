@@ -51,10 +51,8 @@ from pathlib import Path
 
 if not __package__:
     import _bootstrap  # noqa: F401 - register the source package
-from argus.work_source import (  # noqa: E402 - path set just above
-    WorkSource,
-    WorkSourceError,
-)
+from argus import conventions
+from argus.conventions import phase_file_parts, phase_paths, phase_run_dir, runs_dir
 from argus.phase_policy import (  # noqa: E402 - path set just above
     is_runnable_phase,
     phase_gates_blocked,
@@ -68,9 +66,10 @@ from argus.phase_reservations import (  # noqa: E402 - path set just above
     reservation_file,
     save_reservation_file,
 )
-
-from argus import conventions
-from argus.conventions import phase_file_parts, phase_paths, phase_run_dir, runs_dir
+from argus.work_source import (  # noqa: E402 - path set just above
+    WorkSource,
+    WorkSourceError,
+)
 
 INDEX_ROW_RE = re.compile(r"^\|\s*(\d{4,6})\s*\|")
 INDEX_HEAD_RE = re.compile(r"^#{2,3}\s*(\d{4,6})\.\s")
@@ -259,7 +258,7 @@ def finalize_log_done(repo, number, phase_file=None):
     return False
 
 
-def index_complete(repo, roadmap):
+def index_complete(_repo, roadmap):
     """Phase numbers marked Complete in roadmap/index.md."""
     if roadmap is None:
         return set()
@@ -343,7 +342,7 @@ def is_done(repo, number, path, index_done):
     return False
 
 
-def candidates(repo, roadmap):
+def candidates(_repo, roadmap):
     out = []
     if roadmap is None:
         return out
@@ -426,7 +425,7 @@ def audit(repo, roadmap, apply_index=False):
     return issues
 
 
-def _annotate_index_complete(repo, roadmap, drifted):
+def _annotate_index_complete(_repo, roadmap, drifted):
     """Mark each named phase's index.md entry Complete, in place.
 
     Two shapes exist and they need different edits:
@@ -588,7 +587,7 @@ def gate_block(number, path):
     return None
 
 
-def _gitsync(repo):
+def _gitsync(_repo):
     """Return the publisher shipped with this Argus package."""
     try:
         from argus.gitsync import awaiting_review
@@ -688,14 +687,14 @@ def _group_section(text):
     return "\n".join(body)
 
 
-def _parse_group_members(path, number):
+def _parse_group_members(path, _number):
     """The phase numbers a phase file lists in its ``together:`` declaration.
 
-    ``number`` is the phase being read, kept in the signature so every reader
-    of one phase document takes the same pair. Returns the tokens exactly as
-    declared, in declaration order, so group ordering is the document's and
-    not a set's. Every failure names the document, because a bad declaration
-    is a property of the file an operator has to fix.
+    The phase number is kept in the signature as ``_number``, unused here, so
+    every reader of one phase document takes the same pair. Returns the tokens
+    exactly as declared, in declaration order, so group ordering is the
+    document's and not a set's. Every failure names the document, because a bad
+    declaration is a property of the file an operator has to fix.
     """
     try:
         text = Path(path).read_text(encoding="utf-8", errors="replace")
@@ -1249,7 +1248,7 @@ class RoadmapSource(WorkSource):
 def self_test():
     conventions.configure(
         {
-            "repo-root": Path("."),
+            "repo-root": Path(),
             "roadmap-dir": Path("roadmap"),
             "driver.runs": Path("runs"),
             "driver.include": ["phase-*.md"],
@@ -1631,7 +1630,7 @@ def self_test():
             def read(self):
                 return self.state, "fake"
 
-            def reserve(self, phase, machine_id, **kwargs):
+            def reserve(self, phase, machine_id, **kwargs):  # noqa: ARG002 - the fake mirrors the real store's signature
                 record = {
                     "phase": f"{int(phase):06d}",
                     "machine_id": machine_id,
@@ -1643,7 +1642,7 @@ def self_test():
                 self.reserved.append((int(phase), machine_id))
                 return record
 
-            def reserve_group(self, phases, machine_id, **kwargs):
+            def reserve_group(self, phases, machine_id, **kwargs):  # noqa: ARG002 - the fake mirrors the real store's signature
                 records = []
                 for phase in phases:
                     key = f"{int(phase):06d}"
@@ -1728,7 +1727,7 @@ def self_test():
         assert got["state"] == "COORDINATION_INCONSISTENT", got
 
         class FailingStore(FakeStore):
-            def reserve(self, phase, machine_id, **kwargs):
+            def reserve(self, phase, machine_id, **kwargs):  # noqa: ARG002 - the fake mirrors the real store's signature
                 raise CoordinationError("coordination push failed")
 
         try:
@@ -1845,7 +1844,7 @@ def self_test():
             def read(self):
                 return self.state, "fake"
 
-            def reserve(self, phase, machine_id, **kwargs):
+            def reserve(self, phase, machine_id, **kwargs):  # noqa: ARG002 - the fake mirrors the real store's signature
                 record = {
                     "phase": f"{int(phase):06d}",
                     "machine_id": machine_id,
@@ -2124,4 +2123,4 @@ def self_test():
 def _self_test_publisher_lookup():
     from argus.gitsync import awaiting_review
 
-    assert _gitsync(Path(".")) is awaiting_review
+    assert _gitsync(Path()) is awaiting_review

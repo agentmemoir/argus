@@ -20,7 +20,6 @@ from pathlib import Path
 from argus.config import SHELL_VARS
 from argus.exec_tempdir import exec_tempdir
 
-
 ARGUS = Path(__file__).resolve().parents[1]
 CONFIG_ENV_NAMES = frozenset(SHELL_VARS.values())
 

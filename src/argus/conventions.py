@@ -2,9 +2,9 @@
 # SPDX-License-Identifier: Apache-2.0
 """Shared settings, paths, and phase names for Argus tools."""
 
+import contextlib
 import re
 from pathlib import Path
-
 
 _SETTINGS = {}
 _MISSING = object()
@@ -174,10 +174,8 @@ def _pipeline_inputs(repo, number, phase_file, pipeline):
     if phase_file is not None:
         path = Path(phase_file)
         if path.is_absolute():
-            try:
+            with contextlib.suppress(ValueError):
                 path = path.relative_to(Path(repo).resolve())
-            except ValueError:
-                pass
         overrides[file_name] = str(path)
     if number_name not in declared or file_name not in declared:
         raise ValueError("pipeline must declare the configured phase inputs")

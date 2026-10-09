@@ -52,6 +52,11 @@ target-version = "py311"
 select = ["E", "F", "W", "I", "UP", "B", "BLE", "SIM", "C4", "RET", "PTH", "ARG"]
 ignore = ["E501"]
 
+[tool.ruff.lint.per-file-ignores]
+# `exec_tempdir.py` is a copy of a shared test helper. Rewrites belong in the
+# shared copy, so a re-copy stays a diff of behaviour, not of style.
+"src/argus/exec_tempdir.py" = ["PTH", "SIM105"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra --strict-markers"

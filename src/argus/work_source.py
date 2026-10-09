@@ -43,9 +43,10 @@ installed as a distribution, so there is no metadata for a plugin system to
 discover. Adding a source is one line in ``SOURCES``.
 """
 
-from abc import ABC, abstractmethod
 import importlib
+from abc import ABC, abstractmethod
 from pathlib import Path
+
 from argus import conventions
 
 #: The source a machine gets when it has configured none. Every machine runs
@@ -115,9 +116,9 @@ def resolve(name, repo, roadmap=None):
 def self_test():
     previous = conventions.configure(
         {
-            "repo-root": Path("."),
+            "repo-root": Path(),
             "pipeline": None,
-            "roadmap-dir": Path("."),
+            "roadmap-dir": Path(),
             "driver.include": ["phase-*.md"],
             "driver.exclude": [],
             "driver.runs": Path("runs"),

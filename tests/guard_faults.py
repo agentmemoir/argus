@@ -308,7 +308,7 @@ def check_fault(repo, driver, fault):
         return judge(lines, rc, fault)
     finally:
         target.write_bytes(original)
-        os.chmod(target, mode)
+        target.chmod(mode)
         if _digest(target) != digest:
             raise RestoreError(
                 f"{target.name} was not restored byte-for-byte after the fault "

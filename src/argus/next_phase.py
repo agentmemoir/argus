@@ -71,11 +71,15 @@ from argus.roadmap_source import (  # noqa: E402,F401 - path set just above
     publication_receipt_done,
     reported_path,
     resolve_group,
+)
+from argus.roadmap_source import (
     self_test as roadmap_source_self_test,
 )
 from argus.work_source import (  # noqa: E402 - path set just above
     WorkSourceError,
     resolve,
+)
+from argus.work_source import (
     self_test as work_source_self_test,
 )
 
