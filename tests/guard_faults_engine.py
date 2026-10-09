@@ -81,40 +81,42 @@ _SCRUBBED_NAMES = frozenset(
 )
 
 
-#: Where one fault's scratch space is made. The path has to be short: a tmux
+#: Where one fault's tmux socket base is made. The path has to be short: a tmux
 #: server puts its socket under `TMUX_TMPDIR`, and a unix socket path is capped
-#: (104 bytes on macOS, 108 on Linux). A caller's own `TMPDIR` can be deep enough
-#: that the socket path overflows, and then the driver self-test dies before it
-#: prints a verdict, so every driver-checked fault is reported inconclusive. That
+#: (103 bytes usable on macOS, 107 on Linux). The fixture directory is not
+#: capped, so the two get separate bases: a deep fixture scratch would otherwise
+#: push the socket over the limit, the self-test would die before it printed a
+#: verdict, and every driver-checked fault would be reported inconclusive. That
 #: reads as an uncovered guard, and it is not one.
-SHORT_TEMP = "/tmp"
+SHORT_TMP = "/tmp"
 
 
-def _scratch_parent() -> str | None:
-    """A short parent for one fault's scratch space, or ``None`` for the default."""
-    candidate = Path(SHORT_TEMP)
+def _short_tmp_parent() -> str | None:
+    """A short parent for one fault's tmux socket base, or ``None``."""
+    candidate = Path(SHORT_TMP)
     if candidate.is_dir() and os.access(candidate, os.W_OK):
         return str(candidate)
     return None
 
 
-def _isolated_env(scratch: str) -> dict[str, str]:
+def _isolated_env(scratch: str, tmux: str) -> dict[str, str]:
     """This process's environment, with one fault's own scratch space.
 
-    The caller's Argus settings are dropped and `TMPDIR` and `TMUX_TMPDIR` point
-    inside `scratch`, so this fault's fixtures and its tmux server cannot collide
-    with another fault's or with a live line's.
+    The caller's Argus settings are dropped; `TMPDIR` points inside `scratch`
+    and `TMUX_TMPDIR` at `tmux`, so this fault's fixtures and its tmux server
+    cannot collide with another fault's or with a live line's. The socket base
+    is separate because a unix socket path is capped and the fixture path is
+    not.
     """
     env = {
         name: value
         for name, value in os.environ.items()
         if not name.startswith(_SCRUBBED_PREFIXES) and name not in _SCRUBBED_NAMES
     }
-    tmp, tmux = Path(scratch) / "tmp", Path(scratch) / "tmux"
+    tmp = Path(scratch) / "tmp"
     tmp.mkdir()
-    tmux.mkdir()
     env["TMPDIR"] = str(tmp)
-    env["TMUX_TMPDIR"] = str(tmux)
+    env["TMUX_TMPDIR"] = tmux
     return env
 
 
@@ -166,8 +168,11 @@ def run_selftest(
         if check == "issue_guards"
         else ["bash", str(driver), "--self-test"]
     )
-    with tempfile.TemporaryDirectory(prefix="ag-", dir=_scratch_parent()) as scratch:
-        env = _isolated_env(scratch)
+    with (
+        tempfile.TemporaryDirectory(prefix="ag-") as scratch,
+        tempfile.TemporaryDirectory(prefix="ag-tmux-", dir=_short_tmp_parent()) as tmux,
+    ):
+        env = _isolated_env(scratch, tmux)
         if cases:
             env["SELFTEST_CASES"] = cases
         try:
