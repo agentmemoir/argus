@@ -22,7 +22,7 @@ classifiers = [
 dependencies = ["pyyaml>=6.0"]
 
 [dependency-groups]
-dev = ["pytest>=8.0"]
+dev = ["pytest>=8.0", "ruff>=0.6"]
 
 [tool.uv]
 package = true
@@ -40,6 +40,17 @@ Source = "https://github.com/agentmemoir/argus"
 # VCS rules keep caches and local files out.
 [tool.hatch.build.targets.wheel]
 packages = ["src/argus"]
+
+[tool.ruff]
+line-length = 88
+src = ["src", "tests"]
+target-version = "py311"
+
+[tool.ruff.lint]
+# The same families glide selects. E501 is ignored because the formatter
+# cannot wrap a long string or a comment, and it is the one line-length voice.
+select = ["E", "F", "W", "I", "UP", "B", "BLE", "SIM", "C4", "RET", "PTH", "ARG"]
+ignore = ["E501"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -16,6 +16,21 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+      - name: Install the project
+        run: uv sync --frozen
+      - name: Lint and check formatting
+        run: |
+          uv run ruff check .
+          uv run ruff format --check .
+
   self-test:
     name: self-test
     runs-on: ubuntu-latest

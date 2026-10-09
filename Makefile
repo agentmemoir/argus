@@ -11,7 +11,7 @@ PREFIX ?= $(HOME)/.local
 BINDIR ?= $(PREFIX)/bin
 CONFIG ?= config.json
 
-.PHONY: install sync check dry-run self-test identifiers guard-faults wheel
+.PHONY: install sync lint fmt fmt-check check dry-run self-test identifiers guard-faults wheel
 install:
 	install -d "$(DESTDIR)$(BINDIR)"
 	ln -sf "$(CURDIR)/bin/argus" "$(DESTDIR)$(BINDIR)/argus"
@@ -19,6 +19,16 @@ install:
 
 sync:
 	$(UV) sync
+
+# Lint and the one formatter (ruff, 88 columns). CI runs lint and fmt-check.
+lint:
+	$(RUN) ruff check .
+
+fmt:
+	$(RUN) ruff format .
+
+fmt-check:
+	$(RUN) ruff format --check .
 
 # A tick reads one configuration file, so the readiness report and the dry run
 # read the file named by CONFIG. --self-test reads no file.
