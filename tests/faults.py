@@ -63,7 +63,7 @@ FAULTS = (
     {
         "name": "config-paths-anchored-on-cwd",
         "breaks": "relative config paths name different folders when Argus runs elsewhere",
-        "file": "src/argus/config.py",
+        "file": "src/argus/config_loader.py",
         "find": "        candidate = config_dir / candidate",
         "replace": "        candidate = Path.cwd() / candidate  # FAULT: anchor on cwd",
         "check": "entrypoint",

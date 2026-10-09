@@ -10,8 +10,13 @@ RUN := $(UV) run
 PREFIX ?= $(HOME)/.local
 BINDIR ?= $(PREFIX)/bin
 CONFIG ?= config.json
+LINE_LIMIT := 350
+# Files still above the limit while the migration splits them, one per session.
+# Each split removes its file from this list; the list is empty when the
+# migration ends.
+LINE_EXEMPT := src/argus/gitsync.py src/argus/phase_reservations.py src/argus/roadmap_source.py
 
-.PHONY: install sync lint fmt fmt-check typecheck check dry-run example-check \
+.PHONY: install sync lint fmt fmt-check typecheck lines check dry-run example-check \
         self-test identifiers leakscan guard-faults wheel install-check
 install:
 	install -d "$(DESTDIR)$(BINDIR)"
@@ -34,6 +39,23 @@ fmt-check:
 # Type checking at mypy's default level (see pyproject.toml). CI runs it.
 typecheck:
 	$(RUN) mypy src/argus
+
+# No Python file may exceed the line limit, comments and blank lines included.
+# The exempt files are the three a later session splits; each split removes its
+# file here in the same change.
+lines:
+	@printf 'checking every Python file against the %s-line limit\n' '$(LINE_LIMIT)'
+	@files=$$(find src tests -name '*.py' -type f 2>/dev/null); \
+	if [ -z "$$files" ]; then printf 'no Python files found\n'; exit 1; fi; \
+	printf '%s\n' "$$files" | xargs wc -l | awk -v lim=$(LINE_LIMIT) -v exempt='$(LINE_EXEMPT)' \
+		'BEGIN { n = split(exempt, parts, " "); for (i = 1; i <= n; i++) if (parts[i] != "") skip[parts[i]] = 1 } \
+		 $$NF == "total" { next } \
+		 $$1 > lim { if ($$2 in skip) { printf "exempt for now: %s\n", $$2; next } \
+			over = over $$0 "\n"; count++ } \
+		 END { if (count) { printf "OVER LIMIT:\n%s", over; \
+			printf "%d file(s) exceed the %s-line limit. Split before adding.\n", count, lim; \
+			exit 1 } \
+			printf "all files within %s lines\n", lim }'
 
 # A tick reads one configuration file, so the readiness report and the dry run
 # read the file named by CONFIG. --self-test reads no file.

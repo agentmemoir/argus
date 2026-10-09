@@ -5,101 +5,13 @@
 
 import copy
 import json
-import shlex
-import subprocess
 import sys
 import tempfile
 from pathlib import Path
 
+import test_config_cli
 from argus import config as cfgmod
-
-HERE = Path(__file__).resolve().parent
-SAMPLE = HERE.parent / "config.sample.jsonc"
-
-BASE = {
-    "repo-root": "project",
-    "pipeline": "pipeline.yaml",
-    "roadmap-dir": "roadmap",
-    "number-input": "phase_number",
-    "file-input": "phase_file",
-    "driver": {
-        "provider": "phase",
-        "include": ["phase-*.md"],
-        "exclude": ["phase-100499.md"],
-        "runs": "runs",
-        "state": "state",
-        "stale-after": 2700,
-        "outage-stale": 32400,
-        "quiet-minutes": 45,
-        "keep-logs-days": 7,
-        "merge-check-max": 5,
-        "recover-own-claim": False,
-    },
-    "machine": {"id-file": "machine.id"},
-    "commands": {
-        "glide": "glide",
-        "git": "git",
-        "tmux": "tmux",
-        "python": "/usr/bin/python3",
-        "hermes": "hermes",
-        "gh": "gh",
-    },
-    "tmux": {
-        "session": "development",
-        "width": 164,
-        "height": 56,
-        "idle-window": "idle",
-        "phase-window": "phase",
-        "idle-script": "phase-tmux-idle.sh",
-        "refresh": 15,
-    },
-}
-
-
-def check(condition, detail=""):
-    if not condition:
-        raise AssertionError(detail)
-
-
-def write(directory, text, name="config.json"):
-    # Every config here names machine.id-file, so the file it points at is
-    # written beside it. The sample does the same for the tests that load it.
-    (Path(directory) / "machine.id").write_text("machine-1\n", encoding="utf-8")
-    path = Path(directory) / name
-    path.write_text(text, encoding="utf-8")
-    return path
-
-
-def sample_in(directory):
-    """Copy the sample beside the machine-id file it names."""
-    (Path(directory) / "machine.id").write_text("sample-machine\n", encoding="utf-8")
-    path = Path(directory) / "config.json"
-    path.write_text(SAMPLE.read_text(encoding="utf-8"), encoding="utf-8")
-    return path
-
-
-def commented(document):
-    text = json.dumps(document, indent=2)
-    text = text.replace("{\n", "{\n  /* block comment */\n", 1)
-    return "// leading line comment\n" + text + "\n// trailing comment\n"
-
-
-def expect_error(call, needle):
-    try:
-        call()
-    except cfgmod.ConfigError as exc:
-        check(needle in str(exc), f"{needle!r} not in {str(exc)!r}")
-        return
-    raise AssertionError(f"no ConfigError naming {needle!r}")
-
-
-def run_cli(args, cwd):
-    return subprocess.run(
-        [sys.executable, "-m", "argus.config", *args],
-        cwd=cwd,
-        text=True,
-        capture_output=True,
-    )
+from config_fixture import BASE, check, commented, expect_error, sample_in, write
 
 
 def test_comments_are_ignored():
@@ -273,101 +185,6 @@ def test_machine_id_is_read_from_a_file():
         expect_error(lambda: cfgmod.load(str(path)), "machine.id-file")
 
 
-def test_shell_format():
-    with tempfile.TemporaryDirectory() as tmp:
-        path = sample_in(tmp)
-        base = Path(tmp).resolve()
-        result = run_cli(["--config", str(path), "--format", "shell"], tmp)
-        check(result.returncode == 0, result.stderr)
-        out = result.stdout
-        check(f"REPO={shlex.quote(str(base / 'project'))}" in out, out)
-        check("PHASE_INCLUDE=( 'phase-*.md' )" in out, out)
-        check("RECOVER_OWN_CLAIM=0" in out, out)
-        check("NOTIFY_DISABLED=0" in out, out)
-        check("PHASE_MACHINE_ID=sample-machine" in out, out)
-        check("ARGUS_SOURCE_REPO='file'" in out, out)
-        check("BOARD_REPO=" in out, out)
-
-
-def test_shell_format_omits_absent_objects():
-    with tempfile.TemporaryDirectory() as tmp:
-        path = write(tmp, json.dumps(BASE))
-        result = run_cli(["--config", str(path), "--format", "shell"], tmp)
-        check(result.returncode == 0, result.stderr)
-        check("BOARD_REPO=" not in result.stdout, result.stdout)
-        check("DISCORD_CHANNEL=" not in result.stdout, result.stdout)
-        check("HERMES_PROFILE_NAME=" not in result.stdout, result.stdout)
-        check("NOTIFY_DISABLED=" not in result.stdout, result.stdout)
-
-
-def test_json_format():
-    with tempfile.TemporaryDirectory() as tmp:
-        path = sample_in(tmp)
-        base = Path(tmp).resolve()
-        result = run_cli(["--config", str(path), "--format", "json"], tmp)
-        check(result.returncode == 0, result.stderr)
-        data = json.loads(result.stdout)
-        check(set(data) == {"path", "values", "sources"}, sorted(data))
-        check(data["path"] == str(path.resolve()), data["path"])
-        check(
-            data["values"]["repo-root"] == str(base / "project"),
-            data["values"]["repo-root"],
-        )
-        check(data["sources"]["driver.runs"] == "file", data["sources"])
-
-
-def test_report_format():
-    with tempfile.TemporaryDirectory() as tmp:
-        path = sample_in(tmp)
-        result = run_cli(["--config", str(path), "--format", "report"], tmp)
-        check(result.returncode == 0, result.stderr)
-        lines = [line for line in result.stdout.splitlines() if line]
-        check(len(lines) == len(cfgmod.SCHEMA), (len(lines), len(cfgmod.SCHEMA)))
-        check(lines[0].split("\t")[:2] == ["repo-root", "file"], lines[0])
-        check(all(len(line.split("\t")) == 3 for line in lines), lines)
-
-
-def test_cli_flag_beats_file():
-    with tempfile.TemporaryDirectory() as tmp:
-        path = write(tmp, json.dumps(BASE))
-        other = (Path(tmp) / "other").resolve()
-        result = run_cli(
-            [
-                "--config",
-                str(path),
-                "--repo-root",
-                str(other),
-                "--phase-glob",
-                "work-*.md",
-                "--driver",
-                "roadmap",
-                "--format",
-                "shell",
-            ],
-            tmp,
-        )
-        check(result.returncode == 0, result.stderr)
-        check("ARGUS_SOURCE_REPO='flag'" in result.stdout, result.stdout)
-        check(f"REPO={shlex.quote(str(other))}" in result.stdout, result.stdout)
-        check("DRIVER=roadmap" in result.stdout, result.stdout)
-        check("PHASE_INCLUDE=( 'work-*.md' )" in result.stdout, result.stdout)
-
-
-def test_default_config_is_used_when_present():
-    with tempfile.TemporaryDirectory() as tmp:
-        write(tmp, json.dumps(BASE))
-        result = run_cli(["--format", "report"], tmp)
-        check(result.returncode == 0, result.stderr)
-        check(result.stdout.startswith("repo-root\tfile\t"), result.stdout)
-
-
-def test_missing_default_config_fails_clearly():
-    with tempfile.TemporaryDirectory() as tmp:
-        result = run_cli(["--format", "report"], tmp)
-        check(result.returncode == 2, (result.returncode, result.stdout))
-        check("config.json" in result.stderr, result.stderr)
-
-
 TESTS = (
     ("comments ignored", test_comments_are_ignored),
     ("comment markers in strings kept", test_comment_markers_inside_strings_are_kept),
@@ -379,13 +196,19 @@ TESTS = (
     ("wrong type", test_wrong_type_names_key),
     ("bad values", test_bad_values_name_key),
     ("sample", test_sample_loads_with_every_schema_key),
-    ("shell format", test_shell_format),
-    ("shell omits absent objects", test_shell_format_omits_absent_objects),
-    ("json format", test_json_format),
-    ("report format", test_report_format),
-    ("cli flag", test_cli_flag_beats_file),
-    ("default config", test_default_config_is_used_when_present),
-    ("missing default config", test_missing_default_config_fails_clearly),
+    ("shell format", test_config_cli.test_shell_format),
+    (
+        "shell omits absent objects",
+        test_config_cli.test_shell_format_omits_absent_objects,
+    ),
+    ("json format", test_config_cli.test_json_format),
+    ("report format", test_config_cli.test_report_format),
+    ("cli flag", test_config_cli.test_cli_flag_beats_file),
+    ("default config", test_config_cli.test_default_config_is_used_when_present),
+    (
+        "missing default config",
+        test_config_cli.test_missing_default_config_fails_clearly,
+    ),
 )
 
 

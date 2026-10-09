@@ -7,6 +7,7 @@ Run the checks from the repository root. The tooling runs through `uv run`; the 
 | `make lint` | `ruff check` finds nothing. |
 | `make fmt-check` | The tree is formatted at 88 columns. |
 | `make typecheck` | mypy over the package, at its default level. |
+| `make lines` | No Python file exceeds 350 lines, comments and blank lines included. |
 | `make self-test` | The driver self-test, the unit suites, the reservation group, the gitsync self-test, and the identifier gate all pass. Needs no configuration file. |
 | `make identifiers` | The published folder carries no home path, no numeric account or channel id, and no notification default or literal that is not a placeholder. |
 | `make leakscan` | The published tree carries no host path, no credential assignment, and no run state. |
@@ -21,4 +22,4 @@ Run the checks from the repository root. The tooling runs through `uv run`; the 
 
 `make leakscan` covers tracked files plus untracked files that git does not ignore, so a leak fails before it is committed. `make example-check` puts a stand-in `glide` command first on `PATH`, because the readiness report only asks whether the configured command resolves.
 
-CI runs the lint, format, and type checks, then `make leakscan`, `make example-check`, `make install-check`, `make self-test`, and `make guard-faults`, on every pull request. [CONTRIBUTING.md](../CONTRIBUTING.md) carries the local gate and the commit rules.
+CI runs the lint, format, type, and line-limit checks, then `make leakscan`, `make example-check`, `make install-check`, `make self-test`, and `make guard-faults`, on every pull request. [CONTRIBUTING.md](../CONTRIBUTING.md) carries the local gate and the commit rules.
