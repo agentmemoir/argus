@@ -4,7 +4,14 @@
 
 The Python tools:
 
-- `next_phase.py`, `work_source.py`, and `roadmap_source.py` select work.
+- `next_phase.py` and `work_source.py` select work, and `roadmap_source.py` is the
+  roadmap work source: it re-exports the module surface (declared in `__all__`).
+  The work sits in `roadmap_evidence.py` (the completion markers and the roadmap
+  folder), `roadmap_queue.py` (the candidates and the next one),
+  `roadmap_index.py` (index.md drift), `roadmap_group.py` (reservation-group
+  declarations), `roadmap_select.py` (claiming a phase or a group on the board),
+  `roadmap_server.py` (`select_server_phase` and the `RoadmapSource` class), and
+  the `roadmap_selftest*.py` files (the self-test).
 - `config.py` reads settings, and `conventions.py` shares them across tools.
 - `phase_reservations.py` is the entry point of the reservation tools: it
   re-exports the module surface and runs `main`. The work sits in
