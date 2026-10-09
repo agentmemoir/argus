@@ -87,6 +87,11 @@ import json
 import sys
 from pathlib import Path
 
+if not __package__:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+    from argus import (
+        _bootstrap as _bootstrap,  # noqa: F401 - register the source package
+    )
 from argus import conventions
 from argus.config.loader import ConfigError as ArgusConfigError
 from argus.gitsync.git import ConfigError, summarize
