@@ -167,8 +167,123 @@ def gh_mark_pull_request_ready(
     return True, f"pull request {int(number)} is ready for review"
 
 
+def gh_pull_request_body(
+    number: int | str,
+    owner: str | None,
+    repo: str | None,
+    host: str | None = None,
+) -> tuple[str | None, str]:
+    """Read a pull request body, or None when GitHub cannot answer.
+
+    Returns ``(body, detail)`` where body is the text gh reports. None is not
+    empty: a caller that reads "could not ask" as empty would wipe the body.
+    """
+    target = _repo_target(owner, repo, host)
+    argv = [
+        gh_binary(),
+        "pr",
+        "view",
+        str(int(number)),
+        "--repo",
+        target,
+        "--json",
+        "body",
+    ]
+    try:
+        done = subprocess.run(
+            argv, capture_output=True, text=True, timeout=GH_TIMEOUT_S
+        )
+    except FileNotFoundError:
+        return None, "gh is not installed"
+    except subprocess.TimeoutExpired:
+        return None, f"gh did not answer within {GH_TIMEOUT_S}s"
+    if done.returncode != 0:
+        return None, f"gh exited {done.returncode}"
+    try:
+        raw = json.loads(done.stdout)
+    except ValueError:
+        return None, "gh did not return JSON"
+    if not isinstance(raw, dict):
+        return None, "gh returned JSON without a body"
+    body_value = cast("dict[str, Any]", raw).get("body")
+    if not isinstance(body_value, str):
+        return None, "gh returned JSON without a body"
+    return body_value, ""
+
+
+def gh_edit_pull_request_body(
+    number: int | str,
+    owner: str | None,
+    repo: str | None,
+    host: str | None,
+    body: str,
+) -> tuple[bool, str]:
+    """Replace a pull request body. Returns ``(ok, detail)``.
+
+    A failure is reported, never raised. The caller keeps its own state, so a
+    GitHub blip must not undo a publication that already landed.
+    """
+    target = _repo_target(owner, repo, host)
+    argv = [
+        gh_binary(),
+        "pr",
+        "edit",
+        str(int(number)),
+        "--repo",
+        target,
+        "--body",
+        body,
+    ]
+    try:
+        done = subprocess.run(
+            argv, capture_output=True, text=True, timeout=GH_TIMEOUT_S
+        )
+    except FileNotFoundError:
+        return False, "gh is not installed"
+    except subprocess.TimeoutExpired:
+        return False, f"gh did not answer within {GH_TIMEOUT_S}s"
+    if done.returncode != 0:
+        return False, f"gh exited {done.returncode}"
+    return True, f"pull request {int(number)} body updated"
+
+
+def gh_comment_pull_request(
+    number: int | str,
+    owner: str | None,
+    repo: str | None,
+    host: str | None,
+    body: str,
+) -> tuple[bool, str]:
+    """Post a comment on a pull request. Returns ``(ok, detail)``."""
+    target = _repo_target(owner, repo, host)
+    argv = [
+        gh_binary(),
+        "pr",
+        "comment",
+        str(int(number)),
+        "--repo",
+        target,
+        "--body",
+        body,
+    ]
+    try:
+        done = subprocess.run(
+            argv, capture_output=True, text=True, timeout=GH_TIMEOUT_S
+        )
+    except FileNotFoundError:
+        return False, "gh is not installed"
+    except subprocess.TimeoutExpired:
+        return False, f"gh did not answer within {GH_TIMEOUT_S}s"
+    if done.returncode != 0:
+        return False, f"gh exited {done.returncode}"
+    return True, f"pull request {int(number)} comment posted"
+
+
 __all__ = [
+    "gh_comment_pull_request",
+    "gh_edit_pull_request_body",
     "gh_mark_pull_request_ready",
+    "gh_pull_request_body",
     "gh_pull_request_open",
     "gh_pull_request_state",
 ]
