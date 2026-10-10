@@ -252,4 +252,4 @@ def _group_review_checks(base: Path) -> list[tuple[str, object, str]]:
     return results
 
 
-__all__ = ["_group_review_checks"]
+__all__ = ["_group_review_checks", "_receipt_fixture", "_write_receipt"]

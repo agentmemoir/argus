@@ -127,7 +127,7 @@ def _checklist_checks(base: Path, results: list[tuple[str, object, str]]) -> Non
         public_head="def5678abc",
     )
     calls: list[Any] = []
-    saved = subprocess.run
+    saved: Any = subprocess.run
 
     def _route(argv: Any, **kwargs: Any) -> Any:
         import types

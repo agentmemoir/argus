@@ -203,9 +203,12 @@ def gh_pull_request_body(
         raw = json.loads(done.stdout)
     except ValueError:
         return None, "gh did not return JSON"
-    if not isinstance(raw, dict) or not isinstance(raw.get("body"), str):
+    if not isinstance(raw, dict):
         return None, "gh returned JSON without a body"
-    return cast("dict[str, Any]", raw)["body"], ""
+    body_value = cast("dict[str, Any]", raw).get("body")
+    if not isinstance(body_value, str):
+        return None, "gh returned JSON without a body"
+    return body_value, ""
 
 
 def gh_edit_pull_request_body(
