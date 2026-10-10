@@ -152,15 +152,27 @@ def canonical_remote_url(value: str | None) -> str:
     )
 
 
-def upstream_urls(repo: str | Path, *, push: bool = False) -> set[str]:
-    _branch, remote, _remote_branch, why = resolve_upstream(repo)
-    if why or not remote:
+def configured_remote_urls(repo: str | Path, *, push: bool = False) -> set[str]:
+    """Every fetch (or push) URL configured by the checkout's remotes.
+
+    The public/private separation proof reads these rather than the current
+    branch's upstream. Separation is a property of the two repositories'
+    configured destinations, and a checkout parked on a branch whose
+    remote-tracking ref was deleted still has them; reading the branch's
+    upstream instead answered with an empty set and refused the tick with
+    "cannot prove separate destinations" for a branch that had merely lost its
+    remote copy.
+    """
+    rc, out, _ = git(repo, "remote")
+    if rc != 0:
         return set()
-    return {canonical_remote_url(url) for url in remote_urls(repo, remote, push=push)}
-
-
-def upstream_push_urls(repo: str | Path) -> set[str]:
-    return upstream_urls(repo, push=True)
+    urls: set[str] = set()
+    for name in out.splitlines():
+        if name.strip():
+            urls.update(
+                canonical_remote_url(url) for url in remote_urls(repo, name, push=push)
+            )
+    return urls
 
 
 def classify(repo: str | Path, upstream: str) -> tuple[str, str, int, int, str]:
