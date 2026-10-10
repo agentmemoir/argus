@@ -19,7 +19,11 @@ from argus.gitsync.group_publication import (
     _push_one,
     _write_publication_receipt,
 )
-from argus.gitsync.group_review import _group_pending, mark_group_pull_request_ready
+from argus.gitsync.group_review import (
+    _group_pending,
+    mark_group_pull_request_ready,
+    update_group_pull_request,
+)
 from argus.gitsync.review import open_predecessor
 from argus.gitsync.runstate import commit_leftover_run_state, publish_dirt
 from argus.gitsync.sync import mode_resync, sync_all
@@ -245,6 +249,11 @@ def publish_phase(
                 outcome["group"] = members
                 outcome["group_pending"] = pending
                 outcome["group_last_unfinished"] = not pending
+                updated = update_group_pull_request(
+                    root, phase, members, receipt.get("pull_request")
+                )
+                if updated is not None:
+                    outcome["pull_request_update"] = updated
                 ready = mark_group_pull_request_ready(
                     phase, pending, receipt.get("pull_request")
                 )

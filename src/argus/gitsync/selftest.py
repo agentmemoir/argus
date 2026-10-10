@@ -20,6 +20,7 @@ from argus.gitsync.selftest_carry import (
 )
 from argus.gitsync.selftest_dispatch import _tidy_and_dispatch_checks
 from argus.gitsync.selftest_fixture import BOARD_REL, _check
+from argus.gitsync.selftest_group_checklist import _group_checklist_checks
 from argus.gitsync.selftest_group_review import _group_review_checks
 from argus.gitsync.selftest_merge_gate import _branch_pair_checks, _merge_gate_checks
 from argus.gitsync.selftest_publish import (
@@ -119,6 +120,8 @@ def _delegated_checks(base: Path, checks: list[dict[str, Any]]) -> None:
         _check(checks, f"sequencing: {name}", ok, detail)
     for name, ok, detail in _group_review_checks(base):
         _check(checks, f"group pull request: {name}", ok, detail)
+    for name, ok, detail in _group_checklist_checks(base):
+        _check(checks, f"group checklist: {name}", ok, detail)
     for name, ok, detail in _tidy_and_dispatch_checks(base):
         _check(checks, f"dispatch: {name}", ok, detail)
     for name, ok, detail in _two_phase_stack_checks(base):
