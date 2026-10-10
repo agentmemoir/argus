@@ -254,6 +254,14 @@ def publish_phase(
                 )
                 if updated is not None:
                     outcome["pull_request_update"] = updated
+                    if not updated.get("ok"):
+                        outcome["pull_request_update_warning"] = (
+                            f"the shared pull request was not fully updated: "
+                            f"{updated.get('comment_detail')} / "
+                            f"{updated.get('body_detail')}. The pull request "
+                            f"may show an open checkbox or a missing comment; "
+                            f"read the pull request body before merging."
+                        )
                 ready = mark_group_pull_request_ready(
                     phase, pending, receipt.get("pull_request")
                 )

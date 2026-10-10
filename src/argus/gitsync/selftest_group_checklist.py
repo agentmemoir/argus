@@ -165,10 +165,34 @@ def _checklist_checks(base: Path, results: list[tuple[str, object, str]]) -> Non
     )
 
 
+def _fallback_mismatch_checks(results: list[tuple[str, object, str]]) -> None:
+    body, changed = _update_body_checklist(
+        "Plan\n", [("cache warm", True), ("index build", False)]
+    )
+    results.append(
+        (
+            "a body without a checklist gains every box",
+            changed and "- [x] cache warm" in body and "- [ ] index build" in body,
+            f"body={body!r}",
+        )
+    )
+    duped, _changed = _update_body_checklist(
+        "Plan\n- [ ] Warm the cache\n", [("cache warm", True)]
+    )
+    results.append(
+        (
+            "paraphrased lines are kept while slug labels are appended ticked",
+            "- [ ] Warm the cache" in duped and "- [x] cache warm" in duped,
+            f"body={duped!r}",
+        )
+    )
+
+
 def _group_checklist_checks(base: Path) -> list[tuple[str, object, str]]:
     results: list[tuple[str, object, str]] = []
     _body_primer_checks(results)
     _checklist_checks(base, results)
+    _fallback_mismatch_checks(results)
     return results
 
 

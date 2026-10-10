@@ -229,10 +229,12 @@ def _tidy_group_body(body: str) -> str:
 def update_group_pull_request(
     root: str | Path, phase: int, members: Iterable[Any], pull_request: str | None
 ) -> dict[str, Any] | None:
-    """Post this member's comment and tick its checkbox. Never raises.
+    """Tick this member's checkbox, then post its comment. Never raises.
 
     Every member runs this on publish, including the first and the last. The
-    last member's edit also tidies the body; ready itself stays in
+    comment goes out only after the checkbox lands (or was already current),
+    so a failed body edit never leaves a ``Completed`` comment beside an open
+    box. The last member's edit also tidies the body; ready itself stays in
     ``mark_group_pull_request_ready`` so it still happens exactly once. A
     GitHub failure is reported in the result and never undoes the publication.
     """
@@ -255,21 +257,16 @@ def update_group_pull_request(
         public_head = str(receipt.get("public_head") or "")
         if public_head:
             head = f" ({public_head[:7]})"
-    comment = f"Completed {my_label}.{head}"
-    comment_ok, comment_detail = gh_comment_pull_request(
-        ref["number"], ref.get("owner"), ref.get("repo"), ref.get("host"), comment
-    )
     body, body_detail = gh_pull_request_body(
         ref["number"], ref.get("owner"), ref.get("repo"), ref.get("host")
     )
-    body_ok: bool | None = None
     if body is None:
         return {
-            "ok": comment_ok,
+            "ok": False,
             "phase": mine,
             "pull_request": pull_request,
-            "comment_ok": comment_ok,
-            "comment_detail": comment_detail,
+            "comment_ok": None,
+            "comment_detail": "comment skipped: pull request body unreadable",
             "body_ok": None,
             "body_detail": body_detail,
         }
@@ -288,6 +285,17 @@ def update_group_pull_request(
         )
     else:
         body_ok, body_detail = True, "body already current"
+    comment_ok: bool | None = None
+    comment_detail = "comment skipped: body update failed"
+    if body_ok:
+        comment = f"Completed {my_label}.{head}"
+        comment_ok, comment_detail = gh_comment_pull_request(
+            ref["number"],
+            ref.get("owner"),
+            ref.get("repo"),
+            ref.get("host"),
+            comment,
+        )
     return {
         "ok": bool(comment_ok and body_ok),
         "phase": mine,
