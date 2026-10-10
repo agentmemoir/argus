@@ -25,11 +25,12 @@ import os
 import shutil
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 EXAMPLES = ROOT / "examples"
+# Let this run as `python3 scripts/check_install.py` as well as under `uv run`.
+sys.path.insert(0, str(ROOT / "src"))
 
 #: Runs inside the fresh venv: import every shipped module, then prove the
 #: shell driver shipped beside the package. Importing every module is safe:
@@ -76,8 +77,22 @@ def main(argv: list[str]) -> int:
         print("uv is not on PATH; this check installs with uv", file=sys.stderr)
         return 2
 
-    with tempfile.TemporaryDirectory(prefix="argus-install-check-") as tmp:
-        venv = Path(tmp) / "venv"
+    from argus.exec_tempdir import make_exec_dir
+
+    # The clean venv's console script has to be executable, and a host whose
+    # default temporary directory is `noexec` refuses it, so use the bundled
+    # helper that finds a directory permitting execution.
+    scratch = make_exec_dir()
+    if not scratch:
+        print(
+            "no temporary directory on this host permits running the installed "
+            "console script",
+            file=sys.stderr,
+        )
+        return 2
+    try:
+        tmp = Path(scratch)
+        venv = tmp / "venv"
         python = venv / "bin" / "python"
         for command in (
             ["uv", "venv", "--python", sys.executable, str(venv)],
@@ -119,6 +134,8 @@ def main(argv: list[str]) -> int:
             print(result.stdout + result.stderr, file=sys.stderr)
             return 1
         print(f"console script: {console.name} --check exit 0")
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
 
     print(f"install check: {wheel.name} ok")
     return 0

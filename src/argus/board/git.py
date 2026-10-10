@@ -43,19 +43,6 @@ def _is_git_repo(path: str | Path) -> bool:
     return rc == 0 and out == "true"
 
 
-def _is_own_worktree(path: str | Path) -> bool:
-    """True when *path* is a Git work-tree top level, not merely inside one.
-
-    ``_is_git_repo`` answers "is this inside a work tree", which is true for a
-    plain directory that merely sits inside an enclosing repository. The
-    public/private boundary proof must not read the remotes of an enclosing,
-    unrelated repository through such a directory, so it asks this instead.
-    """
-    resolved = Path(path).resolve()
-    rc, out, _ = _git(path, "rev-parse", "--show-toplevel")
-    return rc == 0 and bool(out) and Path(out).resolve() == resolved
-
-
 def _remote_urls(repo: str | Path, remote: str, *, push: bool = False) -> list[str]:
     args = ["remote", "get-url"]
     if push:
@@ -65,6 +52,22 @@ def _remote_urls(repo: str | Path, remote: str, *, push: bool = False) -> list[s
     if rc != 0:
         return []
     return [line.strip() for line in out.splitlines() if line.strip()]
+
+
+def _all_remote_urls(repo: str | Path, *, push: bool = False) -> list[str]:
+    """Every fetch (or push) URL of every remote the checkout configures.
+
+    Separation is a property of the two repositories' configured destinations,
+    not of the branch either happens to be on, so the proof reads all of them.
+    """
+    rc, out, _ = _git(repo, "remote")
+    if rc != 0:
+        return []
+    urls: list[str] = []
+    for name in out.splitlines():
+        if name.strip():
+            urls.extend(_remote_urls(repo, name, push=push))
+    return urls
 
 
 def _canonical_remote_url(value: str | None) -> str:
@@ -88,34 +91,35 @@ def _canonical_remote_url(value: str | None) -> str:
 
 
 def _remote_url_sets(
-    root: str | Path, private: str | Path, remote: str
+    root: str | Path, private: str | Path
 ) -> tuple[set[str], set[str], set[str], set[str]]:
-    public_fetch = {_canonical_remote_url(url) for url in _remote_urls(root, remote)}
+    public_fetch = {_canonical_remote_url(url) for url in _all_remote_urls(root)}
     public_push = {
-        _canonical_remote_url(url) for url in _remote_urls(root, remote, push=True)
+        _canonical_remote_url(url) for url in _all_remote_urls(root, push=True)
     }
-    private_fetch = {
-        _canonical_remote_url(url) for url in _remote_urls(private, remote)
-    }
+    private_fetch = {_canonical_remote_url(url) for url in _all_remote_urls(private)}
     private_push = {
-        _canonical_remote_url(url) for url in _remote_urls(private, remote, push=True)
+        _canonical_remote_url(url) for url in _all_remote_urls(private, push=True)
     }
     return public_fetch, public_push, private_fetch, private_push
 
 
-def _assert_private_boundary(
-    root: str | Path, private: str | Path, remote: str
-) -> None:
-    # Only a directory that is its own work-tree top level is a public
-    # repository. A plain directory that merely sits inside an unrelated
-    # repository would otherwise have the enclosing repository's remotes read
-    # as the public side, and a board checkout with no matching remote would
-    # then refuse at construction with "cannot prove separate destinations".
-    # The deliberate missing-remote case belongs at read(), not here.
-    if not _is_own_worktree(root):
+def _assert_private_boundary(root: str | Path, private: str | Path) -> None:
+    # Only a directory that is its own work-tree top level is the public
+    # repository. `git rev-parse --is-inside-work-tree` is true for a plain
+    # directory that merely sits inside an enclosing repository, so testing the
+    # public side with it read the enclosing repository's remotes, and a
+    # checkout with no matching remote refused at construction with "cannot
+    # prove separate destinations". The deliberate missing-remote case belongs
+    # at read(), not here. Accepted trade-off: a repo-root configured as a
+    # subdirectory of a repository is no longer boundary-checked; the supported
+    # layout is a checkout root, which is its own top level.
+    resolved = Path(root).resolve()
+    rc_t, top, _ = _git(root, "rev-parse", "--show-toplevel")
+    if rc_t != 0 or not top or Path(top).resolve() != resolved:
         return
     public_fetch, public_push, private_fetch, private_push = _remote_url_sets(
-        root, private, remote
+        root, private
     )
     if not public_fetch or not public_push or not private_fetch or not private_push:
         raise CoordinationUnavailable(

@@ -2,10 +2,11 @@
 # SPDX-License-Identifier: Apache-2.0
 """The sync_one checks: fast-forward, merge, refusal."""
 
+import subprocess
 from pathlib import Path
 from typing import Any
 
-from argus.gitsync.git import git
+from argus.gitsync.git import git, git_binary
 from argus.gitsync.merge import sync_one
 from argus.gitsync.selftest_fixture import (
     _check,
@@ -274,6 +275,40 @@ def _sync_one_checks(base: Path, checks: list[dict[str, Any]]) -> None:
         and git(work, "rev-parse", "HEAD")[1] == head_before
         and (work / "a.txt").read_text() == "a1\nlocal edit\n",
         f"overlapping={res.get('overlapping')}",
+    )
+
+    # 6g. A branch whose remote-tracking ref was pruned locally, while the
+    # remote still has the branch: start sync fetches the configured remote,
+    # recreates the ref, and fast-forwards instead of refusing with no-upstream.
+    d = base / "pruned-tracking-ref"
+    d.mkdir()
+    remote, work = _init_remote(d, "w")
+    git(work, "checkout", "-q", "-b", "feature/pruned")
+    git(work, "push", "-q", "-u", "origin", "feature/pruned")
+    other = d / "other-pruned"
+    subprocess.run(
+        [git_binary(), "clone", "-q", str(remote), str(other)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    git(other, "config", "user.email", "sync-test@example.com")
+    git(other, "config", "user.name", "sync test")
+    git(other, "checkout", "-q", "feature/pruned")
+    (other / "c.txt").write_text("remote\n")
+    git(other, "add", "c.txt")
+    git(other, "commit", "-q", "-m", "advance feature/pruned")
+    git(other, "push", "-q", "origin", "feature/pruned")
+    # Only the local remote-tracking ref goes; the remote branch stays.
+    git(work, "update-ref", "-d", "refs/remotes/origin/feature/pruned")
+    res = sync_one(work, "start")
+    _check(
+        checks,
+        "sync: a pruned tracking ref is recovered by a fetch",
+        res["ok"]
+        and res["action"] == "fast-forwarded"
+        and (work / "c.txt").read_text() == "remote\n",
+        f"action={res.get('action')} blockers={res.get('blockers')}",
     )
 
 

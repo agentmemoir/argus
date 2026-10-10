@@ -160,16 +160,26 @@ def sync_one(
     if not is_git_repo(repo):
         return blocked(info, "not a git working tree")
     cur_branch, cur_remote, remote_branch, why = resolve_upstream(repo)
+    if why and cur_branch:
+        # The branch may have a configured upstream whose remote-tracking ref
+        # was pruned locally while the branch still exists on the remote.
+        # Fetching the configured remote recreates the ref, so try once before
+        # giving up; a branch the remote really deleted stays unresolved.
+        rc_r, up_remote, _ = git(repo, "config", "--get", f"branch.{cur_branch}.remote")
+        if rc_r == 0 and up_remote and up_remote != ".":
+            fetch_rc, _, _ = git(
+                repo, "fetch", "--prune", up_remote, timeout=FETCH_TIMEOUT_S
+            )
+            if fetch_rc == 0:
+                cur_branch, cur_remote, remote_branch, why = resolve_upstream(repo)
     if why:
         result = blocked(info, why)
-        if cur_branch and not cur_remote:
-            # The branch is checked out but has no resolvable upstream: its
-            # remote-tracking ref is gone (a group branch deleted from the
-            # remote, or a branch that was never pushed). Its own action names
-            # that, so a reader is not sent looking at the Git destinations,
-            # which are present and distinct. blocked() hardcodes
-            # action="blocked"; the distinct action is the whole point, because
-            # the driver and the run log both branch on it.
+        if cur_branch and not cur_remote and "has no upstream" in why:
+            # The branch is checked out with no upstream at all (none
+            # configured, or none left after the recovery fetch). Its own action
+            # names that, so a reader is not sent looking at the Git
+            # destinations, which are present and distinct. An unreadable
+            # upstream keeps the generic blocked action.
             result["action"] = "no-upstream"
         return result
     branch = branch or cur_branch
