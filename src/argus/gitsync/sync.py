@@ -10,14 +10,13 @@ from argus.gitsync.git import (
     FETCH_TIMEOUT_S,
     blocked,
     classify,
+    configured_remote_urls,
     current_branch,
     git,
     integration_branch,
     is_git_repo,
     resolve_upstream,
     summarize,
-    upstream_push_urls,
-    upstream_urls,
 )
 from argus.gitsync.merge import _fast_forward, _merge, sync_one
 
@@ -160,10 +159,10 @@ def sync_all(root: str | Path, mode: str, branch: str | None = None) -> dict[str
     if nested is not None and is_git_repo(nested):
         repos.append(nested)
     if nested is not None and len(repos) == 2:
-        public_fetch = upstream_urls(root)
-        public_push = upstream_push_urls(root)
-        private_fetch = upstream_urls(nested)
-        private_push = upstream_push_urls(nested)
+        public_fetch = configured_remote_urls(root)
+        public_push = configured_remote_urls(root, push=True)
+        private_fetch = configured_remote_urls(nested)
+        private_push = configured_remote_urls(nested, push=True)
         if not public_fetch or not public_push or not private_fetch or not private_push:
             reason = (
                 "cannot prove separate public/private Git destinations; "

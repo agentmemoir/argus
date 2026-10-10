@@ -45,6 +45,36 @@ def _pushurl_boundary_check(base: Path) -> tuple[bool, str]:
         return True, str(exc)
 
 
+def _boundary_walkup_check(base: Path, private: Path) -> tuple[bool, str]:
+    """A public root merely inside an unrelated repository is not a public repo.
+
+    A hardened host whose temporary directory is ``noexec`` puts the self-test
+    scratch inside the checkout, so the public root is a plain directory inside
+    an enclosing repository. The boundary proof must read the public
+    repository's own remotes, not the enclosing one's, so construction succeeds
+    and the deliberate missing board remote fails closed at ``read()``.
+    """
+    enclosing = base / "enclosing-repo"
+    enclosing.mkdir()
+    subprocess.run(
+        [git_binary(), "init", "-q", str(enclosing)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    root = enclosing / "public-root"
+    root.mkdir()
+    try:
+        store = ReservationStore(root, private_repo=private, remote="does-not-exist")
+    except CoordinationUnavailable as exc:
+        return False, f"construction refused: {exc}"
+    try:
+        store.read()
+    except CoordinationUnavailable:
+        return True, "constructed, then failed closed at read()"
+    return False, "read() accepted a missing remote"
+
+
 def _publication_lock_check(
     store: ReservationStore,
     reservation: dict[str, Any],
@@ -60,4 +90,8 @@ def _publication_lock_check(
     return blocked
 
 
-__all__ = ["_publication_lock_check", "_pushurl_boundary_check"]
+__all__ = [
+    "_boundary_walkup_check",
+    "_publication_lock_check",
+    "_pushurl_boundary_check",
+]

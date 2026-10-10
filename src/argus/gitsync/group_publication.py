@@ -91,11 +91,14 @@ def _write_publication_receipt(
         raise ConfigError("publication did not produce both repository heads")
     public_branch = current_branch(root)
     private_branch = current_branch(private)
-    # One branch and one pull request cover a whole group, so every member's
-    # receipt records the pull request the group already has. A second pull
-    # request on the same branch cannot exist, and a member whose receipt named
-    # none would be verified against its commit id alone. The caller's own URL is
-    # used only until a member of this group has recorded one.
+    # One branch covers a whole group, so a member's receipt records the pull
+    # request the group already has. That pull request is reused only while it
+    # still covers the branch: once a member's pull request merges and the
+    # branch is reset onto the integration branch and pushed again, GitHub
+    # opens a second pull request on the same branch, and the merged one no
+    # longer carries the member being published. A member whose receipt named
+    # none would be verified against its commit id alone. The caller's own URL
+    # is used only until a sibling of this group records one still open.
     group = _declared_group(root, phase)
     if group:
         pull_request = (

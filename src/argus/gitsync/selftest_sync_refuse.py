@@ -152,5 +152,38 @@ def _sync_refuse_checks(base: Path, checks: list[dict[str, Any]]) -> None:
         res["summary"],
     )
 
+    # 9c. The public checkout is on a branch whose remote-tracking ref is gone
+    # (a group branch deleted from the remote). Separation must be read from the
+    # configured remotes, which are still distinct, so the tick is not refused
+    # with a destinations error; the public checkout names the real cause, a
+    # missing upstream, under its own action.
+    d = base / "gone-upstream"
+    d.mkdir()
+    _pub_remote, pub = _init_remote(d, "pub")
+    nested = pub / BOARD_REL
+    nested.parent.mkdir(parents=True, exist_ok=True)
+    priv_remote, _ = _init_remote(d, "priv")
+    subprocess.run(
+        [git_binary(), "clone", "-q", str(priv_remote), str(nested)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    git(pub, "checkout", "-q", "-b", "feature/group-x")
+    git(pub, "push", "-q", "-u", "origin", "feature/group-x")
+    git(pub, "push", "-q", "origin", "--delete", "feature/group-x")
+    git(pub, "fetch", "-q", "--prune")
+    res = sync_all(pub, "start")
+    public = next(r for r in res["repos"] if r["repo"] == str(pub.resolve()))
+    _check(
+        checks,
+        "sync: a gone upstream is named, not misread as shared destinations",
+        (not res["ok"])
+        and "cannot prove separate" not in res["summary"]
+        and public.get("action") == "no-upstream"
+        and "no upstream" in public["blockers"][-1],
+        res["summary"],
+    )
+
 
 __all__ = ["_sync_refuse_checks"]

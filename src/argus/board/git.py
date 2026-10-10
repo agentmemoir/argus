@@ -43,6 +43,19 @@ def _is_git_repo(path: str | Path) -> bool:
     return rc == 0 and out == "true"
 
 
+def _is_own_worktree(path: str | Path) -> bool:
+    """True when *path* is a Git work-tree top level, not merely inside one.
+
+    ``_is_git_repo`` answers "is this inside a work tree", which is true for a
+    plain directory that merely sits inside an enclosing repository. The
+    public/private boundary proof must not read the remotes of an enclosing,
+    unrelated repository through such a directory, so it asks this instead.
+    """
+    resolved = Path(path).resolve()
+    rc, out, _ = _git(path, "rev-parse", "--show-toplevel")
+    return rc == 0 and bool(out) and Path(out).resolve() == resolved
+
+
 def _remote_urls(repo: str | Path, remote: str, *, push: bool = False) -> list[str]:
     args = ["remote", "get-url"]
     if push:
@@ -93,8 +106,13 @@ def _remote_url_sets(
 def _assert_private_boundary(
     root: str | Path, private: str | Path, remote: str
 ) -> None:
-    public_is_repo = _is_git_repo(root)
-    if not public_is_repo:
+    # Only a directory that is its own work-tree top level is a public
+    # repository. A plain directory that merely sits inside an unrelated
+    # repository would otherwise have the enclosing repository's remotes read
+    # as the public side, and a board checkout with no matching remote would
+    # then refuse at construction with "cannot prove separate destinations".
+    # The deliberate missing-remote case belongs at read(), not here.
+    if not _is_own_worktree(root):
         return
     public_fetch, public_push, private_fetch, private_push = _remote_url_sets(
         root, private, remote

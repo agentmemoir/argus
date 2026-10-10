@@ -161,7 +161,17 @@ def sync_one(
         return blocked(info, "not a git working tree")
     cur_branch, cur_remote, remote_branch, why = resolve_upstream(repo)
     if why:
-        return blocked(info, why)
+        result = blocked(info, why)
+        if cur_branch and not cur_remote:
+            # The branch is checked out but has no resolvable upstream: its
+            # remote-tracking ref is gone (a group branch deleted from the
+            # remote, or a branch that was never pushed). Its own action names
+            # that, so a reader is not sent looking at the Git destinations,
+            # which are present and distinct. blocked() hardcodes
+            # action="blocked"; the distinct action is the whole point, because
+            # the driver and the run log both branch on it.
+            result["action"] = "no-upstream"
+        return result
     branch = branch or cur_branch
     remote = cast("str", remote or cur_remote)
     if branch != cur_branch:

@@ -32,6 +32,7 @@ from argus.board.selftest_hygiene import (
 )
 from argus.board.selftest_lifecycle import _group_lifecycle_checks
 from argus.board.selftest_publication import (
+    _boundary_walkup_check,
     _publication_lock_check,
     _pushurl_boundary_check,
 )
@@ -234,6 +235,14 @@ def self_test_checks() -> list[dict[str, Any]]:
             "coordination fetch failure fails closed",
             unavailable,
             "missing remote",
+        )
+
+        walkup_ok, walkup_detail = _boundary_walkup_check(base, clients[1])
+        _self_test_check(
+            checks,
+            "a public root inside an unrelated repository is not boundary-checked",
+            walkup_ok,
+            walkup_detail,
         )
 
         lock_contender = store_b.reserve(100604, "server-01")
