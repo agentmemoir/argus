@@ -165,21 +165,6 @@ sys.exit(2)
         "a flag override was not reported as a flag",
         override.stdout,
     )
-    # A relative flag path is relative to the caller's folder, not the file's.
-    relative_flag = run(
-        ["argus", "--config", str(config), "--repo-root", ".", "--check"],
-        project,
-        env,
-    )
-    require(
-        re.search(
-            rf"^REPO: {re.escape(str(project.resolve()))} \(flag\)$",
-            relative_flag.stdout,
-            re.M,
-        ),
-        "a relative --repo-root did not resolve against the working directory",
-        relative_flag.stdout,
-    )
     # With no flag, ./config.json is the file that is read.
     (base / "config.json").write_text(config.read_text())
     default_load = run(["argus", "--check"], base, env)
@@ -208,6 +193,22 @@ sys.exit(2)
         and "would reserve and launch phase 100010" in relative_config.stdout,
         "config paths resolve against the config file",
         relative_config.stdout + relative_config.stderr,
+    )
+
+    # A relative flag path is relative to the caller's folder, not the file's.
+    relative_flag = run(
+        ["argus", "--config", str(config), "--repo-root", ".", "--check"],
+        project,
+        env,
+    )
+    require(
+        re.search(
+            rf"^REPO: {re.escape(str(project.resolve()))} \(flag\)$",
+            relative_flag.stdout,
+            re.M,
+        ),
+        "a relative --repo-root did not resolve against the working directory",
+        relative_flag.stdout,
     )
 
     # Both entry points select the same work. The config names a relative folder
