@@ -195,6 +195,22 @@ sys.exit(2)
         relative_config.stdout + relative_config.stderr,
     )
 
+    # A relative flag path is relative to the caller's folder, not the file's.
+    relative_flag = run(
+        ["argus", "--config", str(config), "--repo-root", ".", "--check"],
+        project,
+        env,
+    )
+    require(
+        re.search(
+            rf"^REPO: {re.escape(str(project.resolve()))} \(flag\)$",
+            relative_flag.stdout,
+            re.M,
+        ),
+        "a relative --repo-root did not resolve against the working directory",
+        relative_flag.stdout,
+    )
+
     # Both entry points select the same work. The config names a relative folder
     # the layout cannot infer.
     commands = [

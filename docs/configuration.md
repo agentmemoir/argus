@@ -8,7 +8,7 @@ The file's rules:
 - No value has a default in code: a missing required key stops the tick and names the key.
 - No environment variable is read.
 - A relative path resolves against the folder that holds the file itself, not the working directory and not the project folder. An absolute path is used as written.
-- A command-line flag beats the file for one run.
+- A command-line flag beats the file for one run. A relative path given by a flag resolves against the working directory, like any command-line path.
 
 ## The Values
 
