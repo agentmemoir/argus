@@ -7,8 +7,10 @@
 # Run as the idle window's command by argus/driver/phase-tmux.sh. It is the only
 # thing standing between a quiet line and a dead session: a window whose command
 # exits closes, and if it is the last window the session and possibly the whole
-# tmux server go with it. So this script loops forever and never exits, even
-# when every file it reads is missing.
+# tmux server go with it. So this script keeps looping, even when every file it
+# reads is missing, and ends only when the process that started it is gone. That
+# is the window's shell or the tmux server; with it gone there is no window left
+# to hold open, and an unattended loop would be an orphan with no one to stop it.
 #
 # Shows, in order:
 #   - a HALTED banner with the reason when the line is halted (Q2: the title
@@ -19,6 +21,10 @@
 # Reads only. It writes nothing and starts nothing, so it cannot perturb a run.
 
 set -uo pipefail
+
+# The starter, read before anything else. Its pid stays here after the script is
+# adopted by init, which is how the loop below tells that the starter has gone.
+STARTER="$PPID"
 
 # The idle window loads the same config file as the driver. Its CLI flags are
 # passed when the window is created, so it sees the same one-run overrides.
@@ -122,9 +128,9 @@ draw() {
   printf '\n'
 }
 
-# Loop forever. `draw` is allowed to fail; the sleep keeps the window alive
-# either way, which is the property that protects the session.
-while :; do
+# Loop while the starter lives. `draw` is allowed to fail; the sleep keeps the
+# window alive either way, which is the property that protects the session.
+while kill -0 "$STARTER" 2>/dev/null; do
   draw || true
   sleep "$REFRESH" || sleep 5
 done
