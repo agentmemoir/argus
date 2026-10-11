@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """The short publication lock: acquire and release."""
 
+import datetime as _datetime
 from typing import Any
 
 from argus.board.core import (
@@ -16,13 +17,19 @@ from argus.board.core import (
     _validate_machine_id,
     _validate_reservation_id,
 )
+from argus.board.records import _publication_lock_stale
 from argus.board.state import _owner_matches
 from argus.board.store_base import _StoreBase
 from argus.board.worktree import _transaction
 
 
 class _PublicationOps(_StoreBase):
-    def acquire_publication(self, reservation: dict[str, Any]) -> Any:
+    def acquire_publication(
+        self,
+        reservation: dict[str, Any],
+        *,
+        now: _datetime.datetime | str | None = None,
+    ) -> Any:
         if self.issues:
             raise CoordinationError("publication locks only apply to phases")
         key, _number = _phase_key(reservation.get("phase"))
@@ -50,7 +57,7 @@ class _PublicationOps(_StoreBase):
                 "generation": generation,
                 "acquired_at": _now(),
             }
-            if current is not None:
+            if current is not None and not _publication_lock_stale(current, now):
                 same = (
                     current.get("phase") == key
                     and current.get("machine_id") == machine_id

@@ -2,11 +2,16 @@
 # SPDX-License-Identifier: Apache-2.0
 """Self-test checks for the push boundary and publication lock."""
 
+import datetime
 import subprocess
 from pathlib import Path
 from typing import Any
 
-from argus.board.core import CoordinationUnavailable, PublicationBusy
+from argus.board.core import (
+    GROUP_HEARTBEAT_WINDOW_S,
+    CoordinationUnavailable,
+    PublicationBusy,
+)
 from argus.board.git import _git, git_binary
 from argus.board.store import ReservationStore
 
@@ -90,8 +95,47 @@ def _publication_lock_check(
     return blocked
 
 
+def _stale_publication_lock_check(
+    store: ReservationStore,
+    reservation: dict[str, Any],
+    target: dict[str, Any],
+) -> tuple[bool, str]:
+    """A lock left by a publish that died stops blocking after the heartbeat window."""
+    store.acquire_publication(reservation)
+    late = datetime.datetime.now(datetime.UTC) + datetime.timedelta(
+        seconds=GROUP_HEARTBEAT_WINDOW_S + 60
+    )
+
+    def take(**clock: Any) -> dict[str, Any]:
+        return store.takeover(
+            target["phase"],
+            "server-02",
+            confirm=True,
+            expected_reservation_id=target["reservation_id"],
+            expected_generation=target["generation"],
+            **clock,
+        )
+
+    try:
+        take()
+        return False, "a fresh lock did not block the takeover"
+    except PublicationBusy:
+        pass
+    try:
+        taken = take(now=late)
+        store.acquire_publication(taken, now=late)
+    except PublicationBusy as exc:
+        return False, f"a stale lock still blocked: {exc}"
+    state, _commit = store.read()
+    publication: dict[str, Any] = state.get("publication") or {}
+    held = publication.get("phase")
+    store.release_publication(taken)
+    return held == taken["phase"], f"holder after the takeover: {held}"
+
+
 __all__ = [
     "_boundary_walkup_check",
     "_publication_lock_check",
+    "_stale_publication_lock_check",
     "_pushurl_boundary_check",
 ]

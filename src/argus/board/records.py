@@ -72,6 +72,26 @@ def _claim_window(record: dict[str, Any]) -> tuple[_datetime.datetime, int] | No
     return reference, window
 
 
+def _publication_lock_stale(
+    lock: dict[str, Any], now: _datetime.datetime | str | None = None
+) -> bool:
+    """Whether the publication lock has outlived the longest a live run stays silent.
+
+    One publish takes the lock and ends by releasing it. A publish that dies
+    before the release leaves the lock for good, and every takeover and every
+    other phase's publish then refuses it. The lock is stale once it is older
+    than the heartbeat window, the time after which a silent owner loses its
+    claim. A stamp that is missing or unreadable is not stale, because freeing a
+    lock nobody can read could take it from a live publish.
+    """
+    try:
+        acquired = _parse_moment(lock.get("acquired_at"), what="acquired_at")
+    except CoordinationUnavailable:
+        return False
+    moment = _as_moment(now) or _datetime.datetime.now(_datetime.UTC)
+    return (moment - acquired).total_seconds() > GROUP_HEARTBEAT_WINDOW_S
+
+
 def _claim_window_passed(record: dict[str, Any], moment: _datetime.datetime) -> bool:
     measured = _claim_window(record)
     if measured is None:
@@ -196,4 +216,4 @@ def _claim_one(
     return record
 
 
-__all__ = ["_claim_one", "_expire_records"]
+__all__ = ["_claim_one", "_expire_records", "_publication_lock_stale"]
