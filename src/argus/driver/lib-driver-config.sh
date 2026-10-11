@@ -202,6 +202,11 @@ argus_init() {
 
   if [ "$SELF_TEST_MODE" = 0 ]; then
     resolve_python || PYTHON="python3"
+    # A flag path is relative to where the caller stands, and the children start
+    # elsewhere (a tmux session starts in the project), so fix it here, as
+    # ARGUS_CONFIG_FILE is below.
+    case "$CLI_REPO" in ''|/*) : ;; *) CLI_REPO="$PWD/$CLI_REPO" ;; esac
+    case "$CLI_ROADMAP" in ''|/*) : ;; *) CLI_ROADMAP="$PWD/$CLI_ROADMAP" ;; esac
     _config_args=()
     [ -z "$CLI_CONFIG" ] || _config_args+=(--config "$CLI_CONFIG")
     _config_args+=(--format shell)

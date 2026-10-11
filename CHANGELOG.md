@@ -21,3 +21,6 @@ been released yet.
   `--session <NUMBER> <PHASE-FILE>`.
 - Checks: the driver self-test, the guard-faults harness, and a wheel that
   ships the shell driver.
+- A relative `--repo-root` or `--roadmap-dir` resolves against the working
+  directory, not the configuration file's folder, so `--root .` from the project
+  root names the project root.

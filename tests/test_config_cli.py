@@ -92,6 +92,18 @@ def test_cli_flag_beats_file():
         check("PHASE_INCLUDE=( 'work-*.md' )" in result.stdout, result.stdout)
 
 
+def test_cli_flag_path_is_relative_to_working_directory():
+    with tempfile.TemporaryDirectory() as tmp:
+        base = Path(tmp).resolve()
+        (base / "cfg").mkdir()
+        path = write(base / "cfg", json.dumps(BASE))
+        result = run_cli(
+            ["--config", str(path), "--repo-root", ".", "--format", "shell"], base
+        )
+        check(result.returncode == 0, result.stderr)
+        check(f"REPO={shlex.quote(str(base))}" in result.stdout, result.stdout)
+
+
 def test_default_config_is_used_when_present():
     with tempfile.TemporaryDirectory() as tmp:
         write(tmp, json.dumps(BASE))

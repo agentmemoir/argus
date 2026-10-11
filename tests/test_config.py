@@ -210,6 +210,10 @@ TESTS = (
     ("json format", test_config_cli.test_json_format),
     ("report format", test_config_cli.test_report_format),
     ("cli flag", test_config_cli.test_cli_flag_beats_file),
+    (
+        "cli flag path",
+        test_config_cli.test_cli_flag_path_is_relative_to_working_directory,
+    ),
     ("default config", test_config_cli.test_default_config_is_used_when_present),
     (
         "missing default config",

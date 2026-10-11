@@ -46,7 +46,8 @@ def load(
 
     `config_path=None` uses `./config.json` when it is a file. `overrides` may
     hold the four flag names `repo-root`, `roadmap-dir`, `phase-glob`, and
-    `driver`; each present one wins over the file and its source is `flag`.
+    `driver`; each present one wins over the file and its source is `flag`. A
+    relative flag path resolves against the working directory.
     """
     if config_path is None:
         path = Path("config.json")
@@ -124,8 +125,8 @@ def _build(
             _check_type(field, raw_value)
             _check_value(field, raw_value, required)
             config_dir = (
-                path if source == "flag" else origins.get(field.key, path)
-            ).parent
+                Path.cwd() if source == "flag" else origins.get(field.key, path).parent
+            )
             value = _convert(field, raw_value, config_dir)
             key = _REPORT_KEY.get(field.key, field.key)
             values[key] = value

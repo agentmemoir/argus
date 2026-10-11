@@ -110,7 +110,9 @@ def test_overlay_paths_use_the_file_that_supplied_each_value(tmp_path: Path) -> 
     assert config.get("repo-root") == tmp_path / "project"
 
 
-def test_flags_beat_overlay_and_use_base_path_origin(tmp_path: Path) -> None:
+def test_flags_beat_overlay_and_resolve_against_cwd(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     document = copy.deepcopy(BASE)
     path = overlay_config(
         tmp_path,
@@ -120,11 +122,14 @@ def test_flags_beat_overlay_and_use_base_path_origin(tmp_path: Path) -> None:
             "driver": {"include": ["overlay-*.md"], "provider": "roadmap"},
         },
     )
+    cwd = tmp_path / "cwd"
+    cwd.mkdir()
+    monkeypatch.chdir(cwd)
     config = cfgmod.load(
         path,
         {"repo-root": "flag-project", "phase-glob": ["flag-*.md"], "driver": "phase"},
     )
-    assert config.get("repo-root") == tmp_path / "flag-project"
+    assert config.get("repo-root") == cwd / "flag-project"
     assert config.get("driver.include") == ["flag-*.md"]
     assert config.get("driver.provider") == "phase"
     assert config.source("repo-root") == "flag"
