@@ -35,6 +35,7 @@ from argus.board.selftest_publication import (
     _boundary_walkup_check,
     _publication_lock_check,
     _pushurl_boundary_check,
+    _stale_publication_lock_check,
 )
 from argus.board.store import ReservationStore
 from argus.exec_tempdir import make_exec_dir
@@ -255,6 +256,15 @@ def self_test_checks() -> list[dict[str, Any]]:
             "publication lock blocks a valid second phase",
             _publication_lock_check(store_a, other, lock_contender),
             "claim-scoped",
+        )
+        stale_ok, stale_detail = _stale_publication_lock_check(
+            store_a, other, store_b.reserve(100605, "server-01")
+        )
+        _self_test_check(
+            checks,
+            "a stale publication lock blocks neither takeover nor publish",
+            stale_ok,
+            stale_detail,
         )
         try:
             _group_lifecycle_checks(checks, base)

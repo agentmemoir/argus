@@ -21,3 +21,7 @@ been released yet.
   `--session <NUMBER> <PHASE-FILE>`.
 - Checks: the driver self-test, the guard-faults harness, and a wheel that
   ships the shell driver.
+- A publication lock left behind by a publish that died stops blocking after the
+  30 minute heartbeat window, so claim recovery and other phases' publishes
+  proceed. A fresh lock still blocks both; `release-publication` still frees one
+  early.

@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Operator takeover of a whole group under a new reservation."""
 
+import datetime as _datetime
 import secrets
 from typing import Any
 
@@ -17,6 +18,7 @@ from argus.board.core import (
     _validate_machine_id,
     _validate_reservation_id,
 )
+from argus.board.records import _publication_lock_stale
 from argus.board.state import _receipt_of
 from argus.board.store_base import _StoreBase
 from argus.board.worktree import _base_revisions, _transaction
@@ -33,6 +35,7 @@ class _TakeoverOps(_StoreBase):
         base_revisions: dict[str, Any] | None = None,
         expected_reservation_id: Any = None,
         expected_generation: Any = None,
+        now: _datetime.datetime | str | None = None,
     ) -> Any:
         """Take one claim over under a new reservation id, for a whole group.
 
@@ -105,7 +108,9 @@ class _TakeoverOps(_StoreBase):
                     f"{self.kind} {key} changed before takeover could commit"
                 )
             publication = state.get("publication")
-            if publication is not None:
+            if publication is not None and not _publication_lock_stale(
+                publication, now
+            ):
                 raise PublicationBusy(
                     "cannot take over a phase while its publication lock is held"
                 )
