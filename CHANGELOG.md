@@ -24,3 +24,5 @@ been released yet.
 - A relative `--repo-root` or `--roadmap-dir` resolves against the working
   directory, not the configuration file's folder, so `--root .` from the project
   root names the project root.
+- The tmux idle watcher ends when the process that started it is gone, so one
+  run outside tmux, or after its tmux server died, no longer loops as an orphan.
