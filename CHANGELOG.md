@@ -21,3 +21,5 @@ been released yet.
   `--session <NUMBER> <PHASE-FILE>`.
 - Checks: the driver self-test, the guard-faults harness, and a wheel that
   ships the shell driver.
+- The tmux idle watcher ends when the process that started it is gone, so one
+  run outside tmux, or after its tmux server died, no longer loops as an orphan.
