@@ -1,4 +1,4 @@
-# Copyright 2026 Agent Memoir Developers (https://agentmemoir.com/)
+# Copyright 2026 Agent Memoir (https://agentmemoir.com/)
 # SPDX-License-Identifier: Apache-2.0
 """Putting the public checkout on the branch a phase or a group publishes from."""
 

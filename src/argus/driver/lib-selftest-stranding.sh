@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Copyright 2026 Agent Memoir Developers (https://agentmemoir.com/)
+# Copyright 2026 Agent Memoir (https://agentmemoir.com/)
 # SPDX-License-Identifier: Apache-2.0
 #
 # Self-test case: the stranding fixture against the real board of a throwaway repo.

@@ -1,4 +1,4 @@
-# Copyright 2026 Agent Memoir Developers (https://agentmemoir.com/)
+# Copyright 2026 Agent Memoir (https://agentmemoir.com/)
 # SPDX-License-Identifier: Apache-2.0
 """Commit one issue run and its exact frozen task file in the private checkout."""
 

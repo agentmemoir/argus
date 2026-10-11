@@ -1,4 +1,4 @@
-# Copyright 2026 Agent Memoir Developers (https://agentmemoir.com/)
+# Copyright 2026 Agent Memoir (https://agentmemoir.com/)
 # SPDX-License-Identifier: Apache-2.0
 """Return a published issue checkout to its integration branch using GitHub evidence."""
 

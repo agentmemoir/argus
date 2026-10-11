@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright 2026 Agent Memoir Developers (https://agentmemoir.com/)
+# Copyright 2026 Agent Memoir (https://agentmemoir.com/)
 # SPDX-License-Identifier: Apache-2.0
 """Close out a phase whose remedy approver ran out of rounds.
 

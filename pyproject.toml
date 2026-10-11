@@ -9,7 +9,7 @@ description = "An unattended phase driver: select work, reserve it on a shared b
 readme = "README.md"
 requires-python = ">=3.11"
 license = "Apache-2.0"
-authors = [{ name = "Agent Memoir Developers", email = "dev@agentmemoir.com" }]
+authors = [{ name = "Agent Memoir", email = "dev@agentmemoir.com" }]
 keywords = ["pipeline", "coding-agent", "automation", "orchestration"]
 classifiers = [
   "Development Status :: 3 - Alpha",

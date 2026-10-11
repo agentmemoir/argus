@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright 2026 Agent Memoir Developers (https://agentmemoir.com/)
+# Copyright 2026 Agent Memoir (https://agentmemoir.com/)
 # SPDX-License-Identifier: Apache-2.0
 """Check that a built wheel carries the package and only the package.
 

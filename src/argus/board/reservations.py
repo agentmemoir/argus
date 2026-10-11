@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright 2026 Agent Memoir Developers (https://agentmemoir.com/)
+# Copyright 2026 Agent Memoir (https://agentmemoir.com/)
 # SPDX-License-Identifier: Apache-2.0
 """Shared, fenced phase reservations backed by a configured Git board.
 
