@@ -25,5 +25,8 @@ been released yet.
   30 minute heartbeat window, so claim recovery and other phases' publishes
   proceed. A fresh lock still blocks both; `release-publication` still frees one
   early.
+- A relative `--repo-root` or `--roadmap-dir` resolves against the working
+  directory, not the configuration file's folder, so `--root .` from the project
+  root names the project root.
 - The tmux idle watcher ends when the process that started it is gone, so one
   run outside tmux, or after its tmux server died, no longer loops as an orphan.
