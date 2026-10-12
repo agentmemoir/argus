@@ -13,6 +13,7 @@ from argus.gitsync.gh import (
     gh_pull_request_body,
     gh_pull_request_open,
 )
+from argus.gitsync.gh_gate import gh_pull_request_comment_bodies
 from argus.gitsync.receipts import _phase_run_entries, phase_receipt, pull_request_ref
 
 
@@ -289,13 +290,23 @@ def update_group_pull_request(
     comment_detail = "comment skipped: body update failed"
     if body_ok:
         comment = f"Completed {my_label}.{head}"
-        comment_ok, comment_detail = gh_comment_pull_request(
-            ref["number"],
-            ref.get("owner"),
-            ref.get("repo"),
-            ref.get("host"),
-            comment,
+        # A publish that runs again for the same head (a retry after a failed
+        # step, a rerun of the helper) finds its comment already there. When the
+        # comments cannot be read the comment is posted: a repeat is noise, a
+        # missing comment is lost.
+        posted, _why = gh_pull_request_comment_bodies(
+            ref["number"], ref.get("owner"), ref.get("repo"), ref.get("host")
         )
+        if posted is not None and comment in {text.strip() for text in posted}:
+            comment_ok, comment_detail = True, "comment already posted"
+        else:
+            comment_ok, comment_detail = gh_comment_pull_request(
+                ref["number"],
+                ref.get("owner"),
+                ref.get("repo"),
+                ref.get("host"),
+                comment,
+            )
     return {
         "ok": bool(comment_ok and body_ok),
         "phase": mine,

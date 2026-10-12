@@ -126,6 +126,7 @@ def _configure_self_test(
             "pipeline": pipeline,
             "roadmap-dir": Path(roadmap or Path(board) / "roadmap"),
             "driver.runs": Path(runs or Path(board) / "runs"),
+            "driver.state": ".driver",
             "driver.include": list(include),
             "driver.exclude": list(exclude),
             "number-input": number_input,

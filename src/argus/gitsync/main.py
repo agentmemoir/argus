@@ -95,6 +95,7 @@ if not __package__:
 from argus import conventions
 from argus.config.loader import ConfigError as ArgusConfigError
 from argus.gitsync.git import ConfigError, summarize
+from argus.gitsync.group_gate import mode_gate
 from argus.gitsync.issue_modes import issue_mode
 from argus.gitsync.merge import sync_one
 from argus.gitsync.mode_branch import mode_branch
@@ -131,6 +132,7 @@ def main() -> int:
             "tidy",
             "clean",
             "checkpoint",
+            "gate",
         ],
         default="start",
         help="start: sync before a phase; push: verify a "
@@ -146,10 +148,15 @@ def main() -> int:
         "clean: commit and push leftover private run state, "
         "for one --phase or for every phase when it is omitted; "
         "checkpoint: commit and push a checkout's work in "
-        "progress on the branch it is on, for a release handoff",
+        "progress on the branch it is on, for a release handoff; "
+        "gate: merge the fix pull requests waiting on a published "
+        "group phase's branch, and make the group's pull request "
+        "ready once its checks pass",
     )
     ap.add_argument(
-        "--phase", default=None, help="phase number for --mode publish or --mode clean"
+        "--phase",
+        default=None,
+        help="phase number for --mode publish, --mode clean or --mode gate",
     )
     ap.add_argument(
         "--reservation-file",
@@ -220,6 +227,10 @@ def main() -> int:
             if args.phase is None:
                 raise ConfigError("--phase is required with --mode published")
             out = mode_published(args.root, args.phase)
+        elif args.mode == "gate":
+            if args.phase is None:
+                raise ConfigError("--phase is required with --mode gate")
+            out = mode_gate(args.root, args.phase)
         elif args.mode == "clean":
             out = mode_clean(args.root, args.phase)
         elif args.mode == "resync":

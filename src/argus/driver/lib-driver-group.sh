@@ -190,3 +190,35 @@ claim_renew() {
   fi
   return 0
 }
+
+# Run the group gate for the pull request a published phase is waiting on.
+#
+# The gate merges the fix pull requests waiting on the group's branch and makes
+# the group's pull request ready once its checks pass. It cannot be a step of
+# any one phase, because the checks it waits on finish after every phase has: a
+# publish that finds them running holds the pull request in draft, and the first
+# tick that finds them green readies it. A group's members share one pull
+# request, so the gate runs once per pull request, on the first member the merge
+# check lists.
+#
+# The answer is logged when it changes. A pull request held for running checks
+# says so once, and the tick that finds the checks green says so once, rather
+# than every tick for as long as the group waits for its merge. A gate that gave
+# no answer is logged the same way, with the file that holds its error.
+gate_group_pull_request() {
+  local phase="$1" pr="$2" out summary last
+  [ -n "$pr" ] || return 0
+  [ -z "${DRIVER_STUB_COORDINATION:-}" ] || return 0
+  case " $GATED_PULL_REQUESTS " in *" $pr "*) return 0 ;; esac
+  GATED_PULL_REQUESTS="$GATED_PULL_REQUESTS $pr"
+  out="$RUN_DIR/group-gate-$phase.json"
+  "$PYTHON" "$ARGUS/gitsync/main.py" "${ARGUS_CONFIG_ARGS[@]}" --root "$REPO" \
+    --mode gate --phase "$phase" >"$out" 2>"$out.err" || true
+  [ "$(selection_value state <"$out")" != NO-GROUP ] || return 0
+  summary="$(selection_value summary <"$out")"
+  [ -n "$summary" ] || summary="no answer (see $out.err)"
+  last="$RUN_DIR/group-gate-$phase.last"
+  [ "$(cat "$last" 2>/dev/null)" != "$summary" ] || return 0
+  log "group gate for ${work_kind:-phase} $phase: $summary"
+  printf '%s\n' "$summary" >"$last"
+}
