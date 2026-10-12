@@ -36,6 +36,9 @@ role's entry file is named for what it does.
   on a phase branch), `runstate.py` (leftover run state), `receipts.py` and
   `review.py` (receipts and open predecessors, including `awaiting_review`),
   `publish.py`, `group_publication.py` and `publish_phase.py` (publication),
+  `group_review.py` (the group's pull request body and comments), `group_gate.py`
+  (the fix pull requests and the ready transition) with `gh_gate.py` (the gh calls
+  it makes),
   `tidy.py` (returning a checkout to the integration branch), and the `mode*.py`
   files that dispatch the modes.
 - `gitsync/issue_*.py` and `gitsync/publish_issue.py` publish an issue branch, scope private task and run data, and return a checkout to its integration branch after GitHub review.

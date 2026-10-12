@@ -78,15 +78,14 @@ def mode_branch(
     # rather than falling back to the integration branch, because the fallback
     # looks exactly like a correct launch and produces a phase built on missing
     # code.
-    predecessor = open_predecessor(root, phase)
-    if predecessor and predecessor.get("branch") == branch:
-        # Another member of this phase's own reservation group. One branch covers
-        # the whole group, so that member's work is on the branch this launch is
-        # about to cut or resume, and there is no separate base to prove. Without
-        # this the missing-branch refusal below fires on the first tick of every
-        # group, because the group branch does not exist until that tick creates
-        # it, and the members after the first would never launch.
-        predecessor = None
+    #
+    # A member of this phase's own reservation group is no predecessor: one branch
+    # covers the whole group, so that member's work is on the branch this launch is
+    # about to cut or resume, and there is no separate base to prove. Without this
+    # the missing-branch refusal below fires on the first tick of every group,
+    # because the group branch does not exist until that tick creates it, and the
+    # members after the first would never launch.
+    predecessor = open_predecessor(root, phase, own_branch=branch)
     base = None
     if predecessor:
         rc, _, _ = git(

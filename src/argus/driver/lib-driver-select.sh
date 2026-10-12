@@ -28,9 +28,18 @@ selector_run() {
     # inside it. A dry run keeps the raw text on stderr and records nothing,
     # which is what it did before.
     if [ "$DRY_RUN" != 1 ]; then
-      sed 's/^/selector: /' "$err" >>"$LOG"
+      # The same warnings on every tick are logged once, as for any other
+      # repeat. The raw text still reaches stderr every time.
+      if cmp -s "$err" "$RUN_DIR/log-last-selector"; then
+        touch "$LOG"
+      else
+        sed 's/^/selector: /' "$err" >>"$LOG"
+        cp "$err" "$RUN_DIR/log-last-selector"
+      fi
     fi
     cat "$err" >&2
+  else
+    rm -f "$RUN_DIR/log-last-selector"
   fi
   printf '%s' "$out"
   return "$rc"
@@ -171,6 +180,7 @@ confirm_pending_reviews() {
   local phase branch pr rc=0 state checked=0 cap
   PENDING_PUBLISHED=0
   MERGE_CHECK_HEALTH="ok"
+  GATED_PULL_REQUESTS=""
   # Bounded, because each phase costs a gh call and possibly a fetch, and a
   # selection is not a place where unbounded network work belongs. Five keeps
   # the worst case (five calls at the 15s bound in gitsync.py) to about 75
@@ -225,17 +235,20 @@ confirm_pending_reviews() {
         if grep -q '"state": *"unknown"' "$RUN_DIR/phase-published-$phase.json" 2>/dev/null; then
           MERGE_CHECK_HEALTH="UNAVAILABLE (gh could not be asked)"
         fi
-        log "phase $phase still waits: $(sed -n 's/.*"blockers": \[\(.*\)\].*/\1/p' "$RUN_DIR/phase-published-$phase.json" 2>/dev/null | head -1)"
-        log "  branch: $branch"
-        [ -z "$pr" ] || log "  pull request: $pr"
+        # One line per phase, logged when it changes: a pull request can wait
+        # days, and the same three lines every ten minutes buried everything else.
+        log_changed "waits-$phase" "phase $phase still waits: $(sed -n 's/.*"blockers": \[\(.*\)\].*/\1/p' "$RUN_DIR/phase-published-$phase.json" 2>/dev/null | head -1) (branch: $branch${pr:+; pull request: $pr})"
         if [ "$MERGE_CHECK_HEALTH" = "UNAVAILABLE (gh could not be asked)" ]; then
-          log "  the squash-merge check is DEGRADED: a squash-merged phase will keep waiting until gh works again"
+          log_changed degraded "  the squash-merge check is DEGRADED: a squash-merged phase will keep waiting until gh works again"
         fi
+        # Still waiting for its pull request to merge: the one moment the group's
+        # fix pull requests and its ready transition are due.
+        gate_group_pull_request "$phase" "$pr"
         ;;
     esac
     rc=0
   done < <(pending_review_lines <<<"$1")
-  log "merge check: $MERGE_CHECK_HEALTH ($checked phase(s) examined)"
+  log_changed merge-check "merge check: $MERGE_CHECK_HEALTH ($checked phase(s) examined)"
   # A degraded merge check is announced, not just logged. This is the condition
   # that hid the stall: gh could not be asked, every phase stayed "awaiting
   # review", the next phase was cut from a merged branch, and the branch guard

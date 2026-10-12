@@ -14,16 +14,13 @@ from argus.gitsync.git import (
     is_git_repo,
     summarize,
 )
+from argus.gitsync.group_gate import release_group_pull_request
 from argus.gitsync.group_publication import (
     _load_phase_reservation,
     _push_one,
     _write_publication_receipt,
 )
-from argus.gitsync.group_review import (
-    _group_pending,
-    mark_group_pull_request_ready,
-    update_group_pull_request,
-)
+from argus.gitsync.group_review import _group_pending, update_group_pull_request
 from argus.gitsync.review import open_predecessor
 from argus.gitsync.runstate import commit_leftover_run_state, publish_dirt
 from argus.gitsync.sync import mode_resync, sync_all
@@ -238,10 +235,12 @@ def publish_phase(
             outcome["receipt"] = receipt
             # The group's own answer, for the caller: the shared pull request
             # that covers these members, which members have not published yet,
-            # and whether this publication was the group's last. The ready
-            # transition sits beside it, in the one place that knows the group
-            # is finished, so a shared pull request is taken out of draft
-            # exactly once even though every member publishes through here.
+            # and whether this publication was the group's last. The gate sits
+            # beside it, in the one place that knows the group is finished: it
+            # merges the fix pull requests waiting on the group branch and takes
+            # the shared pull request out of draft once, when its checks are
+            # green. Checks that are red or still running hold it, and the
+            # driver's next ticks retry, so a publish never has to wait for CI.
             group: list[Any] = receipt.get("group") or []
             members = [str(member) for member in group]
             if members:
@@ -262,11 +261,18 @@ def publish_phase(
                             f"may show an open checkbox or a missing comment; "
                             f"read the pull request body before merging."
                         )
-                ready = mark_group_pull_request_ready(
-                    phase, pending, receipt.get("pull_request")
-                )
-                if ready is not None:
-                    outcome["pull_request_ready"] = ready
+                try:
+                    gate = release_group_pull_request(
+                        root,
+                        phase,
+                        members,
+                        receipt.get("pull_request"),
+                        receipt.get("branch"),
+                    )
+                except Exception as exc:  # noqa: BLE001 - the gate never undoes a publish
+                    gate = {"state": "HELD", "reasons": [f"group gate failed: {exc}"]}
+                if gate is not None:
+                    outcome["group_gate"] = gate
             outcome["repos"] = results
             outcome["summary"] = summarize(
                 [
@@ -282,7 +288,7 @@ def publish_phase(
             # own phase, and only a human can decide whether that phase's work
             # should exist at all. Blocking here would put the human back on the
             # critical path, which is the thing this pipeline exists to remove.
-            carried: dict[str, Any] | None = open_predecessor(root, phase)
+            carried = open_predecessor(root, phase, own_branch=receipt.get("branch"))
             if carried:
                 outcome["carries_open_phase"] = carried
                 outcome["warning"] = (

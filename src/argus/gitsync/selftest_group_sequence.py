@@ -34,8 +34,11 @@ class _FakeGitHub:
         if cmd == "view":
             if self.fail_view:
                 return types.SimpleNamespace(returncode=1, stdout="", stderr="")
+            payload: dict[str, Any] = {"body": self.body}
+            if "comments" in argv:
+                payload = {"comments": [{"body": text} for text in self.comments]}
             return types.SimpleNamespace(
-                returncode=0, stdout=json.dumps({"body": self.body}), stderr=""
+                returncode=0, stdout=json.dumps(payload), stderr=""
             )
         if cmd == "edit":
             if self.fail_edit:
@@ -86,6 +89,8 @@ def _publish_sequence_checks(
             public_head="def5678abc",
         )
         second = update_group_pull_request(pub, 100030, members, url)
+        second_comments = list(fake.comments)
+        repeat = update_group_pull_request(pub, 100030, members, url)
     finally:
         subprocess.run = saved
     results.append(
@@ -108,6 +113,16 @@ def _publish_sequence_checks(
             and "- [x] index build" in fake.body
             and len(fake.comments) == 2,
             f"second={second} body={fake.body!r}",
+        )
+    )
+    results.append(
+        (
+            "publishing the same head again posts no second comment",
+            isinstance(repeat, dict)
+            and repeat.get("ok") is True
+            and repeat.get("comment_detail") == "comment already posted"
+            and fake.comments == second_comments,
+            f"repeat={repeat} comments={fake.comments}",
         )
     )
     results.append(

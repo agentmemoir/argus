@@ -280,6 +280,7 @@ def gh_comment_pull_request(
 
 
 __all__ = [
+    "_repo_target",
     "gh_comment_pull_request",
     "gh_edit_pull_request_body",
     "gh_mark_pull_request_ready",

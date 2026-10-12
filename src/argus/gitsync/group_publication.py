@@ -138,12 +138,11 @@ def _write_publication_receipt(
     # rewritten after this phase branched from it would silently change what
     # this phase is built on, and nothing would ever notice: the branch still
     # exists, so every existence check passes.
-    carried: dict[str, Any] | None = open_predecessor(root, phase)
-    if carried and carried.get("branch") == public_branch:
-        # Another member of this phase's own reservation group: the same branch
-        # and the same pull request. Recording that as a branch this phase was
-        # stacked on would say the phase is based on itself.
-        carried = None
+    #
+    # Another member of this phase's own reservation group is not one: it shares
+    # the branch and the pull request, and recording it as the branch this phase
+    # was stacked on would say the phase is based on itself.
+    carried = open_predecessor(root, phase, own_branch=public_branch)
     if carried:
         base = carried["branch"]
         rc_b, base_head, _ = git(root, "rev-parse", "--verify", f"refs/heads/{base}")

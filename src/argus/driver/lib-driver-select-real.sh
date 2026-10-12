@@ -30,14 +30,19 @@ _drive_real_selection() {
       # ordering fixes.
       tidy_published_checkout || { _DRIVE_RC=1; return 0; }
       selection="$(coordination_select)" || selection_rc=$?
-      if [ "$selection_rc" -ne 0 ] && [ "$selection_rc" -ne 2 ] \
-          && [ "$selection_rc" -ne 3 ] \
-          && { [ "$selection_rc" -ne 1 ] || [ "${WORK_SOURCE:-roadmap}" != issues ]; }; then
+      # The selector answers in JSON, and its exit code only restates the state:
+      # 1 is NO_PHASE (nothing left to reserve), 3 is WAIT_FOR_CLAIM, 4 is
+      # BLOCKED_ON_GATE. So the code is not what is judged. A selector that
+      # printed no state did not answer, and that is the one refusal made here.
+      # Judging the code refused NO_PHASE on every tick of an empty queue, blamed
+      # the board for it, and skipped the merge check below, so the last pull
+      # requests of a queue were never recorded as merged.
+      selection_state="$(printf '%s' "$selection" | selection_value state)"
+      if [ -z "$selection_state" ]; then
         log "coordination state unavailable; refusing to launch (next_phase rc=$selection_rc)"
         { _DRIVE_RC=1; return 0; }
       fi
       bind_selection_kind "$selection"
-      selection_state="$(printf '%s' "$selection" | selection_value state)"
       # A phase whose pull request is merged is a finished phase, and this tick's
       # selection was computed without that fact. Confirm what merged first, so
       # the line never launches a phase the board already considers done.

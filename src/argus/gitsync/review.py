@@ -138,7 +138,9 @@ def awaiting_review(repo: str | Path, number: int) -> dict[str, Any] | None:
     }
 
 
-def open_predecessor(root: str | Path, phase: int | str) -> dict[str, Any] | None:
+def open_predecessor(
+    root: str | Path, phase: int | str, own_branch: str | None = None
+) -> dict[str, Any] | None:
     """The highest earlier phase whose code is not yet on master, or None.
 
     A phase that is waiting for review is finished work. The next phase must be
@@ -161,6 +163,13 @@ def open_predecessor(root: str | Path, phase: int | str) -> dict[str, Any] | Non
     receipt is unreadable is skipped, matching ``phase_receipt``, because an
     unreadable receipt must never be treated as a base branch.
 
+    ``own_branch`` is the branch the caller works on. An earlier phase on that
+    same branch is another member of the caller's reservation group: one branch
+    and one pull request cover the group, so its work is not a base the caller
+    was cut from, and there is no predecessor to report. Every caller used to
+    drop that case itself, and the publisher did not, so it warned in every
+    member's output that the branch was cut from itself.
+
     Returns ``{"phase", "branch", "pull_request", "head"}`` or None.
     """
     root = Path(root).resolve()
@@ -180,4 +189,6 @@ def open_predecessor(root: str | Path, phase: int | str) -> dict[str, Any] | Non
                 "pull_request": review.get("pull_request"),
                 "head": review.get("head"),
             }
+    if best is not None and best["branch"] == own_branch:
+        return None
     return best

@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """The publication-receipt, group-publication and custom-convention checks."""
 
+import json
 import subprocess
 from pathlib import Path
 from typing import Any, cast
@@ -17,10 +18,9 @@ from argus.gitsync.review import open_predecessor
 from argus.gitsync.selftest_fixture import (
     BOARD_REL,
     _configure_self_test,
-    _gh_says,
     _init_remote,
-    _StubGH,
 )
+from argus.gitsync.selftest_gate_fixture import _checks, _listing, _RoutedGH
 from argus.gitsync.selftest_publish import _publish_fixture
 
 
@@ -105,6 +105,10 @@ def _group_publication_check(base: Path) -> tuple[bool, str]:
     )
     git(nested, "config", "user.email", "sync-test@example.com")
     git(nested, "config", "user.name", "sync test")
+    # The driver's own folder is untracked on a real host, and the ready marker
+    # the gate writes there must not read as dirt to the publishes that follow.
+    with (nested / ".git" / "info" / "exclude").open("a") as exclude:
+        exclude.write("runs/.driver/\n")
     # The declaration lives in the phase documents, so where a group is read
     # from is where it has to be written.
     roadmap = nested / "roadmap"
@@ -146,13 +150,26 @@ def _group_publication_check(base: Path) -> tuple[bool, str]:
             return False, f"the first member claimed to be the group's last: {first}"
         if first.get("group_pending") != ["100030"]:
             return False, f"the first member did not name the member to come: {first}"
-        if "pull_request_ready" in first:
-            return False, f"the first member marked the pull request ready: {first}"
+        if first.get("group_gate", {}).get("state") != "WAITING":
+            return False, f"the first member did not wait for the group: {first}"
         # No pull request is passed for the second member. One branch can carry
         # one pull request, so the group's own record is the only answer, and the
-        # member that finishes the group marks it ready. gh is stubbed, so the
-        # answers are fixed and no network is touched.
-        with _StubGH(_gh_says("OPEN")):
+        # member that finishes the group marks it ready once the checks pass. gh
+        # is stubbed, so the answers are fixed and no network is touched.
+        pull_request: dict[str, Any] = {
+            "state": "OPEN",
+            "body": "- [ ] a\n- [ ] b\n",
+            "comments": [],
+        }
+        green = {
+            "pr view": {"stdout": json.dumps(pull_request)},
+            "pr edit": {},
+            "pr comment": {},
+            "pr list": _listing(),
+            "pr checks": _checks("pass"),
+            "pr ready": {},
+        }
+        with _RoutedGH(green):
             second = publish_phase(pub, 100030)
         if not second.get("ok"):
             return False, f"the group's second member did not publish: {second}"
@@ -160,15 +177,10 @@ def _group_publication_check(base: Path) -> tuple[bool, str]:
             return False, f"the group's last member was not reported as last: {second}"
         if second.get("group_pending") != []:
             return False, f"the last member reported members left to run: {second}"
-        ready_value = second.get("pull_request_ready")
-        ready = (
-            cast("dict[str, Any]", ready_value) if isinstance(ready_value, dict) else {}
-        )
-        if ready.get("ok") is not True:
-            return (
-                False,
-                f"the last member did not mark the pull request ready: {ready_value}",
-            )
+        gate = cast("dict[str, Any]", second.get("group_gate") or {})
+        ready = cast("dict[str, Any]", gate.get("ready") or {})
+        if gate.get("state") != "READY" or not ready.get("ok"):
+            return False, f"the last member did not make the pull request ready: {gate}"
         receipts = {
             number: cast("dict[str, Any]", phase_receipt(pub, number))
             for number in (100020, 100030)

@@ -16,7 +16,7 @@ _drive() {
   mkdir -p "$RUN_DIR"
 
   if [ -f "$HALT" ]; then
-    log "halted ($(tr '\n' ' ' <"$HALT")); refusing to advance"
+    log_changed halted "halted ($(tr '\n' ' ' <"$HALT")); refusing to advance"
     return 0
   fi
 
@@ -195,7 +195,7 @@ _drive_cut_branch() {
 drive() {
   local rc=0
   mkdir -p "$RUN_DIR"
-  log "configuration: driver=$DRIVER repo=$REPO roadmap=$(roadmap_dir) config=${ARGUS_CONFIG_FILE:-none}; $CONFIG_PRECEDENCE"
+  log_changed configuration "configuration: driver=$DRIVER repo=$REPO roadmap=$(roadmap_dir) config=${ARGUS_CONFIG_FILE:-none}; $CONFIG_PRECEDENCE"
   if command -v flock >/dev/null 2>&1; then
     _drive "${1:-}" || rc=$?
   else
