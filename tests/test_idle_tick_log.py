@@ -88,6 +88,19 @@ def test_an_empty_queue_runs_the_merge_check_and_is_not_a_refusal(
     assert "unavailable" not in "".join(log_lines(tmp_path))
 
 
+def test_an_empty_queue_after_the_merge_check_is_not_a_refusal(
+    tmp_path: Path,
+) -> None:
+    answer = '{"state": "NO_PHASE", "awaiting_review": [{"phase": "100926"}]}'
+    fake_sync(tmp_path)
+    # The merge check records a merged phase, so the selection is asked again.
+    recorded = SELECTION.replace("PENDING_PUBLISHED=0; }", "PENDING_PUBLISHED=1; }")
+    run(tmp_path, recorded, ANSWER=answer, RC="1")
+    assert (tmp_path / "result").read_text().strip() == "state=NO_PHASE drive_rc=none"
+    assert "recomputing the selection" in "".join(log_lines(tmp_path))
+    assert "unavailable" not in "".join(log_lines(tmp_path))
+
+
 def test_a_selector_that_prints_no_state_still_refuses_the_launch(
     tmp_path: Path,
 ) -> None:

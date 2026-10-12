@@ -76,12 +76,14 @@ _drive_real_selection() {
             log "recomputing the selection"
             selection_rc=0
             selection="$(coordination_select)" || selection_rc=$?
-            if [ "$selection_rc" -ne 0 ] && [ "$selection_rc" -ne 2 ] \
-                && [ "$selection_rc" -ne 3 ]; then
-              log "coordination state unavailable after the merge check; refusing to launch"
+            # Judged by the state, as above: the merge check that just recorded
+            # the last merged pull request leaves an empty queue, and an empty
+            # queue exits 1.
+            selection_state="$(printf '%s' "$selection" | selection_value state)"
+            if [ -z "$selection_state" ]; then
+              log "coordination state unavailable after the merge check; refusing to launch (next_phase rc=$selection_rc)"
               { _DRIVE_RC=1; return 0; }
             fi
-            selection_state="$(printf '%s' "$selection" | selection_value state)"
           fi
         fi
       fi
