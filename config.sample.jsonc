@@ -148,6 +148,7 @@
   // receives them, so this file must not be committed to a public tree.
   "notify": {
     "profile": "example-profile",
+    // The whole hermes target: the platform, a colon, and the channel id.
     "channel": "discord:000000000000000000",
 
     // Whether notices are sent at all. Required when notify is present, so that
