@@ -18,7 +18,8 @@ class Field(NamedTuple):
 #   "optional" - never required;
 #   "board"    - required only when the `board` object is present;
 #   "notify"   - required only when the `notify` object is present;
-#   "issues"   - required only when the `issues` object is present.
+#   "issues"   - required only when the `issues` object is present;
+#   "repair"   - required only when the `repair` object is present.
 SCHEMA = (
     Field("repo-root", "path", "required"),
     Field("pipeline", "path", "required"),
@@ -83,6 +84,9 @@ SCHEMA = (
     Field("issues.timeout", "int", "optional"),
     Field("issues.claim-attempts", "int", "optional"),
     Field("issues.announce", "bool", "optional"),
+    Field("repair.pipeline", "path", "repair"),
+    Field("repair.attempts", "int", "repair"),
+    Field("repair.wait", "int", "repair"),
 )
 
 # Dotted key -> shell variable, in the same order as SCHEMA. The shell format
@@ -129,6 +133,9 @@ SHELL_VARS = {
     "notify.disabled": "NOTIFY_DISABLED",
     "notify.fallback": "DISCORD_FALLBACK_CHANNEL",
     "notify.heartbeat": "HEARTBEAT_URL",
+    "repair.pipeline": "REPAIR_PIPELINE",
+    "repair.attempts": "REPAIR_ATTEMPTS",
+    "repair.wait": "REPAIR_WAIT",
 }
 SHELL_VARS.update(
     {
@@ -162,7 +169,16 @@ _OVERRIDES = {
     "driver": ("driver.provider", False),
 }
 
-_OBJECT_KEYS = ("driver", "machine", "commands", "tmux", "board", "notify", "issues")
+_OBJECT_KEYS = (
+    "driver",
+    "machine",
+    "commands",
+    "tmux",
+    "board",
+    "notify",
+    "issues",
+    "repair",
+)
 
 # Two keys name one value: the file a machine reads its own name from, and the
 # name it reads. Only the name is stored, reported and passed to the shell.

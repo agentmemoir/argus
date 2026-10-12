@@ -119,7 +119,7 @@ ARGUS_CONFIG_VARS=(
   TMUX_WIDTH TMUX_HEIGHT TMUX_IDLE_WINDOW TMUX_PHASE_WINDOW TMUX_IDLE_SCRIPT
   TMUX_REFRESH BOARD_REPO BOARD_FILE BOARD_BRANCH BOARD_REMOTE
   HERMES_PROFILE_NAME DISCORD_CHANNEL NOTIFY_DISABLED DISCORD_FALLBACK_CHANNEL
-  HEARTBEAT_URL
+  HEARTBEAT_URL REPAIR_PIPELINE REPAIR_ATTEMPTS REPAIR_WAIT
 )
 
 # Argus's own shell helpers, sourced from beside this file. The folder is
@@ -138,7 +138,7 @@ for helper in \
   phase-tmux.sh lib-stat.sh \
   lib-driver-config.sh lib-driver-log.sh lib-driver-notify.sh \
   lib-driver-run.sh lib-driver-select.sh lib-driver-check.sh \
-  lib-driver-drive.sh lib-driver-dryrun.sh lib-driver-select-flow.sh \
+  lib-driver-drive.sh lib-driver-dryrun.sh lib-driver-select-flow.sh lib-driver-repair.sh \
   lib-driver-select-stub.sh lib-driver-select-real.sh lib-driver-launch.sh \
   lib-selftest.sh lib-selftest-launch.sh lib-selftest-flow.sh \
   lib-selftest-unavailable.sh lib-selftest-reasons.sh lib-selftest-recovery.sh \
@@ -178,6 +178,9 @@ done
 # The tick: reserve, branch, and launch.
 # shellcheck disable=SC1091
 . "$ARGUS_DIR/lib-driver-drive.sh"
+# Self-healing: a repair run for a pull request whose checks finished red.
+# shellcheck disable=SC1091
+. "$ARGUS_DIR/lib-driver-repair.sh"
 # shellcheck disable=SC1091
 . "$ARGUS_DIR/lib-driver-dryrun.sh"
 # shellcheck disable=SC1091
@@ -241,6 +244,10 @@ case "${1:-}" in
   --session)
     [ "$#" -eq 3 ] || { echo "usage: phase-driver.sh --session <N> <phase-file>" >&2; exit 2; }
     run_session "$2" "$3"
+    ;;
+  --repair-session)
+    [ "$#" -eq 4 ] || { echo "usage: phase-driver.sh --repair-session <id> <task-file> <branch>" >&2; exit 2; }
+    run_repair_session "$2" "$3" "$4"
     ;;
   --check)     check ;;
   --self-test) driver_self_test ;;

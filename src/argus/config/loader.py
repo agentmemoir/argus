@@ -88,6 +88,10 @@ def _build(
         cast("dict[str, Any]", notify_value) if isinstance(notify_value, dict) else None
     )
 
+    repair_value = raw.get("repair")
+    repair = (
+        cast("dict[str, Any]", repair_value) if isinstance(repair_value, dict) else None
+    )
     issue_value = raw.get("issues")
     issues = (
         cast("dict[str, Any]", issue_value) if isinstance(issue_value, dict) else None
@@ -119,7 +123,7 @@ def _build(
     values: dict[str, object] = {}
     sources: dict[str, str] = {}
     for field in SCHEMA:
-        required = _is_required(field, board, notify, issues)
+        required = _is_required(field, board, notify, issues, repair)
         if field.key in supplied:
             raw_value, source = supplied[field.key]
             _check_type(field, raw_value)
@@ -143,6 +147,7 @@ def _is_required(
     board: dict[str, Any] | None,
     notify: dict[str, Any] | None,
     issues: dict[str, Any] | None,
+    repair: dict[str, Any] | None,
 ) -> bool:
     if field.required == "required":
         return True
@@ -152,6 +157,8 @@ def _is_required(
         return notify is not None
     if field.required == "issues":
         return issues is not None
+    if field.required == "repair":
+        return repair is not None
     return False
 
 
@@ -222,6 +229,10 @@ def _check_value(field: Field, value: object, required: bool) -> None:
         )
     if required and field.type in ("str", "path") and value == "":
         raise ConfigError(f"missing required key '{field.key}'")
+    if field.key == "repair.attempts" and cast("int", value) < 1:
+        raise ConfigError("invalid value for key 'repair.attempts': must be at least 1")
+    if field.key == "repair.wait" and cast("int", value) < 0:
+        raise ConfigError("invalid value for key 'repair.wait': must not be negative")
     if field.key == "driver.state" and "/" in cast("str", value):
         raise ConfigError(
             "invalid value for key 'driver.state': must be a folder name, not a path"

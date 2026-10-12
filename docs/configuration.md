@@ -31,6 +31,7 @@ The file's rules:
 - `tmux.session`, `tmux.width`, `tmux.height`, `tmux.idle-window`, `tmux.phase-window`, `tmux.idle-script`, `tmux.refresh` — the tmux session and its geometry. Required.
 - `board.repo`, `board.file`, `board.branch`, `board.remote` — the shared board. Required only when the `board` object is present.
 - `notify.profile`, `notify.channel`, `notify.disabled` — the notification target. Required when the `notify` object is present. `notify.fallback`, `notify.heartbeat` — optional.
+- `repair.pipeline`, `repair.attempts`, `repair.wait` — self-healing: the pipeline a repair run executes, how many repair runs one pull request gets, and how many seconds the line waits for a published pull request's checks to finish. All required when the `repair` object is present; omit the object to leave failing checks to a person. See [Repair](paths-and-ownership.md#repair).
 
 The notification values belong to whoever receives the notices, so a configuration file that holds them must not be committed to a public tree.
 

@@ -34,6 +34,7 @@ from argus.gitsync.selftest_receipt import (
     _portable_publication_check,
     _publication_receipt_check,
 )
+from argus.gitsync.selftest_repair import _repair_step_checks
 from argus.gitsync.selftest_runstate import _runstate_checks
 from argus.gitsync.selftest_sequencing import _sequencing_checks
 from argus.gitsync.selftest_stack import _two_phase_stack_checks
@@ -126,6 +127,8 @@ def _delegated_checks(base: Path, checks: list[dict[str, Any]]) -> None:
         _check(checks, f"group checklist: {name}", ok, detail)
     for name, ok, detail in _group_gate_checks(base):
         _check(checks, f"group gate: {name}", ok, detail)
+    for name, ok, detail in _repair_step_checks(base):
+        _check(checks, f"repair: {name}", ok, detail)
     for name, ok, detail in _group_sequence_checks(base):
         _check(checks, f"group sequence: {name}", ok, detail)
     for name, ok, detail in _tidy_and_dispatch_checks(base):

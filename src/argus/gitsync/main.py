@@ -102,6 +102,7 @@ from argus.gitsync.mode_branch import mode_branch
 from argus.gitsync.mode_clean import mode_checkpoint, mode_clean
 from argus.gitsync.modes import mode_published, mode_tidy, result_exit_code
 from argus.gitsync.publish_phase import publish_phase
+from argus.gitsync.repair import mode_repair
 from argus.gitsync.selftest import self_test
 from argus.gitsync.sync import mode_resync, sync_all
 
@@ -133,6 +134,7 @@ def main() -> int:
             "clean",
             "checkpoint",
             "gate",
+            "repair",
         ],
         default="start",
         help="start: sync before a phase; push: verify a "
@@ -151,7 +153,9 @@ def main() -> int:
         "progress on the branch it is on, for a release handoff; "
         "gate: merge the fix pull requests waiting on a published "
         "group phase's branch, and make the group's pull request "
-        "ready once its checks pass",
+        "ready once its checks pass; "
+        "repair: prepare one repair run for a pull request this "
+        "machine published whose checks finished red",
     )
     ap.add_argument(
         "--phase",
@@ -227,6 +231,8 @@ def main() -> int:
             if args.phase is None:
                 raise ConfigError("--phase is required with --mode published")
             out = mode_published(args.root, args.phase)
+        elif args.mode == "repair":
+            out = mode_repair(args.root)
         elif args.mode == "gate":
             if args.phase is None:
                 raise ConfigError("--phase is required with --mode gate")

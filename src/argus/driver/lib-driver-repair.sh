@@ -1,0 +1,114 @@
+#!/usr/bin/env bash
+# Copyright 2026 Agent Memoir (https://agentmemoir.com/)
+# SPDX-License-Identifier: Apache-2.0
+#
+# Self-healing: one repair run for a pull request whose checks finished red.
+#
+# Sourced by phase-driver.sh; not executable on its own. Everything here is off
+# unless the configuration has a `repair` object.
+
+# Whether this tick belongs to a repair, so it must not start other work.
+#
+# Asked by an idle tick before it selects anything, which covers both moments the
+# work is due. After a group's last member publishes, the machine is idle and the
+# pull request is waiting. Between two members, the next one has not been
+# reserved yet, so a repair can still go first. Nothing is claimed on the board
+# here, and the answer is judged by the state the Python step printed, never by
+# its exit code.
+#
+# HOLD means the checks on a pull request this machine published have not
+# finished. A new member would push before the old head's result is in, and a
+# result for a head that is no longer the head is never seen again, so the tick
+# waits, for as long as `repair.wait` allows. REPAIR starts one repair run and
+# the tick ends. EXHAUSTED, BLOCKED and NONE let the tick go on to its normal
+# work, because a pull request that cannot be repaired must not stop the line.
+#
+# Returns 0 when the tick should end, 1 when it should carry on.
+repair_due() {
+  [ -n "${REPAIR_PIPELINE:-}" ] || return 1
+  [ -z "${DRIVER_STUB_COORDINATION:-}" ] || return 1
+  local plan="$RUN_DIR/repair-plan.json" state summary
+  "$PYTHON" "$ARGUS/gitsync/main.py" "${ARGUS_CONFIG_ARGS[@]}" --root "$REPO" \
+    --mode repair >"$plan" 2>"$plan.err" || true
+  state="$(selection_value state <"$plan")"
+  summary="$(selection_value summary <"$plan")"
+  case "$state" in
+    REPAIR)
+      log "$summary"
+      repair_launch "$(selection_value id <"$plan")" "$(selection_value task <"$plan")" \
+        "$(selection_value branch <"$plan")" || return 1
+      return 0 ;;
+    HOLD)
+      log_changed repair-hold "$summary"
+      return 0 ;;
+    EXHAUSTED)
+      log_changed repair-exhausted "$summary"
+      [ "$(selection_value notify <"$plan")" != True ] || notify "$summary"
+      return 1 ;;
+    BLOCKED)
+      log_changed repair-blocked "$summary"
+      return 1 ;;
+    NONE)
+      return 1 ;;
+    *)
+      log_changed repair-error "repair: the check gave no answer (see $plan.err)"
+      return 1 ;;
+  esac
+}
+
+# Open the phase window on one repair session.
+repair_launch() {
+  local id="$1" task="$2" branch="$3" launch quoted setting
+  printf -v launch 'bash %q' "$SELF"
+  for setting in "${ARGUS_CONFIG_ARGS[@]}"; do
+    printf -v quoted ' %q' "$setting"
+    launch="$launch$quoted"
+  done
+  printf -v quoted ' --repair-session %q %q %q' "$id" "$task" "$branch"
+  launch="$launch$quoted"
+  9>&- tmux_session_ensure \
+    || { notify "repair $id failed to create tmux session '$SESSION'"; return 1; }
+  tmux_set_title "repair $id starting"
+  9>&- tmux_phase_window_open "$launch" "$RUN_DIR/session-repair-$id.log" \
+    || { notify "repair $id failed to launch in tmux"; return 1; }
+  tmux_phase_window_select
+  log "launched repair $id in tmux '$SESSION' window 'phase'"
+}
+
+# The repair run, inside the phase window.
+#
+# It never writes the halt marker. A phase that fails stops the line because the
+# next phase would build on it; a repair that fails changes nothing the line
+# depends on, and the attempt was counted when the task was prepared, so the
+# limit ends the retries. The pipeline's agent commits on the branch; this pushes
+# whatever it left, without force, and a run that left nothing to push counts as
+# a failed attempt.
+run_repair_session() {
+  local id="$1" task="$2" branch="$3" rc=0 left
+  mkdir -p "$RUN_DIR"
+  trap 'rm -f "$PIDFILE"; exit 130' HUP INT TERM
+  printf '%s\n' "$$" >"$PIDFILE"
+  cd "$REPO"
+  tmux_set_title "repair $id running"
+  "$CMD_GLIDE" run --pipeline "$REPAIR_PIPELINE" \
+    --input "repair_id=$id" --input "repair_task=$task" || rc=$?
+  if [ "$rc" -eq 0 ]; then
+    if "$PYTHON" "$ARGUS/gitsync/main.py" "${ARGUS_CONFIG_ARGS[@]}" --root "$REPO" \
+        --mode checkpoint >"$RUN_DIR/repair-$id-push.json" 2>&1; then
+      log "repair $id: pushed to $branch; the next tick reads the new checks"
+      tmux_set_title "repair $id done"
+    else
+      log "repair $id: could not push to $branch (see $RUN_DIR/repair-$id-push.json)"
+      tmux_set_title "repair $id not pushed"
+    fi
+  else
+    log "repair $id: the run ended with rc=$rc and pushed nothing"
+    tmux_set_title "repair $id ended (rc=$rc)"
+  fi
+  left="$("$CMD_GIT" -C "$REPO" status --porcelain 2>/dev/null | head -1 || true)"
+  if [ "$rc" -ne 0 ] && [ -n "$left" ]; then
+    notify "Repair $id ended with rc=$rc and left uncommitted edits in the checkout on $branch. Read them before the line goes on."
+  fi
+  rm -f "$PIDFILE"
+  exit 0
+}

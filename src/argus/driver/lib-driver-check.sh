@@ -113,6 +113,14 @@ check() {
     echo "issue readiness: accepted (exit $issue_rc)"
     return "$warned"
   fi
+  if [ -n "${REPAIR_PIPELINE:-}" ]; then
+    if [ -r "$REPAIR_PIPELINE" ]; then
+      echo "repair: $REPAIR_PIPELINE ($REPAIR_ATTEMPTS attempt(s) per pull request, waits up to ${REPAIR_WAIT}s for checks)"
+    else
+      echo "repair: $REPAIR_PIPELINE MISSING OR UNREADABLE, a repair run would fail"
+      warned=1
+    fi
+  fi
   # The launch suffix says whether this machine can actually run what it
   # selects: a folder outside this checkout is readable but not launchable.
   if [ -n "$ROADMAP_DIR" ]; then

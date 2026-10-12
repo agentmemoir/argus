@@ -64,6 +64,13 @@ _drive() {
   fi
 
 
+  # A pull request this machine published whose checks finished red gets one
+  # repair run before any new work, and one whose checks are still running holds
+  # the tick. Nothing has been claimed yet, so ending here costs nothing.
+  if repair_due; then
+    return 0
+  fi
+
   # The fence is empty until a path fills it in. Every branch that reaches the
   # launch must set both, because `set -u` makes a missing one fatal and an
   # empty one silently drops the child's ownership fence.
