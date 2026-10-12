@@ -156,7 +156,11 @@ def _group_publication_check(base: Path) -> tuple[bool, str]:
         # one pull request, so the group's own record is the only answer, and the
         # member that finishes the group marks it ready once the checks pass. gh
         # is stubbed, so the answers are fixed and no network is touched.
-        pull_request = {"state": "OPEN", "body": "- [ ] a\n- [ ] b\n", "comments": []}
+        pull_request: dict[str, Any] = {
+            "state": "OPEN",
+            "body": "- [ ] a\n- [ ] b\n",
+            "comments": [],
+        }
         green = {
             "pr view": {"stdout": json.dumps(pull_request)},
             "pr edit": {},
@@ -174,7 +178,8 @@ def _group_publication_check(base: Path) -> tuple[bool, str]:
         if second.get("group_pending") != []:
             return False, f"the last member reported members left to run: {second}"
         gate = cast("dict[str, Any]", second.get("group_gate") or {})
-        if gate.get("state") != "READY" or not (gate.get("ready") or {}).get("ok"):
+        ready = cast("dict[str, Any]", gate.get("ready") or {})
+        if gate.get("state") != "READY" or not ready.get("ok"):
             return False, f"the last member did not make the pull request ready: {gate}"
         receipts = {
             number: cast("dict[str, Any]", phase_receipt(pub, number))

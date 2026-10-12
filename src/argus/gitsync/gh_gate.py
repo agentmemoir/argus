@@ -4,7 +4,7 @@
 
 import json
 import subprocess
-from typing import Any
+from typing import Any, cast
 
 from argus.gitsync.gh import _repo_target
 from argus.gitsync.git import GH_TIMEOUT_S, gh_binary
@@ -37,12 +37,15 @@ def _gh(argv: list[str]) -> tuple[subprocess.CompletedProcess[str] | None, str]:
 def _json_list(done: subprocess.CompletedProcess[str]) -> list[dict[str, Any]] | None:
     """The JSON array gh printed, or ``None`` when it printed anything else."""
     try:
-        raw = json.loads(done.stdout)
+        raw: object = json.loads(done.stdout)
     except ValueError:
         return None
-    if not isinstance(raw, list) or not all(isinstance(row, dict) for row in raw):
+    if not isinstance(raw, list):
         return None
-    return raw
+    rows = cast("list[object]", raw)
+    if not all(isinstance(row, dict) for row in rows):
+        return None
+    return cast("list[dict[str, Any]]", rows)
 
 
 def gh_open_pull_requests(
@@ -96,13 +99,19 @@ def gh_pull_request_comment_bodies(
     if done is None:
         return None, why
     try:
-        raw = json.loads(done.stdout) if done.returncode == 0 else None
+        raw: object = json.loads(done.stdout) if done.returncode == 0 else None
     except ValueError:
         raw = None
-    comments = raw.get("comments") if isinstance(raw, dict) else None
+    comments = (
+        cast("dict[str, Any]", raw).get("comments") if isinstance(raw, dict) else None
+    )
     if not isinstance(comments, list):
         return None, f"gh exited {done.returncode}"
-    return [str(c.get("body", "")) for c in comments if isinstance(c, dict)], ""
+    return [
+        str(cast("dict[str, Any]", c).get("body", ""))
+        for c in cast("list[object]", comments)
+        if isinstance(c, dict)
+    ], ""
 
 
 def gh_merge_pull_request(
