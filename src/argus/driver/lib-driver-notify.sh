@@ -77,7 +77,10 @@ send_one() {
 # hung hermes must never block or halt the pipeline. On total failure the channel
 # is marked dead for this process, so we stop retrying and stop spamming.
 notify() {
-  local msg="$1" target="discord:$CHANNEL"
+  # The configured channel is the whole hermes target, `discord:<channel id>` as
+  # the sample writes it. Prefixing it again sent every notice to
+  # `discord:discord:<id>`, which hermes cannot deliver.
+  local msg="$1" target="$CHANNEL"
   if [ "$NOTIFY_DEAD" = 1 ]; then
     log "notify skipped (channel unavailable): $msg"
     return 0
@@ -105,7 +108,7 @@ notify() {
   if send_one "$target" "$msg"; then
     log "notify ok (retry): $msg"; rm -f "$NOTIFY_BROKEN"; return 0
   fi
-  if [ -n "$FALLBACK" ] && send_one "discord:$FALLBACK" "$msg"; then
+  if [ -n "$FALLBACK" ] && send_one "$FALLBACK" "$msg"; then
     log "notify via fallback channel: $msg"; return 0
   fi
   printf 'notify broken at %s: %s\n' "$(ts)" "$msg" >"$NOTIFY_BROKEN"
