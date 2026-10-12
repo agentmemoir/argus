@@ -17,6 +17,31 @@ log() {
 # log, and also speak on stdout so a manual run is not silent (cron captures it).
 say() { log "$*"; [ "$DRY_RUN" = 1 ] && return 0; printf '%s\n' "$*"; }
 
+# Log a line only when it differs from the last one logged under the same key.
+#
+# A tick with nothing to do says the same things every ten minutes: the
+# configuration, the renewed claim, a pull request still waiting. Written each
+# time they bury the line that changed, and a log read for a fault is read for
+# what is different. The key names the line, not the tick, so a line that
+# changes is logged at once and one that comes back after a different answer is
+# logged again; callers drop a key whose line should not survive a failure.
+#
+# A suppressed repeat still touches the log. The idle display reports the age of
+# the log as proof that the driver ticks, and a quiet log must not read as a dead
+# driver. The remembered line is one file per key in the driver's own folder, so
+# it is untracked and goes with the rest of the run state.
+log_changed() {
+  local key="$1" line="$2" file="$RUN_DIR/log-last-$1"
+  if [ "$DRY_RUN" != 1 ]; then
+    if [ "$(cat "$file" 2>/dev/null)" = "$line" ]; then
+      touch "$LOG"
+      return 0
+    fi
+    printf '%s\n' "$line" >"$file"
+  fi
+  log "$line"
+}
+
 # One line out of text the selector wrote, safe to put in a log entry.
 #
 # The reason a selector refuses is free text from git and from the reservation

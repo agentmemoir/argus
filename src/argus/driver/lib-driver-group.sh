@@ -182,11 +182,14 @@ claim_renew() {
     --generation "$generation" --status running \
     >"$RUN_DIR/claim-renew${claim_number:+-$claim_number}.json" 2>&1 || rc=$?
   if [ "$rc" -ne 0 ]; then
+    # A failure ends the run of identical successes, so the renewal that follows
+    # it is logged even when its words match the one before.
+    rm -f "$RUN_DIR/log-last-renew"
     log "claim renew: could not renew the claim for ${work_kind:-phase} $claim_number (rc=$rc; see $RUN_DIR/claim-renew${claim_number:+-$claim_number}.json)"
   elif [ -s "$GROUPFILE" ]; then
-    log "group renew: renewed the group for ${work_kind:-phase} $claim_number under reservation $reservation_id"
+    log_changed renew "group renew: renewed the group for ${work_kind:-phase} $claim_number under reservation $reservation_id"
   else
-    log "claim renew: renewed the claim for ${work_kind:-phase} $claim_number under reservation $reservation_id"
+    log_changed renew "claim renew: renewed the claim for ${work_kind:-phase} $claim_number under reservation $reservation_id"
   fi
   return 0
 }

@@ -10,6 +10,9 @@ selftest_case_merge_orphan() {
   # left that would turn a merged pull request into a finished phase. Driven
   # through the coordination stub so the case runs with no board and no network.
   log "self-test: merge check with a merged and an unmerged pull request"
+  # The case counts how many times the tick logs a waiting phase, and a tick
+  # logs a line that has not changed since the last one only once.
+  rm -f "$RUN_DIR"/log-last-*
   before_merged="$(grep -c 'phase 100010 is merged' "$LOG" || true)"
   before_waited="$(grep -c 'phase 100011 still waits' "$LOG" || true)"
   before_health="$(grep -c 'merge check: UNAVAILABLE' "$LOG" || true)"

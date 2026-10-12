@@ -184,7 +184,7 @@ _drive_choose_selection() {
         { _DRIVE_RC=0; return 0; }
         ;;
       NO_PHASE)
-        log "no uncompleted ${work_kind:-phase}"
+        log_changed idle "no uncompleted ${work_kind:-phase}"
         { _DRIVE_RC=0; return 0; }
         ;;
       AWAITING_REVIEW)
