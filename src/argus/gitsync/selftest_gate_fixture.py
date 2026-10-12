@@ -55,7 +55,11 @@ def _listing(*prs: dict[str, Any]) -> dict[str, Any]:
 
 
 def _rows(*buckets: str) -> list[dict[str, Any]]:
-    return [{"name": f"job{i}", "bucket": b} for i, b in enumerate(buckets, 1)]
+    run = "https://github.com/example-org/example-repo/actions/runs/4242"
+    return [
+        {"name": f"job{i}", "bucket": b, "link": f"{run}/job/{i}"}
+        for i, b in enumerate(buckets, 1)
+    ]
 
 
 def _pr(number: int, **fields: Any) -> dict[str, Any]:

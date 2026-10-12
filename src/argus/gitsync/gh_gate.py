@@ -14,7 +14,9 @@ _LIST_FIELDS = (
 )
 
 
-def _gh(argv: list[str]) -> tuple[subprocess.CompletedProcess[str] | None, str]:
+def _gh(
+    argv: list[str], timeout: int = GH_TIMEOUT_S
+) -> tuple[subprocess.CompletedProcess[str] | None, str]:
     """Run one gh command. Returns the finished process, or ``None`` and why not.
 
     The same two outcomes ``gh.py`` reports for every call: gh is missing, or it
@@ -25,12 +27,12 @@ def _gh(argv: list[str]) -> tuple[subprocess.CompletedProcess[str] | None, str]:
     """
     try:
         done = subprocess.run(
-            [gh_binary(), *argv], capture_output=True, text=True, timeout=GH_TIMEOUT_S
+            [gh_binary(), *argv], capture_output=True, text=True, timeout=timeout
         )
     except FileNotFoundError:
         return None, "gh is not installed"
     except subprocess.TimeoutExpired:
-        return None, f"gh did not answer within {GH_TIMEOUT_S}s"
+        return None, f"gh did not answer within {timeout}s"
     return done, ""
 
 
@@ -73,13 +75,13 @@ def gh_pull_request_checks(
 ) -> tuple[list[dict[str, Any]] | None, str]:
     """The checks on a pull request's current head, or ``None`` and why not.
 
-    Each row carries ``name`` and ``bucket`` (``pass``, ``fail``, ``pending``,
-    ``skipping`` or ``cancel``). The exit status is not read: gh exits 1 for a
+    Each row carries ``name``, ``link`` (the job's page) and ``bucket`` (``pass``,
+    ``fail``, ``pending``, ``skipping`` or ``cancel``). The exit status is not read: gh exits 1 for a
     failing check and 8 for a running one, with the rows printed either way. A
     pull request with no checks prints no rows, and reads as unanswered here.
     """
     done, why = _gh(
-        ["pr", "checks", str(int(number)), "--json", "name,bucket"]
+        ["pr", "checks", str(int(number)), "--json", "name,bucket,link"]
         + ["--repo", _repo_target(owner, repo, host)]
     )
     if done is None:
@@ -139,6 +141,7 @@ def gh_merge_pull_request(
 
 
 __all__ = [
+    "_gh",
     "gh_merge_pull_request",
     "gh_open_pull_requests",
     "gh_pull_request_checks",

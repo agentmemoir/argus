@@ -38,7 +38,8 @@ role's entry file is named for what it does.
   `publish.py`, `group_publication.py` and `publish_phase.py` (publication),
   `group_review.py` (the group's pull request body and comments), `group_gate.py`
   (the fix pull requests and the ready transition) with `gh_gate.py` (the gh calls
-  it makes),
+  it makes), `repair.py` (the repair plan) with `gh_repair.py` (a pull request's
+  head and a failed run's log),
   `tidy.py` (returning a checkout to the integration branch), and the `mode*.py`
   files that dispatch the modes.
 - `gitsync/issue_*.py` and `gitsync/publish_issue.py` publish an issue branch, scope private task and run data, and return a checkout to its integration branch after GitHub review.
@@ -53,7 +54,7 @@ The driver and its shell helpers live in `driver/`: `driver/phase-driver.sh` is
 the entry point and `driver/lib-*.sh` is one module per concern.
 `driver/lib-driver-group.sh` holds the group side of a tick: the member array a
 selection carries, the one branch the group publishes on, and the renewal the
-tick loop owes a running group. `driver/lib-selftest-*.sh` holds the self-test
+tick loop owes a running group. `driver/lib-driver-repair.sh` holds the repair hook a tick asks first and the repair session. `driver/lib-selftest-*.sh` holds the self-test
 case stages, one file per group, each named after the cases it runs.
 
 `exec_tempdir.py` is a copy of a shared test helper. It differs from that copy by the fixture-name prefix and by one behavior: this copy creates its build-tree fallback on first use, so a hardened host that mounts its temporary directories `noexec` still has somewhere to run a fixture. Re-copy it when the shared helper changes, and keep that difference.

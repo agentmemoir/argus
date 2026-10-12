@@ -137,6 +137,32 @@ def test_bad_values_name_key():
         expect_error(lambda: cfgmod.load(str(path)), "driver.include")
 
 
+def test_repair_object_needs_all_three_keys_and_sane_values():
+    with tempfile.TemporaryDirectory() as tmp:
+        whole = {"pipeline": "repair.yaml", "attempts": 3, "wait": 0}
+        document = copy.deepcopy(BASE)
+        document["repair"] = whole
+        config = cfgmod.load(str(write(tmp, json.dumps(document))))
+        check(config.get("repair.attempts") == 3, config.get("repair.attempts"))
+        check(config.get("repair.wait") == 0, config.get("repair.wait"))
+        check(str(config.get("repair.pipeline")).endswith("repair.yaml"), "path")
+
+        absent = cfgmod.load(str(write(tmp, json.dumps(BASE))))
+        check(absent.get("repair.attempts") is None, "repair is off by default")
+
+        for key in whole:
+            document = copy.deepcopy(BASE)
+            document["repair"] = {k: v for k, v in whole.items() if k != key}
+            path = write(tmp, json.dumps(document))
+            expect_error(lambda p=path: cfgmod.load(str(p)), f"repair.{key}")
+
+        for key, value in (("attempts", 0), ("wait", -1)):
+            document = copy.deepcopy(BASE)
+            document["repair"] = {**whole, key: value}
+            path = write(tmp, json.dumps(document))
+            expect_error(lambda p=path: cfgmod.load(str(p)), f"repair.{key}")
+
+
 def test_sample_loads_with_every_schema_key():
     with tempfile.TemporaryDirectory() as tmp:
         path = sample_in(tmp)
@@ -201,6 +227,7 @@ TESTS = (
     ("missing required key", test_missing_required_key_names_it),
     ("wrong type", test_wrong_type_names_key),
     ("bad values", test_bad_values_name_key),
+    ("repair object", test_repair_object_needs_all_three_keys_and_sane_values),
     ("sample", test_sample_loads_with_every_schema_key),
     ("shell format", test_config_cli.test_shell_format),
     (
