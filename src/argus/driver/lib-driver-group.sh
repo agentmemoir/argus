@@ -239,7 +239,7 @@ watch_signals_pull_request() {
   case "$(selection_value state <"$out")" in
     WATCHED) ;;
     NO-PULL-REQUEST) return 0 ;;
-    *) log_changed "signals-$phase" "pull request signals for phase $phase were not read (see $out.err)"; return 0 ;;
+    *) log_changed "signals-$phase" "pull request signals for phase $phase were not read (see $out)"; return 0 ;;
   esac
   summary="$(grep -o '"kind": *"[a-z_]*"' "$out" | sed 's/.*"\([a-z_]*\)"$/\1/' | sort | uniq -c | awk '{printf "%s%s %s", (NR > 1 ? ", " : ""), $1, $2}' || true)"
   [ -n "$summary" ] || return 0

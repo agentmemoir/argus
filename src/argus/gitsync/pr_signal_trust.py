@@ -56,6 +56,8 @@ def build_visibility(root: Path) -> Visibility:
     Raises ``IssuesUnavailable`` when those settings cannot be read, so the
     caller reads nothing rather than guessing who is trusted.
     """
-    trust = Trust(root, IssueClient())
+    needs_teams = conventions.setting("issues.resolve-teams", False)
+    client = IssueClient() if needs_teams else None
+    trust = Trust(root, client)
     show = conventions.setting("issues.untrusted-comments", "ignore") == "data-only"
     return Visibility(trusted=adapt(trust), show_untrusted=show)

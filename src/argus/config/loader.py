@@ -9,7 +9,11 @@ from typing import Any, cast
 from argus.config.document import read_document
 from argus.config.document import strip_comments as strip_comments
 from argus.config.errors import ConfigError
-from argus.config.issue_validation import validate_issues, validate_presence
+from argus.config.issue_validation import (
+    validate_issues,
+    validate_presence,
+    validate_trust,
+)
 from argus.config.overlay import apply_overlay
 from argus.config.schema import (
     _OBJECT_KEYS,
@@ -106,7 +110,7 @@ def _build(
         found, value = _lookup(raw, field.key)
         if found and value is not None:
             supplied[field.key] = (value, "overlay" if field.key in origins else "file")
-    if issues is not None:
+    if provider == "issues":
         for key, default in ISSUES_DEFAULTS.items():
             supplied.setdefault(key, (copy.deepcopy(default), "default"))
 
@@ -123,7 +127,7 @@ def _build(
     values: dict[str, object] = {}
     sources: dict[str, str] = {}
     for field in SCHEMA:
-        required = _is_required(field, board, notify, issues, repair)
+        required = _is_required(field, board, notify, issues, repair, provider)
         if field.key in supplied:
             raw_value, source = supplied[field.key]
             _check_type(field, raw_value)
@@ -138,6 +142,8 @@ def _build(
         elif required:
             raise ConfigError(f"missing required key '{field.key}'")
     if issues is not None:
+        validate_trust(issues)
+    if provider == "issues":
         validate_issues(values)
     return Config(path, values, sources)
 
@@ -148,6 +154,7 @@ def _is_required(
     notify: dict[str, Any] | None,
     issues: dict[str, Any] | None,
     repair: dict[str, Any] | None,
+    provider: object,
 ) -> bool:
     if field.required == "required":
         return True
@@ -156,7 +163,7 @@ def _is_required(
     if field.required == "notify":
         return notify is not None
     if field.required == "issues":
-        return issues is not None
+        return issues is not None and provider == "issues"
     if field.required == "repair":
         return repair is not None
     return False

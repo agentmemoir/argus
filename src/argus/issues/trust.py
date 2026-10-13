@@ -22,11 +22,11 @@ ASSOCIATIONS = frozenset(
         "UNKNOWN",
     }
 )
-DEFAULT_ASSOCIATIONS = ["OWNER", "MEMBER", "COLLABORATOR"]
+DEFAULT_ASSOCIATIONS = ["OWNER", "MEMBER"]
 
 
 class Trust:
-    def __init__(self, repo: Path, client: IssueClient) -> None:
+    def __init__(self, repo: Path, client: IssueClient | None = None) -> None:
         self.authors = set(conventions.setting("issues.trusted-authors", []))
         self.apps = set(conventions.setting("issues.trusted-apps", []))
         self.associations = set(
@@ -60,6 +60,11 @@ class Trust:
                         self.unresolved.append(token)
             for team in sorted(teams):
                 if conventions.setting("issues.resolve-teams", False):
+                    if client is None:
+                        raise IssuesUnavailable(
+                            "configuration",
+                            "issues.resolve-teams needs an issue source",
+                        )
                     self.owners.update(x.lower() for x in client.team_members(team))
                 else:
                     self.unresolved.append("@" + team)
@@ -86,8 +91,8 @@ class Trust:
         apps = self.comment_apps if comment else self.apps
         associations = self.comment_associations if comment else self.associations
         authors = self.comment_authors if comment else self.authors | self.owners
-        bot = author.get("is_bot") is True or author.get("type") == "Bot"
-        # A human allowlist must not accidentally grant a bot permission.
-        return association in associations or (
-            login in apps if bot else login in authors
-        )
+        # A bot is trusted only through the apps allowlist: a trusted
+        # association admits a person, not a bot.
+        if author.get("is_bot") is True or author.get("type") == "Bot":
+            return login in apps
+        return association in associations or login in authors

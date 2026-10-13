@@ -76,4 +76,5 @@ def test_an_unreadable_snapshot_is_logged_once_as_not_read(tmp_path: Path) -> No
     (tmp_path / "answer.json").write_text(answer("UNAVAILABLE", []))
     lines = run_ticks(tmp_path, "100030", "100030")
     assert len(lines) == 1
-    assert "were not read (see " in lines[0]
+    assert "signals-100030.json" in lines[0]
+    assert ".err" not in lines[0]

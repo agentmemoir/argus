@@ -111,6 +111,7 @@ def test_timeout_and_missing_gh_are_typed(configured: Configured) -> None:
         ("NONE", False, ["maintainer"], [], True),
         ("NONE", True, [], ["maintainer"], True),
         ("NONE", True, ["maintainer"], [], False),
+        ("MEMBER", True, [], [], False),
         ("CONTRIBUTOR", False, [], [], False),
         ("INVALID", False, ["maintainer"], [], False),
         ("NONE", False, [], [], False),

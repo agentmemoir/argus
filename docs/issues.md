@@ -26,8 +26,8 @@ An open linked PR is reported as `watching`. A merged linked PR with an open iss
 | `search` | Query filter; required for `search`. |
 | `task-dir` | Required contained task folder. |
 | `trusted-authors` | Exact allowed user logins. |
-| `trusted-apps` | Allowed bot logins. |
-| `trusted-associations` | Defaults to `OWNER`, `MEMBER`, `COLLABORATOR`. |
+| `trusted-apps` | Allowed bot logins; a bot is trusted only through this list. |
+| `trusted-associations` | Defaults to `OWNER`, `MEMBER`. |
 | `codeowners-file` | Optional readable file of trusted owners. |
 | `resolve-teams` | Defaults to false; team lookup uses the GitHub API. |
 | `comment-trust` | Separate `authors`, `apps`, and `associations` for comment inclusion. |

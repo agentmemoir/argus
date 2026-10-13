@@ -11,9 +11,12 @@ It never merges, pushes, or edits a pull request body.
 import hashlib
 import json
 import re
+import shlex
+import subprocess
 from pathlib import Path
 from typing import Any, cast
 
+from argus import conventions
 from argus.conventions import phase_run_dir
 from argus.gitsync.gh_gate import _gh
 from argus.gitsync.pr_signal_fetch import Fetch, Snapshot, fetch_snapshot
@@ -26,6 +29,7 @@ REACTIONS = frozenset(
     {"+1", "-1", "laugh", "confused", "heart", "hooray", "rocket", "eyes"}
 )
 MAX_REPLY_CHARS = 4000
+REPLY_CHECK_TIMEOUT = 30
 SECRET_PATTERN = re.compile(
     r"gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|AKIA[0-9A-Z]{16}"
     r"|sk-[A-Za-z0-9]{20,}|-----BEGIN [A-Z ]*PRIVATE KEY-----"
@@ -47,17 +51,56 @@ def _post(argv: list[str], host: str | None) -> tuple[bool, str]:
     return True, ""
 
 
-def _recorded_reason(recorded: Snapshot | None, cid: str) -> str:
+def _recorded_reason(recorded: Snapshot | None, cid: str, ref: dict[str, Any]) -> str:
     """Why the recorded snapshot does not allow a write to ``cid``, or ""."""
     if recorded is None:
         return "no recorded snapshot: watch the pull request first"
-    row = recorded["comments"].get(cid)
+    bound = {
+        "host": ref["host"],
+        "owner": ref["owner"],
+        "repo": ref["repo"],
+        "number": ref["number"],
+    }
+    if recorded.get("pull_request") != bound:
+        return (
+            "the recorded snapshot is for a different pull request; run signals first"
+        )
+    comments = recorded.get("comments")
+    if not isinstance(comments, dict):
+        return "comment is not in the recorded snapshot"
+    row = cast("dict[str, Any]", comments).get(cid)
     if row is None:
         return "comment is not in the recorded snapshot"
     if row.get("trusted") is not True:
         return "the comment's author is not trusted, so the agent may not answer it"
     if row["in_reply_to"] is not None:
         return "replies to replies are not supported"
+    return ""
+
+
+def _host_reply_refusal(text: str) -> str:
+    """Why the host reply check refused the draft reply, or "" when it did not."""
+    command = conventions.setting("commands.reply-check", None)
+    if not command:
+        return ""
+    try:
+        argv = shlex.split(command)
+    except ValueError:
+        return "the host reply check could not run; nothing was posted"
+    if not argv:
+        return "the host reply check could not run; nothing was posted"
+    try:
+        done = subprocess.run(
+            argv,
+            input=text,
+            capture_output=True,
+            text=True,
+            timeout=REPLY_CHECK_TIMEOUT,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return "the host reply check could not run; nothing was posted"
+    if done.returncode != 0:
+        return "the host reply check refused this reply; nothing was posted"
     return ""
 
 
@@ -81,7 +124,10 @@ def _already_posted(run_dir: Path, cid: str, digest: str) -> bool:
     except OSError:
         return False
     for line in lines:
-        parsed: object = json.loads(line) if line.strip() else None
+        try:
+            parsed: object = json.loads(line) if line.strip() else None
+        except ValueError:
+            continue
         if not isinstance(parsed, dict):
             continue
         row = cast("dict[str, Any]", parsed)
@@ -113,7 +159,7 @@ def reply_to_comment(
     if text_refusal:
         return _refused(text_refusal)
     cid = str(comment_id)
-    reason = _recorded_reason(read_snapshot(run_dir), cid)
+    reason = _recorded_reason(read_snapshot(run_dir), cid, ref)
     if reason:
         return _refused(reason)
     fresh, why = fetch(
@@ -125,14 +171,26 @@ def reply_to_comment(
     )
     if fresh is None:
         return _refused(f"could not re-read the pull request: {why}")
-    if cid not in fresh["comments"]:
+    comments = fresh.get("comments")
+    rows: dict[str, Any] = (
+        cast("dict[str, Any]", comments) if isinstance(comments, dict) else {}
+    )
+    if cid not in rows:
         return _refused("comment is no longer on the pull request")
+    if rows[cid].get("trusted") is not True:
+        return _refused(
+            "the comment's author is not trusted, so the agent may not answer it"
+        )
+    if text is not None:
+        host_refusal = _host_reply_refusal(text)
+        if host_refusal:
+            return _refused(host_refusal)
     base = f"repos/{ref['owner']}/{ref['repo']}/pulls"
     digest = _digest(text) if text is not None else ""
     if text is not None:
         posted = any(
             row["in_reply_to"] == comment_id and row["body"] == text
-            for row in fresh["comments"].values()
+            for row in rows.values()
         )
         if posted or _already_posted(run_dir, cid, digest):
             return {"ok": True, "state": "ALREADY-POSTED", "reasons": [], "events": []}
