@@ -6,8 +6,8 @@ ISSUE_FAULTS = (
     {
         "name": "issue-trust-disabled",
         "file": "src/argus/issues/trust.py",
-        "find": "        return association in associations or (",
-        "replace": "        return True or (  # FAULT: admit every author",
+        "find": "        return association in associations or login in authors",
+        "replace": "        return True  # FAULT: admit every author",
         "breaks": "an untrusted reporter becomes eligible",
         "check": "issues",
         "verdict": "issues self-test:",
