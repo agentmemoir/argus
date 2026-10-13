@@ -2,7 +2,12 @@
 # SPDX-License-Identifier: Apache-2.0
 """The phase run folder's files for pull request signals: the last snapshot and two logs."""
 
+import fcntl
 import json
+import os
+import tempfile
+from collections.abc import Generator
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
@@ -10,6 +15,7 @@ from typing import Any, cast
 SNAPSHOT_FILE = "pr-signals.json"
 EVENTS_FILE = "pr-signal-events.jsonl"
 WRITES_FILE = "pr-signal-writes.jsonl"
+LOCK_FILE = "pr-signals.lock"
 
 
 def now() -> str:
@@ -28,9 +34,25 @@ def read_snapshot(run_dir: Path) -> dict[str, Any] | None:
 def write_snapshot(run_dir: Path, snapshot: dict[str, Any]) -> None:
     """Replace the recorded snapshot in one step, so a reader never sees half of it."""
     path = run_dir / SNAPSHOT_FILE
-    tmp = path.with_suffix(".json.tmp")
-    tmp.write_text(json.dumps(snapshot, indent=2, sort_keys=True) + "\n")
-    tmp.replace(path)
+    fd, name = tempfile.mkstemp(dir=run_dir, prefix=path.name + ".", suffix=".tmp")
+    temp = Path(name)
+    try:
+        with os.fdopen(fd, "w") as handle:
+            handle.write(json.dumps(snapshot, indent=2, sort_keys=True) + "\n")
+        temp.replace(path)
+    finally:
+        temp.unlink(missing_ok=True)
+
+
+@contextmanager
+def snapshot_lock(run_dir: Path) -> Generator[None, None, None]:
+    """Hold the run folder's lock while a reader changes the signal files."""
+    with (run_dir / LOCK_FILE).open("a") as handle:
+        fcntl.flock(handle, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(handle, fcntl.LOCK_UN)
 
 
 def append_log(run_dir: Path, name: str, rows: list[dict[str, Any]]) -> None:

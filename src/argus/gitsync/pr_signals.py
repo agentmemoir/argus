@@ -20,6 +20,7 @@ from argus.gitsync.pr_signal_store import (
     append_log,
     now,
     read_snapshot,
+    snapshot_lock,
     write_snapshot,
 )
 from argus.gitsync.pr_signal_trust import Visibility, build_visibility
@@ -43,12 +44,22 @@ def watch_pull_request(
     )
     if snapshot is None:
         return {"ok": False, "state": "UNAVAILABLE", "reasons": [why], "events": []}
-    snapshot_at: Snapshot = {**snapshot, "checked_at": now()}
-    events = diff_snapshots(read_snapshot(run_dir), snapshot)
-    for event in events:
-        event["at"] = snapshot_at["checked_at"]
-    write_snapshot(run_dir, snapshot_at)
-    append_log(run_dir, EVENTS_FILE, events)
+    snapshot_at: Snapshot = {
+        **snapshot,
+        "checked_at": now(),
+        "pull_request": {
+            "host": ref["host"],
+            "owner": ref["owner"],
+            "repo": ref["repo"],
+            "number": ref["number"],
+        },
+    }
+    with snapshot_lock(run_dir):
+        events = diff_snapshots(read_snapshot(run_dir), snapshot)
+        for event in events:
+            event["at"] = snapshot_at["checked_at"]
+        write_snapshot(run_dir, snapshot_at)
+        append_log(run_dir, EVENTS_FILE, events)
     return {"ok": True, "state": "WATCHED", "reasons": [], "events": events}
 
 

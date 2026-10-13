@@ -99,7 +99,11 @@
     "tmux": "tmux",
     "python": "/usr/bin/python3",
     "hermes": "hermes",
-    "gh": "gh"
+    "gh": "gh",
+
+    // A command that reads a draft pull request reply on stdin and exits
+    // non-zero to refuse it. Optional. An empty string disables the check.
+    "reply-check": ""
   },
 
   // The tmux session the runs happen in. Required when tmux is used to launch.

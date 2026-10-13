@@ -2,9 +2,11 @@
 # SPDX-License-Identifier: Apache-2.0
 """Pull request comment trust: the adapter onto the issue trust check, and the closed default."""
 
+from pathlib import Path
 from typing import Any
 
-from argus.gitsync.pr_signal_trust import Visibility, adapt
+from argus import conventions
+from argus.gitsync.pr_signal_trust import Visibility, adapt, build_visibility
 
 
 class _Stub:
@@ -32,3 +34,17 @@ def test_closed_visibility_trusts_nothing_and_shows_no_untrusted_text() -> None:
     row = {"author_association": "OWNER", "user": {"login": "owner", "type": "User"}}
     assert Visibility.closed().trusted(row) is False
     assert Visibility.closed().show_untrusted is False
+
+
+def test_build_visibility_reads_trust_without_an_issue_source(tmp_path: Path) -> None:
+    previous = conventions.override(
+        {"issues.trusted-authors": ["reviewer"], "issues.resolve-teams": False}
+    )
+    try:
+        visibility = build_visibility(tmp_path)
+        member = {"author_association": "NONE", "user": {"login": "reviewer"}}
+        outsider = {"author_association": "NONE", "user": {"login": "outsider"}}
+        assert visibility.trusted(member) is True
+        assert visibility.trusted(outsider) is False
+    finally:
+        conventions.configure(previous)

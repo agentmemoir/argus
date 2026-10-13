@@ -16,7 +16,7 @@ The file's rules:
 - `pipeline` — the pipeline file a tick runs. Required.
 - `roadmap-dir` — the folder holding the work-item files. Required.
 - `number-input`, `file-input` — the pipeline input names that carry the work-item number and file. Optional, but a pipeline that declares those inputs needs them named.
-- `driver.provider` — the work source. Required.
+- `driver.provider` — the work source. Required. An `issues` block that holds only the trust keys (`trusted-authors`, `trusted-apps`, `trusted-associations`, `codeowners-file`, `resolve-teams`, `comment-trust`, `untrusted-comments`) is allowed for any provider; the issue-source keys still require the `issues` provider.
 - `driver.include` — the work-item file globs. Required. `driver.exclude` — file names to ignore. Optional.
 - `driver.runs` — the run-state folder, holding session logs, the ledger, and the receipts. Required. The folder must exist before a tick starts.
 - `driver.state` — the folder inside `driver.runs` that holds the driver's own log, lock, halt marker, and pid file. Required. A name, not a path.

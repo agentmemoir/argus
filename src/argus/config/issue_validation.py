@@ -10,6 +10,15 @@ from typing import Any, cast
 from argus.config.errors import ConfigError
 
 PREFERENCES = ("newest", "easiest", "hardest", "category", "search")
+TRUST_KEYS = (
+    "trusted-authors",
+    "trusted-apps",
+    "trusted-associations",
+    "codeowners-file",
+    "resolve-teams",
+    "comment-trust",
+    "untrusted-comments",
+)
 
 
 def validate_presence(
@@ -28,9 +37,11 @@ def validate_presence(
         if board is None:
             raise ConfigError("missing required key 'board.file' for the issue source")
     elif issues is not None:
-        raise ConfigError(
-            "'issues' contradicts 'driver.provider': select the issue source"
-        )
+        unknown = sorted(set(issues) - set(TRUST_KEYS))
+        if unknown:
+            raise ConfigError(
+                "'issues' contradicts 'driver.provider': select the issue source"
+            )
 
 
 def _text(value: object) -> bool:
@@ -55,6 +66,30 @@ def _strings(value: object, key: str, *, allow_empty: bool = False) -> list[str]
     return strings
 
 
+def validate_trust(issues: dict[str, Any]) -> None:
+    """Validate only the trust keys a raw ``issues`` block carries.
+
+    A block that holds these keys alone is allowed for any provider, so this
+    runs before the issue-source keys are required.
+    """
+    for name in ("trusted-authors", "trusted-apps", "trusted-associations"):
+        value = issues.get(name)
+        if value is not None:
+            _strings(value, f"issues.{name}", allow_empty=True)
+    comment_trust = issues.get("comment-trust")
+    if comment_trust is not None:
+        trust = cast("dict[str, object]", comment_trust)
+        for name, entries in trust.items():
+            key = f"issues.comment-trust.{name}"
+            if name not in ("authors", "apps", "associations"):
+                raise ConfigError(f"unknown key '{key}'")
+            _strings(entries, key, allow_empty=True)
+    if issues.get("untrusted-comments") not in (None, "ignore", "data-only"):
+        raise ConfigError(
+            "invalid value for key 'issues.untrusted-comments': use ignore or data-only"
+        )
+
+
 def validate_issues(values: dict[str, object]) -> None:
     """Validate the merged values after schema type and required-key checks."""
     repo = cast("str", values["issues.repo"])
@@ -73,20 +108,6 @@ def validate_issues(values: dict[str, object]) -> None:
         if key in values and not _text(values[key]):
             raise ConfigError(f"invalid value for key '{key}': expected non-empty text")
     _validate_groups(values)
-    for name in ("trusted-authors", "trusted-apps", "trusted-associations"):
-        _strings(values[f"issues.{name}"], f"issues.{name}", allow_empty=True)
-    comment_trust = values.get("issues.comment-trust")
-    if comment_trust is not None:
-        trust = cast("dict[str, object]", comment_trust)
-        for name, entries in trust.items():
-            key = f"issues.comment-trust.{name}"
-            if name not in ("authors", "apps", "associations"):
-                raise ConfigError(f"unknown key '{key}'")
-            _strings(entries, key, allow_empty=True)
-    if values["issues.untrusted-comments"] not in ("ignore", "data-only"):
-        raise ConfigError(
-            "invalid value for key 'issues.untrusted-comments': use ignore or data-only"
-        )
     for name in (
         "max-comments",
         "max-text-bytes",

@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Issue-source config requirements, trust defaults, labels, and board boundaries."""
 
+import copy
 import json
 from pathlib import Path
 from typing import Any
@@ -49,11 +50,7 @@ def test_issue_optional_defaults_are_visible_only_on_issue_machines(
     tmp_path: Path,
 ) -> None:
     config = cfgmod.load(write(tmp_path, json.dumps(issue_document())))
-    assert config.get("issues.trusted-associations") == [
-        "OWNER",
-        "MEMBER",
-        "COLLABORATOR",
-    ]
+    assert config.get("issues.trusted-associations") == ["OWNER", "MEMBER"]
     assert config.get("issues.trusted-authors") == []
     assert config.get("issues.trusted-apps") == []
     assert config.get("issues.resolve-teams") is False
@@ -101,6 +98,44 @@ def test_roadmap_provider_rejects_issue_object(tmp_path: Path, provider: str) ->
     document["driver"]["provider"] = provider
     with pytest.raises(cfgmod.ConfigError, match="contradicts.*driver.provider"):
         cfgmod.load(write(tmp_path, json.dumps(document)))
+
+
+def test_phase_machine_loads_a_trust_only_issues_block(tmp_path: Path) -> None:
+    document = copy.deepcopy(BASE)
+    document["issues"] = {
+        "trusted-associations": ["OWNER"],
+        "untrusted-comments": "data-only",
+    }
+    config = cfgmod.load(write(tmp_path, json.dumps(document)))
+    assert config.get("issues.trusted-associations") == ["OWNER"]
+    assert config.get("issues.untrusted-comments") == "data-only"
+
+
+def test_phase_machine_rejects_an_issue_source_key(tmp_path: Path) -> None:
+    document = copy.deepcopy(BASE)
+    document["issues"] = {"repo": "example/project"}
+    with pytest.raises(cfgmod.ConfigError, match="contradicts.*driver.provider"):
+        cfgmod.load(write(tmp_path, json.dumps(document)))
+
+
+def test_phase_machine_rejects_a_bad_trust_value(tmp_path: Path) -> None:
+    document = copy.deepcopy(BASE)
+    document["issues"] = {"untrusted-comments": "show"}
+    with pytest.raises(cfgmod.ConfigError, match="issues.untrusted-comments"):
+        cfgmod.load(write(tmp_path, json.dumps(document)))
+
+
+@pytest.mark.parametrize("provider", ["phase", "issues"])
+def test_a_null_trust_value_is_treated_as_absent(tmp_path: Path, provider: str) -> None:
+    if provider == "issues":
+        document = issue_document()
+        document["issues"]["trusted-authors"] = None
+    else:
+        document = copy.deepcopy(BASE)
+        document["issues"] = {"trusted-authors": None}
+    config = cfgmod.load(write(tmp_path, json.dumps(document)))
+    expected: list[str] | None = [] if provider == "issues" else None
+    assert config.get("issues.trusted-authors") == expected
 
 
 def test_driver_flag_is_applied_before_presence_validation(tmp_path: Path) -> None:

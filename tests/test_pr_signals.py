@@ -156,6 +156,21 @@ def test_watch_records_each_change_once(tmp_path: Path) -> None:
     assert all("at" in json.loads(line) for line in lines)
 
 
+def test_watch_binds_the_snapshot_to_the_pull_request(tmp_path: Path) -> None:
+    def reading(*_args: object) -> Any:
+        return _snapshot([], [_comment(10)]), ""
+
+    watch_pull_request(tmp_path, REF, fetch=reading)
+    recorded = read_snapshot(tmp_path)
+    assert recorded is not None
+    assert recorded["pull_request"] == {
+        "host": None,
+        "owner": "example-org",
+        "repo": "example-repo",
+        "number": 7,
+    }
+
+
 def test_untrusted_comment_text_is_not_kept_by_default() -> None:
     record = pr_signal_fetch.normalize_comment(_comment(10), False, False)
     assert record["trusted"] is False
