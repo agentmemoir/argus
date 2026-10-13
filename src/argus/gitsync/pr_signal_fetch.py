@@ -12,10 +12,11 @@ from collections.abc import Callable
 from typing import Any, cast
 
 from argus.gitsync.gh_gate import _gh
+from argus.gitsync.pr_signal_trust import Visibility
 
 Row = dict[str, Any]
 Snapshot = dict[str, Any]
-Fetch = Callable[[str, str, int, str | None], tuple[Snapshot | None, str]]
+Fetch = Callable[[str, str, int, str | None, Visibility], tuple[Snapshot | None, str]]
 
 
 def _api_rows(path: str, host: str | None, key: str) -> tuple[list[Row] | None, str]:
@@ -63,8 +64,12 @@ def normalize_alert(row: Row) -> Row:
     }
 
 
-def normalize_comment(row: Row) -> Row:
-    """The fields of one review comment that the watch compares."""
+def normalize_comment(row: Row, trusted: bool, show_untrusted: bool) -> Row:
+    """The fields of one review comment that the watch compares.
+
+    The text is kept only for a trusted author, or for any author when untrusted
+    text is shown as data. Otherwise the record has no text at all.
+    """
     user: Row = row.get("user") or {}
     reactions: Row = row.get("reactions") or {}
     return {
@@ -74,18 +79,25 @@ def normalize_comment(row: Row) -> Row:
         "in_reply_to": row.get("in_reply_to_id"),
         "updated_at": row.get("updated_at"),
         "reactions": reactions.get("total_count", 0),
-        "body": row.get("body") or "",
+        "trusted": trusted,
+        "body": (row.get("body") or "") if trusted or show_untrusted else None,
     }
 
 
 def fetch_snapshot(
-    owner: str, repo: str, number: int, host: str | None = None
+    owner: str,
+    repo: str,
+    number: int,
+    host: str | None = None,
+    visibility: Visibility | None = None,
 ) -> tuple[Snapshot | None, str]:
     """The pull request's alerts and review comments, or None and why not.
 
     Alerts are read with ``state=all`` so a fixed or dismissed alert stays visible
-    as a state change, not as a row that vanished.
+    as a state change, not as a row that vanished. Without a visibility, no
+    comment text is kept.
     """
+    view = visibility or Visibility.closed()
     alerts, why = _api_rows(
         f"repos/{owner}/{repo}/code-scanning/alerts"
         f"?state=all&ref=refs/pull/{number}/head&per_page=100",
@@ -99,8 +111,14 @@ def fetch_snapshot(
     )
     if comments is None:
         return None, why
+    comment_records: dict[str, Row] = {}
+    for row in comments:
+        trusted = view.trusted(row)
+        comment_records[str(row["id"])] = normalize_comment(
+            row, trusted, view.show_untrusted
+        )
     snapshot: Snapshot = {
         "alerts": {str(row["number"]): normalize_alert(row) for row in alerts},
-        "comments": {str(row["id"]): normalize_comment(row) for row in comments},
+        "comments": comment_records,
     }
     return snapshot, ""
