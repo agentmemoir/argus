@@ -12,6 +12,7 @@ import pytest
 from argus.gitsync import pr_signal_fetch
 from argus.gitsync.pr_signal_diff import diff_snapshots
 from argus.gitsync.pr_signal_store import EVENTS_FILE, SNAPSHOT_FILE, read_snapshot
+from argus.gitsync.pr_signal_trust import Visibility
 from argus.gitsync.pr_signals import watch_pull_request
 
 REF = {"host": None, "owner": "example-org", "repo": "example-repo", "number": 7}
@@ -49,7 +50,8 @@ def _snapshot(alerts: list[dict[str, Any]], comments: list[dict[str, Any]]) -> A
             str(a["number"]): pr_signal_fetch.normalize_alert(a) for a in alerts
         },
         "comments": {
-            str(c["id"]): pr_signal_fetch.normalize_comment(c) for c in comments
+            str(c["id"]): pr_signal_fetch.normalize_comment(c, True, False)
+            for c in comments
         },
     }
 
@@ -152,3 +154,44 @@ def test_watch_records_each_change_once(tmp_path: Path) -> None:
     lines = (tmp_path / EVENTS_FILE).read_text().splitlines()
     assert len(lines) == 2
     assert all("at" in json.loads(line) for line in lines)
+
+
+def test_untrusted_comment_text_is_not_kept_by_default() -> None:
+    record = pr_signal_fetch.normalize_comment(_comment(10), False, False)
+    assert record["trusted"] is False
+    assert record["body"] is None
+
+
+def test_untrusted_text_is_kept_as_data_only_when_configured() -> None:
+    record = pr_signal_fetch.normalize_comment(_comment(10), False, True)
+    assert record["trusted"] is False
+    assert record["body"] == "Hard-coded salt."
+
+
+def test_fetch_keeps_comment_text_only_for_trusted_authors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    rows = [
+        [
+            _comment(10, user={"login": "reviewer"}),
+            _comment(11, user={"login": "outsider"}),
+        ]
+    ]
+
+    def fake_gh(argv: list[str], *_args: object) -> Any:
+        if "code-scanning/alerts" in argv[-1]:
+            return subprocess.CompletedProcess(argv, 0, stdout=json.dumps([[]])), ""
+        return subprocess.CompletedProcess(argv, 0, stdout=json.dumps(rows)), ""
+
+    monkeypatch.setattr(pr_signal_fetch, "_gh", fake_gh)
+    visibility = Visibility(
+        trusted=lambda row: row["user"]["login"] == "reviewer", show_untrusted=False
+    )
+    snap, why = pr_signal_fetch.fetch_snapshot(
+        "example-org", "example-repo", 7, None, visibility
+    )
+    assert why == ""
+    assert snap is not None
+    assert snap["comments"]["10"]["body"] == "Hard-coded salt."
+    assert snap["comments"]["11"]["body"] is None
+    assert snap["comments"]["11"]["trusted"] is False

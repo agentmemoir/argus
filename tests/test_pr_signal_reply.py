@@ -24,6 +24,7 @@ def _comment(_cid: int, in_reply_to: int | None = None, body: str = "Fix it.") -
         "in_reply_to": in_reply_to,
         "updated_at": "t",
         "reactions": 0,
+        "trusted": True,
         "body": body,
     }
 
@@ -178,3 +179,57 @@ def test_a_failed_post_is_logged_as_failed(
     assert out["ok"] is False
     logged = json.loads((tmp_path / WRITES_FILE).read_text())
     assert logged["state"] == "FAILED"
+
+
+def test_refuses_a_comment_whose_author_is_not_trusted(tmp_path: Path) -> None:
+    _record(tmp_path, {"10": {**_comment(10), "trusted": False}})
+    out = reply_to_comment(tmp_path, REF, 10, text="Done.", fetch=_fresh({}))
+    assert out["state"] == "REFUSED"
+    assert "not trusted" in out["reasons"][0]
+
+
+def test_refuses_reply_text_longer_than_the_cap(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _record(tmp_path, {"10": _comment(10)})
+    posts = _spy_gh(monkeypatch)
+    too_long = "x" * (pr_signal_reply.MAX_REPLY_CHARS + 1)
+    out = reply_to_comment(
+        tmp_path, REF, 10, text=too_long, fetch=_fresh({"10": _comment(10)})
+    )
+    assert out["state"] == "REFUSED"
+    assert posts == []
+
+
+def test_refuses_reply_text_that_looks_like_a_credential(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _record(tmp_path, {"10": _comment(10)})
+    posts = _spy_gh(monkeypatch)
+    fake_token = "gh" + "p_" + "A" * 36
+    out = reply_to_comment(
+        tmp_path,
+        REF,
+        10,
+        text=f"token {fake_token}",
+        fetch=_fresh({"10": _comment(10)}),
+    )
+    assert out["state"] == "REFUSED"
+    assert "credential" in out["reasons"][0]
+    assert posts == []
+
+
+def test_a_repeat_of_a_posted_reply_is_skipped_from_the_writes_log(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _record(tmp_path, {"10": _comment(10)})
+    posts = _spy_gh(monkeypatch)
+    first = reply_to_comment(
+        tmp_path, REF, 10, text="Done.", fetch=_fresh({"10": _comment(10)})
+    )
+    second = reply_to_comment(
+        tmp_path, REF, 10, text="Done.", fetch=_fresh({"10": _comment(10)})
+    )
+    assert first["state"] == "POSTED"
+    assert second["state"] == "ALREADY-POSTED"
+    assert len(posts) == 1

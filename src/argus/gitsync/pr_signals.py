@@ -22,14 +22,25 @@ from argus.gitsync.pr_signal_store import (
     read_snapshot,
     write_snapshot,
 )
+from argus.gitsync.pr_signal_trust import Visibility, build_visibility
 from argus.gitsync.receipts import phase_receipt, pull_request_ref
+from argus.issues.transport import IssuesUnavailable
 
 
 def watch_pull_request(
-    run_dir: Path, ref: dict[str, Any], fetch: Fetch = fetch_snapshot
+    run_dir: Path,
+    ref: dict[str, Any],
+    fetch: Fetch = fetch_snapshot,
+    visibility: Visibility | None = None,
 ) -> dict[str, Any]:
     """Read the pull request once, record its changes, and report them."""
-    snapshot, why = fetch(ref["owner"], ref["repo"], ref["number"], ref["host"])
+    snapshot, why = fetch(
+        ref["owner"],
+        ref["repo"],
+        ref["number"],
+        ref["host"],
+        visibility or Visibility.closed(),
+    )
     if snapshot is None:
         return {"ok": False, "state": "UNAVAILABLE", "reasons": [why], "events": []}
     snapshot_at: Snapshot = {**snapshot, "checked_at": now()}
@@ -48,6 +59,13 @@ def mode_signals(root: str | Path, phase: int | str) -> dict[str, Any]:
     ref = pull_request_ref(receipt.get("pull_request")) if receipt else None
     if ref is None:
         return {"ok": True, "state": "NO-PULL-REQUEST", "reasons": [], "events": []}
-    out = watch_pull_request(phase_run_dir(root, int(phase)), ref)
+    try:
+        visibility = build_visibility(root)
+    except IssuesUnavailable as exc:
+        reason = f"trust settings cannot be read: {exc}"
+        return {"ok": False, "state": "UNAVAILABLE", "reasons": [reason], "events": []}
+    out = watch_pull_request(
+        phase_run_dir(root, int(phase)), ref, visibility=visibility
+    )
     out["phase"] = int(phase)
     return out
