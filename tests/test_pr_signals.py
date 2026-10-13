@@ -45,8 +45,12 @@ def _comment(cid: int, **overrides: Any) -> dict[str, Any]:
 def _snapshot(alerts: list[dict[str, Any]], comments: list[dict[str, Any]]) -> Any:
     """The normalized shape ``fetch_snapshot`` returns, built from raw rows."""
     return {
-        "alerts": {str(a["number"]): pr_signal_fetch._alert(a) for a in alerts},
-        "comments": {str(c["id"]): pr_signal_fetch._comment(c) for c in comments},
+        "alerts": {
+            str(a["number"]): pr_signal_fetch.normalize_alert(a) for a in alerts
+        },
+        "comments": {
+            str(c["id"]): pr_signal_fetch.normalize_comment(c) for c in comments
+        },
     }
 
 

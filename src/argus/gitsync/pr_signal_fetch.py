@@ -9,15 +9,16 @@ call as "every alert closed" or "every comment deleted".
 
 import json
 from collections.abc import Callable
-from typing import Any
+from typing import Any, cast
 
 from argus.gitsync.gh_gate import _gh
 
+Row = dict[str, Any]
 Snapshot = dict[str, Any]
 Fetch = Callable[[str, str, int, str | None], tuple[Snapshot | None, str]]
 
 
-def _api_rows(path: str, host: str | None, key: str) -> tuple[list[Any] | None, str]:
+def _api_rows(path: str, host: str | None, key: str) -> tuple[list[Row] | None, str]:
     """Every row of a paginated list endpoint, or None and why not."""
     argv = ["api", "--paginate", "--slurp", path]
     if host and host != "github.com":
@@ -28,24 +29,30 @@ def _api_rows(path: str, host: str | None, key: str) -> tuple[list[Any] | None, 
     if done.returncode != 0:
         return None, f"gh api exited {done.returncode} reading {key}"
     try:
-        pages: object = json.loads(done.stdout)
+        data: Any = json.loads(done.stdout)
     except ValueError:
         return None, f"gh api printed no JSON reading {key}"
-    if not isinstance(pages, list):
+    if not isinstance(data, list):
         return None, f"gh api printed an unexpected shape reading {key}"
-    rows: list[Any] = []
-    for page in pages:
+    rows: list[Row] = []
+    for page in cast("list[object]", data):
         if not isinstance(page, list):
             return None, f"gh api printed an unexpected page reading {key}"
-        rows.extend(page)
-    if not all(isinstance(row, dict) and row.get(key) is not None for row in rows):
-        return None, f"a row without {key} came back"
+        for raw in cast("list[object]", page):
+            if not isinstance(raw, dict):
+                return None, f"a row without {key} came back"
+            row = cast("Row", raw)
+            if row.get(key) is None:
+                return None, f"a row without {key} came back"
+            rows.append(row)
     return rows, ""
 
 
-def _alert(row: dict[str, Any]) -> dict[str, Any]:
-    rule = row.get("rule") or {}
-    location = (row.get("most_recent_instance") or {}).get("location") or {}
+def normalize_alert(row: Row) -> Row:
+    """The fields of one code-scanning alert that the watch compares."""
+    rule: Row = row.get("rule") or {}
+    instance: Row = row.get("most_recent_instance") or {}
+    location: Row = instance.get("location") or {}
     return {
         "state": row.get("state"),
         "rule": rule.get("id"),
@@ -56,14 +63,17 @@ def _alert(row: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _comment(row: dict[str, Any]) -> dict[str, Any]:
+def normalize_comment(row: Row) -> Row:
+    """The fields of one review comment that the watch compares."""
+    user: Row = row.get("user") or {}
+    reactions: Row = row.get("reactions") or {}
     return {
-        "author": (row.get("user") or {}).get("login"),
+        "author": user.get("login"),
         "path": row.get("path"),
         "line": row.get("line"),
         "in_reply_to": row.get("in_reply_to_id"),
         "updated_at": row.get("updated_at"),
-        "reactions": (row.get("reactions") or {}).get("total_count", 0),
+        "reactions": reactions.get("total_count", 0),
         "body": row.get("body") or "",
     }
 
@@ -90,7 +100,7 @@ def fetch_snapshot(
     if comments is None:
         return None, why
     snapshot: Snapshot = {
-        "alerts": {str(row["number"]): _alert(row) for row in alerts},
-        "comments": {str(row["id"]): _comment(row) for row in comments},
+        "alerts": {str(row["number"]): normalize_alert(row) for row in alerts},
+        "comments": {str(row["id"]): normalize_comment(row) for row in comments},
     }
     return snapshot, ""

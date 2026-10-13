@@ -5,7 +5,7 @@
 import json
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 SNAPSHOT_FILE = "pr-signals.json"
 EVENTS_FILE = "pr-signal-events.jsonl"
@@ -19,10 +19,10 @@ def now() -> str:
 def read_snapshot(run_dir: Path) -> dict[str, Any] | None:
     """The last recorded snapshot, or None when none is readable."""
     try:
-        data = json.loads((run_dir / SNAPSHOT_FILE).read_text())
+        data: Any = json.loads((run_dir / SNAPSHOT_FILE).read_text())
     except (OSError, ValueError):
         return None
-    return data if isinstance(data, dict) else None
+    return cast("dict[str, Any]", data) if isinstance(data, dict) else None
 
 
 def write_snapshot(run_dir: Path, snapshot: dict[str, Any]) -> None:
