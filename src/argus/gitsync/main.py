@@ -101,6 +101,8 @@ from argus.gitsync.merge import sync_one
 from argus.gitsync.mode_branch import mode_branch
 from argus.gitsync.mode_clean import mode_checkpoint, mode_clean
 from argus.gitsync.modes import mode_published, mode_tidy, result_exit_code
+from argus.gitsync.pr_signal_reply import mode_signal_reply
+from argus.gitsync.pr_signals import mode_signals
 from argus.gitsync.publish_phase import publish_phase
 from argus.gitsync.repair import mode_repair
 from argus.gitsync.selftest import self_test
@@ -135,6 +137,8 @@ def main() -> int:
             "checkpoint",
             "gate",
             "repair",
+            "signals",
+            "signal-reply",
         ],
         default="start",
         help="start: sync before a phase; push: verify a "
@@ -155,12 +159,23 @@ def main() -> int:
         "group phase's branch, and make the group's pull request "
         "ready once its checks pass; "
         "repair: prepare one repair run for a pull request this "
-        "machine published whose checks finished red",
+        "machine published whose checks finished red; "
+        "signals: read the phase's pull request alerts and review "
+        "comments and record what changed; signal-reply: reply to "
+        "or react to one recorded review comment, for --comment",
     )
     ap.add_argument(
         "--phase",
         default=None,
-        help="phase number for --mode publish, --mode clean or --mode gate",
+        help="phase number for --mode publish, --mode clean, --mode gate, "
+        "--mode signals or --mode signal-reply",
+    )
+    ap.add_argument(
+        "--comment", type=int, default=None, help="review comment id for signal-reply"
+    )
+    ap.add_argument("--text", default=None, help="reply text for signal-reply")
+    ap.add_argument(
+        "--reaction", default=None, help="reaction name for signal-reply, e.g. eyes"
     )
     ap.add_argument(
         "--reservation-file",
@@ -237,6 +252,22 @@ def main() -> int:
             if args.phase is None:
                 raise ConfigError("--phase is required with --mode gate")
             out = mode_gate(args.root, args.phase)
+        elif args.mode == "signals":
+            if args.phase is None:
+                raise ConfigError("--phase is required with --mode signals")
+            out = mode_signals(args.root, args.phase)
+        elif args.mode == "signal-reply":
+            if args.phase is None or args.comment is None:
+                raise ConfigError(
+                    "--phase and --comment are required with signal-reply"
+                )
+            out = mode_signal_reply(
+                args.root,
+                args.phase,
+                args.comment,
+                text=args.text,
+                reaction=args.reaction,
+            )
         elif args.mode == "clean":
             out = mode_clean(args.root, args.phase)
         elif args.mode == "resync":

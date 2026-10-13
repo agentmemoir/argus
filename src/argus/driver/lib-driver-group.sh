@@ -225,3 +225,23 @@ gate_group_pull_request() {
   log "group gate for ${work_kind:-phase} $phase: $summary"
   printf '%s\n' "$summary" >"$last"
 }
+
+# Read a phase's pull request once per tick. The mode records each alert and
+# review comment change in the phase run folder, so a change is returned on the
+# first tick that sees it. This logs the kinds it returned. A read that failed
+# is logged once, as not read, so it never looks like no change.
+watch_signals_pull_request() {
+  local phase="$1" out summary
+  [ -z "${DRIVER_STUB_COORDINATION:-}" ] || return 0
+  out="$RUN_DIR/signals-$phase.json"
+  "$PYTHON" "$ARGUS/gitsync/main.py" "${ARGUS_CONFIG_ARGS[@]}" --root "$REPO" \
+    --mode signals --phase "$phase" >"$out" 2>"$out.err" || true
+  case "$(selection_value state <"$out")" in
+    WATCHED) ;;
+    NO-PULL-REQUEST) return 0 ;;
+    *) log_changed "signals-$phase" "pull request signals for phase $phase were not read (see $out.err)"; return 0 ;;
+  esac
+  summary="$(grep -o '"kind": *"[a-z_]*"' "$out" | sed 's/.*"\([a-z_]*\)"$/\1/' | sort | uniq -c | awk '{printf "%s%s %s", (NR > 1 ? ", " : ""), $1, $2}' || true)"
+  [ -n "$summary" ] || return 0
+  log "pull request signals for phase $phase: $summary"
+}

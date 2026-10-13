@@ -244,6 +244,7 @@ confirm_pending_reviews() {
         # Still waiting for its pull request to merge: the one moment the group's
         # fix pull requests and its ready transition are due.
         gate_group_pull_request "$phase" "$pr"
+        watch_signals_pull_request "$phase"
         ;;
     esac
     rc=0

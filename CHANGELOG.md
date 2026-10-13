@@ -7,6 +7,9 @@ been released yet.
 
 ## [Unreleased]
 
+- `argus` watches a phase's pull request on each tick: code-scanning alerts and
+  review comments are recorded as they change, and one scoped command replies to
+  or reacts to a recorded review comment.
 - `argus` ticks an unattended work queue: select a phase, reserve it on a shared
   Git board, launch its pipeline in tmux, watch the run, and check publication
   before the next tick.
