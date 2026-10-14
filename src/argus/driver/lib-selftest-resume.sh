@@ -51,6 +51,12 @@ selftest_case_resume() {
   export DRIVER_STUB_SLEEP DRIVER_STUB_BOARD_FENCE DRIVER_STUB_COORDINATION
   # The previous case's phase window may still be closing, and a live window
   # makes the tick skip rather than resume. Wait for it before the first check.
+  # The live run record the case needs, written rather than assumed. The fixture
+  # starts phase 100010 as `blocked`, but the flow case ends a run as
+  # `remedy_escalated` in this same run directory, and the child re-checks the
+  # live state before it starts glide. A case that read the fixture's first value
+  # would pass or fail according to which cases ran before it.
+  printf '{"phase": "%s", "state": "blocked"}\n' "$phase" >"$run_dir/run.json"
   wait_phase_window_gone
   rm -f "$HALT" "$run_dir/ledger.json"
 
