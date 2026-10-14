@@ -294,9 +294,9 @@ def update_group_pull_request(
         # step, a rerun of the helper) finds its comment already there. When the
         # comments cannot be read the comment is posted: a repeat is noise, a
         # missing comment is lost.
-        posted, _why = gh_pull_request_comment_bodies(
+        posted = gh_pull_request_comment_bodies(
             ref["number"], ref.get("owner"), ref.get("repo"), ref.get("host")
-        )
+        ).value
         if posted is not None and comment in {text.strip() for text in posted}:
             comment_ok, comment_detail = True, "comment already posted"
         else:

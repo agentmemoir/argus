@@ -4,14 +4,28 @@
 
 import json
 import subprocess
-from typing import Any, cast
+from typing import Any, Generic, NamedTuple, TypeVar, cast
 
 from argus.gitsync.gh import _repo_target
 from argus.gitsync.git import GH_TIMEOUT_S, gh_binary
 
+T = TypeVar("T")
+
 _LIST_FIELDS = (
     "number,url,title,isDraft,isCrossRepository,mergeable,reviewDecision,headRefOid"
 )
+
+
+class GhRead(NamedTuple, Generic[T]):
+    """One gh read: the answer, or ``None`` and why it could not be read.
+
+    Every read returns this, so the reason travels with the answer and a call
+    site names it instead of reading a failed read as an empty one. A two-field
+    tuple, so ``rows, why = gh_pull_request_checks(...)`` still unpacks.
+    """
+
+    value: T | None
+    why: str
 
 
 def _gh(
@@ -52,7 +66,7 @@ def _json_list(done: subprocess.CompletedProcess[str]) -> list[dict[str, Any]] |
 
 def gh_open_pull_requests(
     base: str, owner: str | None, repo: str | None, host: str | None = None
-) -> tuple[list[dict[str, Any]] | None, str]:
+) -> GhRead[list[dict[str, Any]]]:
     """The open pull requests whose base is ``base``, or ``None`` and why not.
 
     ``None`` is not an empty list: a caller that read "could not ask" as "none
@@ -63,43 +77,49 @@ def gh_open_pull_requests(
         + ["--base", base, "--state", "open", "--limit", "100", "--json", _LIST_FIELDS]
     )
     if done is None:
-        return None, why
+        return GhRead(None, why)
     if done.returncode != 0:
-        return None, f"gh exited {done.returncode}"
+        return GhRead(None, f"gh exited {done.returncode}")
     rows = _json_list(done)
-    return (rows, "") if rows is not None else (None, "gh did not return a list")
+    if rows is None:
+        return GhRead(None, "gh did not return a list")
+    return GhRead(rows, "")
 
 
 def gh_pull_request_checks(
     number: int | str, owner: str | None, repo: str | None, host: str | None = None
-) -> tuple[list[dict[str, Any]] | None, str]:
+) -> GhRead[list[dict[str, Any]]]:
     """The checks on a pull request's current head, or ``None`` and why not.
 
     Each row carries ``name``, ``link`` (the job's page) and ``bucket`` (``pass``,
-    ``fail``, ``pending``, ``skipping`` or ``cancel``). The exit status is not read: gh exits 1 for a
-    failing check and 8 for a running one, with the rows printed either way. A
-    pull request with no checks prints no rows, and reads as unanswered here.
+    ``fail``, ``pending``, ``skipping`` or ``cancel``). gh exits 1 for a failing
+    check and 8 for a running one, with the rows printed either way, so the rows
+    decide the answer. The exit status is the reason only when no list was
+    printed: a pull request with no checks prints no list and exits 1, and
+    neither an unreadable answer nor a missing one has rows to judge.
     """
     done, why = _gh(
         ["pr", "checks", str(int(number)), "--json", "name,bucket,link"]
         + ["--repo", _repo_target(owner, repo, host)]
     )
     if done is None:
-        return None, why
+        return GhRead(None, why)
     rows = _json_list(done)
-    return (rows, "") if rows else (None, "gh reported no checks")
+    if not rows:
+        return GhRead(None, f"gh printed no check list (exit {done.returncode})")
+    return GhRead(rows, "")
 
 
 def gh_pull_request_comment_bodies(
     number: int | str, owner: str | None, repo: str | None, host: str | None = None
-) -> tuple[list[str] | None, str]:
+) -> GhRead[list[str]]:
     """Every comment body on a pull request, or ``None`` and why not."""
     done, why = _gh(
         ["pr", "view", str(int(number)), "--json", "comments"]
         + ["--repo", _repo_target(owner, repo, host)]
     )
     if done is None:
-        return None, why
+        return GhRead(None, why)
     try:
         raw: object = json.loads(done.stdout) if done.returncode == 0 else None
     except ValueError:
@@ -108,12 +128,13 @@ def gh_pull_request_comment_bodies(
         cast("dict[str, Any]", raw).get("comments") if isinstance(raw, dict) else None
     )
     if not isinstance(comments, list):
-        return None, f"gh exited {done.returncode}"
-    return [
+        return GhRead(None, f"gh exited {done.returncode}")
+    bodies = [
         str(cast("dict[str, Any]", c).get("body", ""))
         for c in cast("list[object]", comments)
         if isinstance(c, dict)
-    ], ""
+    ]
+    return GhRead(bodies, "")
 
 
 def gh_merge_pull_request(
@@ -141,6 +162,7 @@ def gh_merge_pull_request(
 
 
 __all__ = [
+    "GhRead",
     "_gh",
     "gh_merge_pull_request",
     "gh_open_pull_requests",

@@ -61,9 +61,9 @@ def _fix_pull_request_hold(pr: dict[str, Any], ref: dict[str, Any]) -> str | Non
         return f"mergeable is {str(pr.get('mergeable')).lower()}"
     if pr.get("reviewDecision") == "CHANGES_REQUESTED":
         return "changes requested"
-    rows, _why = gh_pull_request_checks(
+    rows = gh_pull_request_checks(
         pr["number"], ref.get("owner"), ref.get("repo"), ref.get("host")
-    )
+    ).value
     verdict, names = checks_verdict(rows)
     return None if verdict == "passing" else _checks_reason(verdict, names)
 
@@ -84,9 +84,10 @@ def merge_fix_pull_requests(branch: str, ref: dict[str, Any]) -> dict[str, Any]:
     """
     owner, repo, host = ref.get("owner"), ref.get("repo"), ref.get("host")
     result: dict[str, Any] = {"merged": [], "held": [], "unknown": ""}
-    prs, why = gh_open_pull_requests(branch, owner, repo, host)
+    opened = gh_open_pull_requests(branch, owner, repo, host)
+    prs = opened.value
     if prs is None:
-        result["unknown"] = why
+        result["unknown"] = opened.why
         return result
     for pr in prs:
         number = pr["number"]
@@ -167,9 +168,9 @@ def release_group_pull_request(
     marker = _ready_marker(root, members)
     if marker.exists():
         return dict(out, state="READY", reasons=[])
-    rows, _why = gh_pull_request_checks(
+    rows = gh_pull_request_checks(
         ref["number"], ref.get("owner"), ref.get("repo"), ref.get("host")
-    )
+    ).value
     out["reasons"] = _gate_reasons(fixes, rows)
     if out["reasons"]:
         return dict(out, state="HELD")

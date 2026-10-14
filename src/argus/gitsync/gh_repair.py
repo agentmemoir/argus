@@ -6,7 +6,7 @@ import json
 from typing import Any, cast
 
 from argus.gitsync.gh import _repo_target
-from argus.gitsync.gh_gate import _gh
+from argus.gitsync.gh_gate import GhRead, _gh
 
 # A failed run's log is megabytes, and gh may fetch it job by job, so the bound
 # is well above the 15 seconds the small reads get.
@@ -15,30 +15,30 @@ GH_LOG_TIMEOUT_S = 120
 
 def gh_pull_request_head(
     number: int | str, owner: str | None, repo: str | None, host: str | None = None
-) -> tuple[tuple[str, str] | None, str]:
+) -> GhRead[tuple[str, str]]:
     """``(state, head commit)`` of a pull request, or ``None`` and why not."""
     done, why = _gh(
         ["pr", "view", str(int(number)), "--json", "state,headRefOid"]
         + ["--repo", _repo_target(owner, repo, host)]
     )
     if done is None:
-        return None, why
+        return GhRead(None, why)
     try:
         raw: object = json.loads(done.stdout) if done.returncode == 0 else None
     except ValueError:
         raw = None
     if not isinstance(raw, dict):
-        return None, f"gh exited {done.returncode}"
+        return GhRead(None, f"gh exited {done.returncode}")
     fields = cast("dict[str, Any]", raw)
     state, head = fields.get("state"), fields.get("headRefOid")
     if not isinstance(state, str) or not isinstance(head, str):
-        return None, "gh returned no state or head"
-    return (state, head), ""
+        return GhRead(None, "gh returned no state or head")
+    return GhRead((state, head), "")
 
 
 def gh_failed_run_log(
     run: int | str, owner: str | None, repo: str | None, host: str | None = None
-) -> tuple[str | None, str]:
+) -> GhRead[str]:
     """The log of the failed steps of one workflow run, or ``None`` and why not."""
     done, why = _gh(
         ["run", "view", str(int(run)), "--log-failed"]
@@ -46,10 +46,10 @@ def gh_failed_run_log(
         timeout=GH_LOG_TIMEOUT_S,
     )
     if done is None:
-        return None, why
+        return GhRead(None, why)
     if done.returncode != 0:
-        return None, f"gh exited {done.returncode}"
-    return done.stdout, ""
+        return GhRead(None, f"gh exited {done.returncode}")
+    return GhRead(done.stdout, "")
 
 
 __all__ = ["GH_LOG_TIMEOUT_S", "gh_failed_run_log", "gh_pull_request_head"]
