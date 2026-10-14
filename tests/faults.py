@@ -273,4 +273,19 @@ FAULTS = (
         "verdict": "driver self-test:",
         "expect": "a resume restarted the run with --fresh",
     },
+    {
+        "name": "resume-accepts-an-unsettled-auto-pin",
+        "breaks": "the resume trusts a repin that did not settle every pin on "
+        "HEAD, so the run continues with pins that no longer describe the tree",
+        "file": "src/argus/driver/lib-driver-ledger.sh",
+        "find": '    if [ "$pin" != "$head" ]; then\n'
+        '      RESUME_REFUSAL="the ledger auto-pin did not settle every pin on HEAD"\n'
+        "      return 1\n"
+        "    fi\n",
+        "replace": "    :  # FAULT: an unsettled pin is accepted\n",
+        "check": "driver",
+        "cases": "resume",
+        "verdict": "driver self-test:",
+        "expect": "an unsettled auto-pin did not refuse",
+    },
 ) + ISSUE_FAULTS

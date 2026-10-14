@@ -2,206 +2,13 @@
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
 # SPDX-License-Identifier: Apache-2.0
 #
-# The resume: prove the ledger, hold the board fence, cut the branch, launch.
+# The resume: resolve the target, prove the ledger, hold the fence, cut the
+# branch, launch.
 #
 # Every check runs before the launch, so a refusal leaves the run untouched,
 # rewrites the record and writes the marker. Nothing here archives the run it
 # continues: a resume exists to keep the stage state `--fresh` would throw away.
 
-
-# The distinct non-empty step pins in the run's ledger, one per line.
-resume_ledger_pins() {   # <run_dir>
-  local file="$1/ledger.json"
-  [ -f "$file" ] || return 0
-  "$PYTHON" - "$file" <<'PY'
-import json, sys
-try:
-    with open(sys.argv[1], encoding="utf-8") as handle:
-        ledger = json.load(handle)
-except (OSError, ValueError):
-    raise SystemExit(0)
-steps = ledger.get("steps") if isinstance(ledger, dict) else None
-if not isinstance(steps, dict):
-    raise SystemExit(0)
-seen = []
-for entry in steps.values():
-    head = entry.get("git_head") if isinstance(entry, dict) else None
-    if isinstance(head, str) and head and head not in seen:
-        seen.append(head)
-for head in seen:
-    print(head)
-PY
-}
-
-# The exact command a person must run when the auto-pin refuses.
-resume_repin_hint() {   # <number> <rel>
-  local line text="glide run --pipeline $PIPELINE"
-  while IFS= read -r line; do
-    text="$text $line"
-  done < <(glide_input_args "$1" "$2" 2>/dev/null || true)
-  printf '%s --repin-head --repin-reason "why HEAD moved"' "$text"
-}
-
-# Prove the ledger's step pins still describe the tree, or fast-forward them.
-#
-# No pins and every pin equal to HEAD both resume untouched. When every pin is an
-# ancestor of HEAD the tree only moved forward, so glide is asked to repin once
-# and the pins are re-read. Anything else fails closed and names the command a
-# person must run: guessing would repin a run whose outputs no longer match the
-# tree.
-resume_ledger_proof() {   # <run_dir> <number> <rel>
-  local run_dir="$1" number="$2" rel="$3" pins head pin all_equal=1 all_ancestor=1
-  RESUME_REFUSAL=""
-  pins="$(resume_ledger_pins "$run_dir")"
-  if [ -z "$pins" ]; then
-    return 0
-  fi
-  head="$(git -C "$REPO" rev-parse HEAD 2>/dev/null || true)"
-  if [ -z "$head" ]; then
-    RESUME_REFUSAL="HEAD is unreadable in $REPO"
-    return 1
-  fi
-  while IFS= read -r pin; do
-    [ "$pin" = "$head" ] || all_equal=0
-  done <<<"$pins"
-  if [ "$all_equal" = 1 ]; then
-    return 0
-  fi
-  while IFS= read -r pin; do
-    git -C "$REPO" merge-base --is-ancestor "$pin" "$head" 2>/dev/null \
-      || all_ancestor=0
-  done <<<"$pins"
-  if [ "$all_ancestor" != 1 ]; then
-    RESUME_REFUSAL="the ledger pins a commit HEAD does not descend from; run $(resume_repin_hint "$number" "$rel")"
-    return 1
-  fi
-  local reason pin_args=() line
-  reason="argus resume auto-pin: HEAD descends from pinned $(printf '%s' "$pins" | head -1)"
-  # A self-test hook. The decision is what is proven here; glide's own repin write
-  # is glide's test, and a self-test that ran the real command would need a glide
-  # binary and a writable ledger it must not have.
-  case "${DRIVER_STUB_REPIN:-}" in
-    ok)
-      log "resume auto-pin: (stub) would repin from [$(printf '%s' "$pins" | tr '\n' ' ')] to $head; reason: $reason"
-      return 0 ;;
-    fail)
-      RESUME_REFUSAL="the ledger auto-pin failed; run $(resume_repin_hint "$number" "$rel")"
-      return 1 ;;
-  esac
-  while IFS= read -r line; do
-    pin_args+=("$line")
-  done < <(glide_input_args "$number" "$rel" 2>/dev/null || true)
-  if ! "$CMD_GLIDE" run --pipeline "$PIPELINE" "${pin_args[@]}" \
-      --repin-head --repin-reason "$reason" >>"$LOG" 2>&1; then
-    RESUME_REFUSAL="the ledger auto-pin failed; run $(resume_repin_hint "$number" "$rel")"
-    return 1
-  fi
-  while IFS= read -r pin; do
-    if [ "$pin" != "$head" ]; then
-      RESUME_REFUSAL="the ledger auto-pin did not settle every pin on HEAD"
-      return 1
-    fi
-  done <<<"$(resume_ledger_pins "$run_dir")"
-  log "resume auto-pin: from [$(printf '%s' "$pins" | tr '\n' ' ')] to $head; reason: $reason"
-  return 0
-}
-
-# One field of the reservation object the board CLI printed.
-resume_reservation_field() {   # <field>
-  "$PYTHON" - "$1" <<'PY'
-import json, sys
-try:
-    data = json.load(sys.stdin)
-except ValueError:
-    data = {}
-record = data.get("reservation") if isinstance(data, dict) else None
-if not isinstance(record, dict):
-    record = data if isinstance(data, dict) else {}
-print(record.get(sys.argv[1], ""))
-PY
-}
-
-# Establish the board fence the resumed run launches under.
-#
-# The candidates, in order: the claim when it names this phase, then the fence the
-# record kept from the halt. The fence is renewed first; when that fails and the
-# slot is free, a fresh reservation is taken. Any conflict or unreachable board
-# fails closed, because launching without a fence would let a second machine own
-# the phase while this one works it.
-resume_fence() {   # <phase>
-  local phase="$1" candidate_id="" candidate_gen="" claim_number=""
-  RESUME_REFUSAL=""
-  if [ -s "$CLAIM" ]; then
-    IFS=$'\t' read -r claim_number candidate_id candidate_gen <"$CLAIM" || true
-    if [ "$claim_number" != "$phase" ]; then
-      candidate_id=""; candidate_gen=""
-    fi
-  fi
-  if [ -z "$candidate_id" ]; then
-    candidate_id="$HALT_REC_RESERVATION_ID"
-    candidate_gen="$HALT_REC_GENERATION"
-  fi
-  if [ -n "$candidate_id" ] && [ -n "$candidate_gen" ] \
-      && resume_fence_renew "$phase" "$candidate_id" "$candidate_gen"; then
-    return 0
-  fi
-  resume_fence_reserve "$phase"
-}
-
-# Renew the fence the halted run held, and set the fence globals when it holds.
-resume_fence_renew() {   # <phase> <reservation_id> <generation>
-  local phase="$1" reservation_id="$2" generation="$3" rc=0
-  case "${DRIVER_STUB_BOARD_FENCE:-}" in
-    renew)
-      RESUME_RESERVATION_ID="$reservation_id"
-      RESUME_RESERVATION_GENERATION="$generation"
-      return 0 ;;
-    reserve|fail) return 1 ;;
-  esac
-  "$PYTHON" "$ARGUS/board/reservations.py" renew-group \
-    "${ARGUS_CONFIG_ARGS[@]}" "${BOARD_KIND_ARGS[@]+"${BOARD_KIND_ARGS[@]}"}" \
-    --repo-root "$REPO" --machine-id "$PHASE_MACHINE_ID" \
-    --reservation-id "$reservation_id" --generation "$generation" \
-    --status running >"$RUN_DIR/claim-renew-$phase.json" 2>&1 || rc=$?
-  if [ "$rc" -ne 0 ]; then
-    return 1
-  fi
-  RESUME_RESERVATION_ID="$reservation_id"
-  RESUME_RESERVATION_GENERATION="$generation"
-  return 0
-}
-
-# Take a fresh reservation when the halted one is gone and the slot is free.
-resume_fence_reserve() {   # <phase>
-  local phase="$1" out="" rc=0
-  case "${DRIVER_STUB_BOARD_FENCE:-}" in
-    reserve)
-      RESUME_RESERVATION_ID="rsv-resume-stub"
-      RESUME_RESERVATION_GENERATION="9"
-      return 0 ;;
-    renew|fail)
-      RESUME_REFUSAL="the board refused both a renewal and a fresh reservation for phase $phase"
-      return 1 ;;
-  esac
-  out="$("$PYTHON" "$ARGUS/board/reservations.py" reserve \
-    "${ARGUS_CONFIG_ARGS[@]}" "${BOARD_KIND_ARGS[@]+"${BOARD_KIND_ARGS[@]}"}" \
-    --repo-root "$REPO" --phase "$phase" --machine-id "$PHASE_MACHINE_ID" \
-    --run-id "phase-$phase" 2>&1)" || rc=$?
-  if [ "$rc" -ne 0 ]; then
-    RESUME_REFUSAL="the board would not grant a fence for phase $phase: $(printf '%s' "$out" | tr '\n' ' ')"
-    return 1
-  fi
-  RESUME_RESERVATION_ID="$(printf '%s' "$out" | resume_reservation_field reservation_id)"
-  RESUME_RESERVATION_GENERATION="$(printf '%s' "$out" | resume_reservation_field generation)"
-  if [ -z "$RESUME_RESERVATION_ID" ] || [ -z "$RESUME_RESERVATION_GENERATION" ]; then
-    RESUME_REFUSAL="the board returned no fence for phase $phase"
-    return 1
-  fi
-  return 0
-}
-
-# The launch path for a phase number, in the repo-relative shape the selector
-# reports, so `--session N <file>` receives what it always receives.
 resume_phase_file_of() {   # <number>
   "$PYTHON" - "$ARGUS" "$REPO" "$1" "${ARGUS_CONFIG_ARGS[@]}" <<'PY'
 import sys
@@ -267,6 +74,7 @@ _drive_resume() {   # [<number>]
   # builtin runs, so `$a` would be read before it is set.
   local target="$requested" run_dir reason
   RESUME_REFUSAL=""
+  RESUME_REFUSE_QUIET=0
   # `_drive` clears this before a tick, but `--resume` never runs `_drive`, so a
   # resume clears it itself: `set -u` makes a missing one fatal at the check
   # below, and a stale one would abort a launch that already happened.
@@ -302,27 +110,44 @@ _drive_resume() {   # [<number>]
     rel="$HALT_REC_PHASE_FILE"
   fi
 
+  # The record is one slot and may belong to another phase: `--resume N` names a
+  # phase the record need not. Its run directory, its state snapshot and its
+  # fence all belong to the phase it names, so a mismatch clears all three. Read
+  # for a different phase, they would prove that phase's ledger and renew that
+  # phase's fence while launching this one.
+  if [ "$HALT_REC_PHASE" != "$number" ]; then
+    HALT_REC_RUN_DIR=""
+    HALT_REC_STATE=""
+    HALT_REC_RESERVATION_ID=""
+    HALT_REC_GENERATION=""
+  fi
+
   run_dir="$HALT_REC_RUN_DIR"
   if [ -z "$run_dir" ]; then
     run_dir="$(phase_run_dir "$number" "$rel")"
   fi
   RESUME_RUN_DIR="$run_dir"
 
-  # The record's own snapshot is the gate when it names this phase: that is the
-  # state the halt left, and it is what the record promises a reader. A request
-  # for another phase has no snapshot to read, so it asks the run itself. The
-  # child re-reads the live state before glide starts, and that is what catches a
-  # run that moved on between the two.
-  local gate_state
-  if [ "$HALT_REC_PHASE" = "$number" ]; then
-    gate_state="$HALT_REC_STATE"
-  else
-    gate_state="$(phase_state "$number" "$rel")"
-  fi
+  # The gate is asked of two states, and both must pass. The record's snapshot is
+  # the state the halt left and what the record promises a reader; the live run is
+  # the state now and what glide will actually continue. Asking only the snapshot
+  # let a run that reached a terminal state after the halt reach the launch, where
+  # only the child stopped it - after a `started` notification had gone out. For a
+  # phase the record does not name there is no snapshot, and the live run is the
+  # only state there is.
+  local gate_state live_state
+  live_state="$(phase_state "$number" "$rel")"
+  gate_state="${HALT_REC_STATE:-$live_state}"
   reason="$(resume_gate_reason "$gate_state" "$run_dir")" || {
     resume_refuse "$target" "$reason"
     return 1
   }
+  if [ "$gate_state" != "$live_state" ]; then
+    reason="$(resume_gate_reason "$live_state" "$run_dir")" || {
+      resume_refuse "$target" "the run moved on since the halt: $reason"
+      return 1
+    }
+  fi
 
   if ! resume_ledger_proof "$run_dir" "$number" "$rel"; then
     resume_refuse "$target" "$RESUME_REFUSAL"
@@ -343,12 +168,27 @@ _drive_resume() {   # [<number>]
   reservation_generation="$RESUME_RESERVATION_GENERATION"
   record_claim "$number" "$reservation_id" "$reservation_generation"
 
+  # Read the stage before the launch: the child starts inside `_drive_launch` and
+  # can advance `resume.json` before this line is written, and the stage logged
+  # here is the acceptance source a person reads.
+  local stage
+  stage="$(resume_stage "$run_dir")"
+  RESUME_STAGE="$stage"
+
   RESUME_MODE=1
-  _drive_launch || return $?
-  [ -z "${_DRIVE_RC:-}" ] || return "$_DRIVE_RC"
+  _drive_launch
+  if [ "${_DRIVE_RC:-0}" != 0 ]; then
+    # No window opened, so the record is kept for a retry and the marker goes
+    # back. Without the marker the tick-on-clear branch fires again on every tick,
+    # which is the automatic retry the plan rules out. The launch already
+    # notified, so this refusal does not notify again.
+    RESUME_REFUSE_QUIET=1
+    resume_refuse "$target" "the launch failed; see $RUN_DIR/driver.log"
+    return 1
+  fi
 
   rm -f "$HALT_RECORD"
-  log "halt-clear: phase $number resume launched (stage $(resume_stage "$run_dir"), reservation $reservation_id gen $reservation_generation)"
+  log "halt-clear: phase $number resume launched (stage $stage, reservation $reservation_id gen $reservation_generation)"
   return 0
 }
 
@@ -362,10 +202,15 @@ resume_cmd() {   # [<number>]
       printf 'argus: --resume takes a phase number, not %s\n' "$requested" >&2
       exit 2 ;;
   esac
+  # The same prologue the tick runs, in the same order. `--resume` enters the
+  # launch path without running a tick, so without this a second `--resume`, or a
+  # resume racing an orphaned run's live pid, could launch the phase twice.
+  driver_lock_take || exit 1
   if tmux_busy; then
     printf 'argus: a %s window is already running; stop it first\n' "${work_kind:-phase}" >&2
     exit 1
   fi
+  driver_orphan_check || exit 1
   if [ -z "$requested" ] && [ ! -f "$HALT_RECORD" ]; then
     printf 'argus: no halt record at %s; nothing to resume\n' "$HALT_RECORD" >&2
     exit 1
@@ -376,5 +221,5 @@ resume_cmd() {   # [<number>]
     exit 1
   fi
   printf 'resumed %s %s at stage %s; the halt marker is untouched\n' \
-    "${work_kind:-phase}" "$number" "$(resume_stage "$RESUME_RUN_DIR")"
+    "${work_kind:-phase}" "$number" "${RESUME_STAGE:-unknown}"
 }

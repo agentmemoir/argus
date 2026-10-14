@@ -287,18 +287,18 @@ def is_done(
     finalize log, so the remedy approver and finalize never ran and the line
     moved on with nothing reporting an error.
 
-    So the box counts only once the pipeline has run the phase, and only while
-    that run is not one that stopped somewhere it can still continue from. That
-    keeps the operator close-out for a phase the pipeline finished, and refuses
-    it for a phase nothing ever ran. It also refuses it for a phase the line
-    halted: a hand tick there let a cleared halt marker advance the queue past
-    the halted phase instead of resuming it. `argus abandon` is the supported
-    close-out for a phase that will not resume.
-
     It is deliberately *not* corroborated by the ledger, the receipt or the
     finalize log. Each of those already completes a phase on its own below, so
     corroborating the box with them would leave the box unable to change any
     verdict: the tick would be read and then ignored.
+
+    The run is checked against the resume classes here and only here. A receipt, a
+    finalized ledger, a finalize log and a Complete line in `index.md` are each
+    runner or pipeline evidence that a phase finished, and making one unfinished
+    run block all of them was tried and breaks the selector's own flow case. So a
+    halted phase closed out by those still counts as done; `argus abandon` is the
+    close-out for a phase that will not resume, and the approval box is the one
+    hand-written signal that the guard holds.
     """
     if (
         run_completed(repo, number, path)

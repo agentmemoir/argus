@@ -29,6 +29,11 @@ RESUME_RUN_DIR=""
 RESUME_RESERVATION_ID=""
 RESUME_RESERVATION_GENERATION=""
 RESUME_FROM_TICK=0
+# The stage the launch resumed from, read before the launch so a fast child
+# cannot move it out from under the log line and the closing message.
+RESUME_STAGE=""
+# Set when a refusal must not notify again, because the caller already did.
+RESUME_REFUSE_QUIET=0
 
 # Write the halt record beside the marker.
 #
@@ -37,13 +42,14 @@ RESUME_FROM_TICK=0
 # reader never sees half of one. The fence the halted run held is read from the
 # claim file, because it is the fence candidate a resume starts from.
 halt_record_write() {   # <phase> <phase_file> <run_dir> <state> <rc> <source> [reason]
-  local marker="" claim_number="" reservation_id="" generation="" rc="$5"
+  local marker="" reservation_id="" generation="" rc="$5"
   if [ -f "$HALT" ]; then
     marker="$(tr '\n' ' ' <"$HALT")"
   fi
-  if [ -s "$CLAIM" ]; then
-    IFS=$'\t' read -r claim_number reservation_id generation <"$CLAIM" || true
-    if [ "$claim_number" != "$1" ]; then
+  if claim_read_fields "$CLAIM"; then
+    reservation_id="$CLAIM_ID"
+    generation="$CLAIM_GEN"
+    if [ "$CLAIM_NUMBER" != "$1" ]; then
       reservation_id=""; generation=""
     fi
   fi
@@ -141,7 +147,7 @@ resume_refuse() {   # <phase> <reason>
   fi
   RESUME_REFUSAL="$reason"
   log "resume refused: phase ${phase:-unknown}: $reason"
-  if [ "$RESUME_FROM_TICK" = 1 ]; then
+  if [ "$RESUME_FROM_TICK" = 1 ] && [ "$RESUME_REFUSE_QUIET" != 1 ]; then
     notify "halt resume refused for phase ${phase:-unknown}: $reason"
   fi
 }

@@ -4,6 +4,38 @@
 #
 # The tick: reserve, branch, and launch a phase.
 #
+# Two prologue steps are shared with `--resume`, which enters the same launch
+# path without running a tick. They live here rather than inline so the two
+# callers cannot drift apart.
+
+# Take the driver lock, or report that another instance holds it.
+driver_lock_take() {
+  mkdir -p "$RUN_DIR"
+  if command -v flock >/dev/null 2>&1; then
+    exec 9>"$LOCK"
+    flock -n 9 || { log "another driver instance holds the lock; skip"; return 1; }
+  fi
+  return 0
+}
+
+# Halt when a recorded live PID has no phase window: an orphaned run.
+#
+# `tmux kill-window` does not signal the pane, so the pid outlives the window and
+# a second run would race it. A dead pid is removed and the caller proceeds.
+driver_orphan_check() {
+  [ -f "$PIDFILE" ] || return 0
+  local opid
+  opid="$(cat "$PIDFILE" 2>/dev/null || true)"
+  if [ -n "$opid" ] && kill -0 "$opid" 2>/dev/null; then
+    log "orphaned run detected (pid $opid, no phase window); halting"
+    [ -f "$HALT" ] || printf 'orphaned run pid %s at %s\n' "$opid" "$(ts)" >"$HALT"
+    notify "a phase run (pid $opid) is alive but its tmux phase window is gone (orphaned). Line stopped; investigate."
+    return 1
+  fi
+  rm -f "$PIDFILE"
+  return 0
+}
+
 _drive() {
   cd "$REPO"
 
@@ -22,7 +54,7 @@ _drive() {
 
   if command -v flock >/dev/null 2>&1; then
     exec 9>"$LOCK"
-    flock -n 9 || { log "another driver instance holds the lock; skip"; return 0; }
+    flock -n 9 || { log "another driver instance holds the lock; skip"; return 1; }
   fi
 
   # The tick is the renewer of the claim this machine holds. The board measures a
@@ -36,21 +68,7 @@ _drive() {
     return 0
   fi
 
-  # No phase window, but a recorded live PID means an orphaned run (e.g. after
-  # `tmux kill-window`, which does not signal the pane). The session itself
-  # outlives every phase, so it proves nothing. Halt rather than start a
-  # second, concurrent run.
-  if [ -f "$PIDFILE" ]; then
-    local opid
-    opid="$(cat "$PIDFILE" 2>/dev/null || true)"
-    if [ -n "$opid" ] && kill -0 "$opid" 2>/dev/null; then
-      log "orphaned run detected (pid $opid, no phase window); halting"
-      [ -f "$HALT" ] || printf 'orphaned run pid %s at %s\n' "$opid" "$(ts)" >"$HALT"
-      notify "a phase run (pid $opid) is alive but its tmux phase window is gone (orphaned). Line stopped; investigate."
-      return 0
-    fi
-    rm -f "$PIDFILE"
-  fi
+  driver_orphan_check || return 0
 
   # No live phase: clear per-session state a hard kill may have left behind.
   rm -f "$CURRENT" "$STALL"

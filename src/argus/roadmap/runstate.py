@@ -4,11 +4,9 @@
 
 `evidence` answers whether a phase is finished. These answer the other half of
 the same question. A `blocked` run stopped at a stage and can still continue, so
-it must stay out of the done set: closing it out by hand was how a cleared halt
-marker launched the next phase instead of resuming the halted one. A run
-directory with no readable `run.json` but a `resume.json` is the interrupted
-class, and it is unfinished for the same reason. An `abandoned.json` residue is a
-phase a person has parked, which the selector reports and skips.
+it must stay out of the done set. A run directory with no readable `run.json` but
+a `resume.json` is the interrupted class, and it is unfinished for the same
+reason. An `abandoned.json` residue is a phase a person has parked.
 """
 
 import json
@@ -29,8 +27,7 @@ def _run_dir(
 ) -> Path | None:
     """The run directory, or None when the layout cannot be resolved.
 
-    A templated pipeline whose template does not format raises `ValueError`; the
-    callers here read an absent directory and an unresolvable one the same way.
+    A templated pipeline whose template does not format raises `ValueError`.
     """
     try:
         return phase_run_dir(repo, number, phase_file)
@@ -61,13 +58,7 @@ def run_state(
 ) -> str | None:
     """The run state glide recorded, or None when there is no readable record.
 
-    Args:
-        repo: The project root.
-        number: The phase number.
-        phase_file: The phase file, when the run layout is templated.
-
-    Returns:
-        The `state` string from `run.json`, otherwise ``None``.
+    `phase_file` is for a templated run layout.
     """
     directory = _run_dir(repo, number, phase_file)
     if directory is None:
@@ -81,8 +72,8 @@ def run_unfinished(
     """Whether the run stopped somewhere it can still continue from.
 
     True for a `blocked` run, and for a run directory with no readable
-    `run.json` but a `resume.json` beside it. Everything else is finished or
-    was never started, and the caller may treat it as it always did.
+    `run.json` but a `resume.json` beside it. Everything else was never started
+    or is finished.
     """
     directory = _run_dir(repo, number, phase_file)
     if directory is None:
@@ -96,8 +87,14 @@ def run_unfinished(
 def run_abandoned(
     repo: str | Path, number: int, phase_file: str | Path | None = None
 ) -> bool:
-    """Whether a person has parked this phase with an `abandoned.json` residue."""
+    """Whether a person has parked this phase with an `abandoned.json` residue.
+
+    A residue that is not version 1, or names another phase, is not this phase's.
+    """
     directory = _run_dir(repo, number, phase_file)
     if directory is None:
         return False
-    return (directory / ABANDONED_FILENAME).is_file()
+    residue = _read_json(directory / ABANDONED_FILENAME)
+    if residue is None or residue.get("version") != 1:
+        return False
+    return residue.get("phase") == str(number)

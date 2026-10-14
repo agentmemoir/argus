@@ -35,7 +35,7 @@ selftest_resume_launches() {
 
 selftest_case_resume() {
   local phase=100010 rel run_dir old_sleep old_fence old_repin old_coordination
-  local launches head resume_out
+  local launches head resume_out log_before advanced
   rel="$(resume_phase_file_of "$phase")" || rel=""
   run_dir="$(phase_run_dir "$phase" "$rel")"
   old_sleep="$DRIVER_STUB_SLEEP"
@@ -108,6 +108,20 @@ selftest_case_resume() {
       "$([ -f "$HALT_RECORD" ] && echo present || echo absent)"
     { grep -n 'resume\|halt\|window is running\|orphan' "$LOG" 2>/dev/null | tail -6 | sed 's/^/      /'; } || true
   fi
+  # The plan's own acceptance measure, asserted rather than described: a cleared
+  # marker resumes the recorded phase and reserves no other phase. This is the
+  # check that would have caught the 2026-10-14 advance, when a cleared marker
+  # let the queue launch 101040 after 101032 had halted.
+  log_before="$(wc -l <"$LOG" 2>/dev/null || printf '0')"
+  drive --self-test || true
+  advanced="$(tail -n "+$((log_before + 1))" "$LOG" 2>/dev/null | grep -c 'reserved phase' || true)"
+  if [ "${advanced:-0}" = 0 ]; then
+    echo "ok: the tick resumed the recorded phase and reserved no other phase"
+  else
+    echo "FAIL: the tick reserved another phase instead of resuming the halted one"; fail=1
+    { tail -n "+$((log_before + 1))" "$LOG" 2>/dev/null | sed 's/^/      /'; } || true
+  fi
+
 
   # The run is not archived: a resume continues the state `--fresh` would throw
   # away. This is the interrupted class (an unreadable run record with only the
@@ -129,79 +143,43 @@ selftest_case_resume() {
   rm -f "$run_dir/resume.json"
   printf '{"phase": "100010", "state": "blocked"}\n' >"$run_dir/run.json"
 
-  # A pin HEAD does not descend from must fail closed and name the command a
-  # person has to run: repinning it silently would rewrite a run whose outputs no
-  # longer match the tree.
-  selftest_resume_record "$phase" "$rel" "$run_dir" blocked 1
+  # The ledger proof and the board fence, in their own file: each is a guard the
+  # resume runs before it launches, and each has its own cases.
+  selftest_resume_ledger_cases
+  selftest_resume_fence_cases
+
+  # `--resume N` must not read another phase's records. The record here names a
+  # different phase and carries a run directory of its own, and that directory's
+  # ledger pins a commit HEAD does not descend from. Read for the phase being
+  # resumed the resume proceeds; read for the phase the record names it refuses.
+  # The case proves which directory the proof was taken from.
+  local other="$RUN_DIR/other-phase-run" other_rel
+  other_rel="$(resume_phase_file_of "$phase")" || other_rel="$rel"
+  mkdir -p "$other"
   printf '{"steps": {"fixture": {"git_head": "%s"}}}\n' \
-    "0000000000000000000000000000000000000000" >"$run_dir/ledger.json"
-  launches="$(selftest_resume_launches)"
-  drive --self-test || true
-  if grep -q 'HEAD does not descend from' "$LOG" \
-      && grep -q -- '--repin-head --repin-reason' "$LOG" \
-      && [ "$(selftest_resume_launches)" = "$launches" ]; then
-    echo "ok: a pin HEAD does not descend from fails closed and names the command"
-  else
-    echo "FAIL: a pin HEAD does not descend from was accepted"; fail=1
-  fi
-
-  # An ancestor pin only moved forward, so the resume takes the auto-pin path
-  # once and continues. The extra commit is made on a detached HEAD and undone,
-  # so the fixture's own branch is left where the next case expects it.
-  head="$(git -C "$REPO" rev-parse HEAD 2>/dev/null || true)"
-  if [ -n "$head" ] \
-      && git -C "$REPO" checkout -q --detach 2>/dev/null \
-      && git -C "$REPO" commit -q --allow-empty -m 'resume fixture: a second commit' 2>/dev/null; then
-    selftest_resume_record "$phase" "$rel" "$run_dir" blocked 1
-    printf '{"steps": {"fixture": {"git_head": "%s"}}}\n' "$head" >"$run_dir/ledger.json"
-    DRIVER_STUB_REPIN=ok
-    export DRIVER_STUB_REPIN
-    launches="$(selftest_resume_launches)"
-    drive --self-test || true
-    wait_phase_window_gone
-    sleep 0.3
-    if grep -q "resume auto-pin: (stub) would repin from \[$head\] to" "$LOG" \
-        && [ "$(selftest_resume_launches)" != "$launches" ]; then
-      echo "ok: an ancestor pin takes the auto-pin path once and resumes"
-    else
-      echo "FAIL: an ancestor pin did not take the auto-pin path"; fail=1
-    fi
-    unset DRIVER_STUB_REPIN
-    git -C "$REPO" checkout -q - 2>/dev/null || true
-  else
-    echo "FAIL: the fixture could not move HEAD for the ancestor-pin case"; fail=1
-  fi
-  rm -f "$run_dir/ledger.json"
-
-  # The fence: the halted reservation is renewed when it can be, and when it
-  # cannot, a free slot is taken. Both refusals stop the resume, because a launch
-  # with no fence would let a second machine own the phase.
-  selftest_resume_record "$phase" "$rel" "$run_dir" blocked 1
-  DRIVER_STUB_BOARD_FENCE=reserve
+    "0000000000000000000000000000000000000000" >"$other/ledger.json"
+  halt_record_write 100499 "$other_rel" "$other" blocked 1 rc
+  rm -f "$HALT" "$run_dir/ledger.json"
+  DRIVER_STUB_BOARD_FENCE=renew
   export DRIVER_STUB_BOARD_FENCE
   launches="$(selftest_resume_launches)"
-  drive --self-test || true
+  # Only the lines this attempt adds: the log is one file across the whole suite,
+  # so a stale refusal from an earlier case would satisfy a bare grep.
+  log_before="$(wc -l <"$LOG" 2>/dev/null || printf '0')"
+  resume_out="$( ( resume_cmd "$phase" ) 2>&1 )" || true
   wait_phase_window_gone
   sleep 0.3
-  if grep -q "halt-clear: phase $phase resume launched (stage .*reservation rsv-resume-stub gen 9)" "$LOG" \
-      && [ "$(selftest_resume_launches)" != "$launches" ]; then
-    echo "ok: a fence that cannot be renewed falls back to a fresh reservation"
+  if [ "$(selftest_resume_launches)" != "$launches" ] \
+      && tail -n "+$((log_before + 1))" "$LOG" 2>/dev/null \
+        | grep -q "halt-clear: phase $phase resume launched" \
+      && ! tail -n "+$((log_before + 1))" "$LOG" 2>/dev/null \
+        | grep -q 'HEAD does not descend from'; then
+    echo "ok: --resume N proves the named phase's ledger, not the record's"
   else
-    echo "FAIL: a renew failure did not fall back to a fresh reservation"; fail=1
+    echo "FAIL: --resume N read the record's run directory for the named phase"; fail=1
+    printf '      resume_cmd said: %s\n' "${resume_out:-<nothing>}"
   fi
-
-  selftest_resume_record "$phase" "$rel" "$run_dir" blocked 1
-  DRIVER_STUB_BOARD_FENCE=fail
-  export DRIVER_STUB_BOARD_FENCE
-  launches="$(selftest_resume_launches)"
-  drive --self-test || true
-  if grep -q 'refused both a renewal and a fresh reservation' "$LOG" \
-      && [ "$(selftest_resume_launches)" = "$launches" ]; then
-    echo "ok: no fence at all stops the resume"
-  else
-    echo "FAIL: a resume launched with no fence"; fail=1
-  fi
-
+  rm -rf "$other"
   # `--resume N` is the operator's half of the same feature: it resumes while the
   # line stays halted, so the marker it found must still be there afterwards.
   DRIVER_STUB_BOARD_FENCE=renew
@@ -230,45 +208,4 @@ selftest_case_resume() {
   DRIVER_STUB_COORDINATION="$old_coordination"
   if [ -n "$old_repin" ]; then DRIVER_STUB_REPIN="$old_repin"; else unset DRIVER_STUB_REPIN; fi
   export DRIVER_STUB_SLEEP DRIVER_STUB_BOARD_FENCE DRIVER_STUB_COORDINATION
-}
-
-selftest_case_abandon() {
-  local phase=100010 rel run_dir old_fence
-  rel="$(resume_phase_file_of "$phase")" || rel=""
-  run_dir="$(phase_run_dir "$phase" "$rel")"
-  old_fence="${DRIVER_STUB_BOARD_FENCE:-}"
-  DRIVER_STUB_BOARD_FENCE=renew
-  export DRIVER_STUB_BOARD_FENCE
-  wait_phase_window_gone
-  rm -f "$HALT" "$HALT_RECORD" "$CLAIM" "$run_dir/abandoned.json"
-
-  # A phase with no run directory is nothing to abandon. Parking it would hide
-  # work the queue never did and would never retry. A subshell, because
-  # `abandon_cmd` exits on refusal and that must not end the suite.
-  ( abandon_cmd 100499 ) >/dev/null 2>&1 || true
-  if [ ! -f "$(phase_run_dir 100499 "")/abandoned.json" ]; then
-    echo "ok: abandon refuses a phase with no run directory"
-  else
-    echo "FAIL: abandon wrote a residue for a phase that never ran"; fail=1
-  fi
-
-  # The residue is what the selector reads to skip and report the phase, and the
-  # record is what a resume would read: a parked phase must not resume, so the
-  # record goes and the run directory stays.
-  selftest_resume_record "$phase" "$rel" "$run_dir" blocked 1
-  ( abandon_cmd "$phase" --reason 'the work is no longer wanted' ) >/dev/null 2>&1 || true
-  if [ -f "$run_dir/abandoned.json" ] && [ ! -f "$HALT_RECORD" ] \
-      && [ ! -f "$CLAIM" ] && [ -d "$run_dir" ]; then
-    echo "ok: abandon writes the residue, releases the claim, and keeps the run directory"
-  else
-    echo "FAIL: abandon did not write the residue or clear the record"; fail=1
-  fi
-  if grep -q "abandoned phase $phase" "$LOG"; then
-    echo "ok: abandon says so in the driver log"
-  else
-    echo "FAIL: abandon wrote no driver log line"; fail=1
-  fi
-  rm -f "$run_dir/abandoned.json"
-  DRIVER_STUB_BOARD_FENCE="$old_fence"
-  export DRIVER_STUB_BOARD_FENCE
 }

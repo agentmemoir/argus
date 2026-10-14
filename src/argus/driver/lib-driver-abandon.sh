@@ -45,10 +45,11 @@ abandon_cmd() {   # <number> [--reason TEXT]
   fi
   state="$(phase_state "$number" "${rel:-}")"
 
-  local claim_number="" fence_id="" fence_gen="" tmp="$run_dir/abandoned.json.tmp.$$"
-  if [ -s "$CLAIM" ]; then
-    IFS=$'\t' read -r claim_number fence_id fence_gen <"$CLAIM" || true
-    if [ "$claim_number" != "$number" ]; then
+  local fence_id="" fence_gen="" tmp="$run_dir/abandoned.json.tmp.$$"
+  if claim_read_fields "$CLAIM"; then
+    fence_id="$CLAIM_ID"
+    fence_gen="$CLAIM_GEN"
+    if [ "$CLAIM_NUMBER" != "$number" ]; then
       fence_id=""; fence_gen=""
     fi
   fi

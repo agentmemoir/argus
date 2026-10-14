@@ -25,6 +25,7 @@ from argus.roadmap.evidence import (
 from argus.roadmap.group import resolve_group_or_none
 from argus.roadmap.index import audit
 from argus.roadmap.queue import candidates, gate_block, select_next
+from argus.roadmap.runstate import run_abandoned
 from argus.roadmap.select import _awaiting_review, _reservation_result, _select_group
 from argus.select.work_source import WorkSource, WorkSourceError
 
@@ -180,11 +181,13 @@ def select_server_phase(
         # recover its own claim and launch a phase glide refuses to start
         # without --fresh, so the tick exited 2 and the line halted on every
         # tick. The phase keeps its place in the queue, but it is not this
-        # tick's work. It is not consulted for a phase that is `done`, and it
-        # sits after the board's completion-inconsistency check below, so a
-        # board claiming "completed" with no evidence is still reported rather
-        # than quietly skipped.
-        ended = None if done else needs_decision(repo, number)
+        # tick's work. It is not consulted for a phase that is `done` and not
+        # parked, and it sits after the board's completion-inconsistency check
+        # below, so a board claiming "completed" with no evidence is still
+        # reported rather than quietly skipped. A parked phase is reported even
+        # when it is also done: the residue is the operator's own action.
+        parked = run_abandoned(repo, number)
+        ended = needs_decision(repo, number) if (not done or parked) else None
         if record is not None:
             status = record.get("status")
             # Finished on disk, and the board is not asserting a completion we

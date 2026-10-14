@@ -117,8 +117,24 @@ def test_ticked_box_still_closes_out_a_finished_run(repo: Path) -> None:
 def test_abandoned_phase_is_reported_rather_than_offered(repo: Path) -> None:
     number = 100050
     phase_file(repo, number)
-    write_json(run_dir(repo, number) / "abandoned.json", {"phase": f"{number:06d}"})
+    write_json(
+        run_dir(repo, number) / "abandoned.json",
+        {"version": 1, "phase": f"{number:06d}"},
+    )
     assert needs_decision(repo, number) == "abandoned"
+
+
+def test_an_invalid_abandoned_residue_does_not_park_the_phase(repo: Path) -> None:
+    # The residue is validated, not merely found: a torn file, or one that names
+    # another phase, must not take this phase out of the queue for ever.
+    for number, residue in (
+        (100051, {}),
+        (100052, {"phase": "100053"}),
+        (100053, {"version": 2, "phase": "100053"}),
+    ):
+        write_json(run_dir(repo, number) / "abandoned.json", residue)
+        assert runstate.run_abandoned(repo, number) is False
+        assert needs_decision(repo, number) is None
 
 
 def test_needs_decision_states_are_unchanged(repo: Path) -> None:

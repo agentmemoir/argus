@@ -146,11 +146,13 @@ for helper in \
   lib-driver-run.sh lib-driver-select.sh lib-driver-check.sh \
   lib-driver-drive.sh lib-driver-dryrun.sh lib-driver-select-flow.sh lib-driver-repair.sh \
   lib-driver-select-stub.sh lib-driver-select-real.sh lib-driver-launch.sh \
-  lib-driver-halt-record.sh lib-driver-resume.sh lib-driver-abandon.sh \
+  lib-driver-halt-record.sh lib-driver-ledger.sh lib-driver-fence.sh \
+  lib-driver-resume.sh lib-driver-abandon.sh \
   lib-selftest.sh lib-selftest-launch.sh lib-selftest-flow.sh \
   lib-selftest-unavailable.sh lib-selftest-reasons.sh lib-selftest-recovery.sh \
   lib-selftest-merge.sh lib-selftest-stranding.sh lib-selftest-group.sh \
-  lib-selftest-resume.sh \
+  lib-selftest-resume.sh lib-selftest-resume-guards.sh \
+  lib-selftest-abandon.sh \
   lib-selftest-fixture.sh selftest-support.sh; do
   if [ ! -r "$ARGUS_DIR/$helper" ]; then
     printf 'argus: cannot read %s: this driver is broken, not misconfigured\n' \
@@ -199,9 +201,14 @@ done
 . "$ARGUS_DIR/lib-driver-select-real.sh"
 # shellcheck disable=SC1091
 . "$ARGUS_DIR/lib-driver-launch.sh"
-# The halt record, the resume, and the abandon close-out.
+# The halt record, the ledger proof, the board fence, the resume, and the
+# abandon close-out.
 # shellcheck disable=SC1091
 . "$ARGUS_DIR/lib-driver-halt-record.sh"
+# shellcheck disable=SC1091
+. "$ARGUS_DIR/lib-driver-ledger.sh"
+# shellcheck disable=SC1091
+. "$ARGUS_DIR/lib-driver-fence.sh"
 # shellcheck disable=SC1091
 . "$ARGUS_DIR/lib-driver-resume.sh"
 # shellcheck disable=SC1091
@@ -227,6 +234,10 @@ done
 . "$ARGUS_DIR/lib-selftest-group.sh"
 # shellcheck disable=SC1091
 . "$ARGUS_DIR/lib-selftest-resume.sh"
+# shellcheck disable=SC1091
+. "$ARGUS_DIR/lib-selftest-resume-guards.sh"
+# shellcheck disable=SC1091
+. "$ARGUS_DIR/lib-selftest-abandon.sh"
 
 argus_init "${1:-}"
 

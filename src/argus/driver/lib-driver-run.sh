@@ -54,6 +54,27 @@ record_claim() {
   printf '%s\t%s\t%s\n' "$number" "$reservation_id" "$generation" >"$CLAIM"
 }
 
+# Read the claim fence into CLAIM_NUMBER, CLAIM_ID and CLAIM_GEN.
+#
+# The tab is split by hand rather than with `IFS=$'\t' read -r a b c`. A tab is
+# an IFS *whitespace* character, so an empty field between two tabs collapses and
+# every field after it shifts by one: a claim written with no fence would read
+# its generation as its reservation id, and a resume would renew a fence that is
+# not there. Returns non-zero when there is no claim to read.
+claim_read_fields() {   # <file>
+  CLAIM_NUMBER=""; CLAIM_ID=""; CLAIM_GEN=""
+  local line rest
+  [ -s "$1" ] || return 1
+  IFS= read -r line <"$1" || return 1
+  CLAIM_NUMBER="${line%%$'\t'*}"
+  rest="${line#*$'\t'}"
+  if [ "$rest" != "$line" ]; then
+    CLAIM_ID="${rest%%$'\t'*}"
+    CLAIM_GEN="${rest#*$'\t'}"
+  fi
+  return 0
+}
+
 # The pipeline input flags for one phase, as separate words.
 #
 # The names come from the configuration and the pipeline declaration, not from
