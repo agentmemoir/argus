@@ -154,3 +154,11 @@ def test_a_failed_run_pushes_nothing_and_never_halts(tmp_path: Path) -> None:
     assert not (tmp_path / "calls").exists()
     assert not (tmp_path / "halt").exists() and not (tmp_path / "pid").exists()
     assert "uncommitted edits" in " ".join(read(tmp_path, "notices"))
+
+
+def test_a_run_that_pushed_nothing_is_not_read_as_a_push(tmp_path: Path) -> None:
+    setup(tmp_path, {"ok": True, "action": "nothing-to-push"})
+    run(tmp_path, "run_repair_session 7-1 /t/task.md b")
+    log = " ".join(read(tmp_path, "log"))
+    assert "the run pushed nothing to b" in log
+    assert "pushed to b" not in log

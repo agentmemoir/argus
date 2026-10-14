@@ -6,6 +6,7 @@ import contextlib
 import json
 import re
 import time
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
 
@@ -109,11 +110,11 @@ def _failure_logs(ref: dict[str, Any], rows: list[dict[str, Any]]) -> str | None
             and (m := _RUN.search(str(row.get("link", ""))))
         }
     )
-    logs = [
-        text
-        for run in runs
-        if (text := gh_failed_run_log(run, ref["owner"], ref["repo"], ref["host"])[0])
-    ]
+    logs: list[str] = []
+    for run in runs:
+        text = gh_failed_run_log(run, ref["owner"], ref["repo"], ref["host"]).value
+        if text:
+            logs.append(text)
     return "\n".join(logs) if logs else None
 
 
@@ -126,45 +127,109 @@ def _task(url: str, branch: str, attempt: int, limit: int, names: list[str]) -> 
     )
 
 
+# How many days of hold reasons the counter keeps. Enough to see a trend; small
+# enough that the file stays a few lines.
+_HOLD_DAYS_KEPT = 30
+
+
+def _count_hold(root: Path, reason: str, now: float) -> None:
+    """Add one to today's count for ``reason``, so reads that fail can be counted.
+
+    The repair log already prints each hold with its reason; this keeps a tally
+    under the driver's state so a day's reasons can be read without grepping.
+    """
+    path = runs_dir(root) / setting("driver.state") / "repair" / "holds.json"
+    day = datetime.fromtimestamp(now, UTC).date().isoformat()
+    counts: dict[str, dict[str, int]] = {}
+    with contextlib.suppress(OSError, ValueError):
+        loaded: object = json.loads(path.read_text(encoding="utf-8"))
+        if isinstance(loaded, dict):
+            for day_key, value in cast("dict[object, object]", loaded).items():
+                if not isinstance(value, dict):
+                    continue
+                counts[str(day_key)] = {
+                    str(reason_key): count
+                    for reason_key, count in cast("dict[object, object]", value).items()
+                    if isinstance(count, int)
+                }
+    today = counts.setdefault(day, {})
+    today[reason] = today.get(reason, 0) + 1
+    for old in sorted(counts)[:-_HOLD_DAYS_KEPT]:
+        del counts[old]
+    with contextlib.suppress(OSError):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(counts, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def _waiting_hold(
+    root: Path,
+    path: Path,
+    record: dict[str, Any],
+    head: str | None,
+    now: float,
+    detail: str,
+) -> dict[str, Any] | None:
+    """A HOLD naming ``detail`` until ``repair.wait`` runs out, or ``None``.
+
+    ``head`` is the pull request head the wait is keyed to; a new head restarts
+    the wait. ``None`` means the head could not be read, so the wait already
+    running is kept rather than restarted on every failing read.
+    """
+    wait = setting("repair.wait")
+    since = record["waiting_since"]
+    if since is None or (head is not None and record["head"] != head):
+        since = now
+        record["waiting_since"] = since
+        if head is not None:
+            record["head"] = head
+        _save(path, record)
+    waited = int(now - since)
+    if wait <= 0 or waited >= wait:
+        return None
+    _count_hold(root, detail, now)
+    return {
+        "state": "HOLD",
+        "summary": f"repair HOLD: {detail} (waited {waited}s of {wait}s)",
+    }
+
+
 def _consider(
     root: Path, ref: dict[str, Any], branch: str, now: float
 ) -> dict[str, Any] | None:
     """One pull request's turn: hold the line, repair, give up, or nothing (``None``)."""
-    found, _why = gh_pull_request_head(
-        ref["number"], ref["owner"], ref["repo"], ref["host"]
-    )
-    if found is None or found[0] != "OPEN":
-        return None
-    state_head = found[1]
-    rows, why = gh_pull_request_checks(
-        ref["number"], ref["owner"], ref["repo"], ref["host"]
-    )
-    verdict, names = checks_verdict(rows)
     path, record = _record(root, ref["number"])
     url = f"{ref['owner']}/{ref['repo']}#{ref['number']}"
+    head = gh_pull_request_head(ref["number"], ref["owner"], ref["repo"], ref["host"])
+    if head.value is None:
+        # A failed head read must not read as "no change": hold and name it.
+        return _waiting_hold(
+            root,
+            path,
+            record,
+            None,
+            now,
+            f"could not read the pull request {url} ({head.why})",
+        )
+    found = head.value
+    if found[0] != "OPEN":
+        return None
+    state_head = found[1]
+    checks = gh_pull_request_checks(
+        ref["number"], ref["owner"], ref["repo"], ref["host"]
+    )
+    rows = checks.value
+    verdict, names = checks_verdict(rows)
     if verdict == "passing":
         path.unlink(missing_ok=True)
         return None
     if not rows or any(row.get("bucket") not in _SETTLED for row in rows):
-        wait = setting("repair.wait")
-        since = record["waiting_since"]
-        if record["head"] != state_head or since is None:
-            since = now
-            record.update(head=state_head, waiting_since=since)
-            _save(path, record)
-        waited = int(now - since)
-        if wait <= 0 or waited >= wait:
-            return None
         # A failed read names its reason as an exit code or a timeout, never gh's stderr text.
         detail = (
             f"checks on {url} are not finished"
             if rows
-            else f"could not read the checks on {url} ({why})"
+            else f"could not read the checks on {url} ({checks.why})"
         )
-        return {
-            "state": "HOLD",
-            "summary": f"repair HOLD: {detail} (waited {waited}s of {wait}s)",
-        }
+        return _waiting_hold(root, path, record, state_head, now, detail)
     limit = setting("repair.attempts")
     if record["attempts"] >= limit:
         first = not record["notified"]
@@ -213,8 +278,9 @@ def mode_repair(root: str | Path) -> dict[str, Any]:
 
     Only a pull request this machine published is looked at, newest first, one
     per pull request and no more than ``driver.merge-check-max`` of them. The
-    answer's ``state`` is ``REPAIR`` (a task is ready), ``HOLD`` (checks are still
-    running, so nothing new should start), ``EXHAUSTED``, ``BLOCKED`` or ``NONE``.
+    answer's ``state`` is ``REPAIR`` (a task is ready), ``HOLD`` (the checks are
+    still running or a read failed, so nothing new should start), ``EXHAUSTED``,
+    ``BLOCKED`` or ``NONE``.
     """
     root = Path(root).resolve()
     mine, cap, now = (

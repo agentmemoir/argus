@@ -50,3 +50,7 @@ been released yet.
 - `commands.reply-check` runs a host command on a draft reply before posting and refuses the reply when the command exits non-zero.
 - A repair hold on a failed checks read says the read could not be made and gives its exit code or timeout. It used to say the checks were not finished.
 - A checkpoint with nothing staged pushes what the branch already has. It used to run a commit that the pre-commit hooks refused, so the repair push was blocked.
+- A repair hold on a failed pull request head read names the read failure. It used to read as no change and start no repair.
+- Every gh read returns one `GhRead` (the answer, or `None` and why), so a call site names the reason instead of dropping it.
+- A checkpoint with nothing staged reports action `nothing-to-push`, and the repair shell logs that the run pushed nothing instead of reporting a push.
+- A repair hold records a per-day count of its reasons under the driver state.
