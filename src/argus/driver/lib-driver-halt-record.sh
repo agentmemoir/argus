@@ -51,9 +51,14 @@ halt_record_write() {   # <phase> <phase_file> <run_dir> <state> <rc> <source> [
     ""|*[!0-9-]*) rc="" ;;
   esac
   local tmp="$HALT_RECORD.tmp.$$"
+  # The rename is done in Python, not with `mv`. The installed-command test runs
+  # the driver with a PATH holding only the commands the configuration declares,
+  # and `mv` is not one of them.
   "$PYTHON" - "$tmp" "$1" "$2" "$3" "$4" "$rc" "$6" "${7:-}" "$marker" \
-    "$reservation_id" "$generation" "$(ts)" <<'PY'
-import json, sys
+    "$reservation_id" "$generation" "$(ts)" "$HALT_RECORD" <<'PY'
+import json, os, sys
+# argv[13] is the destination. The temp file is written beside it and replaced in
+# one step, so a reader never sees half a record.
 record = {
     "version": 1,
     "phase": sys.argv[2],
@@ -71,8 +76,8 @@ record = {
 with open(sys.argv[1], "w", encoding="utf-8") as handle:
     json.dump(record, handle, indent=2, sort_keys=True)
     handle.write("\n")
+os.replace(sys.argv[1], sys.argv[13])
 PY
-  mv -f "$tmp" "$HALT_RECORD"
 }
 
 # Read and validate the halt record into the HALT_REC_* globals.

@@ -278,7 +278,11 @@ sys.exit(2)
     renamed = item.with_name("work-100010-first.md")
     item.rename(renamed)
     shutil.rmtree(board / "artifacts")
+    # Both halt files: the marker and the record beside it. A tick resumes the
+    # phase the record names, so clearing only the marker no longer leaves a
+    # clean state for the dry run below.
     (runs / "state/halted").unlink()
+    (runs / "state/halted.json").unlink(missing_ok=True)
     result = run(
         ["argus", "--config", str(config), "--phase-glob", "work-*.md", "--dry-run"],
         base,

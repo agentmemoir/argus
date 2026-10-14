@@ -52,9 +52,13 @@ abandon_cmd() {   # <number> [--reason TEXT]
       fence_id=""; fence_gen=""
     fi
   fi
+  # The rename is done in Python, not with `mv`, for the same reason the halt
+  # record's is: the installed-command test declares the commands the driver may
+  # use, and `mv` is not one of them.
   "$PYTHON" - "$tmp" "$number" "$rel" "$run_dir" "$state" "$reason" \
-    "$fence_id" "$fence_gen" "$(ts)" <<'PY'
-import json, sys
+    "$fence_id" "$fence_gen" "$(ts)" "$run_dir/abandoned.json" <<'PY'
+import json, os, sys
+# argv[10] is the destination; the temp file beside it is replaced in one step.
 residue = {
     "version": 1,
     "phase": sys.argv[2],
@@ -69,8 +73,8 @@ residue = {
 with open(sys.argv[1], "w", encoding="utf-8") as handle:
     json.dump(residue, handle, indent=2, sort_keys=True)
     handle.write("\n")
+os.replace(sys.argv[1], sys.argv[10])
 PY
-  mv -f "$tmp" "$run_dir/abandoned.json"
 
   if [ -n "$fence_id" ] && [ -n "$fence_gen" ]; then
     case "${DRIVER_STUB_BOARD_FENCE:-}" in
