@@ -4,7 +4,6 @@
 
 import shutil
 import sys
-import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -66,10 +65,19 @@ def self_test_checks() -> list[dict[str, Any]]:
     # The hygiene fixture writes a `pre-receive` hook and git refuses to run it
     # from a `noexec` mount, so the fixture must live where the host runs a
     # script. A host whose default temporary directory is `noexec` would
-    # otherwise report the hook as broken when its mode is correct.
-    base = Path(
-        make_exec_dir() or tempfile.mkdtemp(prefix="phase-reservations-selftest-")
-    )
+    # otherwise report the hook as broken when its mode is correct. When no
+    # directory permits execution, record that rather than fall back to an
+    # unprobed one that reintroduces the same failure.
+    executable = make_exec_dir()
+    if not executable:
+        _self_test_check(
+            checks,
+            "board self-test needs temporary storage the host will execute",
+            False,
+            "no temporary directory on this host permits execution",
+        )
+        return checks
+    base = Path(executable)
     try:
         _remote, clients = _git_test_repo(base, "claims")
         # Each store owns a different real client checkout. The public side

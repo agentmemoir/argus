@@ -54,3 +54,4 @@ been released yet.
 - Every gh read returns one `GhRead` (the answer, or `None` and why), so a call site names the reason instead of dropping it.
 - A checkpoint with nothing staged reports action `nothing-to-push`, and the repair shell logs that the run pushed nothing instead of reporting a push.
 - A repair hold records a per-day count of its reasons under the driver state.
+- The self-tests and executable test stubs build their fixtures in a directory the host is proved to run, so a machine whose temporary storage is mounted `noexec` no longer reports a hook or stub CLI as broken when its mode is correct. The board, group, and sync self-tests record a refusal instead of falling back to an unprobed directory; the issue-tick, notify, and issue-driver stubs, and the fault harness's scratch, use the shared probed directory; and `make noexecscan` fails a new test that creates its own temp directory or marks a file executable without that helper.

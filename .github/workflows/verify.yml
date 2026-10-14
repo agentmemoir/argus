@@ -36,6 +36,40 @@ jobs:
         run: make typecheck-strict
       - name: Check the line limit
         run: make lines
+      - name: Check the noexec rule
+        run: make noexecscan
+
+  noexec:
+    name: noexec temporary storage
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+      - name: Install the project
+        run: uv sync --frozen
+      - name: Install tmux
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq tmux
+      # The affected checks must pass when the storage they create files in
+      # cannot execute them, so the default temp directory and /dev/shm are both
+      # noexec. argus.exec_tempdir then falls back to a probed directory in the
+      # checkout, which is the case a hardened host gives.
+      - name: Mount temporary storage noexec
+        run: |
+          sudo mkdir -p /mnt/noexec
+          sudo mount -t tmpfs -o noexec,nosuid,nodev,mode=1777 tmpfs /mnt/noexec
+          sudo mount -t tmpfs -o noexec,nosuid,nodev,mode=1777 tmpfs /dev/shm
+      - name: Noexec rule and affected checks
+        env:
+          TMPDIR: /mnt/noexec
+        run: |
+          make noexecscan
+          uv run pytest -q tests/test_exec_tempdir.py tests/test_issue_tick.py tests/test_notify_target.py tests/test_issue_driver.py
+          uv run python -m argus.board.cli --self-test
+          uv run python -m argus.issues.selftest
+          uv run python -m argus.select.group --self-test
+          uv run python -m argus.gitsync.main --self-test
 
   self-test:
     name: self-test

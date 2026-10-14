@@ -61,6 +61,9 @@ class _Checkout:
 @contextlib.contextmanager
 def _detached_worktree(private: Path, ref: str) -> Generator[_Checkout, None, None]:
     """Yield a disposable checkout without taking the phase branch."""
+    # A worktree parent holds the checkout's files; git never runs a file from it
+    # (hooks come from the repository's own hooksPath, not this folder), so this
+    # path needs no execution probe. `sweep_stale_worktrees` owns its cleanup.
     parent = Path(tempfile.mkdtemp(prefix=WORKTREE_PREFIX))
     checkout = _Checkout(private, parent, parent / "checkout")
     rc, _, err = _git(private, "worktree", "add", "--detach", str(checkout.path), ref)
