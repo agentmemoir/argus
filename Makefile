@@ -17,7 +17,7 @@ LINE_LIMIT := 350
 LINE_EXEMPT :=
 
 .PHONY: install sync lint fmt fmt-check typecheck typecheck-strict lines check dry-run example-check \
-        self-test identifiers leakscan guard-faults wheel install-check
+        self-test identifiers leakscan noexecscan guard-faults wheel install-check
 install:
 	install -d "$(DESTDIR)$(BINDIR)"
 	ln -sf "$(CURDIR)/bin/argus" "$(DESTDIR)$(BINDIR)/argus"
@@ -103,6 +103,13 @@ identifiers:
 # run them.
 leakscan:
 	$(RUN) pytest -q tests/test_no_host_leak.py tests/test_leak_patterns.py
+
+# The noexec rule: a hook or stub CLI must run from a directory the host proved
+# it executes, never a bare temp directory or a `tmp_path` file marked
+# executable. The test is the rulebook; this target is how a push check and CI
+# run it.
+noexecscan:
+	$(RUN) pytest -q tests/test_noexec_policy.py
 
 guard-faults:
 	$(RUN) python tests/guard_faults.py

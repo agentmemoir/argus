@@ -80,7 +80,7 @@ def tmux_dir() -> Iterator[Path]:
 
 
 @pytest.fixture
-def backlog(tmp_path: Path) -> Path:
+def backlog(tmp_path: Path, exec_dir: Path) -> Path:
     """A public checkout, a private board checkout, a fake gh and a config."""
     root, board = tmp_path / "root", tmp_path / "root" / "board"
     checkout(tmp_path / "pub.git", root, {"a.txt": "one\n"})
@@ -97,7 +97,7 @@ def backlog(tmp_path: Path) -> Path:
         },
     )
     gh = fake_gh(tmp_path, [issue(100001)])
-    stub = tmp_path / "glide"
+    stub = exec_dir / "glide"
     stub.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
     stub.chmod(0o755)
     (tmp_path / "machine.id").write_text(MACHINE + "\n", encoding="utf-8")

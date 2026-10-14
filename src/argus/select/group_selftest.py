@@ -107,7 +107,19 @@ def _self_test_group_claim(checks: list[dict[str, Any]]) -> None:
     from argus.board.reservations import SELF_TEST_BRANCH, _git_test_repo
     from argus.exec_tempdir import make_exec_dir
 
-    base = Path(make_exec_dir() or tempfile.mkdtemp(prefix="phase-group-selftest-"))
+    # The fixture's git hooks must run, so it needs storage the host executes;
+    # when none permits it, record that rather than fall back to an unprobed dir
+    # that reintroduces the same failure.
+    executable = make_exec_dir()
+    if not executable:
+        _check(
+            checks,
+            "group self-test needs temporary storage the host will execute",
+            False,
+            "no temporary directory on this host permits execution",
+        )
+        return
+    base = Path(executable)
     try:
         root = base / "root"
         root.mkdir()

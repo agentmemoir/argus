@@ -15,7 +15,12 @@ from argus.notify.notifications import format_notification
 DRIVER = Path(__file__).resolve().parents[1] / "src/argus/driver"
 
 
-def shell(tmp_path: Path, body: str, selection: dict[str, object]) -> str:
+def shell(
+    tmp_path: Path,
+    body: str,
+    selection: dict[str, object],
+    extra_env: dict[str, str] | None = None,
+) -> str:
     fixture = tmp_path / "selection.json"
     fixture.write_text(json.dumps(selection), encoding="utf-8")
     script = "\n".join(
@@ -62,6 +67,7 @@ _drive_stub_selection() {
             "TEST_DRIVER": str(DRIVER),
             "TEST_ROOT": str(tmp_path),
             "TEST_PYTHON": sys.executable,
+            **(extra_env or {}),
         },
         stdin=subprocess.DEVNULL,
         capture_output=True,
@@ -230,8 +236,10 @@ report_issue_selection "$(cat "$TEST_ROOT/selection.json")"
     assert (line in log, notice in output) == (bool(failure), bool(failure))
 
 
-def test_issue_escalation_records_the_receipt_and_keeps_kind(tmp_path: Path) -> None:
-    recorder = tmp_path / "recorder"
+def test_issue_escalation_records_the_receipt_and_keeps_kind(
+    tmp_path: Path, exec_dir: Path
+) -> None:
+    recorder = exec_dir / "recorder"
     recorder.write_text(
         '#!/bin/sh\nprintf "%s\\n" "$@" >"$TEST_ROOT/argv.txt"\n', encoding="utf-8"
     )
@@ -240,7 +248,7 @@ def test_issue_escalation_records_the_receipt_and_keeps_kind(tmp_path: Path) -> 
         tmp_path,
         """
 . "$TEST_DRIVER/lib-driver-run.sh"
-PYTHON="$TEST_ROOT/recorder"
+PYTHON="$RECORDER"
 work_kind=issue
 CLIO_RESERVATION_ID=rsv-fixture; CLIO_RESERVATION_GENERATION=2
 gitsync_clean() { printf 'CLEAN:%s\\n' "$1"; }
@@ -249,6 +257,7 @@ notify_phase() { printf 'NOTICE:%s:%s\\n' "$1" "$2"; }
 handle_escalation 23 tasks/issue-000023-fixture.md
 """,
         {},
+        {"RECORDER": str(recorder)},
     )
     argv = (tmp_path / "argv.txt").read_text(encoding="utf-8").splitlines()
     assert argv[1:] == [

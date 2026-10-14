@@ -3,11 +3,11 @@
 """The self-test entry point and the delegated checks it collects."""
 
 import json
-import tempfile
 from pathlib import Path
 from typing import Any
 
 from argus import conventions
+from argus.exec_tempdir import make_exec_dir
 from argus.gitsync.modes import result_exit_code
 from argus.gitsync.selftest_branch import (
     _phase_branch_checks,
@@ -68,7 +68,19 @@ def self_test_checks() -> list[dict[str, Any]]:
 def _self_test_checks() -> list[dict[str, Any]]:
     """Stubbed-remote checks. Pure: temp dirs only, no repo state touched."""
     checks: list[dict[str, Any]] = []
-    base = Path(tempfile.mkdtemp(prefix="gitsync-selftest-"))
+    # The stubbed remotes carry hooks and fixtures git runs, so the base must be
+    # storage the host executes; when none permits it, record that rather than
+    # fall back to a directory that refuses.
+    executable = make_exec_dir()
+    if not executable:
+        _check(
+            checks,
+            "sync self-test needs temporary storage the host will execute",
+            False,
+            "no temporary directory on this host permits execution",
+        )
+        return checks
+    base = Path(executable)
 
     _sync_one_checks(base, checks)
     _sync_refuse_checks(base, checks)

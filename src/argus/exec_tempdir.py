@@ -24,10 +24,19 @@ One rule, one place. Both suites call `exec_tempdir()` rather than each picking 
 directory, because a second copy is a second chance to get it wrong. A host with
 nowhere that permits execution skips with the reason, rather than reporting a
 handful of failures about permissions that are correct.
+
+Do not merge the two ways a probe can fail. A directory that refuses execution
+and a probe that could not be run at all are different answers, and reading them
+alike is a bug that has come back more than once. Only a `PermissionError`
+raised while starting the probe is a refusal; a write that failed or a run that
+timed out is **unprobed**. `can_execute` answers `False` for both on purpose,
+because its callers only decide whether to try the next candidate;
+`refuses_execution` is the only function that may claim a refusal.
 """
 
 from __future__ import annotations
 
+import enum
 import os
 import shutil
 import subprocess
@@ -97,6 +106,61 @@ class _OwnedDirectory:
         return self.name
 
 
+class _ProbeOutcome(enum.Enum):
+    """What running a probe executable in a directory showed about that directory.
+
+    A three-valued enum, rather than two booleans or loose string flags, so each
+    answer is named once and a caller cannot read an unprobed result as a refusal
+    by accident.
+    """
+
+    #: The filesystem started the probe and it exited cleanly.
+    RUNS = "runs"
+    #: The kernel refused to start the probe. A mount with `noexec` gives this.
+    #: It is the only answer that proves the directory itself refuses execution.
+    REFUSED = "refused"
+    #: The probe could not be run for another reason: it could not be written,
+    #: the run timed out, or the run reported another error. Nothing is known
+    #: about the directory, so this must never be read as a refusal.
+    UNPROBED = "unprobed"
+
+
+def _run_probe(directory: str) -> _ProbeOutcome:
+    """Write a probe executable into `directory`, run it, and classify the result.
+
+    Keep the two failures apart: a directory the kernel refuses to run a file in,
+    and a probe that could not be run at all. Only the first is proof that the
+    directory refuses execution; the second is a failure to find out, and reading
+    it as a refusal turns a skip into a false answer.
+    """
+    probe = os.path.join(directory, "_probe.sh")
+    try:
+        with open(probe, "w", encoding="utf-8") as handle:
+            handle.write("#!/bin/sh\nexit 0\n")
+        os.chmod(probe, 0o755)
+    except OSError:
+        # A probe that could not be written was never run, so this says nothing
+        # about execution. It is UNPROBED, never REFUSED.
+        return _ProbeOutcome.UNPROBED
+    try:
+        done = subprocess.run(
+            [probe], capture_output=True, text=True, timeout=10, check=False
+        )  # noqa: S603
+    except PermissionError:
+        # Only a PermissionError raised while *starting* the probe is a refusal:
+        # the kernel rejected the exec, which is what a `noexec` mount gives. A
+        # timeout or any other OSError means the probe could not be run.
+        return _ProbeOutcome.REFUSED
+    except (OSError, subprocess.SubprocessError):
+        return _ProbeOutcome.UNPROBED
+    finally:
+        try:
+            os.remove(probe)
+        except OSError:
+            pass
+    return _ProbeOutcome.RUNS if done.returncode == 0 else _ProbeOutcome.UNPROBED
+
+
 def can_execute(directory: str) -> bool:
     """Return True when an executable file in `directory` can actually be run.
 
@@ -107,27 +171,24 @@ def can_execute(directory: str) -> bool:
 
     Every failure answers False rather than raising, because the caller's decision
     is to try the next candidate, and a directory it cannot even write a probe
-    into is a directory it cannot vouch for.
+    into is a directory it cannot vouch for. False therefore covers both a
+    directory that refuses execution and a probe that could not be run; a caller
+    that needs the first claim alone asks `refuses_execution` instead.
     """
-    probe = os.path.join(directory, "_probe.sh")
-    try:
-        with open(probe, "w", encoding="utf-8") as handle:
-            handle.write("#!/bin/sh\nexit 0\n")
-        os.chmod(probe, 0o755)
-    except OSError:
-        return False
-    try:
-        done = subprocess.run(
-            [probe], capture_output=True, text=True, timeout=10, check=False
-        )  # noqa: S603
-    except (OSError, subprocess.SubprocessError):
-        return False
-    finally:
-        try:
-            os.remove(probe)
-        except OSError:
-            pass
-    return done.returncode == 0
+    return _run_probe(directory) is _ProbeOutcome.RUNS
+
+
+def refuses_execution(directory: str) -> bool:
+    """Return True when the filesystem itself refuses to run a file in `directory`.
+
+    `can_execute` answers the same False for a mount that refuses execution and
+    for a probe that failed transiently — a write it could not make, a run that
+    timed out. A caller that needs the stronger claim, that the kernel really
+    refused, asks this instead. Only a permission refusal from the kernel counts;
+    a probe that could not be run proves nothing either way, so it answers False.
+    This is the only place a refusal is claimed.
+    """
+    return _run_probe(directory) is _ProbeOutcome.REFUSED
 
 
 def _executable_candidates(

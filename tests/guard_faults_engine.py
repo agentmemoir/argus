@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from argus.config.schema import SHELL_VARS
+from argus.exec_tempdir import make_exec_dir
 
 DRIVER = Path("src/argus/driver/phase-driver.sh")
 
@@ -168,25 +169,37 @@ def run_selftest(
         if check == "issue_guards"
         else ["bash", str(driver), "--self-test"]
     )
-    with (
-        tempfile.TemporaryDirectory(prefix="ag-") as scratch,
-        tempfile.TemporaryDirectory(prefix="ag-tmux-", dir=_short_tmp_parent()) as tmux,
-    ):
-        env = _isolated_env(scratch, tmux)
-        if cases:
-            env["SELFTEST_CASES"] = cases
-        try:
-            proc = subprocess.run(
-                command,
-                cwd=repo,
-                env=env,
-                capture_output=True,
-                text=True,
-                timeout=SELFTEST_TIMEOUT,
-            )
-        finally:
-            _kill_isolated_tmux(env)
-    return proc.stdout.splitlines() + proc.stderr.splitlines(), proc.returncode
+    # The self-test under test writes its own stubs and hooks into TMPDIR, which
+    # `_isolated_env` points inside this scratch, so the scratch must be storage
+    # the host executes. When none permits it, say so rather than hand the
+    # self-test a directory that refuses and misreport every fault.
+    scratch = make_exec_dir()
+    if not scratch:
+        return (
+            ["fault harness: no temporary directory on this host runs files"],
+            2,
+        )
+    try:
+        with tempfile.TemporaryDirectory(
+            prefix="ag-tmux-", dir=_short_tmp_parent()
+        ) as tmux:
+            env = _isolated_env(scratch, tmux)
+            if cases:
+                env["SELFTEST_CASES"] = cases
+            try:
+                proc = subprocess.run(
+                    command,
+                    cwd=repo,
+                    env=env,
+                    capture_output=True,
+                    text=True,
+                    timeout=SELFTEST_TIMEOUT,
+                )
+            finally:
+                _kill_isolated_tmux(env)
+        return proc.stdout.splitlines() + proc.stderr.splitlines(), proc.returncode
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
 
 
 def judge(lines: list[str], rc: int, fault: dict[str, Any]) -> tuple[bool, str]:
