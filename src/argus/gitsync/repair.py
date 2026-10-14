@@ -136,7 +136,7 @@ def _consider(
     if found is None or found[0] != "OPEN":
         return None
     state_head = found[1]
-    rows, _why = gh_pull_request_checks(
+    rows, why = gh_pull_request_checks(
         ref["number"], ref["owner"], ref["repo"], ref["host"]
     )
     verdict, names = checks_verdict(rows)
@@ -155,9 +155,15 @@ def _consider(
         waited = int(now - since)
         if wait <= 0 or waited >= wait:
             return None
+        # A failed read names its reason as an exit code or a timeout, never gh's stderr text.
+        detail = (
+            f"checks on {url} are not finished"
+            if rows
+            else f"could not read the checks on {url} ({why})"
+        )
         return {
             "state": "HOLD",
-            "summary": f"repair HOLD: checks on {url} are not finished (waited {waited}s of {wait}s)",
+            "summary": f"repair HOLD: {detail} (waited {waited}s of {wait}s)",
         }
     limit = setting("repair.attempts")
     if record["attempts"] >= limit:

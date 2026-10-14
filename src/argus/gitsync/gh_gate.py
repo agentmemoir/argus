@@ -76,9 +76,11 @@ def gh_pull_request_checks(
     """The checks on a pull request's current head, or ``None`` and why not.
 
     Each row carries ``name``, ``link`` (the job's page) and ``bucket`` (``pass``,
-    ``fail``, ``pending``, ``skipping`` or ``cancel``). The exit status is not read: gh exits 1 for a
-    failing check and 8 for a running one, with the rows printed either way. A
-    pull request with no checks prints no rows, and reads as unanswered here.
+    ``fail``, ``pending``, ``skipping`` or ``cancel``). gh exits 1 for a failing
+    check and 8 for a running one, with the rows printed either way, so the rows
+    decide the answer. The exit status is given as the reason only when no rows
+    were printed. A pull request with no checks prints no rows, and reads as
+    unanswered here.
     """
     done, why = _gh(
         ["pr", "checks", str(int(number)), "--json", "name,bucket,link"]
@@ -87,7 +89,11 @@ def gh_pull_request_checks(
     if done is None:
         return None, why
     rows = _json_list(done)
-    return (rows, "") if rows else (None, "gh reported no checks")
+    if rows is None:
+        return None, f"gh printed no check list (exit {done.returncode})"
+    if not rows:
+        return None, "gh reported no checks"
+    return rows, ""
 
 
 def gh_pull_request_comment_bodies(

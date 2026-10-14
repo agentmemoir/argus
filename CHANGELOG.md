@@ -48,3 +48,5 @@ been released yet.
 - The recorded pull request snapshot is bound to its pull request, held under a run-folder lock, and written through a unique temp file.
 - The driver log for a pull request signal read that failed names the JSON answer file.
 - `commands.reply-check` runs a host command on a draft reply before posting and refuses the reply when the command exits non-zero.
+- A repair hold on a failed checks read says the read could not be made and gives its exit code or timeout. It used to say the checks were not finished.
+- A checkpoint with nothing staged pushes what the branch already has. It used to run a commit that the pre-commit hooks refused, so the repair push was blocked.
