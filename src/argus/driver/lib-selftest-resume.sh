@@ -49,6 +49,9 @@ selftest_case_resume() {
   DRIVER_STUB_COORDINATION=resume
   unset DRIVER_STUB_REPIN
   export DRIVER_STUB_SLEEP DRIVER_STUB_BOARD_FENCE DRIVER_STUB_COORDINATION
+  # The previous case's phase window may still be closing, and a live window
+  # makes the tick skip rather than resume. Wait for it before the first check.
+  wait_phase_window_gone
   rm -f "$HALT" "$run_dir/ledger.json"
 
   # A record whose run is not blocked must not resume. This is the class the
@@ -84,15 +87,20 @@ selftest_case_resume() {
   # and consumes the record. A ledger with no pins is the case where nothing has
   # to be proven about the tree.
   selftest_resume_record "$phase" "$rel" "$run_dir" blocked 1
+  launches="$(selftest_resume_launches)"
   drive --self-test || true
   wait_phase_window_gone
   sleep 0.3
   if grep -q "halt-clear: phase $phase resume launched" "$LOG" \
-      && grep -q "launched phase $phase" "$LOG" \
+      && [ "$(selftest_resume_launches)" != "$launches" ] \
       && [ ! -f "$HALT_RECORD" ] && [ ! -f "$HALT" ]; then
     echo "ok: a blocked record resumes, launches, and is consumed"
   else
     echo "FAIL: a blocked record did not resume and consume its record"; fail=1
+    printf '      DRIVE_RC=[%s] marker=[%s] record=[%s]\n' "${_DRIVE_RC:-}" \
+      "$([ -f "$HALT" ] && echo present || echo absent)" \
+      "$([ -f "$HALT_RECORD" ] && echo present || echo absent)"
+    { grep -n 'resume\|halt\|window is running\|orphan' "$LOG" 2>/dev/null | tail -6 | sed 's/^/      /'; } || true
   fi
 
   # The run is not archived: a resume continues the state `--fresh` would throw

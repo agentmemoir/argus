@@ -284,6 +284,7 @@ def test_dry_run_names_an_available_issue(tmp_path: Path) -> None:
         tmp_path,
         """
 HALT="$TEST_ROOT/halted"
+HALT_RECORD="$TEST_ROOT/halted.json"
 tmux_phase_window_alive() { return 1; }
 work_preflight() { return 0; }
 coordination_select() { cat "$TEST_ROOT/selection.json"; }
