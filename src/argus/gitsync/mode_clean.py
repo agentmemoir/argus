@@ -147,11 +147,12 @@ def mode_checkpoint(root: str | Path) -> dict[str, Any]:
         return blocked(info, f"could not stage the checkout: {err or out}")
     # Ask git first. With nothing staged, the pre-commit hook refused the commit
     # with its own text, and git's "nothing to commit" never appeared. So an
-    # empty stage must not reach the commit.
+    # empty stage must not reach the commit, and it is named for what it is: a
+    # run that pushed nothing, which the repair shell reads as a failed attempt.
     rc, out, err = git(root, "diff", "--cached", "--quiet")
     if rc not in (0, 1):
         return blocked(info, f"could not read the staged changes: {err or out}")
-    action = "pushed"
+    action = "nothing-to-push"
     if rc == 1:
         rc, out, err = git(
             root, "commit", "-q", "-m", f"checkpoint: work in progress on {branch}"

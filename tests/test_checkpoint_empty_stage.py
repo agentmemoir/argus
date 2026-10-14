@@ -61,7 +61,7 @@ def test_nothing_staged_pushes_without_a_commit(
     calls = _spy_git(monkeypatch, {"commit": (1, "", HOOK_REFUSAL)})
     result = mode_checkpoint(pub)
     assert result["ok"] is True
-    assert result["action"] == "pushed"
+    assert result["action"] == "nothing-to-push"
     assert not [c for c in calls if c[:1] == ("commit",)]
 
 
