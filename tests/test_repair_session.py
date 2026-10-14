@@ -4,16 +4,17 @@
 
 import json
 import os
-import stat
 import subprocess
 from pathlib import Path
 
 DRIVER = Path(__file__).resolve().parents[1] / "src/argus/driver"
+# The glide stand-in runs from the repository, never from temporary storage.
+GLIDE_STUB = Path(__file__).resolve().parent / "fixtures" / "fake_glide.sh"
 
 PRELUDE = """\
 set -euo pipefail
 export PYTHON=python3 REPO="$FAKE/repo" RUN_DIR="$FAKE/state" LOG="$FAKE/log" DRY_RUN=0
-export ARGUS="$FAKE/argus" REPAIR_PIPELINE="$FAKE/repair.yaml" CMD_GLIDE="$FAKE/glide"
+export ARGUS="$FAKE/argus" REPAIR_PIPELINE="$FAKE/repair.yaml"
 export CMD_GIT=git PIDFILE="$FAKE/pid" HALT="$FAKE/halt" DRIVER_STUB_COORDINATION=
 ARGUS_CONFIG_ARGS=(--config c.jsonc)
 mkdir -p "$RUN_DIR" "$REPO"
@@ -36,13 +37,6 @@ answer = here / "answer.json"
 sys.stdout.write(answer.read_text() if answer.exists() else "")
 """
 
-# A glide that exits with the code in `glide-rc` and records its arguments.
-GLIDE = """\
-#!/bin/sh
-echo "$@" >"$(dirname "$0")/glide-args"
-exit "$(cat "$(dirname "$0")/glide-rc")"
-"""
-
 
 def setup(tmp_path: Path, answer: dict[str, object] | None, glide_rc: int = 0) -> None:
     main = tmp_path / "argus" / "gitsync" / "main.py"
@@ -50,14 +44,16 @@ def setup(tmp_path: Path, answer: dict[str, object] | None, glide_rc: int = 0) -
     main.write_text(MAIN)
     if answer is not None:
         (tmp_path / "answer.json").write_text(json.dumps(answer))
-    glide = tmp_path / "glide"
-    glide.write_text(GLIDE)
-    glide.chmod(glide.stat().st_mode | stat.S_IXUSR)
     (tmp_path / "glide-rc").write_text(str(glide_rc))
 
 
 def run(tmp_path: Path, script: str, **env: str) -> int:
-    base = {"FAKE": str(tmp_path), "DRIVER": str(DRIVER), "PATH": os.environ["PATH"]}
+    base = {
+        "FAKE": str(tmp_path),
+        "DRIVER": str(DRIVER),
+        "PATH": os.environ["PATH"],
+        "CMD_GLIDE": str(GLIDE_STUB),
+    }
     done = subprocess.run(["bash", "-c", PRELUDE + script], env=base | env, check=False)
     return done.returncode
 
