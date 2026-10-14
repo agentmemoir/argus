@@ -5,7 +5,30 @@
 # The dry-run half of a tick.
 #
 _drive_dry_run() {
-    [ -f "$HALT" ] && { log "dry-run: halted; would refuse to advance"; { _DRIVE_RC=0; return 0; }; }
+    if [ -f "$HALT" ]; then
+      log "dry-run: halted; would refuse to advance"
+      if [ -f "$HALT_RECORD" ] && halt_record_read "$HALT_RECORD"; then
+        log "dry-run: halt record for phase $HALT_REC_PHASE (state ${HALT_REC_STATE:-unknown}) present"
+      fi
+      { _DRIVE_RC=0; return 0; }
+    fi
+    # A record with no marker is the whole point of this feature, so the dry run
+    # says what the tick would do with it and says nothing about launching the
+    # next phase: that is the answer an operator used to get, and it was wrong.
+    if [ -f "$HALT_RECORD" ]; then
+      local record_reason=""
+      if halt_record_read "$HALT_RECORD"; then
+        record_reason="$(resume_gate_reason "$HALT_REC_STATE" "$HALT_REC_RUN_DIR")" || true
+        if [ -z "$record_reason" ]; then
+          log "dry-run: halt record for phase $HALT_REC_PHASE (state ${HALT_REC_STATE:-unknown}) present; would resume it"
+        else
+          log "dry-run: would refuse the resume (state ${HALT_REC_STATE:-unknown} is not blocked) and re-halt"
+        fi
+      else
+        log "dry-run: halt record $HALT_RECORD is malformed; would re-halt"
+      fi
+      { _DRIVE_RC=0; return 0; }
+    fi
     tmux_phase_window_alive 2>/dev/null \
       && { log "dry-run: phase window is running; would skip"; { _DRIVE_RC=0; return 0; }; }
     local selection selection_rc=0 state unknown_state

@@ -64,6 +64,22 @@ _drive() {
   fi
 
 
+  # The fence is empty until a path fills it in. Every branch that reaches the
+  # launch must set both, because `set -u` makes a missing one fatal and an
+  # empty one silently drops the child's ownership fence. Declared above the
+  # resume branch because a resume fills them too, through `_drive_resume`.
+  local out rc=0 number rel reservation_id="" reservation_generation=""
+  local selection selection_rc=0 selection_state unknown_state
+
+  # A cleared marker with a record beside it is a resume, and it wins over a due
+  # repair: the operator cleared the halt on purpose, and a repair can wait one
+  # tick. `_drive_resume` does the whole resume, including the launch.
+  if [ ! -f "$HALT" ] && [ -f "$HALT_RECORD" ]; then
+    RESUME_FROM_TICK=1
+    _drive_resume
+    return $?
+  fi
+
   # A pull request this machine published whose checks finished red gets one
   # repair run before any new work, and one whose checks are still running holds
   # the tick. Nothing has been claimed yet, so ending here costs nothing.
@@ -71,11 +87,6 @@ _drive() {
     return 0
   fi
 
-  # The fence is empty until a path fills it in. Every branch that reaches the
-  # launch must set both, because `set -u` makes a missing one fatal and an
-  # empty one silently drops the child's ownership fence.
-  local out rc=0 number rel reservation_id="" reservation_generation=""
-  local selection selection_rc=0 selection_state unknown_state
   # Everything that can refuse a launch because of how this machine is
   # configured is asked here, above the selector. Below this point the tick holds
   # a claim on the shared board, and a claim is not something the line can give

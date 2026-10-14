@@ -288,6 +288,10 @@ argus_init() {
     RUN_DIR="$DRIVER_RUN_DIR"
     LOCK="$RUN_DIR/driver.lock"
     HALT="$RUN_DIR/halted"
+    # The halt's own record, written beside the marker at the run-end halt and
+    # read by a resume. It outlives the marker: clearing the marker resumes the
+    # recorded phase at its stage instead of advancing the queue.
+    HALT_RECORD="$RUN_DIR/halted.json"
     STALL="$RUN_DIR/stalled"
     CURRENT="$RUN_DIR/current"
     PIDFILE="$RUN_DIR/pid"

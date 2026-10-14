@@ -14,6 +14,8 @@
 #   phase-driver.sh --self-test                  # hermetic guard/halt/notify test
 #   phase-driver.sh --stop                       # stop the live run (halt + Ctrl-C)
 #   phase-driver.sh --release                    # stop the live run and give its group back
+#   phase-driver.sh --resume [<N>]               # resume the halted phase at its stage
+#   phase-driver.sh abandon <N> [--reason TEXT]  # park a phase that will not resume
 #   phase-driver.sh --session <N> <phase-file>   # one phase, run inside tmux
 #
 # The server reserves the selected phase in the private coordination branch
@@ -65,6 +67,8 @@
 #   DRIVER_STUB_RC=<n>    skip glide; pretend it exited with rc <n>
 #   DRIVER_STUB_SLEEP=<s> how long the stub "works" (default 2)
 #   DRIVER_RUN_DIR=<dir>  isolate runtime state (used by --self-test)
+#   DRIVER_STUB_BOARD_FENCE=<renew|reserve|fail>  the resume's board fence
+#   DRIVER_STUB_REPIN=<ok|fail>  the resume's ledger auto-pin decision
 set -euo pipefail
 
 # Parse the mode flags before reading the configuration file. The four layout
@@ -86,6 +90,8 @@ while [ "$#" -gt 0 ]; do
     --help|-h)
       echo 'usage: argus [--config FILE] [--driver phase] [--repo-root PATH] [--roadmap-dir PATH] [--phase-glob GLOB] [--dry-run|--check|--self-test|--stop|--release]'
       echo '       argus --session NUMBER PHASE_FILE'
+      echo '       argus --resume [NUMBER]'
+      echo '       argus abandon NUMBER [--reason TEXT]'
       echo 'A tick reads one configuration file: --config FILE, or ./config.json when it is there.'
       echo 'The file names every value the tick uses, including the pipeline and the board checkout;'
       echo 'config.sample.jsonc is the schema, and no value has a default. --self-test needs no file.'
@@ -140,9 +146,11 @@ for helper in \
   lib-driver-run.sh lib-driver-select.sh lib-driver-check.sh \
   lib-driver-drive.sh lib-driver-dryrun.sh lib-driver-select-flow.sh lib-driver-repair.sh \
   lib-driver-select-stub.sh lib-driver-select-real.sh lib-driver-launch.sh \
+  lib-driver-halt-record.sh lib-driver-resume.sh lib-driver-abandon.sh \
   lib-selftest.sh lib-selftest-launch.sh lib-selftest-flow.sh \
   lib-selftest-unavailable.sh lib-selftest-reasons.sh lib-selftest-recovery.sh \
   lib-selftest-merge.sh lib-selftest-stranding.sh lib-selftest-group.sh \
+  lib-selftest-resume.sh \
   lib-selftest-fixture.sh selftest-support.sh; do
   if [ ! -r "$ARGUS_DIR/$helper" ]; then
     printf 'argus: cannot read %s: this driver is broken, not misconfigured\n' \
@@ -191,6 +199,13 @@ done
 . "$ARGUS_DIR/lib-driver-select-real.sh"
 # shellcheck disable=SC1091
 . "$ARGUS_DIR/lib-driver-launch.sh"
+# The halt record, the resume, and the abandon close-out.
+# shellcheck disable=SC1091
+. "$ARGUS_DIR/lib-driver-halt-record.sh"
+# shellcheck disable=SC1091
+. "$ARGUS_DIR/lib-driver-resume.sh"
+# shellcheck disable=SC1091
+. "$ARGUS_DIR/lib-driver-abandon.sh"
 # The self-test and its case stages.
 # shellcheck disable=SC1091
 . "$ARGUS_DIR/lib-selftest.sh"
@@ -210,6 +225,8 @@ done
 . "$ARGUS_DIR/lib-selftest-stranding.sh"
 # shellcheck disable=SC1091
 . "$ARGUS_DIR/lib-selftest-group.sh"
+# shellcheck disable=SC1091
+. "$ARGUS_DIR/lib-selftest-resume.sh"
 
 argus_init "${1:-}"
 
@@ -249,6 +266,16 @@ case "${1:-}" in
     [ "$#" -eq 4 ] || { echo "usage: phase-driver.sh --repair-session <id> <task-file> <branch>" >&2; exit 2; }
     run_repair_session "$2" "$3" "$4"
     ;;
+  --resume)
+    shift
+    [ "$#" -le 1 ] || { echo "usage: phase-driver.sh --resume [NUMBER]" >&2; exit 2; }
+    resume_cmd "${1:-}"
+    ;;
+  abandon)
+    [ "$#" -ge 2 ] || { echo "usage: phase-driver.sh abandon <NUMBER> [--reason TEXT]" >&2; exit 2; }
+    shift
+    abandon_cmd "$@"
+    ;;
   --check)     check ;;
   --self-test) driver_self_test ;;
   --stop)      stop ;;
@@ -256,7 +283,7 @@ case "${1:-}" in
   --dry-run)   DRY_RUN=1; drive ;;
   ""|--drive)  drive ;;
   *)
-    echo "usage: phase-driver.sh [--dry-run|--check|--self-test|--stop|--release] | --session <N> <phase-file>" >&2
+    echo "usage: phase-driver.sh [--dry-run|--check|--self-test|--stop|--release] | --resume [<N>] | abandon <N> [--reason TEXT] | --session <N> <phase-file>" >&2
     exit 2
     ;;
 esac

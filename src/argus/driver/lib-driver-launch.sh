@@ -18,6 +18,10 @@ _drive_launch() {
   [ -z "${DRIVER_STUB_READY_FILE:-}" ] || envs="$envs DRIVER_STUB_READY_FILE='$DRIVER_STUB_READY_FILE'"
   [ -z "$reservation_id" ] || envs="$envs CLIO_RESERVATION_ID='$reservation_id'"
   [ -z "$reservation_generation" ] || envs="$envs CLIO_RESERVATION_GENERATION='$reservation_generation'"
+  # A resume tells the child not to archive the run it is continuing; the child
+  # re-checks the resume gate itself, because the state can move between here and
+  # the launch.
+  [ "${RESUME_MODE:-0}" != 1 ] || envs="$envs CLIO_RESUME='1'"
   local self_quoted number_quoted rel_quoted config_arg="" quoted setting
   if [ "${work_kind:-phase}" = issue ]; then
     printf -v quoted '%q' "$ARGUS_CONFIG_FILE"
