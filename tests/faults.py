@@ -218,4 +218,59 @@ FAULTS = (
         "expect": None,
         "expect_absent": "driver self-test: pass",
     },
+    {
+        "name": "resume-gate-accepts-a-finished-run",
+        "breaks": "a resume continues a run that already finished, which is the "
+        "class the queue used to advance past",
+        "file": "src/argus/driver/lib-driver-halt-record.sh",
+        "find": "    completed)\n"
+        "      printf 'the run is completed; clear the halt marker to let the queue advance' ;;\n",
+        "replace": "    completed)\n      return 0 ;;\n",
+        "check": "driver",
+        "cases": "resume",
+        "verdict": "driver self-test:",
+        "expect": "a completed record did not refuse and keep the record",
+    },
+    {
+        "name": "resume-record-consumed-before-the-launch",
+        "breaks": "a refused resume consumes the record, so the halt it is standing "
+        "on can no longer be retried",
+        "file": "src/argus/driver/lib-driver-resume.sh",
+        "find": '  local target="$requested" run_dir reason\n  RESUME_REFUSAL=""\n',
+        "replace": '  local target="$requested" run_dir reason\n'
+        '  RESUME_REFUSAL=""\n'
+        '  rm -f "$HALT_RECORD"  # FAULT: consumed before the launch\n',
+        "check": "driver",
+        "cases": "resume",
+        "verdict": "driver self-test:",
+        "expect": "a malformed record did not refuse and keep the record",
+    },
+    {
+        "name": "resume-not-run-on-a-cleared-marker",
+        "breaks": "clearing the halt marker advances the queue instead of resuming "
+        "the recorded phase",
+        "file": "src/argus/driver/lib-driver-drive.sh",
+        "find": '  if [ ! -f "$HALT" ] && [ -f "$HALT_RECORD" ]; then\n'
+        "    RESUME_FROM_TICK=1\n"
+        "    _drive_resume\n"
+        "    return $?\n"
+        "  fi\n",
+        "replace": "  true  # FAULT: a cleared halt no longer resumes\n",
+        "check": "driver",
+        "cases": "resume",
+        "verdict": "driver self-test:",
+        "expect": "a blocked record did not resume and consume its record",
+    },
+    {
+        "name": "resume-archives-the-run-it-continues",
+        "breaks": "a resume restarts the run with --fresh, throwing away the stage "
+        "state the resume exists to keep",
+        "file": "src/argus/driver/lib-driver-run.sh",
+        "find": '      if [ "${CLIO_RESUME:-}" = 1 ]; then\n',
+        "replace": '      if [ "${CLIO_RESUME:-}" = 0 ]; then\n',
+        "check": "driver",
+        "cases": "resume",
+        "verdict": "driver self-test:",
+        "expect": "a resume restarted the run with --fresh",
+    },
 ) + ISSUE_FAULTS
