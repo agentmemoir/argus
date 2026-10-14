@@ -20,6 +20,7 @@ from typing import Any, cast
 
 from argus import conventions
 from argus.conventions import phase_run_dir
+from argus.roadmap.runstate import run_abandoned, run_unfinished
 from argus.select.policy import is_runnable_phase
 from argus.select.work_source import WorkSourceError
 
@@ -119,7 +120,7 @@ NEEDS_DECISION_RUN_STATES = frozenset({"rejected", "remedy_escalated"})
 
 
 def needs_decision(repo: str | Path, number: int) -> str | None:
-    """The run state when this phase ended needing a person's decision.
+    """Why this phase ended needing a person's decision, if it did.
 
     Args:
         repo: The project root.
@@ -127,8 +128,12 @@ def needs_decision(repo: str | Path, number: int) -> str | None:
 
     Returns:
         The terminal run state when it is one the selector must not offer,
-        otherwise ``None``.
+        ``"abandoned"`` when a person has parked the phase, otherwise ``None``.
     """
+    # The residue is checked first: it is the operator's own action, and it must
+    # not be hidden by a run state the selector would otherwise offer.
+    if run_abandoned(repo, number):
+        return "abandoned"
     rj = run_dir(repo, number) / "run.json"
     try:
         state = json.loads(rj.read_text())
@@ -282,9 +287,13 @@ def is_done(
     finalize log, so the remedy approver and finalize never ran and the line
     moved on with nothing reporting an error.
 
-    So the box counts only once the pipeline has run the phase. That keeps the
-    operator close-out for a phase the pipeline rejected or blocked, which is
-    what a hand tick is for, and refuses it for a phase nothing ever ran.
+    So the box counts only once the pipeline has run the phase, and only while
+    that run is not one that stopped somewhere it can still continue from. That
+    keeps the operator close-out for a phase the pipeline finished, and refuses
+    it for a phase nothing ever ran. It also refuses it for a phase the line
+    halted: a hand tick there let a cleared halt marker advance the queue past
+    the halted phase instead of resuming it. `argus abandon` is the supported
+    close-out for a phase that will not resume.
 
     It is deliberately *not* corroborated by the ledger, the receipt or the
     finalize log. Each of those already completes a phase on its own below, so
@@ -293,7 +302,11 @@ def is_done(
     """
     if (
         run_completed(repo, number, path)
-        or (file_approved(path) and phase_attempted(repo, number, path))
+        or (
+            file_approved(path)
+            and phase_attempted(repo, number, path)
+            and not run_unfinished(repo, number, path)
+        )
         or publication_receipt_done(repo, number, path)
     ):
         return True

@@ -89,7 +89,7 @@ self-test:
 	$(RUN) python -m argus.select.group --self-test
 	$(RUN) python -m argus.gitsync.main --self-test
 	$(RUN) python -m argus.issues.selftest
-	$(RUN) pytest -q tests/test_config_issues.py tests/test_config_overlay.py tests/test_issue_board.py tests/test_issue_driver.py tests/test_issue_tick.py tests/test_idle_watcher.py tests/test_group_gate_hook.py tests/test_idle_tick_log.py tests/test_repair_session.py tests/test_repair_checks_read.py tests/test_checkpoint_empty_stage.py tests/test_notify_target.py tests/test_issues_*.py tests/test_issue_publication*.py
+	$(RUN) pytest -q tests/test_config_issues.py tests/test_config_overlay.py tests/test_issue_board.py tests/test_issue_driver.py tests/test_issue_tick.py tests/test_idle_watcher.py tests/test_group_gate_hook.py tests/test_idle_tick_log.py tests/test_repair_session.py tests/test_repair_checks_read.py tests/test_checkpoint_empty_stage.py tests/test_notify_target.py tests/test_selection_blocked.py tests/test_issues_*.py tests/test_issue_publication*.py
 
 # The published folder must carry no identifier: no home path, no numeric
 # account or channel id, and no notification default or literal that is not a
