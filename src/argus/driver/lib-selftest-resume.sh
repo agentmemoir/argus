@@ -166,6 +166,13 @@ selftest_case_resume() {
   # Only the lines this attempt adds: the log is one file across the whole suite,
   # so a stale refusal from an earlier case would satisfy a bare grep.
   log_before="$(wc -l <"$LOG" 2>/dev/null || printf '0')"
+  # The `_drive` calls above took the driver lock in this shell, and a command
+  # substitution inherits it. `driver_lock_take` opens its own file description,
+  # so on a host with `flock` the inherited lock is a live second holder and the
+  # resume refuses with no message. Release this shell's copy first; the next
+  # `_drive` reopens it. A host without `flock` never takes it, so this line is
+  # what makes the case mean the same thing on Linux and on macOS.
+  exec 9>&- 2>/dev/null || true
   resume_out="$( ( resume_cmd "$phase" ) 2>&1 )" || true
   wait_phase_window_gone
   sleep 0.3
@@ -189,6 +196,7 @@ selftest_case_resume() {
   launches="$(selftest_resume_launches)"
   # A subshell: `resume_cmd` exits on refusal, and that exit must not end the
   # suite with cases still to run. Its output is kept so a failure can say why.
+  exec 9>&- 2>/dev/null || true
   resume_out="$( ( resume_cmd "$phase" ) 2>&1 )" || true
   wait_phase_window_gone
   sleep 0.3

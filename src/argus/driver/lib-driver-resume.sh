@@ -205,12 +205,12 @@ resume_cmd() {   # [<number>]
   # The same prologue the tick runs, in the same order. `--resume` enters the
   # launch path without running a tick, so without this a second `--resume`, or a
   # resume racing an orphaned run's live pid, could launch the phase twice.
-  driver_lock_take || exit 1
+  driver_lock_take || { printf 'argus: another driver instance holds the lock; try again\n' >&2; exit 1; }
   if tmux_busy; then
     printf 'argus: a %s window is already running; stop it first\n' "${work_kind:-phase}" >&2
     exit 1
   fi
-  driver_orphan_check || exit 1
+  driver_orphan_check || { printf 'argus: a phase run is alive with no window (orphaned); the line is halted\n' >&2; exit 1; }
   if [ -z "$requested" ] && [ ! -f "$HALT_RECORD" ]; then
     printf 'argus: no halt record at %s; nothing to resume\n' "$HALT_RECORD" >&2
     exit 1
