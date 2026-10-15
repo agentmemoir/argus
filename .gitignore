@@ -9,3 +9,4 @@ target/
 !.gitignore
 !.vscode
 !.github
+!.gitattributes
