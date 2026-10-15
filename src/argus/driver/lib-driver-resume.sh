@@ -38,10 +38,23 @@ PY
 # proof was taken. A resume proves the pins against HEAD and then must not move
 # it, so only the branch half runs here. A refusal is fail-closed: a launch onto
 # the integration branch would put unreviewed product code where others pull it.
+#
+# Every member of a group publishes on the group's one branch, and a resume has
+# no selection to read the group from: the tick's resume branch runs before the
+# selector, and `--resume` never selects at all. The group comes from the phase's
+# own document, which is where the publication reads it, so the branch step below
+# names the branch the rest of the group's joins expect instead of stacking a
+# branch of this member's own. A declaration that cannot be read is refused
+# rather than read as "runs alone": a resume that cannot see the group would cut
+# exactly the wrong branch.
 _drive_resume_branch() {   # <number> <rel>
   local number="$1" rel="$2" roadmap_name
   if [ -n "${DRIVER_STUB_COORDINATION:-}" ]; then
     return 0
+  fi
+  if [ "${work_kind:-phase}" != issue ] && ! group_take_declared "$number"; then
+    RESUME_REFUSAL="the reservation group of phase $number could not be read"
+    return 1
   fi
   roadmap_name="$(basename "$rel" .md)"
   if ! "$PYTHON" "$ARGUS/gitsync/main.py" "${ARGUS_CONFIG_ARGS[@]}" --root "$REPO" \
@@ -155,16 +168,6 @@ _drive_resume() {   # [<number>]
       resume_refuse "$target" "the run moved on since the halt: $reason"
       return 1
     }
-  fi
-
-  # Every member of a group publishes on the group's one branch, and a resume has
-  # no selection to read the group from: the tick's resume branch runs before the
-  # selector, and `--resume` never selects at all. The phase's own document
-  # declares the group, so the branch step below names the branch the rest of the
-  # group's joins expect instead of stacking a branch of this member's own.
-  if [ "${work_kind:-phase}" != issue ] && ! group_take_declared "$number"; then
-    resume_refuse "$target" "the reservation group of phase $number could not be read"
-    return 1
   fi
 
   # The branch is cut before the ledger proof, because the proof proves the pins
