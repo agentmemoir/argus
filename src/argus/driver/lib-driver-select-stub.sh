@@ -36,8 +36,6 @@ _drive_stub_selection() {
         # must not be stopped by the unmerged one, or the merged one is stranded.
         selection="$(printf '{"state":"WAIT_FOR_CLAIM","phase":"%s","path":"%s","owner":"%s","status":"claimed","reservation_id":"rsv-stale-old","generation":"7","awaiting_review":[{"phase":"100010","branch":"feature/review-merged","pull_request":"https://example/pr/1"},{"phase":"100011","branch":"feature/review-open","pull_request":"https://example/pr/2"}]}' \
           "$stub_phase" "$stub_path" "$PHASE_MACHINE_ID")"
-        confirm_pending_reviews "$selection"
-        [ "$PENDING_PUBLISHED" -eq 0 ] || log "self-test: $PENDING_PUBLISHED phase(s) moved to published; recomputing the selection"
       fi
       if [ "${DRIVER_STUB_COORDINATION:-}" = "awaiting" ]; then
         # A selector that still stops on an open pull request. The driver and

@@ -47,11 +47,6 @@ _drive() {
 
   mkdir -p "$RUN_DIR"
 
-  if [ -f "$HALT" ]; then
-    log_changed halted "halted ($(tr '\n' ' ' <"$HALT")); refusing to advance"
-    return 0
-  fi
-
   if command -v flock >/dev/null 2>&1; then
     exec 9>"$LOCK"
     flock -n 9 || { log "another driver instance holds the lock; skip"; return 1; }
@@ -60,15 +55,33 @@ _drive() {
   # The tick is the renewer of the claim this machine holds. The board measures a
   # claim from its newest heartbeat once work has begun, so a claim nobody renews
   # expires under a live run and another machine may take the work away.
-  claim_renew
-
   if tmux_busy; then
+    claim_renew
     check_stall
     log "${work_kind:-phase} window is running; skip"
     return 0
   fi
 
   driver_orphan_check || return 0
+
+  # Publication is maintenance of finished work. It never selects or reserves
+  # work, and a halt holds launches while these receipts and group gates settle.
+  reconcile_pending_reviews || return 1
+  if [ -f "$HALT" ]; then
+    log_changed halted "halted ($(tr '\n' ' ' <"$HALT")); no new work"
+    return 0
+  fi
+  [ "${1:-}" != --merge-check-only ] || return 0
+  if [ "$PENDING_PUBLISHED" -gt 0 ] || [ "$PENDING_READY" -gt 0 ]; then
+    return 0
+  fi
+  # A manual stop needs an explicit resume or release. Clearing the line's halt
+  # alone must not feed the stopped claim back into recover-own-claim.
+  if [ -s "$RUN_DIR/stopped-claim" ]; then
+    log_changed stopped "a manually stopped claim waits for --resume or --release; no new work"
+    return 0
+  fi
+  claim_renew
 
   # No live phase: clear per-session state a hard kill may have left behind.
   rm -f "$CURRENT" "$STALL"
@@ -272,6 +285,13 @@ drive() {
 stop() {
   mkdir -p "$RUN_DIR"
   printf 'stopped by operator at %s\n' "$(ts)" >"$HALT"
+  local stopped_phase=""
+  # A stale current file alone has no recoverable claim. Holding it would
+  # strand an idle stop, because neither resume nor release could consume it.
+  if claim_read_fields "$CLAIM" && [ -n "$CLAIM_ID" ] && [ -n "$CLAIM_GEN" ]; then
+    stopped_phase="$CLAIM_NUMBER"
+  fi
+  [ -z "$stopped_phase" ] || printf '%s\n' "$stopped_phase" >"$RUN_DIR/stopped-claim"
   # Ctrl-C must reach the phase window. Targeting the session would send it to
   # whichever window is current, which may be the idle status display.
   if tmux_phase_window_alive; then
@@ -337,6 +357,7 @@ release() {
         log "release: returned the group for ${work_kind:-phase} $number to the queue"
       fi
       rm -f "$CLAIM"
+      rm -f "$RUN_DIR/stopped-claim"
       issue_announce "$number" released
     else
       rc=$?

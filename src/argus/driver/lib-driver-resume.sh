@@ -193,9 +193,19 @@ _drive_resume() {   # [<number>]
   local record_identity
   record_identity="$(halt_record_identity "$HALT_RECORD")"
 
+  # Consume the accepted manual stop before launch. A new stop written while
+  # the child starts must survive; removing it after launch would erase it.
+  local stopped_claim=""
+  if [ "$(cat "$RUN_DIR/stopped-claim" 2>/dev/null)" = "$number" ]; then
+    stopped_claim="$number"
+    rm -f "$RUN_DIR/stopped-claim"
+  fi
   RESUME_MODE=1
   _drive_launch
   if [ "${_DRIVE_RC:-0}" != 0 ]; then
+    if [ -n "$stopped_claim" ] && [ ! -f "$RUN_DIR/stopped-claim" ]; then
+      printf '%s\n' "$stopped_claim" >"$RUN_DIR/stopped-claim"
+    fi
     # No window opened, so the record is kept for a retry and the marker goes
     # back. Without the marker the tick-on-clear branch fires again on every tick,
     # which is the automatic retry the plan rules out. The launch already
@@ -220,6 +230,9 @@ _drive_resume() {   # [<number>]
 # stays halted. Exits 0 after the launch, without waiting for the run.
 resume_cmd() {   # [<number>]
   local requested="${1:-}"
+  if [ -z "$requested" ] && [ ! -f "$HALT_RECORD" ] && [ -s "$RUN_DIR/stopped-claim" ]; then
+    requested="$(cat "$RUN_DIR/stopped-claim")"
+  fi
   case "$requested" in
     "") ;;
     *[!0-9]*)

@@ -179,6 +179,7 @@ PROBE
 confirm_pending_reviews() {
   local phase branch pr rc=0 state checked=0 cap
   PENDING_PUBLISHED=0
+  PENDING_READY=0
   MERGE_CHECK_HEALTH="ok"
   GATED_PULL_REQUESTS=""
   # Bounded, because each phase costs a gh call and possibly a fetch, and a

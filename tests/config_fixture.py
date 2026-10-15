@@ -9,7 +9,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from argus.config import cli as cfgmod
+import argus.config.cli as cfgmod
 
 HERE = Path(__file__).resolve().parent
 SAMPLE = HERE.parent / "config.sample.jsonc"

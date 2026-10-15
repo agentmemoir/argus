@@ -77,27 +77,27 @@ def test_a_suppressed_repeat_still_touches_the_log(tmp_path: Path) -> None:
     assert time.time() - log.stat().st_mtime < 60
 
 
-def test_an_empty_queue_runs_the_merge_check_and_is_not_a_refusal(
+def test_an_empty_queue_is_not_a_refusal_or_a_second_merge_check(
     tmp_path: Path,
 ) -> None:
     answer = '{"state": "NO_PHASE", "awaiting_review": [{"phase": "100926"}]}'
     fake_sync(tmp_path)
     run(tmp_path, SELECTION, ANSWER=answer, RC="1")
     assert (tmp_path / "result").read_text().strip() == "state=NO_PHASE drive_rc=none"
-    assert "100926" in (tmp_path / "merge-check").read_text()
+    assert not (tmp_path / "merge-check").exists()
     assert "unavailable" not in "".join(log_lines(tmp_path))
 
 
-def test_an_empty_queue_after_the_merge_check_is_not_a_refusal(
+def test_selection_does_not_repeat_completed_maintenance(
     tmp_path: Path,
 ) -> None:
     answer = '{"state": "NO_PHASE", "awaiting_review": [{"phase": "100926"}]}'
     fake_sync(tmp_path)
-    # The merge check records a merged phase, so the selection is asked again.
+    # Publication is settled before this function; selection must not repeat it.
     recorded = SELECTION.replace("PENDING_PUBLISHED=0; }", "PENDING_PUBLISHED=1; }")
     run(tmp_path, recorded, ANSWER=answer, RC="1")
     assert (tmp_path / "result").read_text().strip() == "state=NO_PHASE drive_rc=none"
-    assert "recomputing the selection" in "".join(log_lines(tmp_path))
+    assert not (tmp_path / "merge-check").exists()
     assert "unavailable" not in "".join(log_lines(tmp_path))
 
 

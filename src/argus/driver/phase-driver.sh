@@ -11,6 +11,7 @@
 #
 #   phase-driver.sh [--dry-run]                  # cron entrypoint
 #   phase-driver.sh --check                      # report environment readiness
+#   phase-driver.sh --merge-check-only           # settle publication without new work
 #   phase-driver.sh --self-test                  # hermetic guard/halt/notify test
 #   phase-driver.sh --stop                       # stop the live run (halt + Ctrl-C)
 #   phase-driver.sh --release                    # stop the live run and give its group back
@@ -22,7 +23,7 @@
 # before tmux starts. A coordination fetch/push failure is fail-closed.
 #
 # Cron runs the driver every few minutes. It does nothing while a phase is
-# running or while the line is halted; otherwise it starts the lowest
+# running; while halted it settles publication only. Otherwise it starts the lowest
 # uncompleted phase in the tmux session named below. A phase that ends
 # blocked/rejected/errored, OR that is stopped by a signal (Ctrl-C / tmux
 # kill-session), writes a halt marker and stops the line until the operator
@@ -88,13 +89,16 @@ while [ "$#" -gt 0 ]; do
       esac
       shift 2 ;;
     --help|-h)
-      echo 'usage: argus [--config FILE] [--driver phase] [--repo-root PATH] [--roadmap-dir PATH] [--phase-glob GLOB] [--dry-run|--check|--self-test|--stop|--release]'
+      echo 'usage: argus [--config FILE] [--driver phase] [--repo-root PATH] [--roadmap-dir PATH] [--phase-glob GLOB] [--dry-run|--check|--merge-check-only|--self-test|--stop|--release]'
       echo '       argus --session NUMBER PHASE_FILE'
       echo '       argus --resume [NUMBER]'
       echo '       argus abandon NUMBER [--reason TEXT]'
       echo 'A tick reads one configuration file: --config FILE, or ./config.json when it is there.'
       echo 'The file names every value the tick uses, including the pipeline and the board checkout;'
       echo 'config.sample.jsonc is the schema, and no value has a default. --self-test needs no file.'
+      echo '--merge-check-only settles phase merges and group readiness without selecting or launching work.'
+      echo 'Maintenance waits while a phase window or an orphaned phase process is active.'
+      echo '--stop holds a claim for explicit --resume or --release; --resume keeps the line halted.'
       exit 0 ;;
     *) MODE_ARGS+=("$1"); shift ;;
   esac
@@ -145,7 +149,7 @@ for helper in \
   lib-driver-config.sh lib-driver-log.sh lib-driver-notify.sh \
   lib-driver-run.sh lib-driver-select.sh lib-driver-check.sh \
   lib-driver-drive.sh lib-driver-dryrun.sh lib-driver-select-flow.sh lib-driver-repair.sh \
-  lib-driver-select-stub.sh lib-driver-select-real.sh lib-driver-launch.sh \
+  lib-driver-select-stub.sh lib-driver-select-real.sh lib-driver-maintenance.sh lib-driver-launch.sh \
   lib-driver-halt-record.sh lib-driver-ledger.sh lib-driver-fence.sh \
   lib-driver-resume.sh lib-driver-abandon.sh \
   lib-selftest.sh lib-selftest-launch.sh lib-selftest-flow.sh \
@@ -179,6 +183,7 @@ done
 # The work selector, reservation results, and the merge check.
 # shellcheck disable=SC1091
 . "$ARGUS_DIR/lib-driver-select.sh"
+. "$ARGUS_DIR/lib-driver-maintenance.sh"
 # The reservation group: its member array, its one branch, and its renewal.
 # shellcheck disable=SC1091
 . "$ARGUS_DIR/lib-driver-group.sh"
@@ -288,13 +293,14 @@ case "${1:-}" in
     abandon_cmd "$@"
     ;;
   --check)     check ;;
+  --merge-check-only) drive --merge-check-only ;;
   --self-test) driver_self_test ;;
   --stop)      stop ;;
   --release)   release ;;
   --dry-run)   DRY_RUN=1; drive ;;
   ""|--drive)  drive ;;
   *)
-    echo "usage: phase-driver.sh [--dry-run|--check|--self-test|--stop|--release] | --resume [<N>] | abandon <N> [--reason TEXT] | --session <N> <phase-file>" >&2
+    echo "usage: phase-driver.sh [--dry-run|--check|--merge-check-only|--self-test|--stop|--release] | --resume [<N>] | abandon <N> [--reason TEXT] | --session <N> <phase-file>" >&2
     exit 2
     ;;
 esac

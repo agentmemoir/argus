@@ -217,6 +217,12 @@ gate_group_pull_request() {
   out="$RUN_DIR/group-gate-$phase.json"
   "$PYTHON" "$ARGUS/gitsync/main.py" "${ARGUS_CONFIG_ARGS[@]}" --root "$REPO" \
     --mode gate --phase "$phase" >"$out" 2>"$out.err" || true
+  # `ready` is present only on the tick that performs the transition. An
+  # already-ready group returns READY without it, so later ticks may launch.
+  if [ "$(selection_value ready <"$out")" != "" ] \
+      && [ "$(selection_value state <"$out")" = READY ]; then
+    PENDING_READY=$((PENDING_READY + 1))
+  fi
   [ "$(selection_value state <"$out")" != NO-GROUP ] || return 0
   summary="$(selection_value summary <"$out")"
   [ -n "$summary" ] || summary="no answer (see $out.err)"
