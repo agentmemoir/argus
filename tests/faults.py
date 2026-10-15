@@ -197,8 +197,10 @@ FAULTS = (
             "expires a live run's claim and another machine may take the "
             "work",
             "file": "src/argus/driver/lib-driver-drive.sh",
-            "find": "  claim_renew\n",
-            "replace": "  true  # FAULT: the claim is never renewed\n",
+            "find": "  if tmux_busy; then\n    claim_renew\n    check_stall\n",
+            "replace": "  if tmux_busy; then\n"
+            "    true  # FAULT: the running claim is never renewed\n"
+            "    check_stall\n",
             "check": "driver",
             "cases": "group_run",
             "verdict": "driver self-test:",

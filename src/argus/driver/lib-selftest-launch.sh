@@ -286,9 +286,20 @@ selftest_case_locks_stall() {
     *) echo "FAIL: halt title not set, got '$(title_of)'"; fail=1 ;;
   esac
 
+  # Maintenance may run behind a halt; the claim, phase branches and launch
+  # count must stay put. Diagnostic wording is not a launch oracle.
+  local halted_claim_before halted_refs_before halted_starts_before
+  halted_claim_before="$(cat "$CLAIM" 2>/dev/null || true)"
+  halted_refs_before="$(git -C "$REPO" for-each-ref --format='%(refname):%(objectname)' refs/heads)"
+  halted_starts_before="$(grep -c 'Phase .* started\.' "$LOG" || true)"
   drive --self-test || true
-  grep -q "refusing to advance" "$LOG" \
-    && echo "ok: refuses to advance while halted" || { echo "FAIL: advanced while halted"; fail=1; }
+  if [ "$halted_claim_before" = "$(cat "$CLAIM" 2>/dev/null || true)" ] \
+      && [ "$halted_refs_before" = "$(git -C "$REPO" for-each-ref --format='%(refname):%(objectname)' refs/heads)" ] \
+      && [ "$halted_starts_before" = "$(grep -c 'Phase .* started\.' "$LOG" || true)" ]; then
+    echo "ok: halted tick kept the claim and branches without starting work"
+  else
+    echo "FAIL: halted tick changed the claim or branches, or started work"; fail=1
+  fi
   tmux_window_exists \
     && { echo "FAIL: opened a phase window while halted"; fail=1; } \
     || echo "ok: no phase window opened while halted"
