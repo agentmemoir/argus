@@ -126,7 +126,7 @@ def mode_checkpoint(root: str | Path, paths: list[str] | None = None) -> dict[st
     Returns a result dict; ok is the success flag.
     """
     root = Path(root).resolve()
-    info = {"repo": str(root)}
+    info: dict[str, Any] = {"repo": str(root)}
     if not is_git_repo(root):
         return dict(
             info, ok=True, action="checkpoint-skipped", hint="not a git working tree"
