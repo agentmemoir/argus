@@ -48,6 +48,16 @@ RESUME_FAULTS = (
         "expect": "the ledger proof ran before the branch step",
     },
     {
+        "name": "resume-group-not-read",
+        "breaks": "a resumed member of a reservation group cuts a branch of its own",
+        "file": "src/argus/driver/lib-driver-resume.sh",
+        "find": '  if [ "${work_kind:-phase}" != issue ] && ! group_take_declared "$number"; then\n',
+        "replace": "  if false; then  # FAULT: the resume runs without the group\n",
+        "cases": "group_resume",  # selftest_case_group_resume
+        "verdict": "driver self-test:",
+        "expect": "the resume cut a branch of its own for the group member",
+    },
+    {
         "name": "resume-fence-reply-not-parsed",
         "breaks": "the fence parser drops the piped reply",
         "file": "src/argus/driver/lib-driver-fence.sh",

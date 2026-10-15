@@ -259,3 +259,143 @@ selftest_case_resume() {
   if [ -n "$old_repin" ]; then DRIVER_STUB_REPIN="$old_repin"; else unset DRIVER_STUB_REPIN; fi
   export DRIVER_STUB_SLEEP DRIVER_STUB_BOARD_FENCE DRIVER_STUB_COORDINATION
 }
+
+selftest_case_group_resume() {
+  # A resume has no selection to read the group from, and it still has to land on
+  # the group's one branch: the tick's resume branch runs before the selector,
+  # and `--resume` never selects at all. Without the group the branch step names
+  # a branch from this member alone, so the member's receipt lands on a branch
+  # none of the group's joins know and a second branch carrying the group's
+  # commits is left on the remote.
+  local group_root="$tmp/group-resume-root" group_base="$tmp/group-resume-base"
+  local group_config="$tmp/group-resume-config.json"
+  local group_branch="feature/group-cache-warm" member_branch="feature/cache-read"
+  local rel="" run_dir="" head="" rc=0
+  local old_repo="${REPO:-}" old_board_dir="${BOARD_DIR:-}" old_wf="${WF:-}"
+  local old_argus="${ARGUS:-}" old_notifier="${NOTIFIER:-}"
+  local old_run_dir="${RUN_DIR:-}" old_lock="${LOCK:-}" old_halt="${HALT:-}"
+  local old_stall="${STALL:-}" old_current="${CURRENT:-}" old_pid="${PIDFILE:-}"
+  local old_log="${LOG:-}" old_session="${SESSION:-}" old_claim="${CLAIM:-}"
+  local old_release="${RELEASE:-}" old_group_file="${GROUPFILE:-}"
+  local old_group_branch="${GROUPBRANCH:-}" old_notify_broken="${NOTIFY_BROKEN:-}"
+  local old_coordination="${DRIVER_STUB_COORDINATION:-}" old_sleep="$DRIVER_STUB_SLEEP"
+  if ! selftest_fixture_root "$group_root" "$group_base" \
+      || ! selftest_fixture_group_phases "$group_root"; then
+    echo "FAIL: the group-resume case could not build its own checkout"
+    fail=1
+    return 0
+  fi
+  REPO="$group_root"; BOARD_DIR=board-data
+  ARGUS="$group_root/$BOARD_DIR/argus"
+  NOTIFIER="$ARGUS/notify/notifications.py"
+  selftest_write_config "$group_root" "$group_config" "$BOARD_DIR"
+  load_fixture_config "$group_config"
+  WORK_SOURCE_FLAGS=(--source roadmap)
+  RUN_DIR="$WF/$DRIVER_STATE"
+  mkdir -p "$RUN_DIR"
+  LOCK="$RUN_DIR/driver.lock"; HALT="$RUN_DIR/halted"; STALL="$RUN_DIR/stalled"
+  CURRENT="$RUN_DIR/current"; PIDFILE="$RUN_DIR/pid"; LOG="$RUN_DIR/driver.log"
+  CLAIM="$RUN_DIR/claim"; RELEASE="$RUN_DIR/release"
+  GROUPFILE="$RUN_DIR/group"; GROUPBRANCH="$RUN_DIR/group-branch"
+  SESSION="ar-driver-group-resume-$$"
+  DRIVER_STUB_RC=0; DRIVER_STUB_SLEEP=1
+  # The branch cut is the step under test, so the real helper has to run here.
+  unset DRIVER_STUB_COORDINATION
+  export DRIVER_STUB_RC DRIVER_STUB_SLEEP
+  rm -f "$CLAIM" "$GROUPFILE" "$GROUPBRANCH" "$HALT" "$CURRENT" "$PIDFILE"
+
+  # The group's first member is waiting on its pull request, which is what makes
+  # it an open predecessor for the member being resumed. The receipt carries no
+  # head on purpose: the merge check refuses a receipt with nothing to verify
+  # without asking GitHub, so the case stays off the network.
+  mkdir -p "$WF/phase-100020"
+  printf '{"version": 1, "phase": "100020", "state": "awaiting_review", "branch": "%s", "private_branch": "master", "integration_branch": "master"}\n' \
+    "$group_branch" >"$WF/phase-100020/publication.json"
+
+  # The group's one branch, cut the way the group's first tick cuts it, so the
+  # resume starts where a member of a half-run group really starts.
+  "$PYTHON" "$ARGUS/gitsync/main.py" "${ARGUS_CONFIG_ARGS[@]}" --root "$REPO" \
+    --mode branch --phase 100030 --roadmap phase-100030-cache-read \
+    --roadmap-dir "$(roadmap_dir)" --group 100020 --group 100030 \
+    >"$RUN_DIR/group-cut.json" 2>&1 || rc=$?
+  head="$(git -C "$REPO" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+  if [ "$rc" -eq 0 ] && [ "$head" = "$group_branch" ]; then
+    echo "ok: the group-resume case cut the group's one branch first"
+  else
+    echo "FAIL: the group-resume case could not cut the group's branch (HEAD=$head)"; fail=1
+    printf '      the branch helper said: %s\n' \
+      "$(tr '\n' ' ' <"$RUN_DIR/group-cut.json" 2>/dev/null)"
+  fi
+
+  # The second member halts and the operator clears the marker, which is the
+  # state the next tick resumes. The record keeps the fence a halt leaves.
+  rel="$(resume_phase_file_of 100030)" || rel=""
+  run_dir="$(phase_run_dir 100030 "$rel")"
+  mkdir -p "$run_dir"
+  printf '{"phase": "100030", "state": "blocked"}\n' >"$run_dir/run.json"
+  selftest_resume_record 100030 "$rel" "$run_dir" blocked 1
+  drive || true
+
+  # The launch has to have happened, or the two checks below would pass on a
+  # resume that refused before it cut anything.
+  grep -q 'launched phase 100030' "$LOG" \
+    && echo "ok: the group's second member resumed and launched" \
+    || { echo "FAIL: the resumed group member did not launch"; fail=1; }
+  head="$(git -C "$REPO" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+  if [ "$head" = "$group_branch" ]; then
+    echo "ok: a resumed group member stays on the group's one branch"
+  else
+    echo "FAIL: the resumed group member left the group's branch (HEAD=$head)"; fail=1
+  fi
+  if git -C "$REPO" rev-parse --verify --quiet "refs/heads/$member_branch" >/dev/null 2>&1 \
+      || git -C "$REPO" rev-parse --verify --quiet "refs/remotes/origin/$member_branch" >/dev/null 2>&1; then
+    echo "FAIL: the resume cut a branch of its own for the group member"; fail=1
+  else
+    echo "ok: the resume cut no branch of its own for the group member"
+  fi
+
+  # A declaration the resume cannot read is refused, not read as "runs alone": a
+  # resume that cannot see the group would cut exactly the wrong branch. One
+  # member naming a set the other does not is the malformed case the roadmap
+  # reader refuses.
+  wait_phase_window_gone
+  cat >"$REPO/$BOARD_DIR/plans/phase-100020-cache-warm.md" <<DOC
+# 100020. Group member
+
+- [ ] Work to do.
+
+### Reservation Group
+
+\`together: 100020\`
+DOC
+  git -C "$REPO/$BOARD_DIR" add -A
+  git -C "$REPO/$BOARD_DIR" commit -q -m "roadmap: break the group declaration"
+  launches="$(selftest_resume_launches)"
+  printf '{"phase": "100030", "state": "blocked"}\n' >"$run_dir/run.json"
+  selftest_resume_record 100030 "$rel" "$run_dir" blocked 1
+  drive || true
+  if grep -q "the reservation group of phase 100030 could not be read" "$LOG" \
+      && [ "$(selftest_resume_launches)" = "$launches" ]; then
+    echo "ok: a resume refuses a group declaration it cannot read"
+  else
+    echo "FAIL: a resume read a group declaration it cannot read"; fail=1
+  fi
+  rm -f "$HALT"
+
+  tmux kill-session -t "$SESSION" 2>/dev/null || true
+  rm -f "$CLAIM" "$GROUPFILE" "$GROUPBRANCH" "$HALT" "$CURRENT" "$PIDFILE"
+  REPO="$old_repo"; BOARD_DIR="$old_board_dir"; WF="$old_wf"; ARGUS="$old_argus"
+  NOTIFIER="$old_notifier"; RUN_DIR="$old_run_dir"; LOCK="$old_lock"
+  HALT="$old_halt"; STALL="$old_stall"; CURRENT="$old_current"; PIDFILE="$old_pid"
+  LOG="$old_log"; SESSION="$old_session"; CLAIM="$old_claim"; RELEASE="$old_release"
+  GROUPFILE="$old_group_file"; GROUPBRANCH="$old_group_branch"
+  NOTIFY_BROKEN="$old_notify_broken"; DRIVER_STUB_SLEEP="$old_sleep"
+  if [ -n "$old_coordination" ]; then
+    DRIVER_STUB_COORDINATION="$old_coordination"
+  else
+    unset DRIVER_STUB_COORDINATION
+  fi
+  export DRIVER_STUB_SLEEP DRIVER_STUB_COORDINATION
+  load_fixture_config "$selftest_config"
+  WORK_SOURCE_FLAGS=(--source roadmap)
+}

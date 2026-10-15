@@ -157,6 +157,16 @@ _drive_resume() {   # [<number>]
     }
   fi
 
+  # Every member of a group publishes on the group's one branch, and a resume has
+  # no selection to read the group from: the tick's resume branch runs before the
+  # selector, and `--resume` never selects at all. The phase's own document
+  # declares the group, so the branch step below names the branch the rest of the
+  # group's joins expect instead of stacking a branch of this member's own.
+  if [ "${work_kind:-phase}" != issue ] && ! group_take_declared "$number"; then
+    resume_refuse "$target" "the reservation group of phase $number could not be read"
+    return 1
+  fi
+
   # The branch is cut before the ledger proof, because the proof proves the pins
   # against the HEAD the launch uses and the branch step can move HEAD. Proving
   # first and cutting after left the launch on a HEAD the proof never saw.

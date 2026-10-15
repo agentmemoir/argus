@@ -60,6 +60,44 @@ group_take_selection() {
   return 0
 }
 
+# Take the group a phase's own document declares, for a path with no selection.
+#
+# The tick reads the group from the selection, and a resume has none: the tick's
+# resume branch runs before the selector, and `--resume` never selects at all.
+# Every member of a group publishes on the group's one branch, so a resume that
+# cut a branch of its own would put the member's receipt on a branch none of the
+# group's joins know. The declaration is where the publication reads the group
+# from, so both name the same branch.
+#
+# A declaration that cannot be read is refused rather than read as "runs alone":
+# a resume that cannot see the group would cut exactly the wrong branch.
+group_take_declared() {   # <number>
+  local declared
+  declared="$("$PYTHON" - "$ARGUS" "$REPO" "$1" "$(roadmap_dir)" \
+    "${ARGUS_CONFIG_ARGS[@]}" <<'PY'
+import json
+import sys
+
+sys.path.insert(0, sys.argv[1])
+import _bootstrap
+from argus import conventions
+
+conventions.configure_from_cli(sys.argv[5:])
+from argus.roadmap import source as roadmap_source
+
+try:
+    group = roadmap_source.resolve_group_or_none(
+        sys.argv[2], sys.argv[4], int(sys.argv[3])
+    )
+except roadmap_source.ReservationGroupError as exc:
+    print(str(exc), file=sys.stderr)
+    raise SystemExit(1)
+print(json.dumps({"group": list(group["group"]) if group else []}))
+PY
+)" || return 1
+  group_take_selection "$declared"
+}
+
 # Whether this tick is running a declared group.
 group_active() {
   [ -n "${GROUP_MEMBERS:-}" ]
