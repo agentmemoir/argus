@@ -23,7 +23,7 @@ selftest_case_merge_orphan() {
   waited_now="$(grep -c 'phase 100011 still waits' "$LOG" || true)"
   health_now="$(grep -c 'merge check: UNAVAILABLE' "$LOG" || true)"
   if [ "$merged_now" -gt "$before_merged" ]; then
-    echo "ok: a merged pull request is confirmed published on a tick that selects a phase (merged $before_merged -> $merged_now)"
+    echo "ok: a merged pull request is confirmed published from the maintenance pass (merged $before_merged -> $merged_now)"
   else
     echo "FAIL: the merge check never confirmed a merged pull request (merged stayed $before_merged)"; fail=1
   fi

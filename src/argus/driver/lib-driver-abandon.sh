@@ -121,6 +121,9 @@ abandon_cmd() {   # <number> [--reason TEXT]
   if halt_record_read "$HALT_RECORD" && [ "$HALT_REC_PHASE" = "$number" ]; then
     rm -f "$HALT_RECORD"
   fi
+  if [ "$(cat "$RUN_DIR/stopped-claim" 2>/dev/null)" = "$number" ]; then
+    rm -f "$RUN_DIR/stopped-claim"
+  fi
   log "abandoned ${work_kind:-phase} $number (state ${state:-unknown}); the selector reports it under needs_decision"
   printf 'abandoned %s %s; the halt marker is left alone\n' "${work_kind:-phase}" "$number"
 }

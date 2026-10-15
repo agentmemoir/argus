@@ -237,6 +237,9 @@ selftest_case_release() {
   [ -s "$CLAIM" ] \
     && echo "ok: the tick recorded the claim fence a release needs" \
     || { echo "FAIL: the tick recorded no claim fence"; fail=1; }
+  # Plant the manual-stop hold a release must clear, so the assertion after the
+  # release has something to catch when the clear is missing.
+  printf '%s\n' "$(cut -f1 "$CLAIM")" >"$RUN_DIR/stopped-claim"
   local before_stopped before_stalled before_orphan
   before_stopped="$(grep -c 'stopped by signal\|needs attention' "$LOG" || true)"
   before_stalled="$(grep -c 'looks stalled\|stalled:' "$LOG" || true)"
@@ -246,6 +249,12 @@ selftest_case_release() {
   # case cannot hang the suite.
   : >"$release_wait"
   sleep 0.3
+  if [ -f "$RUN_DIR/stopped-claim" ]; then
+    echo "FAIL: release left the manual-stop hold behind"
+    fail=1
+  else
+    echo "ok: release cleared the manual-stop hold"
+  fi
   if [ ! -f "$HALT" ]; then
     echo "ok: release did not write the halt marker"
   else

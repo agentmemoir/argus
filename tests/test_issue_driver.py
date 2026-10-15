@@ -33,6 +33,7 @@ def shell(
             "lib-driver-group.sh",
             "lib-driver-select-flow.sh",
             "lib-driver-select-real.sh",
+            "lib-driver-maintenance.sh",
             "lib-driver-dryrun.sh",
         )
     )
@@ -160,7 +161,8 @@ python_standin() {
 _drive_real_selection
 printf '%s' "$PENDING_PUBLISHED"
 """.replace(
-            "_drive_real_selection\n", "PYTHON=python_standin\n_drive_real_selection\n"
+            "_drive_real_selection\n",
+            "PYTHON=python_standin\nreconcile_pending_reviews\n_drive_real_selection\n",
         ),
         {"kind": "issue", "state": "NO_PHASE", "watching": [{"issue": "23"}]},
     )

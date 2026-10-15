@@ -18,6 +18,21 @@ driver_lock_take() {
   return 0
 }
 
+# Take the driver lock, waiting briefly for a tick that is finishing. The wait is
+# bounded, and the caller proceeds without the lock when it is not won: a stop
+# must still write its halt marker, and a release must still return the group.
+driver_lock_wait() {   # [tries]
+  command -v flock >/dev/null 2>&1 || return 0
+  mkdir -p "$RUN_DIR"
+  exec 9>"$LOCK"
+  local tries="${1:-10}" i=0
+  while [ "$i" -lt "$tries" ]; do
+    flock -n 9 && return 0
+    i=$((i + 1)); sleep 0.1
+  done
+  return 1
+}
+
 # Halt when a recorded live PID has no phase window: an orphaned run.
 #
 # `tmux kill-window` does not signal the pane, so the pid outlives the window and
@@ -36,6 +51,27 @@ driver_orphan_check() {
   return 0
 }
 
+# True when the manual-stop hold outlived the board's heartbeat window, so the
+# claim it named has expired and this machine no longer owns the work. The check
+# rides the hold file's own modification time, written when the stop happened.
+stopped_claim_expired() {   # <file>
+  "$PYTHON" - "$ARGUS" "$1" <<'PY'
+import os
+import sys
+import time
+
+sys.path.insert(0, sys.argv[1])
+import _bootstrap  # noqa: F401 - register the source package
+from argus.board.core import GROUP_HEARTBEAT_WINDOW_S
+
+try:
+    age = time.time() - os.path.getmtime(sys.argv[2])
+except OSError:
+    raise SystemExit(1)
+raise SystemExit(0 if age > GROUP_HEARTBEAT_WINDOW_S else 1)
+PY
+}
+
 _drive() {
   cd "$REPO"
 
@@ -47,11 +83,6 @@ _drive() {
 
   mkdir -p "$RUN_DIR"
 
-  if [ -f "$HALT" ]; then
-    log_changed halted "halted ($(tr '\n' ' ' <"$HALT")); refusing to advance"
-    return 0
-  fi
-
   if command -v flock >/dev/null 2>&1; then
     exec 9>"$LOCK"
     flock -n 9 || { log "another driver instance holds the lock; skip"; return 1; }
@@ -60,15 +91,42 @@ _drive() {
   # The tick is the renewer of the claim this machine holds. The board measures a
   # claim from its newest heartbeat once work has begun, so a claim nobody renews
   # expires under a live run and another machine may take the work away.
-  claim_renew
-
   if tmux_busy; then
+    claim_renew
     check_stall
     log "${work_kind:-phase} window is running; skip"
     return 0
   fi
 
   driver_orphan_check || return 0
+
+  # Publication is maintenance of finished work. It never selects or reserves
+  # work, and a halt holds launches while these receipts and group gates settle.
+  reconcile_pending_reviews || return 1
+  if [ -f "$HALT" ]; then
+    log_changed halted "halted ($(tr '\n' ' ' <"$HALT")); no new work"
+    return 0
+  fi
+  [ "${1:-}" != --merge-check-only ] || return 0
+  # A manual stop needs an explicit resume or release. Clearing the line's halt
+  # alone must not feed the stopped claim back into recover-own-claim. The hold
+  # is not renewed, so it is dropped once its claim's window has passed.
+  if [ -s "$RUN_DIR/stopped-claim" ]; then
+    if stopped_claim_expired "$RUN_DIR/stopped-claim"; then
+      log_changed stopped "the stopped claim's window passed; releasing the hold"
+      rm -f "$RUN_DIR/stopped-claim"
+    else
+      log_changed stopped "a manually stopped claim waits for --resume or --release; no new work"
+      return 0
+    fi
+  fi
+  # Renew before any progress return, so a tick that settles a receipt or a group
+  # gate still heartbeats the claim of a run this machine is driving. An idle or
+  # manually stopped line returns above and does not renew.
+  claim_renew
+  if [ "$PENDING_PUBLISHED" -gt 0 ] || [ "$PENDING_READY" -gt 0 ]; then
+    return 0
+  fi
 
   # No live phase: clear per-session state a hard kill may have left behind.
   rm -f "$CURRENT" "$STALL"
@@ -272,6 +330,25 @@ drive() {
 stop() {
   mkdir -p "$RUN_DIR"
   printf 'stopped by operator at %s\n' "$(ts)" >"$HALT"
+  # The halt goes first, so the stop stops the line even when the lock is busy;
+  # losing the lock leaves the halt marker doing its job.
+  driver_lock_wait || log "stop: the driver lock is held by a running tick; the halt marker still stops the line"
+  local stopped_phase=""
+  # A stale current file alone has no recoverable claim. Holding it would
+  # strand an idle stop, because neither resume nor release could consume it.
+  if claim_read_fields "$CLAIM" && [ -n "$CLAIM_ID" ] && [ -n "$CLAIM_GEN" ]; then
+    stopped_phase="$CLAIM_NUMBER"
+    # The live window names the phase actually running; the claim file can be a
+    # stale record from an earlier run. Prefer the live phase when it is a
+    # number, so a resume targets what was stopped and not what was recorded.
+    local live_phase
+    live_phase="$(cat "$CURRENT" 2>/dev/null || true)"
+    case "$live_phase" in
+      ""|*[!0-9]*) ;;
+      *) stopped_phase="$live_phase" ;;
+    esac
+  fi
+  [ -z "$stopped_phase" ] || printf '%s\n' "$stopped_phase" >"$RUN_DIR/stopped-claim"
   # Ctrl-C must reach the phase window. Targeting the session would send it to
   # whichever window is current, which may be the idle status display.
   if tmux_phase_window_alive; then
@@ -282,6 +359,9 @@ stop() {
   else
     log "stop: wrote halt marker (no live session)"
   fi
+  # Drop the lock this function may have taken. A caller that runs another driver
+  # command in the same shell would otherwise inherit the held fd and be refused.
+  exec 9>&- 2>/dev/null || true
 }
 
 # Give the current phase's group back without halting the line.
@@ -295,6 +375,9 @@ stop() {
 # branch. A failure to push or to release is logged and never halts.
 release() {
   mkdir -p "$RUN_DIR"
+  # Best-effort serialize with a tick's own claim and hold reads. A release must
+  # still return the group when the lock is busy.
+  driver_lock_wait || log "release: the driver lock is held by a running tick; releasing without it"
   local number="" claim_number="" reservation_id="" generation="" rc=0
   number="$(cat "$CURRENT" 2>/dev/null || true)"
   if [ -f "$CLAIM" ]; then
@@ -320,6 +403,10 @@ release() {
     --mode checkpoint >"$RUN_DIR/release-checkpoint.json" 2>/dev/null \
     || log "release: could not push the work in progress; the next owner starts from what is already on the branch (see $RUN_DIR/release-checkpoint.json)"
   [ -z "$number" ] || gitsync_clean "$number"
+  # The operator asked to release, so the local manual-stop hold goes whatever
+  # the board write does; clearing it only on success left an expired release
+  # holding the line on a hold nothing would consume.
+  rm -f "$RUN_DIR/stopped-claim"
   # The array the run covered, for the log line below. Read before the board
   # write, because the write is what ends the group on this machine.
   local group_members=""
@@ -346,6 +433,8 @@ release() {
     log "release: no board token was recorded; the run was stopped without a board write"
   fi
   rm -f "$CURRENT" "$PIDFILE" "$RELEASE" "$GROUPFILE" "$GROUPBRANCH"
+  # Drop the lock this function may have taken; see the note in stop().
+  exec 9>&- 2>/dev/null || true
   return 0
 }
 

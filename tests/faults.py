@@ -197,12 +197,27 @@ FAULTS = (
             "expires a live run's claim and another machine may take the "
             "work",
             "file": "src/argus/driver/lib-driver-drive.sh",
-            "find": "  claim_renew\n",
-            "replace": "  true  # FAULT: the claim is never renewed\n",
+            "find": "  if tmux_busy; then\n    claim_renew\n    check_stall\n",
+            "replace": "  if tmux_busy; then\n"
+            "    true  # FAULT: the running claim is never renewed\n"
+            "    check_stall\n",
             "check": "driver",
             "cases": "group_run",
             "verdict": "driver self-test:",
             "expect": "the tick renewed the group's claim while its run was alive",
+        },
+        {
+            "name": "release-keeps-manual-stop-hold",
+            "breaks": "a release leaves the manual-stop hold in place, so the "
+            "release the docs name as a stopped line's exit cannot free it",
+            "file": "src/argus/driver/lib-driver-drive.sh",
+            "find": '  rm -f "$RUN_DIR/stopped-claim"\n'
+            "  # The array the run covered, for the log line below.",
+            "replace": "  # The array the run covered, for the log line below.",
+            "check": "driver",
+            "cases": "release",
+            "verdict": "driver self-test:",
+            "expect": "release left the manual-stop hold behind",
         },
         {
             "name": "selector-refusal-swallowed",
