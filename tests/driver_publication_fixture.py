@@ -176,7 +176,7 @@ def driver_publication_fixture(
                 "remote": "origin",
             },
             "notify": {
-                "profile": "fixture",
+                "profile": "fixture-profile",
                 "channel": "discord:000000000000000000",
                 "disabled": True,
             },
