@@ -15,9 +15,10 @@ Everything runs through `uv run`; there is no virtualenv to activate. Never hand
 
 ## The Local Gate
 
-Run the checks before opening a pull request:
+Run the checks before opening a pull request. `make quick` runs the lint, format, type, line-limit, and prose checks in one command:
 
 ```sh
+make quick         # every static check below, no tests
 make lint          # ruff check
 make fmt-check     # formatting, 88 columns
 make typecheck     # mypy over the package
@@ -27,9 +28,11 @@ make prose         # one paragraph per line in prose files
 make leakscan      # the published tree carries no host path, credential, or run state
 make example-check # the bundled example loads and passes the readiness report
 make install-check # the built wheel installs and its console script runs
-make self-test     # the driver, the reservation group, and the sync self-tests
-make guard-faults  # break every launch guard and require a named failure
+make self-test     # CI only: the driver, the reservation group, and the sync self-tests
+make guard-faults  # CI only: break every launch guard and require a named failure
 ```
+
+`make self-test` and `make guard-faults` take many minutes, so they run in CI. Outside CI (when the `CI` variable is unset) they stop at once with a one-line message. Set `ARGUS_ALLOW_LOCAL=1` to run one locally anyway. `uv run python tests/guard_faults.py --only NAME` runs a single fault and is not blocked.
 
 `make wheel` builds the package and checks that the driver ships inside; `make install-check` installs that wheel into a clean environment and runs the installed console script. CI runs the lint, format, type, line-limit, and prose checks, `make leakscan`, `make example-check`, `make install-check`, `make self-test`, and `make guard-faults`.
 

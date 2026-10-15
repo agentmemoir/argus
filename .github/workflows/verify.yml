@@ -1,7 +1,7 @@
 name: verify
 
 # The full checks run here, off every developer machine. Local runs stay
-# scoped: `make guard-faults --only NAME` or one self-test case.
+# scoped: `uv run python tests/guard_faults.py --only NAME` or one self-test case.
 #
 # Branch pushes run through pull_request; a branch with no pull request runs
 # nothing until one opens. Listing both events would run every commit twice.
@@ -70,7 +70,7 @@ jobs:
       - name: Temporary-storage rule and affected checks
         run: |
           make noexecscan
-          uv run pytest -q tests/test_exec_tempdir.py tests/test_issue_tick.py tests/test_notify_target.py tests/test_issue_driver.py tests/test_prose_lint.py
+          uv run pytest -q tests/test_exec_tempdir.py tests/test_issue_tick.py tests/test_notify_target.py tests/test_issue_driver.py tests/test_prose_lint.py tests/test_ci_only_targets.py
           uv run python -m argus.board.reservations --self-test
           uv run python -m argus.issues.selftest
           uv run python -m argus.select.group --self-test
