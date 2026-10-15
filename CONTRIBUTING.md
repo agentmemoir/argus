@@ -22,7 +22,7 @@ make lint          # ruff check
 make fmt-check     # formatting, 88 columns
 make typecheck     # mypy over the package
 make typecheck-strict # pyright strict over the package and the suite
-make lines         # the 350-line per-file limit
+make llc           # the per-file line limit: 350 Python, 450 other languages
 make prose         # one paragraph per line in prose files
 make leakscan      # the published tree carries no host path, credential, or run state
 make example-check # the bundled example loads and passes the readiness report
@@ -37,7 +37,7 @@ make guard-faults  # break every launch guard and require a named failure
 
 - **One formatter: `ruff format`, 88 columns.** Never hand-format.
 - **Types: mypy at its default level over the package, pyright strict over the package and the suite.** `make typecheck` and `make typecheck-strict` must pass. A shipped `py.typed` is the open step of the recorded target.
-- **No Python file may exceed 350 lines**, comments and blank lines included. `make lines` must pass. New files must fit; the files still above the limit are listed in the Makefile and shrink one per session.
+- **No source file may exceed its line limit**: 350 lines for Python, 450 for every other scanned language, comments and blank lines included. `make llc` must pass, and a new file must fit.
 - **Argus names no project layout.** Every path and command comes from the configuration file; a missing required key stops the tick instead of a guessed default.
 - **Apply the rules to new and refactored code.** Do not bury a refactor in a formatter diff, and do not mass-reformat in the same change as a behaviour fix.
 

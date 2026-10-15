@@ -29,8 +29,6 @@ jobs:
           echo "TMPDIR=/mnt/noexec" >> "$GITHUB_ENV"
 
       - uses: actions/checkout@v4
-      - name: Check the 450-line file limit
-        run: make llc
       - name: Install uv
         uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
       - name: Install the project
@@ -43,8 +41,8 @@ jobs:
         run: make typecheck
       - name: Type-check (strict)
         run: make typecheck-strict
-      - name: Check the line limit
-        run: make lines
+      - name: Check the file line limits
+        run: make llc
       - name: Check one-paragraph-per-line prose
         run: make prose
       - name: Check the temporary-storage rule
@@ -72,7 +70,7 @@ jobs:
       - name: Temporary-storage rule and affected checks
         run: |
           make noexecscan
-          uv run pytest -q tests/test_exec_tempdir.py tests/test_issue_tick.py tests/test_notify_target.py tests/test_issue_driver.py tests/test_prose_lint.py
+          uv run pytest -q tests/test_exec_tempdir.py tests/test_issue_tick.py tests/test_notify_target.py tests/test_issue_driver.py tests/test_prose_lint.py tests/test_line_limit.py
           uv run python -m argus.board.reservations --self-test
           uv run python -m argus.issues.selftest
           uv run python -m argus.select.group --self-test

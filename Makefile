@@ -10,13 +10,7 @@ RUN := $(UV) run
 PREFIX ?= $(HOME)/.local
 BINDIR ?= $(PREFIX)/bin
 CONFIG ?= config.json
-LINE_LIMIT := 350
-# Files still above the limit while the migration splits them, one per session.
-# Each split removes its file from this list; the list is empty when the
-# migration ends. It is empty now: the last file was split.
-LINE_EXEMPT :=
-
-.PHONY: install sync llc lint fmt fmt-check typecheck typecheck-strict lines prose check dry-run example-check \
+.PHONY: install sync llc lint fmt fmt-check typecheck typecheck-strict prose check dry-run example-check \
         self-test identifiers leakscan noexecscan guard-faults wheel install-check
 install:
 	install -d "$(DESTDIR)$(BINDIR)"
@@ -26,15 +20,9 @@ install:
 sync:
 	$(UV) sync
 
-# The 450-line cap over every tracked and untracked working-tree source file, so a new file is caught before it is staged; it runs before ruff, so an over-long file fails in seconds.
+# The line limit over every tracked and untracked source file: Python 350, every other scanned language 450, markdown skipped; it runs before ruff, so an over-long file fails in seconds.
 llc:
-	@git ls-files -z --cached --others --exclude-standard -- \
-		'*.rs' '*.py' '*.sh' '*.bash' \
-		'*.js' '*.ts' '*.jsx' '*.tsx' \
-		'*.go' '*.java' '*.kt' '*.scala' \
-		'*.c' '*.h' '*.cc' '*.hh' '*.cpp' '*.hpp' '*.cxx' '*.hxx' \
-		'*.rb' '*.php' '*.swift' '*.m' '*.mm' \
-		| xargs -0 -r awk 'FNR == 451 { printf "ERROR: %s exceeds 450 lines\n", FILENAME; failed = 1; nextfile } END { exit failed }'
+	@$(RUN) python scripts/check_line_limit.py
 
 # Lint and the one formatter (ruff, 88 columns). CI runs lint and fmt-check.
 lint: llc
@@ -54,22 +42,6 @@ typecheck:
 # uses the same level through .vscode/settings.json.
 typecheck-strict:
 	$(RUN) pyright --project pyright.json
-
-# No Python file may exceed the line limit, comments and blank lines included.
-# Nothing is exempt: a split removes its file here in the same change.
-lines:
-	@printf 'checking every Python file against the %s-line limit\n' '$(LINE_LIMIT)'
-	@files=$$(find src tests -name '*.py' -type f 2>/dev/null); \
-	if [ -z "$$files" ]; then printf 'no Python files found\n'; exit 1; fi; \
-	printf '%s\n' "$$files" | xargs wc -l | awk -v lim=$(LINE_LIMIT) -v exempt='$(LINE_EXEMPT)' \
-		'BEGIN { n = split(exempt, parts, " "); for (i = 1; i <= n; i++) if (parts[i] != "") skip[parts[i]] = 1 } \
-		 $$NF == "total" { next } \
-		 $$1 > lim { if ($$2 in skip) { printf "exempt for now: %s\n", $$2; next } \
-			over = over $$0 "\n"; count++ } \
-		 END { if (count) { printf "OVER LIMIT:\n%s", over; \
-			printf "%d file(s) exceed the %s-line limit. Split before adding.\n", count, lim; \
-			exit 1 } \
-			printf "all files within %s lines\n", lim }'
 
 # The prose rule: one paragraph per line, so the reader's viewer does the
 # wrapping. A new line is only for a new paragraph, a list item, a heading,
