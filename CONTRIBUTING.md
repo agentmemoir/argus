@@ -23,6 +23,7 @@ make fmt-check     # formatting, 88 columns
 make typecheck     # mypy over the package
 make typecheck-strict # pyright strict over the package and the suite
 make lines         # the 350-line per-file limit
+make prose         # one paragraph per line in prose files
 make leakscan      # the published tree carries no host path, credential, or run state
 make example-check # the bundled example loads and passes the readiness report
 make install-check # the built wheel installs and its console script runs
@@ -30,7 +31,7 @@ make self-test     # the driver, the reservation group, and the sync self-tests
 make guard-faults  # break every launch guard and require a named failure
 ```
 
-`make wheel` builds the package and checks that the driver ships inside; `make install-check` installs that wheel into a clean environment and runs the installed console script. CI runs the lint, format, type, and line-limit checks, `make leakscan`, `make example-check`, `make install-check`, `make self-test`, and `make guard-faults`.
+`make wheel` builds the package and checks that the driver ships inside; `make install-check` installs that wheel into a clean environment and runs the installed console script. CI runs the lint, format, type, line-limit, and prose checks, `make leakscan`, `make example-check`, `make install-check`, `make self-test`, and `make guard-faults`.
 
 ## Rules That Matter Here
 
