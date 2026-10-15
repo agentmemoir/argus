@@ -9,7 +9,7 @@ import signal
 import socket
 import subprocess
 import sys
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -67,7 +67,7 @@ def resume_barrier(
     *,
     driver: Path = DRIVER,
     modes: tuple[str, ...] = ("--resume", str(PHASE)),
-) -> Iterator[tuple[subprocess.Popen[str], socket.socket]]:
+) -> Generator[tuple[subprocess.Popen[str], socket.socket], None, None]:
     """Pause a real resume at Git fetch or tmux new-window; never patch internals."""
     tmux = control_tmux(fixture, exec_dir)
     command = "git" if boundary == "before-consume" else "tmux"
