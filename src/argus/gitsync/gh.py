@@ -4,6 +4,7 @@
 
 import json
 import subprocess
+from pathlib import Path
 from typing import Any, cast
 
 from argus.gitsync.git import GH_TIMEOUT_S, gh_binary
@@ -277,6 +278,40 @@ def gh_comment_pull_request(
     if done.returncode != 0:
         return False, f"gh exited {done.returncode}"
     return True, f"pull request {int(number)} comment posted"
+
+
+def gh_create_draft_pull_request(
+    root: Path, branch: str, base: str
+) -> tuple[str | None, str]:
+    """Create a draft for the recorded branch, with an empty body."""
+    try:
+        done = subprocess.run(
+            [
+                gh_binary(),
+                "pr",
+                "create",
+                "--draft",
+                "--head",
+                branch,
+                "--base",
+                base,
+                "--title",
+                branch,
+                "--body",
+                "",
+            ],
+            cwd=root,
+            capture_output=True,
+            text=True,
+            timeout=GH_TIMEOUT_S,
+        )
+    except FileNotFoundError:
+        return None, "gh is not installed"
+    except subprocess.TimeoutExpired:
+        return None, f"gh did not answer within {GH_TIMEOUT_S}s"
+    if done.returncode:
+        return None, f"gh exited {done.returncode}"
+    return done.stdout.strip(), ""
 
 
 __all__ = [

@@ -112,7 +112,7 @@ def mode_clean(root: str | Path, phase: int | str | None = None) -> dict[str, An
     }
 
 
-def mode_checkpoint(root: str | Path) -> dict[str, Any]:
+def mode_checkpoint(root: str | Path, paths: list[str] | None = None) -> dict[str, Any]:
     """Commit and push a checkout's work in progress on the branch it is on.
 
     This is the handoff half of a release. The owner is giving the reservation
@@ -142,7 +142,36 @@ def mode_checkpoint(root: str | Path) -> dict[str, Any]:
             f"refusing to push work in progress on {branch!r}",
             hint="a handoff is the phase branch, not the integration branch",
         )
-    rc, out, err = git(root, "add", "-A")
+    if paths:
+        rc, staged, err = git(root, "diff", "--cached", "--name-only", "-z")
+        if rc:
+            return blocked(info, "could not read staged paths")
+        rc, scoped, err = git(
+            root, "diff", "--cached", "--name-only", "-z", "--", *paths
+        )
+        if rc:
+            return blocked(info, "could not read scoped staged paths")
+        outside = sorted(set(staged.split("\0")) - set(scoped.split("\0")) - {""})
+        if outside:
+            return blocked(
+                info, "staged changes exist outside checkpoint paths", staged=outside
+            )
+        rc, selected, err = git(
+            root,
+            "ls-files",
+            "-z",
+            "--cached",
+            "--others",
+            "--exclude-standard",
+            "--",
+            *paths,
+        )
+        if rc:
+            return blocked(info, "could not read checkpoint paths")
+        info["left_uncommitted"] = sorted(
+            set(dirty_paths(root)) - set(selected.split("\0"))
+        )
+    rc, out, err = git(root, "add", "-A", *(["--", *paths] if paths else []))
     if rc != 0:
         return blocked(info, f"could not stage the checkout: {err or out}")
     # Ask git first. With nothing staged, the pre-commit hook refused the commit
@@ -155,7 +184,11 @@ def mode_checkpoint(root: str | Path) -> dict[str, Any]:
     action = "nothing-to-push"
     if rc == 1:
         rc, out, err = git(
-            root, "commit", "-q", "-m", f"checkpoint: work in progress on {branch}"
+            root,
+            "commit",
+            "-q",
+            "-m",
+            f"{'wip' if paths else 'checkpoint'}: work in progress on {branch}",
         )
         if rc != 0:
             return blocked(info, f"checkpoint commit failed: {err or out}")

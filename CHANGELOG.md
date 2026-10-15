@@ -4,6 +4,8 @@ Notable changes to this project are documented here. The format follows [Keep a 
 
 ## [Unreleased]
 
+- Phase helpers can open a draft after the first commit, stage checkpoint paths, and record one CI read. The driver retries readiness for lone and grouped phases.
+
 - `--merge-check-only` settles phase publication and group readiness without selecting, reserving, or launching work. Halted ticks do the same maintenance once no phase process is active. A tick that records a merge or makes a group ready ends before selecting new work. `--stop` holds its claim for an explicit `--resume` or `--release`; clearing the halt marker alone cannot restart it. A resume keeps the line's halt marker.
 - `argus` watches a phase's pull request on each tick: code-scanning alerts and review comments are recorded as they change, and one scoped command replies to or reacts to a recorded review comment.
 - `argus` ticks an unattended work queue: select a phase, reserve it on a shared Git board, launch its pipeline in tmux, watch the run, and check publication before the next tick.
