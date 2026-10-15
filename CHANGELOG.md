@@ -4,6 +4,8 @@ Notable changes to this project are documented here. The format follows [Keep a 
 
 ## [Unreleased]
 
+- `make self-test` and `make guard-faults` refuse to start unless the `CI` variable is set; `ARGUS_ALLOW_LOCAL=1` overrides. `make quick` runs the lint, format, type, line-limit, and prose checks without tests.
+
 - Phase helpers can open a draft after the first commit, stage checkpoint paths, and record one CI read. The driver retries readiness for lone and grouped phases.
 
 - `--merge-check-only` settles phase publication and group readiness without selecting, reserving, or launching work. Halted ticks do the same maintenance once no phase process is active. A tick that records a merge or makes a group ready ends before selecting new work. `--stop` holds its claim for an explicit `--resume` or `--release`; clearing the halt marker alone cannot restart it. A resume keeps the line's halt marker.

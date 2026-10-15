@@ -16,7 +16,7 @@ LINE_LIMIT := 350
 # migration ends. It is empty now: the last file was split.
 LINE_EXEMPT :=
 
-.PHONY: install sync lint fmt fmt-check typecheck typecheck-strict lines prose check dry-run example-check \
+.PHONY: install sync lint fmt fmt-check typecheck typecheck-strict lines prose quick check dry-run example-check \
         self-test identifiers leakscan noexecscan guard-faults wheel install-check
 install:
 	install -d "$(DESTDIR)$(BINDIR)"
@@ -71,6 +71,13 @@ prose: ## Fail on hard-wrapped prose (one paragraph per line)
 	@printf 'checking prose for hard-wrapped paragraphs\n'
 	@$(RUN) python scripts/check_prose.py
 
+# The static checks, no tests: the fast local gate before a push.
+quick: lint fmt-check typecheck typecheck-strict lines prose
+
+# self-test and guard-faults take many minutes, so they run in CI, which sets
+# CI. They refuse to start anywhere else unless ARGUS_ALLOW_LOCAL=1 is set.
+ci_only = @if [ -z "$$CI" ] && [ "$$ARGUS_ALLOW_LOCAL" != 1 ]; then printf 'make %s runs in CI; set ARGUS_ALLOW_LOCAL=1 to run it here\n' '$@' >&2; exit 1; fi
+
 # A tick reads one configuration file, so the readiness report and the dry run
 # read the file named by CONFIG. --self-test reads no file.
 check:
@@ -90,6 +97,7 @@ example-check:
 	@PATH="$(CURDIR)/examples/check-bin:$$PATH" $(RUN) bin/argus --config examples/argus-config.jsonc --check
 
 self-test:
+	$(ci_only)
 	$(RUN) bin/argus --self-test
 	$(RUN) python tests/test_config.py
 	$(RUN) python tests/test_entrypoint.py
@@ -123,6 +131,7 @@ noexecscan:
 	$(RUN) pytest -q tests/test_noexec_policy.py
 
 guard-faults:
+	$(ci_only)
 	$(RUN) python tests/guard_faults.py
 
 # The package: a wheel whose console script is `argus`, for `pip install .` and
