@@ -82,3 +82,51 @@ def test_an_unreadable_stage_is_refused(
     assert result["ok"] is False
     assert any("could not read the staged changes" in b for b in result["blockers"])
     assert not [c for c in calls if c[:1] in (("commit",), ("push",))]
+
+
+def test_scoped_checkpoint_leaves_other_work_uncommitted(tmp_path: Path) -> None:
+    pub = _phase_clone(tmp_path)
+    (pub / "selected.txt").write_text("work\n")
+    (pub / "other.txt").write_text("leave me\n")
+    result = mode_checkpoint(pub, ["selected.txt"])
+    assert result["ok"] is True
+    assert result["left_uncommitted"] == ["other.txt"]
+    assert mode_clean.git(pub, "status", "--porcelain")[1] == "?? other.txt"
+    assert mode_clean.git(pub, "log", "-1", "--format=%s")[1].startswith("wip:")
+
+
+def test_scoped_checkpoint_refuses_other_staged_work(tmp_path: Path) -> None:
+    pub = _phase_clone(tmp_path)
+    (pub / "selected.txt").write_text("work\n")
+    (pub / "other.txt").write_text("leave me\n")
+    assert mode_clean.git(pub, "add", "other.txt")[0] == 0
+    before = mode_clean.git(pub, "status", "--porcelain")[1]
+    result = mode_checkpoint(pub, ["selected.txt"])
+    assert result["ok"] is False
+    assert mode_clean.git(pub, "status", "--porcelain")[1] == before
+
+
+def test_scoped_checkpoint_refuses_rename_from_outside_scope(tmp_path: Path) -> None:
+    pub = _phase_clone(tmp_path)
+    assert mode_clean.git(pub, "mv", "a.txt", "selected.txt")[0] == 0
+    before = mode_clean.git(pub, "status", "--porcelain")[1]
+    result = mode_checkpoint(pub, ["selected.txt"])
+    assert result["ok"] is False
+    assert mode_clean.git(pub, "status", "--porcelain")[1] == before
+
+
+def test_root_scope_checkpoint_skips_an_ignored_tree(tmp_path: Path) -> None:
+    # The boundary stages the whole root while an ignored private tree exists.
+    # A negative pathspec would make ``git add`` refuse that tree instead of
+    # skipping it; the root spec must leave it alone and commit the rest.
+    pub = _phase_clone(tmp_path)
+    (pub / ".git" / "info" / "exclude").write_text("private/\n", encoding="utf-8")
+    ignored = pub / "private" / "clio-private" / "runs"
+    ignored.mkdir(parents=True)
+    (ignored / "state.json").write_text("{}\n", encoding="utf-8")
+    (pub / "wanted.txt").write_text("work\n", encoding="utf-8")
+    result = mode_checkpoint(pub, ["."])
+    assert result["ok"] is True
+    assert result["action"] == "committed-and-pushed"
+    assert mode_clean.git(pub, "log", "-1", "--format=%s")[1].startswith("wip:")
+    assert mode_clean.git(pub, "status", "--porcelain")[1] == ""

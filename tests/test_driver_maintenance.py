@@ -202,7 +202,7 @@ claim_renew() { :; }
 watch_signals_pull_request() { :; }
 python_transport() {
   case "$*" in
-    *'--mode gate'*) printf '%s' 'READY_ANSWER' ;;
+    *'--mode ready'*) printf '%s' 'READY_ANSWER' ;;
     *'--mode published'*) printf '{"state":"BLOCKED"}' ;;
     *) "$TEST_PYTHON" "$@" ;;
   esac

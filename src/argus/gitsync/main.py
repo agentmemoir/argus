@@ -95,12 +95,13 @@ if not __package__:
 from argus import conventions
 from argus.config.loader import ConfigError as ArgusConfigError
 from argus.gitsync.git import ConfigError, summarize
-from argus.gitsync.group_gate import mode_gate
+from argus.gitsync.group_gate import mode_gate, mode_ready
 from argus.gitsync.issue_modes import issue_mode
 from argus.gitsync.merge import sync_one
 from argus.gitsync.mode_branch import mode_branch
 from argus.gitsync.mode_clean import mode_checkpoint, mode_clean
 from argus.gitsync.modes import mode_published, mode_tidy, result_exit_code
+from argus.gitsync.pr_lifecycle import mode_pr
 from argus.gitsync.pr_signal_reply import mode_signal_reply
 from argus.gitsync.pr_signals import mode_signals
 from argus.gitsync.publish_phase import publish_phase
@@ -135,6 +136,9 @@ def main() -> int:
             "tidy",
             "clean",
             "checkpoint",
+            "open-pr",
+            "peek-ci",
+            "ready",
             "gate",
             "repair",
             "signals",
@@ -182,6 +186,7 @@ def main() -> int:
         default=None,
         help="phase-local reservation.json for --mode publish",
     )
+    ap.add_argument("--paths", nargs="+", help="pathspecs to stage for checkpoint")
     ap.add_argument("--machine-id", default=None)
     ap.add_argument("--reservation-id", default=None)
     ap.add_argument("--generation", type=int, default=None)
@@ -246,6 +251,14 @@ def main() -> int:
             if args.phase is None:
                 raise ConfigError("--phase is required with --mode published")
             out = mode_published(args.root, args.phase)
+        elif args.mode in {"open-pr", "peek-ci", "ready"}:
+            if args.phase is None:
+                raise ConfigError("--phase is required for this mode")
+            out = (
+                mode_ready(args.root, args.phase)
+                if args.mode == "ready"
+                else mode_pr(args.root, args.phase, args.mode)
+            )
         elif args.mode == "repair":
             out = mode_repair(args.root)
         elif args.mode == "gate":
@@ -275,7 +288,7 @@ def main() -> int:
         elif args.mode == "tidy":
             out = mode_tidy(args.root)
         elif args.mode == "checkpoint":
-            out = mode_checkpoint(args.root)
+            out = mode_checkpoint(args.root, args.paths)
         elif args.repo:
             res = sync_one(Path(args.repo).resolve(), args.mode, branch=args.branch)
             out = {

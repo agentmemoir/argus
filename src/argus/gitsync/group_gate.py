@@ -157,15 +157,19 @@ def release_group_pull_request(
     pull request to act on. Never raises: GitHub being unreachable is a hold.
     """
     ref = pull_request_ref(pull_request)
-    if not ref or not branch or not members:
+    if not ref or not branch:
         return None
-    fixes = merge_fix_pull_requests(branch, ref)
+    fixes: dict[str, Any] = (
+        merge_fix_pull_requests(branch, ref)
+        if members
+        else {"merged": [], "held": [], "unknown": ""}
+    )
     out: dict[str, Any] = {"fix_pull_requests": fixes, "reasons": []}
     pending = _group_pending(root, members, phase)
     if pending:
         out.update(state="WAITING", pending=pending)
         return out
-    marker = _ready_marker(root, members)
+    marker = _ready_marker(root, members or [str(phase)])
     if marker.exists():
         return dict(out, state="READY", reasons=[])
     rows = gh_pull_request_checks(
@@ -232,3 +236,29 @@ __all__ = [
     "mode_gate",
     "release_group_pull_request",
 ]
+
+
+def mode_ready(root: str | Path, phase: int | str) -> dict[str, Any]:
+    """Retry readiness for every published phase, including a lone phase."""
+    receipt = phase_receipt(root, int(phase))
+    if not receipt:
+        return {
+            "ok": True,
+            "mode": "ready",
+            "state": "NO_RECEIPT",
+            "summary": "no publication receipt",
+        }
+    result = release_group_pull_request(
+        root,
+        int(phase),
+        [str(m) for m in receipt.get("group", [])],
+        receipt.get("pull_request"),
+        receipt.get("branch"),
+    )
+    out = result or {"state": "NO_PR", "reasons": []}
+    return {
+        "ok": True,
+        "mode": "ready",
+        **out,
+        "summary": f"pull request {out['state']}",
+    }
