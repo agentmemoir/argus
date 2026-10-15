@@ -46,14 +46,16 @@ PY
 # names the branch the rest of the group's joins expect instead of stacking a
 # branch of this member's own. A declaration that cannot be read is refused
 # rather than read as "runs alone": a resume that cannot see the group would cut
-# exactly the wrong branch.
+# exactly the wrong branch. The refusal carries the roadmap reader's own words,
+# which name the document to fix, and the way out of the refusal, because a
+# halted line stays halted until the declaration is fixed or the phase is parked.
 _drive_resume_branch() {   # <number> <rel>
   local number="$1" rel="$2" roadmap_name
   if [ -n "${DRIVER_STUB_COORDINATION:-}" ]; then
     return 0
   fi
   if [ "${work_kind:-phase}" != issue ] && ! group_take_declared "$number"; then
-    RESUME_REFUSAL="the reservation group of phase $number could not be read"
+    RESUME_REFUSAL="the reservation group of phase $number could not be read (${GROUP_ERROR:-no reason reported}); fix the group declaration, or abandon the phase"
     return 1
   fi
   roadmap_name="$(basename "$rel" .md)"

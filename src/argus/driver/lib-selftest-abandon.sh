@@ -30,7 +30,7 @@ selftest_case_abandon() {
     else
       echo "FAIL: abandon ran while another driver held the lock"; fail=1
     fi
-    exec 9>&- 2>/dev/null || true
+    exec 9>&- || true
   else
     echo "skip: abandon lock case (this host has no flock)"
   fi
@@ -40,7 +40,7 @@ selftest_case_abandon() {
   # `abandon_cmd` exits on refusal and that must not end the suite. The suite's
   # inherited lock is released first, as the resume cases do: `abandon_cmd` takes
   # it again, and an fd inherited from this shell would count as a second holder.
-  exec 9>&- 2>/dev/null || true
+  exec 9>&- || true
   ( abandon_cmd 100499 ) >/dev/null 2>&1 || true
   if [ ! -f "$(phase_run_dir 100499 "")/abandoned.json" ]; then
     echo "ok: abandon refuses a phase with no run directory"
@@ -52,7 +52,7 @@ selftest_case_abandon() {
   # record is what a resume would read: a parked phase must not resume, so the
   # record goes and the run directory stays.
   selftest_resume_record "$phase" "$rel" "$run_dir" blocked 1
-  exec 9>&- 2>/dev/null || true
+  exec 9>&- || true
   ( abandon_cmd "$phase" --reason 'the work is no longer wanted' ) >/dev/null 2>&1 || true
   if [ -f "$run_dir/abandoned.json" ] && [ ! -f "$HALT_RECORD" ] \
       && [ ! -f "$CLAIM" ] && [ -d "$run_dir" ]; then
@@ -72,7 +72,7 @@ selftest_case_abandon() {
   rm -f "$run_dir/abandoned.json"
   printf 'halted for the orphan case\n' >"$HALT"
   printf '%s\n' "$$" >"$PIDFILE"
-  exec 9>&- 2>/dev/null || true
+  exec 9>&- || true
   ( abandon_cmd "$phase" ) >/dev/null 2>&1 || true
   if [ ! -f "$run_dir/abandoned.json" ] && [ -f "$PIDFILE" ] && [ -f "$HALT" ]; then
     echo "ok: abandon refuses a live orphaned pid and keeps the marker and evidence"

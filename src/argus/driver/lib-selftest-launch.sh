@@ -139,6 +139,21 @@ selftest_case_locks_stall() {
   unset _captured
   wait_phase_window_gone
 
+  # Dropping the lock fd must leave this shell's stderr alone.
+  #
+  # Measured on this machine's bash 3.2.57 and 5.3.20: a redirection on an `exec`
+  # command applies to the shell and persists, so closing the lock fd with its
+  # stderr redirected sends this shell's stderr to /dev/null for the rest of the
+  # run. Every FAIL line the exit trap writes to stderr went with it, including
+  # the tripwire's, so a run could report a violation count and give no reason
+  # for it. Read from the sources, because the sources are where the idiom lives.
+  if grep -rn 'exec [0-9][0-9]*>&-[[:space:]]*2>' "$ARGUS_DIR"/*.sh >/dev/null 2>&1; then
+    echo "FAIL: a driver source redirects stderr on the lock-fd close"
+    fail=1
+  else
+    echo "ok: closing the lock fd leaves this shell's stderr alone"
+  fi
+
   # The teardown trap, on the path it exists for.
   #
   # The leak it closes was one orphaned tmux session per run, and that session's

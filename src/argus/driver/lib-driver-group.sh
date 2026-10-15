@@ -71,9 +71,15 @@ group_take_selection() {
 #
 # A declaration that cannot be read is refused rather than read as "runs alone":
 # a resume that cannot see the group would cut exactly the wrong branch.
+#
+# Sets GROUP_ERROR to the roadmap reader's own words when the declaration cannot
+# be read. The refusal an operator reads is the only signal a halted line gives,
+# and the reader's message names the document to fix, so it travels with the
+# refusal instead of stopping at the driver's error stream.
 group_take_declared() {   # <number>
   local declared
-  declared="$("$PYTHON" - "$ARGUS" "$REPO" "$1" "$(roadmap_dir)" \
+  GROUP_ERROR=""
+  if ! declared="$("$PYTHON" - "$ARGUS" "$REPO" "$1" "$(roadmap_dir)" \
     "${ARGUS_CONFIG_ARGS[@]}" <<'PY'
 import json
 import sys
@@ -90,11 +96,18 @@ try:
         sys.argv[2], sys.argv[4], int(sys.argv[3])
     )
 except roadmap_source.ReservationGroupError as exc:
-    print(str(exc), file=sys.stderr)
+    # The reason goes to stdout, which is what the caller reads. On stderr it
+    # would be lost to the caller and the refusal would keep the vaguer words
+    # below. A fault this reader did not expect still reaches stderr, as a
+    # traceback, which is where a stack trace belongs.
+    print(str(exc))
     raise SystemExit(1)
 print(json.dumps({"group": list(group["group"]) if group else []}))
 PY
-)" || return 1
+)"; then
+    GROUP_ERROR="$declared"
+    return 1
+  fi
   group_take_selection "$declared"
 }
 

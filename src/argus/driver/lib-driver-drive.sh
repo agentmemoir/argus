@@ -361,7 +361,10 @@ stop() {
   fi
   # Drop the lock this function may have taken. A caller that runs another driver
   # command in the same shell would otherwise inherit the held fd and be refused.
-  exec 9>&- 2>/dev/null || true
+  # No redirection on this line, and that is load-bearing: on an `exec` command a
+  # redirection applies to the shell and persists, so hiding a bad-fd message
+  # here would send this shell's stderr to /dev/null for the rest of the run.
+  exec 9>&- || true
 }
 
 # Give the current phase's group back without halting the line.
@@ -434,7 +437,7 @@ release() {
   fi
   rm -f "$CURRENT" "$PIDFILE" "$RELEASE" "$GROUPFILE" "$GROUPBRANCH"
   # Drop the lock this function may have taken; see the note in stop().
-  exec 9>&- 2>/dev/null || true
+  exec 9>&- || true
   return 0
 }
 

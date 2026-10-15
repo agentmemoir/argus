@@ -173,7 +173,7 @@ selftest_case_resume() {
   # resume refuses with no message. Release this shell's copy first; the next
   # `_drive` reopens it. A host without `flock` never takes it, so this line is
   # what makes the case mean the same thing on Linux and on macOS.
-  exec 9>&- 2>/dev/null || true
+  exec 9>&- || true
   resume_out="$( ( resume_cmd "$phase" ) 2>&1 )" || true
   wait_phase_window_gone
   sleep 0.3
@@ -205,7 +205,7 @@ selftest_case_resume() {
   launches="$(selftest_resume_launches)"
   # A subshell: `resume_cmd` exits on refusal, and that exit must not end the
   # suite with cases still to run. Its output is kept so a failure can say why.
-  exec 9>&- 2>/dev/null || true
+  exec 9>&- || true
   resume_out="$( ( resume_cmd "$phase" ) 2>&1 )" || true
   wait_phase_window_gone
   sleep 0.3
@@ -271,38 +271,16 @@ selftest_case_group_resume() {
   local group_config="$tmp/group-resume-config.json"
   local group_branch="feature/group-cache-warm" member_branch="feature/cache-read"
   local rel="" run_dir="" head="" rc=0
-  local old_repo="${REPO:-}" old_board_dir="${BOARD_DIR:-}" old_wf="${WF:-}"
-  local old_argus="${ARGUS:-}" old_notifier="${NOTIFIER:-}"
-  local old_run_dir="${RUN_DIR:-}" old_lock="${LOCK:-}" old_halt="${HALT:-}"
-  local old_stall="${STALL:-}" old_current="${CURRENT:-}" old_pid="${PIDFILE:-}"
-  local old_log="${LOG:-}" old_session="${SESSION:-}" old_claim="${CLAIM:-}"
-  local old_release="${RELEASE:-}" old_group_file="${GROUPFILE:-}"
-  local old_group_branch="${GROUPBRANCH:-}" old_notify_broken="${NOTIFY_BROKEN:-}"
   local old_coordination="${DRIVER_STUB_COORDINATION:-}" old_sleep="$DRIVER_STUB_SLEEP"
-  if ! selftest_fixture_root "$group_root" "$group_base" \
-      || ! selftest_fixture_group_phases "$group_root"; then
+  if ! selftest_group_begin group-resume "$group_root" "$group_base" "$group_config"; then
     echo "FAIL: the group-resume case could not build its own checkout"
     fail=1
     return 0
   fi
-  REPO="$group_root"; BOARD_DIR=board-data
-  ARGUS="$group_root/$BOARD_DIR/argus"
-  NOTIFIER="$ARGUS/notify/notifications.py"
-  selftest_write_config "$group_root" "$group_config" "$BOARD_DIR"
-  load_fixture_config "$group_config"
-  WORK_SOURCE_FLAGS=(--source roadmap)
-  RUN_DIR="$WF/$DRIVER_STATE"
-  mkdir -p "$RUN_DIR"
-  LOCK="$RUN_DIR/driver.lock"; HALT="$RUN_DIR/halted"; STALL="$RUN_DIR/stalled"
-  CURRENT="$RUN_DIR/current"; PIDFILE="$RUN_DIR/pid"; LOG="$RUN_DIR/driver.log"
-  CLAIM="$RUN_DIR/claim"; RELEASE="$RUN_DIR/release"
-  GROUPFILE="$RUN_DIR/group"; GROUPBRANCH="$RUN_DIR/group-branch"
-  SESSION="ar-driver-group-resume-$$"
   DRIVER_STUB_RC=0; DRIVER_STUB_SLEEP=1
   # The branch cut is the step under test, so the real helper has to run here.
   unset DRIVER_STUB_COORDINATION
   export DRIVER_STUB_RC DRIVER_STUB_SLEEP
-  rm -f "$CLAIM" "$GROUPFILE" "$GROUPBRANCH" "$HALT" "$CURRENT" "$PIDFILE"
 
   # The group's first member is waiting on its pull request, which is what makes
   # it an open predecessor for the member being resumed. The receipt carries no
@@ -374,9 +352,13 @@ DOC
   printf '{"phase": "100030", "state": "blocked"}\n' >"$run_dir/run.json"
   selftest_resume_record 100030 "$rel" "$run_dir" blocked 1
   drive || true
-  if grep -q "the reservation group of phase 100030 could not be read" "$LOG" \
+  # One logged line has to carry all three facts: the refusal, the roadmap
+  # reader's own words naming the document to fix, and the way out of the
+  # refusal. A refusal that only says the group could not be read sends the
+  # operator looking for the file.
+  if grep -q "the reservation group of phase 100030 could not be read (.*phase-100020-cache-warm.md.*fix the group declaration, or abandon the phase" "$LOG" \
       && [ "$(selftest_resume_launches)" = "$launches" ]; then
-    echo "ok: a resume refuses a group declaration it cannot read"
+    echo "ok: a resume refuses a group declaration it cannot read, and names the document to fix"
   else
     echo "FAIL: a resume read a group declaration it cannot read"; fail=1
   fi
@@ -384,18 +366,12 @@ DOC
 
   tmux kill-session -t "$SESSION" 2>/dev/null || true
   rm -f "$CLAIM" "$GROUPFILE" "$GROUPBRANCH" "$HALT" "$CURRENT" "$PIDFILE"
-  REPO="$old_repo"; BOARD_DIR="$old_board_dir"; WF="$old_wf"; ARGUS="$old_argus"
-  NOTIFIER="$old_notifier"; RUN_DIR="$old_run_dir"; LOCK="$old_lock"
-  HALT="$old_halt"; STALL="$old_stall"; CURRENT="$old_current"; PIDFILE="$old_pid"
-  LOG="$old_log"; SESSION="$old_session"; CLAIM="$old_claim"; RELEASE="$old_release"
-  GROUPFILE="$old_group_file"; GROUPBRANCH="$old_group_branch"
-  NOTIFY_BROKEN="$old_notify_broken"; DRIVER_STUB_SLEEP="$old_sleep"
+  DRIVER_STUB_SLEEP="$old_sleep"
   if [ -n "$old_coordination" ]; then
     DRIVER_STUB_COORDINATION="$old_coordination"
   else
     unset DRIVER_STUB_COORDINATION
   fi
   export DRIVER_STUB_SLEEP DRIVER_STUB_COORDINATION
-  load_fixture_config "$selftest_config"
-  WORK_SOURCE_FLAGS=(--source roadmap)
+  selftest_group_end
 }
