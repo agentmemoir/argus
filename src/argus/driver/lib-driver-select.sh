@@ -72,11 +72,11 @@ except ValueError:
 
 # One line per phase the selector skipped because its pull request is open.
 #
-# The selector no longer stops on an open pull request, so nothing else runs
-# the merge check, and a receipt would read awaiting_review for ever: the phase
-# that was merged never gets recorded as merged and the board keeps no
-# completion evidence for it. This is the only place that happens, which is why
-# it runs before the selection is acted on rather than after.
+# The selector no longer stops on an open pull request, so nothing in selection
+# runs the merge check, and a receipt would read awaiting_review for ever: the
+# phase that was merged never gets recorded as merged and the board keeps no
+# completion evidence for it. The tick's maintenance pass runs this before any
+# selection is acted on.
 #
 # Newest first, deliberately. The phase that blocks the line is the highest
 # numbered one still waiting, because the next phase is stacked on the highest
@@ -163,8 +163,8 @@ PROBE
 }
 
 # Run the merge check for every phase waiting on a pull request. Sets
-# PENDING_PUBLISHED to the number that became published, so the caller knows
-# whether the selection it just made has gone stale and must be recomputed.
+# PENDING_PUBLISHED to the number that became published, so the caller knows a
+# receipt settled on this tick and ends the tick before selecting.
 #
 # A global rather than an echoed count, because log writes to stdout in a dry
 # run and to the log file otherwise, so anything captured from this function's

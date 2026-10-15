@@ -33,7 +33,7 @@ With no mode flag, a tick runs once.
 
 ## Stop, resume, and claim expiry
 
-`--stop` writes a halt marker and holds the recorded claim for an explicit `--resume [NUMBER]` or `--release`. Clearing the halt marker alone leaves that hold in place. A resume keeps the halt marker, so it starts one phase while later ticks stay halted.
+`--stop` writes a halt marker and holds the recorded claim for an explicit `--resume [NUMBER]` or `--release`. Clearing the halt marker alone leaves that hold in place, until the claim's own heartbeat window passes: the hold is not renewed, so a tick drops it once the claim has expired and the machine no longer owns the work. A resume keeps the halt marker, so it starts one phase while later ticks stay halted. `--release` clears the hold whether or not the board write lands.
 
 Stop and resume can overlap. A resume accepts a matching stop hold just before it opens the phase window. A stop that reaches this point first may be accepted by that explicit resume. A stop written after the accepted hold is removed stays in place. The halt marker remains in both cases. To stop a resume that is still starting, run `--stop` again once its phase window is open.
 

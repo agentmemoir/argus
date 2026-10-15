@@ -133,6 +133,20 @@ _drive
     assert (tmp_path / "stopped-claim").read_text().strip() == "100020"
 
 
+def test_expired_stop_hold_is_released_and_selection_resumes(tmp_path: Path) -> None:
+    shell(
+        tmp_path,
+        """
+printf '100020\\trsv-fixture\\t2\\n' >"$CLAIM"
+printf '100020\\n' >"$RUN_DIR/stopped-claim"
+stopped_claim_expired() { return 0; }
+_drive
+""",
+    )
+    assert not (tmp_path / "stopped-claim").exists()
+    assert "SELECT" in (tmp_path / "events").read_text().splitlines()
+
+
 def test_active_phase_prevents_checkout_maintenance(tmp_path: Path) -> None:
     shell(tmp_path, "tmux_busy() { return 0; }\ncheck_stall() { :; }\n_drive\n")
     events = (tmp_path / "events").read_text().splitlines()

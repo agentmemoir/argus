@@ -107,6 +107,10 @@ def test_release_returns_manually_stopped_claim_without_clearing_halt(
     fixture = driver_publication
     control_tmux(fixture, exec_dir)
     assert fixture.tick("--stop").returncode == 0
+    # The stop must leave a hold for the release's clear to mean anything. On the
+    # unfixed base the hold never exists, so the assertion after the release
+    # passes for the wrong reason.
+    assert (fixture.state / "stopped-claim").exists()
     released = fixture.tick("--release")
     assert released.returncode == 0, released.stderr
     assert (fixture.state / "halted").exists()
