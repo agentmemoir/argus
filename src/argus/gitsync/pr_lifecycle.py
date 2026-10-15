@@ -5,7 +5,7 @@
 import json
 import subprocess
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from argus.conventions import phase_run_dir
 from argus.gitsync.gh import gh_create_draft_pull_request
@@ -50,16 +50,22 @@ def _open_pull_request(root: Path, branch: str) -> dict[str, Any] | None:
     if done.returncode:
         raise ConfigError(f"gh exited {done.returncode}")
     try:
-        rows = json.loads(done.stdout)
+        raw: object = json.loads(done.stdout)
     except ValueError as exc:
         raise ConfigError("gh did not return JSON") from exc
-    if not isinstance(rows, list) or len(rows) > 1:
+    if not isinstance(raw, list):
+        raise ConfigError("gh returned an unexpected pull request list")
+    rows = cast("list[object]", raw)
+    if len(rows) > 1:
         raise ConfigError("gh returned an unexpected pull request list")
     if not rows:
         return None
-    if not isinstance(rows[0], dict) or not pull_request_ref(rows[0].get("url")):
+    if not isinstance(rows[0], dict):
         raise ConfigError("gh returned an invalid pull request")
-    return dict(rows[0])
+    row = cast("dict[str, Any]", rows[0])
+    if not pull_request_ref(row.get("url")):
+        raise ConfigError("gh returned an invalid pull request")
+    return row
 
 
 def mode_pr(root: str | Path, phase: str | int, mode: str) -> dict[str, Any]:

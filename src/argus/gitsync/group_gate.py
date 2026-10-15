@@ -159,7 +159,7 @@ def release_group_pull_request(
     ref = pull_request_ref(pull_request)
     if not ref or not branch:
         return None
-    fixes = (
+    fixes: dict[str, Any] = (
         merge_fix_pull_requests(branch, ref)
         if members
         else {"merged": [], "held": [], "unknown": ""}

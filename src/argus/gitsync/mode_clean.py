@@ -143,11 +143,13 @@ def mode_checkpoint(root: str | Path, paths: list[str] | None = None) -> dict[st
             hint="a handoff is the phase branch, not the integration branch",
         )
     if paths:
-        rc, staged, err = git(root, "diff", "--cached", "--name-only", "-z")
+        rc, staged, err = git(
+            root, "diff", "--cached", "--no-renames", "--name-only", "-z"
+        )
         if rc:
             return blocked(info, "could not read staged paths")
         rc, scoped, err = git(
-            root, "diff", "--cached", "--name-only", "-z", "--", *paths
+            root, "diff", "--cached", "--no-renames", "--name-only", "-z", "--", *paths
         )
         if rc:
             return blocked(info, "could not read scoped staged paths")

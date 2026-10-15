@@ -104,3 +104,12 @@ def test_scoped_checkpoint_refuses_other_staged_work(tmp_path: Path) -> None:
     result = mode_checkpoint(pub, ["selected.txt"])
     assert result["ok"] is False
     assert mode_clean.git(pub, "status", "--porcelain")[1] == before
+
+
+def test_scoped_checkpoint_refuses_rename_from_outside_scope(tmp_path: Path) -> None:
+    pub = _phase_clone(tmp_path)
+    assert mode_clean.git(pub, "mv", "a.txt", "selected.txt")[0] == 0
+    before = mode_clean.git(pub, "status", "--porcelain")[1]
+    result = mode_checkpoint(pub, ["selected.txt"])
+    assert result["ok"] is False
+    assert mode_clean.git(pub, "status", "--porcelain")[1] == before

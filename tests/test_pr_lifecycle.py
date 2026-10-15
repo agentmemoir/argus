@@ -133,3 +133,24 @@ def test_lone_ready_failure_retries_on_next_tick(tmp_path: Path) -> None:
     with _RoutedGH({"pr checks": _checks("pass"), "pr ready": {}}) as gh:
         assert mode_ready(pub, 10)["state"] == "READY"
     assert len(gh.ran("pr ready")) == 1
+
+
+def test_scratch_phase_checkpoint_draft_ci_publish_ready(phase_repo: Path) -> None:
+    from argus.gitsync.mode_clean import mode_checkpoint
+
+    assert git(phase_repo, "push", "-u", "origin", "feature/draft")[0] == 0
+    (phase_repo / "work.txt").write_text("useful work\n")
+    checkpoint = mode_checkpoint(phase_repo, ["work.txt"])
+    assert checkpoint["ok"], checkpoint
+    with _RoutedGH({"pr list": _listing(), "pr create": {"stdout": URL}}):
+        assert mode_pr(phase_repo, 10, "open-pr")["pull_request"]["url"] == URL
+    with _RoutedGH(
+        {
+            "pr list": _listing({"number": 7, "url": URL}),
+            "pr checks": _checks("pending"),
+        }
+    ):
+        assert mode_pr(phase_repo, 10, "peek-ci")["state"] == "PENDING"
+    _write_receipt(phase_repo, 10, pull_request=URL, branch="feature/draft")
+    with _RoutedGH({"pr checks": _checks("pass"), "pr ready": {}}):
+        assert mode_ready(phase_repo, 10)["state"] == "READY"
