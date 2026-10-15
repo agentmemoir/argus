@@ -6,10 +6,10 @@
 #
 # Every case here builds its own sub-fixture, because a group case needs a
 # roadmap whose lowest uncompleted phase is a member of a group, and the suite's
-# own fixture is used by the cases around them. Each case saves the settings it
-# changes and puts them back before it returns, the way the stranding case does:
-# the suite runs every case in one process, so a case that leaves a path behind
-# decides the next case's verdict.
+# own fixture is used by the cases around them. `selftest_group_begin` points the
+# suite at that sub-fixture and saves what it repoints; `selftest_group_end` puts
+# it back. The suite runs every case in one process, so a case that leaves a path
+# behind decides the next case's verdict.
 selftest_case_group_run() {
   # A group runs one member per tick, on one branch, and the tick launches the
   # member the board named rather than the phase the selector was asked about.
@@ -25,37 +25,15 @@ selftest_case_group_run() {
   local group_root="$tmp/group-run-root" group_base="$tmp/group-run-base"
   local group_config="$tmp/group-run-config.json" group_branch="feature/group-cache-warm"
   local claim_out="" rc=0
-  local old_repo="${REPO:-}" old_board_dir="${BOARD_DIR:-}" old_wf="${WF:-}"
-  local old_argus="${ARGUS:-}" old_notifier="${NOTIFIER:-}"
-  local old_run_dir="${RUN_DIR:-}" old_lock="${LOCK:-}" old_halt="${HALT:-}"
-  local old_stall="${STALL:-}" old_current="${CURRENT:-}" old_pid="${PIDFILE:-}"
-  local old_log="${LOG:-}" old_session="${SESSION:-}" old_claim="${CLAIM:-}"
-  local old_release="${RELEASE:-}" old_group_file="${GROUPFILE:-}"
-  local old_group_branch="${GROUPBRANCH:-}" old_notify_broken="${NOTIFY_BROKEN:-}"
   local old_recover="${RECOVER_OWN_CLAIM:-}"
-  if ! selftest_fixture_root "$group_root" "$group_base" \
-      || ! selftest_fixture_group_phases "$group_root"; then
+  if ! selftest_group_begin group "$group_root" "$group_base" "$group_config"; then
     echo "FAIL: the group case could not build its own checkout, so no group ran"
     fail=1
     return 0
   fi
-  REPO="$group_root"; BOARD_DIR=board-data
-  ARGUS="$group_root/$BOARD_DIR/argus"
-  NOTIFIER="$ARGUS/notify/notifications.py"
-  selftest_write_config "$group_root" "$group_config" "$BOARD_DIR"
-  load_fixture_config "$group_config"
-  WORK_SOURCE_FLAGS=(--source roadmap)
-  RUN_DIR="$WF/$DRIVER_STATE"
-  mkdir -p "$RUN_DIR"
-  LOCK="$RUN_DIR/driver.lock"; HALT="$RUN_DIR/halted"; STALL="$RUN_DIR/stalled"
-  CURRENT="$RUN_DIR/current"; PIDFILE="$RUN_DIR/pid"; LOG="$RUN_DIR/driver.log"
-  CLAIM="$RUN_DIR/claim"; RELEASE="$RUN_DIR/release"
-  GROUPFILE="$RUN_DIR/group"; GROUPBRANCH="$RUN_DIR/group-branch"
-  SESSION="ar-driver-group-$$"
   RECOVER_OWN_CLAIM=1
   DRIVER_STUB_RC=0; DRIVER_STUB_SLEEP=8
   export RECOVER_OWN_CLAIM DRIVER_STUB_RC DRIVER_STUB_SLEEP
-  rm -f "$CLAIM" "$GROUPFILE" "$GROUPBRANCH" "$HALT" "$CURRENT" "$PIDFILE"
 
   # This machine claims the whole group through the request program, and its
   # first member is then recorded as waiting on a pull request. The receipt
@@ -107,16 +85,9 @@ selftest_case_group_run() {
   wait_phase_window_gone
   tmux kill-session -t "$SESSION" 2>/dev/null || true
   rm -f "$CLAIM" "$GROUPFILE" "$GROUPBRANCH" "$HALT" "$CURRENT" "$PIDFILE"
-  REPO="$old_repo"; BOARD_DIR="$old_board_dir"; WF="$old_wf"; ARGUS="$old_argus"
-  NOTIFIER="$old_notifier"; RUN_DIR="$old_run_dir"; LOCK="$old_lock"
-  HALT="$old_halt"; STALL="$old_stall"; CURRENT="$old_current"; PIDFILE="$old_pid"
-  LOG="$old_log"; SESSION="$old_session"; CLAIM="$old_claim"; RELEASE="$old_release"
-  GROUPFILE="$old_group_file"; GROUPBRANCH="$old_group_branch"
-  NOTIFY_BROKEN="$old_notify_broken"
   RECOVER_OWN_CLAIM="$old_recover"; DRIVER_STUB_SLEEP=6
   export RECOVER_OWN_CLAIM DRIVER_STUB_SLEEP
-  load_fixture_config "$selftest_config"
-  WORK_SOURCE_FLAGS=(--source roadmap)
+  selftest_group_end
 }
 
 selftest_case_group_partial() {
@@ -134,33 +105,11 @@ selftest_case_group_partial() {
   local group_root="$tmp/group-partial-root" group_base="$tmp/group-partial-base"
   local group_config="$tmp/group-partial-config.json"
   local claim_out="" statuses="" rc=0 rsv="" gen=""
-  local old_repo="${REPO:-}" old_board_dir="${BOARD_DIR:-}" old_wf="${WF:-}"
-  local old_argus="${ARGUS:-}" old_notifier="${NOTIFIER:-}"
-  local old_run_dir="${RUN_DIR:-}" old_lock="${LOCK:-}" old_halt="${HALT:-}"
-  local old_stall="${STALL:-}" old_current="${CURRENT:-}" old_pid="${PIDFILE:-}"
-  local old_log="${LOG:-}" old_session="${SESSION:-}" old_claim="${CLAIM:-}"
-  local old_release="${RELEASE:-}" old_group_file="${GROUPFILE:-}"
-  local old_group_branch="${GROUPBRANCH:-}" old_notify_broken="${NOTIFY_BROKEN:-}"
-  if ! selftest_fixture_root "$group_root" "$group_base" \
-      || ! selftest_fixture_group_phases "$group_root"; then
+  if ! selftest_group_begin group-partial "$group_root" "$group_base" "$group_config"; then
     echo "FAIL: the partial-group case could not build its own checkout"
     fail=1
     return 0
   fi
-  REPO="$group_root"; BOARD_DIR=board-data
-  ARGUS="$group_root/$BOARD_DIR/argus"
-  NOTIFIER="$ARGUS/notify/notifications.py"
-  selftest_write_config "$group_root" "$group_config" "$BOARD_DIR"
-  load_fixture_config "$group_config"
-  WORK_SOURCE_FLAGS=(--source roadmap)
-  RUN_DIR="$WF/$DRIVER_STATE"
-  mkdir -p "$RUN_DIR"
-  LOCK="$RUN_DIR/driver.lock"; HALT="$RUN_DIR/halted"; STALL="$RUN_DIR/stalled"
-  CURRENT="$RUN_DIR/current"; PIDFILE="$RUN_DIR/pid"; LOG="$RUN_DIR/driver.log"
-  CLAIM="$RUN_DIR/claim"; RELEASE="$RUN_DIR/release"
-  GROUPFILE="$RUN_DIR/group"; GROUPBRANCH="$RUN_DIR/group-branch"
-  SESSION="ar-driver-group-partial-$$"
-  rm -f "$CLAIM" "$GROUPFILE" "$GROUPBRANCH" "$HALT" "$CURRENT" "$PIDFILE"
   claim_out="$("$PYTHON" "$ARGUS/select/group.py" "${ARGUS_CONFIG_ARGS[@]}" \
     --phase 100020 --machine-id "$PHASE_MACHINE_ID" 2>&1)" || rc=$?
   if [ "$rc" -ne 0 ]; then
@@ -221,14 +170,7 @@ print(" ".join("{}={}".format(key, record.get("status"))
     && echo "ok: the release named the group it returned" \
     || { echo "FAIL: the release did not name the group it returned"; fail=1; }
   rm -f "$CLAIM" "$GROUPFILE" "$GROUPBRANCH" "$HALT" "$CURRENT" "$PIDFILE"
-  REPO="$old_repo"; BOARD_DIR="$old_board_dir"; WF="$old_wf"; ARGUS="$old_argus"
-  NOTIFIER="$old_notifier"; RUN_DIR="$old_run_dir"; LOCK="$old_lock"
-  HALT="$old_halt"; STALL="$old_stall"; CURRENT="$old_current"; PIDFILE="$old_pid"
-  LOG="$old_log"; SESSION="$old_session"; CLAIM="$old_claim"; RELEASE="$old_release"
-  GROUPFILE="$old_group_file"; GROUPBRANCH="$old_group_branch"
-  NOTIFY_BROKEN="$old_notify_broken"
-  load_fixture_config "$selftest_config"
-  WORK_SOURCE_FLAGS=(--source roadmap)
+  selftest_group_end
 }
 
 
@@ -245,36 +187,14 @@ selftest_case_group_release() {
   local group_config="$tmp/group-release-config.json"
   local wait_file="$tmp/group-release-wait" ready_file="$tmp/group-release-ready"
   local statuses="" waited=0
-  local old_repo="${REPO:-}" old_board_dir="${BOARD_DIR:-}" old_wf="${WF:-}"
-  local old_argus="${ARGUS:-}" old_notifier="${NOTIFIER:-}"
-  local old_run_dir="${RUN_DIR:-}" old_lock="${LOCK:-}" old_halt="${HALT:-}"
-  local old_stall="${STALL:-}" old_current="${CURRENT:-}" old_pid="${PIDFILE:-}"
-  local old_log="${LOG:-}" old_session="${SESSION:-}" old_claim="${CLAIM:-}"
-  local old_release="${RELEASE:-}" old_group_file="${GROUPFILE:-}"
-  local old_group_branch="${GROUPBRANCH:-}" old_notify_broken="${NOTIFY_BROKEN:-}"
   local old_wait="${DRIVER_STUB_WAIT_FILE:-}"
   local old_ready="${DRIVER_STUB_READY_FILE:-}"
   local old_recover="${RECOVER_OWN_CLAIM:-}"
-  if ! selftest_fixture_root "$group_root" "$group_base" \
-      || ! selftest_fixture_group_phases "$group_root"; then
+  if ! selftest_group_begin group-release "$group_root" "$group_base" "$group_config"; then
     echo "FAIL: the group-release case could not build its own checkout"
     fail=1
     return 0
   fi
-  REPO="$group_root"; BOARD_DIR=board-data
-  ARGUS="$group_root/$BOARD_DIR/argus"
-  NOTIFIER="$ARGUS/notify/notifications.py"
-  selftest_write_config "$group_root" "$group_config" "$BOARD_DIR"
-  load_fixture_config "$group_config"
-  WORK_SOURCE_FLAGS=(--source roadmap)
-  RUN_DIR="$WF/$DRIVER_STATE"
-  mkdir -p "$RUN_DIR"
-  LOCK="$RUN_DIR/driver.lock"; HALT="$RUN_DIR/halted"; STALL="$RUN_DIR/stalled"
-  CURRENT="$RUN_DIR/current"; PIDFILE="$RUN_DIR/pid"; LOG="$RUN_DIR/driver.log"
-  CLAIM="$RUN_DIR/claim"; RELEASE="$RUN_DIR/release"
-  GROUPFILE="$RUN_DIR/group"; GROUPBRANCH="$RUN_DIR/group-branch"
-  SESSION="ar-driver-group-release-$$"
-  rm -f "$CLAIM" "$GROUPFILE" "$GROUPBRANCH" "$HALT" "$CURRENT" "$PIDFILE"
   rm -f "$wait_file" "$ready_file"
   RECOVER_OWN_CLAIM=0
   DRIVER_STUB_RC=0; DRIVER_STUB_SLEEP=8
@@ -338,15 +258,8 @@ print(" ".join(sorted(phases)))')"
   tmux kill-session -t "$SESSION" 2>/dev/null || true
   rm -f "$CLAIM" "$GROUPFILE" "$GROUPBRANCH" "$HALT" "$CURRENT" "$PIDFILE"
   rm -f "$wait_file" "$ready_file"
-  REPO="$old_repo"; BOARD_DIR="$old_board_dir"; WF="$old_wf"; ARGUS="$old_argus"
-  NOTIFIER="$old_notifier"; RUN_DIR="$old_run_dir"; LOCK="$old_lock"
-  HALT="$old_halt"; STALL="$old_stall"; CURRENT="$old_current"; PIDFILE="$old_pid"
-  LOG="$old_log"; SESSION="$old_session"; CLAIM="$old_claim"; RELEASE="$old_release"
-  GROUPFILE="$old_group_file"; GROUPBRANCH="$old_group_branch"
-  NOTIFY_BROKEN="$old_notify_broken"
   DRIVER_STUB_WAIT_FILE="$old_wait"; DRIVER_STUB_READY_FILE="$old_ready"
   RECOVER_OWN_CLAIM="$old_recover"; DRIVER_STUB_SLEEP=6
   export DRIVER_STUB_WAIT_FILE DRIVER_STUB_READY_FILE RECOVER_OWN_CLAIM DRIVER_STUB_SLEEP
-  load_fixture_config "$selftest_config"
-  WORK_SOURCE_FLAGS=(--source roadmap)
+  selftest_group_end
 }

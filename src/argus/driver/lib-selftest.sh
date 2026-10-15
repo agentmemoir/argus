@@ -212,6 +212,7 @@ driver_self_test() {
     tmux kill-session -t "ar-driver-group-$$" 2>/dev/null || true
     tmux kill-session -t "ar-driver-group-partial-$$" 2>/dev/null || true
     tmux kill-session -t "ar-driver-group-release-$$" 2>/dev/null || true
+    tmux kill-session -t "ar-driver-group-resume-$$" 2>/dev/null || true
     # A failing run keeps its fixture when asked, because the reason a case
     # failed is usually in a file the fixture owned and the teardown deletes.
     if [ "${SELFTEST_KEEP_TMP:-0}" = "1" ] && [ "$rc" -ne 0 ]; then
@@ -358,6 +359,9 @@ PROBE
   selftest_run_case group_run
   selftest_run_case group_partial
   selftest_run_case group_release
+  # A resume of a group member: its own sub-fixture, and the resume's branch
+  # step, which has no selection to read the group from.
+  selftest_run_case group_resume
   # The resume cases last: they move the fixture's HEAD and write the shared run
   # directory, so nothing after them would see the state the other cases expect.
   selftest_run_case resume

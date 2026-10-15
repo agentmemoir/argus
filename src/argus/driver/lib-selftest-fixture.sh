@@ -316,3 +316,76 @@ Path(config).write_text(json.dumps(doc, indent=2) + "\n", encoding="utf-8")
 PY
 }
 
+# --- a group case's own sub-fixture -----------------------------------------
+
+# The driver settings a group case repoints, saved by `selftest_group_begin` and
+# put back by `selftest_group_end`. One list, read and written by position,
+# because a `local` inside the helper would end with the helper: the suite runs
+# every case in one process, so a case that leaves a path behind decides the next
+# case's verdict.
+SELFTEST_GROUP_SAVED=()
+
+# Point the suite at a group case's own sub-fixture.
+#
+# A group case needs a roadmap whose lowest uncompleted phase is a member of a
+# group, and the suite's own fixture is used by the cases around it, so each case
+# builds its own. This is the one place that knows which settings such a case
+# repoints, which is what stops the fourth case from forgetting the tenth
+# setting the third one remembered.
+#
+# What is the case's own is left to the case: the tmux session is
+# `ar-driver-$1-$$`, and the stub timing, the stub fence and the recovery flag
+# are the case's, because those are the behaviour it exists to test.
+#
+#   $1  the case's name, as the middle part of its tmux session
+#   $2  the sub-fixture root     (created)
+#   $3  the scratch folder       (created)
+#   $4  the configuration file   (written)
+#
+# Returns 1 without reporting when the sub-fixture cannot be built, so the caller
+# prints the FAIL line that names its own case.
+selftest_group_begin() {   # <name> <root> <base> <config>
+  SELFTEST_GROUP_SAVED=(
+    "${REPO:-}" "${BOARD_DIR:-}" "${WF:-}" "${ARGUS:-}" "${NOTIFIER:-}"
+    "${RUN_DIR:-}" "${LOCK:-}" "${HALT:-}" "${STALL:-}" "${CURRENT:-}"
+    "${PIDFILE:-}" "${LOG:-}" "${SESSION:-}" "${CLAIM:-}" "${RELEASE:-}"
+    "${GROUPFILE:-}" "${GROUPBRANCH:-}" "${NOTIFY_BROKEN:-}"
+  )
+  if ! selftest_fixture_root "$2" "$3" || ! selftest_fixture_group_phases "$2"; then
+    return 1
+  fi
+  REPO="$2"; BOARD_DIR=board-data
+  ARGUS="$2/$BOARD_DIR/argus"
+  NOTIFIER="$ARGUS/notify/notifications.py"
+  selftest_write_config "$2" "$4" "$BOARD_DIR"
+  load_fixture_config "$4"
+  WORK_SOURCE_FLAGS=(--source roadmap)
+  RUN_DIR="$WF/$DRIVER_STATE"
+  mkdir -p "$RUN_DIR"
+  LOCK="$RUN_DIR/driver.lock"; HALT="$RUN_DIR/halted"; STALL="$RUN_DIR/stalled"
+  CURRENT="$RUN_DIR/current"; PIDFILE="$RUN_DIR/pid"; LOG="$RUN_DIR/driver.log"
+  CLAIM="$RUN_DIR/claim"; RELEASE="$RUN_DIR/release"
+  GROUPFILE="$RUN_DIR/group"; GROUPBRANCH="$RUN_DIR/group-branch"
+  SESSION="ar-driver-$1-$$"
+  rm -f "$CLAIM" "$GROUPFILE" "$GROUPBRANCH" "$HALT" "$CURRENT" "$PIDFILE"
+  return 0
+}
+
+# Put back the settings `selftest_group_begin` saved, and reload the suite's own
+# configuration. A case restores what it changed on its own first; this covers
+# the eighteen settings every group case repoints.
+selftest_group_end() {
+  REPO="${SELFTEST_GROUP_SAVED[0]}"; BOARD_DIR="${SELFTEST_GROUP_SAVED[1]}"
+  WF="${SELFTEST_GROUP_SAVED[2]}"; ARGUS="${SELFTEST_GROUP_SAVED[3]}"
+  NOTIFIER="${SELFTEST_GROUP_SAVED[4]}"; RUN_DIR="${SELFTEST_GROUP_SAVED[5]}"
+  LOCK="${SELFTEST_GROUP_SAVED[6]}"; HALT="${SELFTEST_GROUP_SAVED[7]}"
+  STALL="${SELFTEST_GROUP_SAVED[8]}"; CURRENT="${SELFTEST_GROUP_SAVED[9]}"
+  PIDFILE="${SELFTEST_GROUP_SAVED[10]}"; LOG="${SELFTEST_GROUP_SAVED[11]}"
+  SESSION="${SELFTEST_GROUP_SAVED[12]}"; CLAIM="${SELFTEST_GROUP_SAVED[13]}"
+  RELEASE="${SELFTEST_GROUP_SAVED[14]}"; GROUPFILE="${SELFTEST_GROUP_SAVED[15]}"
+  GROUPBRANCH="${SELFTEST_GROUP_SAVED[16]}"
+  NOTIFY_BROKEN="${SELFTEST_GROUP_SAVED[17]}"
+  load_fixture_config "$selftest_config"
+  WORK_SOURCE_FLAGS=(--source roadmap)
+}
+

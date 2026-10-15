@@ -19,8 +19,8 @@
 #   phase-driver.sh abandon <N> [--reason TEXT]  # park a phase that will not resume
 #   phase-driver.sh --session <N> <phase-file>   # one phase, run inside tmux
 #
-# The server reserves the selected phase in the private coordination branch
-# before tmux starts. A coordination fetch/push failure is fail-closed.
+# The cron tick reserves the selected phase in the private coordination branch
+# before tmux starts (a fetch/push failure is fail-closed); `--session` starts no reservation and writes no claim.
 #
 # Cron runs the driver every few minutes. It does nothing while a phase is
 # running; while halted it settles publication only. Otherwise it starts the lowest

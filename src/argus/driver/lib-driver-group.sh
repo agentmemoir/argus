@@ -60,6 +60,57 @@ group_take_selection() {
   return 0
 }
 
+# Take the group a phase's own document declares, for a path with no selection.
+#
+# The tick reads the group from the selection, and a resume has none: the tick's
+# resume branch runs before the selector, and `--resume` never selects at all.
+# Every member of a group publishes on the group's one branch, so a resume that
+# cut a branch of its own would put the member's receipt on a branch none of the
+# group's joins know. The declaration is where the publication reads the group
+# from, so both name the same branch.
+#
+# A declaration that cannot be read is refused rather than read as "runs alone":
+# a resume that cannot see the group would cut exactly the wrong branch.
+#
+# Sets GROUP_ERROR to the roadmap reader's own words when the declaration cannot
+# be read. The refusal an operator reads is the only signal a halted line gives,
+# and the reader's message names the document to fix, so it travels with the
+# refusal instead of stopping at the driver's error stream.
+group_take_declared() {   # <number>
+  local declared
+  GROUP_ERROR=""
+  if ! declared="$("$PYTHON" - "$ARGUS" "$REPO" "$1" "$(roadmap_dir)" \
+    "${ARGUS_CONFIG_ARGS[@]}" <<'PY'
+import json
+import sys
+
+sys.path.insert(0, sys.argv[1])
+import _bootstrap
+from argus import conventions
+
+conventions.configure_from_cli(sys.argv[5:])
+from argus.roadmap import source as roadmap_source
+
+try:
+    group = roadmap_source.resolve_group_or_none(
+        sys.argv[2], sys.argv[4], int(sys.argv[3])
+    )
+except roadmap_source.ReservationGroupError as exc:
+    # The reason goes to stdout, which is what the caller reads. On stderr it
+    # would be lost to the caller and the refusal would keep the vaguer words
+    # below. A fault this reader did not expect still reaches stderr, as a
+    # traceback, which is where a stack trace belongs.
+    print(str(exc))
+    raise SystemExit(1)
+print(json.dumps({"group": list(group["group"]) if group else []}))
+PY
+)"; then
+    GROUP_ERROR="$declared"
+    return 1
+  fi
+  group_take_selection "$declared"
+}
+
 # Whether this tick is running a declared group.
 group_active() {
   [ -n "${GROUP_MEMBERS:-}" ]
