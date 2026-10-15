@@ -54,6 +54,49 @@ record_claim() {
   printf '%s\t%s\t%s\n' "$number" "$reservation_id" "$generation" >"$CLAIM"
 }
 
+# Read the claim fence into CLAIM_NUMBER, CLAIM_ID and CLAIM_GEN.
+#
+# The tab is split by hand rather than with `IFS=$'\t' read -r a b c`. A tab is
+# an IFS *whitespace* character, so an empty field between two tabs collapses and
+# every field after it shifts by one: a claim written with no fence would read
+# its generation as its reservation id, and a resume would renew a fence that is
+# not there. Returns non-zero when there is no claim to read.
+claim_read_fields() {   # <file>
+  CLAIM_NUMBER=""; CLAIM_ID=""; CLAIM_GEN=""
+  local line rest
+  [ -s "$1" ] || return 1
+  IFS= read -r line <"$1" || return 1
+  CLAIM_NUMBER="${line%%$'\t'*}"
+  rest="${line#*$'\t'}"
+  if [ "$rest" != "$line" ]; then
+    CLAIM_ID="${rest%%$'\t'*}"
+    CLAIM_GEN="${rest#*$'\t'}"
+  fi
+  return 0
+}
+
+# The pipeline input flags for one phase, as separate words.
+#
+# The names come from the configuration and the pipeline declaration, not from
+# this script, so a pipeline that renames its inputs still gets what it declared.
+# The resume path builds its auto-pin command from the same words.
+glide_input_args() {   # <number> <rel>
+  "$PYTHON" - "$ARGUS" "$REPO" "$1" "$2" "${ARGUS_CONFIG_ARGS[@]}" <<'PY'
+import json, sys
+from pathlib import Path
+sys.path.insert(0, sys.argv[1])
+import _bootstrap
+from argus import conventions
+conventions.configure_from_cli(sys.argv[5:])
+from argus.conventions import pipeline_inputs
+inputs = pipeline_inputs(sys.argv[2], int(sys.argv[3]), sys.argv[4])
+for key in (conventions.setting("number-input", "phase_number"), conventions.setting("file-input", "phase_file")):
+    value = inputs[key]
+    print("--input")
+    print(f"{key}={value if isinstance(value, str) else json.dumps(value)}")
+PY
+}
+
 # A signal-driven stop must halt and notify: bash dies before any trailing
 # code after a signal, so the work is done in a trap, marker first. (Ctrl-C
 # reaches this; tmux kill-session does NOT signal the pane, which is why the
@@ -169,6 +212,23 @@ run_session() {
   cd "$REPO"
   tmux_set_title "${work_kind:-phase} $number running"
   notify_phase "$rel" started
+  if [ "${CLIO_RESUME:-}" = 1 ]; then
+    # The parent proved the resume gate before it launched, and the state can
+    # still move in between: another machine, or an operator, may have taken the
+    # phase on. Re-check it before glide starts, so a stale resume stops the line
+    # instead of archiving a run that moved on.
+    local resume_run_dir resume_state resume_reason
+    resume_run_dir="$(phase_run_dir "$number" "$rel")"
+    resume_state="$(phase_state "$number" "$rel")"
+    resume_reason="$(resume_gate_reason "$resume_state" "$resume_run_dir")" || {
+      printf 'resume refused: %s\n' "$resume_reason" >"$HALT"
+      halt_record_write "$number" "$rel" "$resume_run_dir" "$resume_state" "" \
+        resume-refused "$resume_reason"
+      log "resume refused: phase $number: $resume_reason"
+      rm -f "$CURRENT" "$PIDFILE"
+      exit 3
+    }
+  fi
   if [ -n "${DRIVER_STUB_RC:-}" ]; then
     log "STUB mode: simulating glide (rc=$DRIVER_STUB_RC)"
     # A stub can be told to wait for a file instead of sleeping a fixed span. A
@@ -205,21 +265,8 @@ run_session() {
     rc="$DRIVER_STUB_RC"
   else
     local glide_inputs=() input input_values
-    if input_values="$("$PYTHON" - "$ARGUS" "$REPO" "$number" "$rel" "${ARGUS_CONFIG_ARGS[@]}" <<'PY'
-import json, sys
-from pathlib import Path
-sys.path.insert(0, sys.argv[1])
-import _bootstrap
-from argus import conventions
-conventions.configure_from_cli(sys.argv[5:])
-from argus.conventions import pipeline_inputs
-inputs = pipeline_inputs(sys.argv[2], int(sys.argv[3]), sys.argv[4])
-for key in (conventions.setting("number-input", "phase_number"), conventions.setting("file-input", "phase_file")):
-    value = inputs[key]
-    print(f"{key}={value if isinstance(value, str) else json.dumps(value)}")
-PY
-    )"; then
-      while IFS= read -r input; do glide_inputs+=(--input "$input"); done <<<"$input_values"
+    if input_values="$(glide_input_args "$number" "$rel")"; then
+      while IFS= read -r input; do glide_inputs+=("$input"); done <<<"$input_values"
       # glide refuses to rerun a run that already reached a terminal state unless
       # --fresh archives that run first. The selector skips the states it knows
       # need a decision, but any other terminal run it hands back (an older end
@@ -229,7 +276,12 @@ PY
       # alone, and a missing run.json means there is nothing to archive.
       local prior_state fresh_args=()
       prior_state="$(terminal_state_of_file "$(phase_run_dir "$number" "$rel")/run.json")"
-      if [ -n "$prior_state" ]; then
+      if [ "${CLIO_RESUME:-}" = 1 ]; then
+        # The parent proved the ledger against HEAD and asked glide to continue
+        # the run it stopped. `--fresh` archives exactly the state the resume
+        # exists to keep, so it is never added here.
+        log "${work_kind:-phase} $number is resuming (prior state ${prior_state:-none}); the run is not archived"
+      elif [ -n "$prior_state" ]; then
         fresh_args+=(--fresh)
         log "${work_kind:-phase} $number run is terminal ($prior_state); restarting it with --fresh"
       fi
@@ -268,6 +320,15 @@ PY
          notify_phase "$rel" interrupted "the process received an interrupt signal" ;;
     *)   printf '%s %s rc=%s state=%s at %s\n' \
            "${work_kind:-phase}" "$number" "$rc" "${state:-unknown}" "$(ts)" >"$HALT"
+          # The record is written beside the marker, and only here: an operator
+          # stop or a signal leaves a run the board claim recovers, and a record
+          # would make the resume gate refuse it.
+          # The record keeps the raw state, which may be empty: the resume gate
+          # tells an absent run.json (the interrupted class) from a present but
+          # damaged one, and an `unknown` placeholder would hide that difference.
+          halt_record_write "$number" "$rel" "$(phase_run_dir "$number" "$rel")" \
+            "$state" "$rc" rc
+          log "halt-start: phase $number rc=$rc state=${state:-unknown} source=rc; marker written"
           # The title is set before the window closes, so the halt survives the
           # phase window going away and the idle display taking over.
           tmux_set_title "HALTED ${work_kind:-phase} $number (rc=$rc)"

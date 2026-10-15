@@ -85,6 +85,11 @@ selftest_run_case() {
         ;;
     esac
   fi
+  # A case that halts leaves the halt record behind, and every case shares one run
+  # folder. Clearing it here is what keeps a later case from starting on a resume
+  # it never asked for. The marker is left alone: the cases that halt manage it
+  # themselves, and clearing it here would change what they assert.
+  rm -f "$HALT_RECORD"
   "selftest_case_$name"
 }
 
@@ -329,6 +334,7 @@ PROBE
   export SESSION_NAME DRIVER_RUN_DIR DISABLE_NOTIFY DISABLE_DISCORD DRIVER_STUB_RC DRIVER_STUB_SLEEP
   RUN_DIR="$DRIVER_RUN_DIR"
   LOCK="$RUN_DIR/driver.lock"; HALT="$RUN_DIR/halted"
+  HALT_RECORD="$RUN_DIR/halted.json"
   STALL="$RUN_DIR/stalled"; CURRENT="$RUN_DIR/current"
   PIDFILE="$RUN_DIR/pid"; CLAIM="$RUN_DIR/claim"; RELEASE="$RUN_DIR/release"
   GROUPFILE="$RUN_DIR/group"; GROUPBRANCH="$RUN_DIR/group-branch"
@@ -352,6 +358,10 @@ PROBE
   selftest_run_case group_run
   selftest_run_case group_partial
   selftest_run_case group_release
+  # The resume cases last: they move the fixture's HEAD and write the shared run
+  # directory, so nothing after them would see the state the other cases expect.
+  selftest_run_case resume
+  selftest_run_case abandon
 
 
   tmux kill-session -t "$SESSION" 2>/dev/null || true

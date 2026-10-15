@@ -25,6 +25,7 @@ from argus.roadmap.evidence import (
 from argus.roadmap.group import resolve_group_or_none
 from argus.roadmap.index import audit
 from argus.roadmap.queue import candidates, gate_block, select_next
+from argus.roadmap.runstate import run_abandoned
 from argus.roadmap.select import _awaiting_review, _reservation_result, _select_group
 from argus.select.work_source import WorkSource, WorkSourceError
 
@@ -163,6 +164,31 @@ def select_server_phase(
                 }
             )
             continue
+        # A phase a person parked, or a run that ended rejected or
+        # remedy_escalated, is not completion evidence and cannot resume without
+        # an explicit operator action. It is reported and passed over, never
+        # offered: offering it made the driver recover its own claim and launch
+        # a phase glide refuses to start without --fresh, so the tick exited 2
+        # and the line halted on every tick. The phase keeps its place in the
+        # queue, but it is not this tick's work. Its report is appended here,
+        # before the open-gate guard and before any completion `continue`, so an
+        # abandoned phase with an open gate is reported rather than stalled, and
+        # a run that is both complete and abandoned is still skipped but still
+        # reported. The residue is the operator's own action.
+        parked = run_abandoned(repo, number)
+        ended = needs_decision(repo, number) if (not done or parked) else None
+        if ended:
+            decisions.append(
+                {
+                    "phase": key,
+                    "path": reported_path(repo, path),
+                    "state": ended,
+                }
+            )
+        # A parked phase is the operator's own close-out: report it and move on,
+        # rather than stopping the line on its still-open decision gate.
+        if parked:
+            continue
         if not done:
             # An open decision gate is checked before anything else that can
             # claim this phase. Reserving a phase that owes the owner a
@@ -174,17 +200,6 @@ def select_server_phase(
             if blocked:
                 blocked["path"] = reported_path(repo, path)
                 return finish(blocked)
-        # A run that ended rejected or remedy_escalated is not completion
-        # evidence and cannot resume without an explicit operator action. It is
-        # reported and passed over, never offered: offering it made the driver
-        # recover its own claim and launch a phase glide refuses to start
-        # without --fresh, so the tick exited 2 and the line halted on every
-        # tick. The phase keeps its place in the queue, but it is not this
-        # tick's work. It is not consulted for a phase that is `done`, and it
-        # sits after the board's completion-inconsistency check below, so a
-        # board claiming "completed" with no evidence is still reported rather
-        # than quietly skipped.
-        ended = None if done else needs_decision(repo, number)
         if record is not None:
             status = record.get("status")
             # Finished on disk, and the board is not asserting a completion we
@@ -194,6 +209,9 @@ def select_server_phase(
             if status in {"completed", "accepted"}:
                 if done:
                     continue
+                # The board's completion claim has no evidence on disk. That is
+                # a real inconsistency, so it still stops the line rather than
+                # being skipped with the parked and terminal phases above.
                 return finish(
                     {
                         "state": "COORDINATION_INCONSISTENT",
@@ -206,13 +224,6 @@ def select_server_phase(
                     }
                 )
             if ended:
-                decisions.append(
-                    {
-                        "phase": key,
-                        "path": reported_path(repo, path),
-                        "state": ended,
-                    }
-                )
                 continue
             if status in {"claimed", "running", "paused", "blocked"}:
                 return finish(held_answer())
@@ -220,13 +231,6 @@ def select_server_phase(
         if done:
             continue
         if ended:
-            decisions.append(
-                {
-                    "phase": key,
-                    "path": reported_path(repo, path),
-                    "state": ended,
-                }
-            )
             continue
         # A phase may declare a reservation group. The group is claimed as one
         # unit under one reservation id, and the answer carries the array. A

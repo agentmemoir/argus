@@ -82,6 +82,15 @@ check() {
     fi
   done
   echo "work source: ${WORK_SOURCE:-roadmap}"
+  # A halt, and the record a resume reads, in the report an operator runs when
+  # the line will not advance. The record is named separately because it survives
+  # `clear-halt`, and it is what decides whether the next tick resumes or
+  # advances.
+  if [ -f "$HALT" ]; then
+    echo "halt: $(tr '\n' ' ' <"$HALT")"
+  elif [ -f "$HALT_RECORD" ] && halt_record_read "$HALT_RECORD"; then
+    echo "halt record: phase $HALT_REC_PHASE (state ${HALT_REC_STATE:-unknown}); the next tick resumes it"
+  fi
   if [ "${WORK_SOURCE:-roadmap}" = issues ]; then
     for var in BOARD_ISSUES_FILE MACHINE_SETTINGS_FILE ISSUES_REPO ISSUES_PREFERENCE \
         ISSUES_CATEGORY ISSUES_SEARCH ISSUES_TASK_DIR ISSUES_CODEOWNERS_FILE \
