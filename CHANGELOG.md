@@ -1,39 +1,20 @@
 # Changelog
 
-Notable changes to this project are documented here. The format follows
-[Keep a Changelog](https://keepachangelog.com/en/1.1.0/). This project intends to
-follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html); no version has
-been released yet.
+Notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). This project intends to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html); no version has been released yet.
 
 ## [Unreleased]
 
 - `--merge-check-only` settles phase publication and group readiness without selecting, reserving, or launching work. Halted ticks do the same maintenance once no phase process is active. A tick that records a merge or makes a group ready ends before selecting new work. `--stop` holds its claim for an explicit `--resume` or `--release`; clearing the halt marker alone cannot restart it. A resume keeps the line's halt marker.
-- `argus` watches a phase's pull request on each tick: code-scanning alerts and
-  review comments are recorded as they change, and one scoped command replies to
-  or reacts to a recorded review comment.
-- `argus` ticks an unattended work queue: select a phase, reserve it on a shared
-  Git board, launch its pipeline in tmux, watch the run, and check publication
-  before the next tick.
-- One JSONC configuration file names every path and command; a missing required
-  key stops the tick and names the key.
-- Reservation groups: several phases claimed in one board write, run on one
-  branch, and published under one pull request, with the claim renewed while a
-  member runs.
-- Halt markers on blocked or failed runs, claim cooldown and expiry handling,
-  and a remedy escalation that records open findings and releases the claim.
-- Modes: `--check`, `--dry-run`, `--self-test`, `--stop`, and
-  `--session <NUMBER> <PHASE-FILE>`.
-- Checks: the driver self-test, the guard-faults harness, and a wheel that
-  ships the shell driver.
-- A publication lock left behind by a publish that died stops blocking after the
-  30 minute heartbeat window, so claim recovery and other phases' publishes
-  proceed. A fresh lock still blocks both; `release-publication` still frees one
-  early.
-- A relative `--repo-root` or `--roadmap-dir` resolves against the working
-  directory, not the configuration file's folder, so `--root .` from the project
-  root names the project root.
-- The tmux idle watcher ends when the process that started it is gone, so one
-  run outside tmux, or after its tmux server died, no longer loops as an orphan.
+- `argus` watches a phase's pull request on each tick: code-scanning alerts and review comments are recorded as they change, and one scoped command replies to or reacts to a recorded review comment.
+- `argus` ticks an unattended work queue: select a phase, reserve it on a shared Git board, launch its pipeline in tmux, watch the run, and check publication before the next tick.
+- One JSONC configuration file names every path and command; a missing required key stops the tick and names the key.
+- Reservation groups: several phases claimed in one board write, run on one branch, and published under one pull request, with the claim renewed while a member runs.
+- Halt markers on blocked or failed runs, claim cooldown and expiry handling, and a remedy escalation that records open findings and releases the claim.
+- Modes: `--check`, `--dry-run`, `--self-test`, `--stop`, and `--session <NUMBER> <PHASE-FILE>`.
+- Checks: the driver self-test, the guard-faults harness, and a wheel that ships the shell driver.
+- A publication lock left behind by a publish that died stops blocking after the 30 minute heartbeat window, so claim recovery and other phases' publishes proceed. A fresh lock still blocks both; `release-publication` still frees one early.
+- A relative `--repo-root` or `--roadmap-dir` resolves against the working directory, not the configuration file's folder, so `--root .` from the project root names the project root.
+- The tmux idle watcher ends when the process that started it is gone, so one run outside tmux, or after its tmux server died, no longer loops as an orphan.
 - A reservation group's pull request is made ready for review only when every member has published and its checks pass; a pull request with failing, running, or unreported checks stays in draft with the reason in the publication output, and the driver readies it on the first tick that finds the checks green.
 - Publishing a group member merges the open pull requests that target the group branch when they are ready, from this repository, mergeable, not blocked by a review, and green, so a fix for a bug an earlier member left lands before the next member starts. The new `--mode gate --phase NUMBER` runs the same step by hand.
 - Publishing the same head twice posts the member's completion comment once.

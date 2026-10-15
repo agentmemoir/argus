@@ -16,7 +16,7 @@ LINE_LIMIT := 350
 # migration ends. It is empty now: the last file was split.
 LINE_EXEMPT :=
 
-.PHONY: install sync lint fmt fmt-check typecheck typecheck-strict lines check dry-run example-check \
+.PHONY: install sync lint fmt fmt-check typecheck typecheck-strict lines prose check dry-run example-check \
         self-test identifiers leakscan noexecscan guard-faults wheel install-check
 install:
 	install -d "$(DESTDIR)$(BINDIR)"
@@ -60,6 +60,16 @@ lines:
 			printf "%d file(s) exceed the %s-line limit. Split before adding.\n", count, lim; \
 			exit 1 } \
 			printf "all files within %s lines\n", lim }'
+
+# The prose rule: one paragraph per line, so the reader's viewer does the
+# wrapping. A new line is only for a new paragraph, a list item, a heading,
+# or a code block. This target fails on indented continuation lines and on
+# consecutive prose lines outside fenced code blocks, HTML comments, and YAML
+# frontmatter. It scans tracked plus untracked markdown files, so LICENSE
+# (not markdown) is never scanned and no directory layout is assumed.
+prose: ## Fail on hard-wrapped prose (one paragraph per line)
+	@printf 'checking prose for hard-wrapped paragraphs\n'
+	@$(RUN) python scripts/check_prose.py
 
 # A tick reads one configuration file, so the readiness report and the dry run
 # read the file named by CONFIG. --self-test reads no file.
