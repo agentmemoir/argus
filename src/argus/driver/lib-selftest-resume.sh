@@ -124,17 +124,17 @@ selftest_case_resume() {
 
 
   # The run is not archived: a resume continues the state `--fresh` would throw
-  # away. This is the interrupted class (an unreadable run record with only the
-  # resume state beside it), because that is the case where the child would
-  # otherwise ask for `--fresh`. The child is run directly, in an environment
-  # this case controls: a tmux pane inherits the session's own environment, so
-  # the stub would reach it there and this branch would never run.
-  printf 'not json at all\n' >"$run_dir/run.json"
+  # away. This is the interrupted class (no run record, only the resume state
+  # beside it), because that is the case where the child would otherwise ask for
+  # `--fresh`. The child is run directly, in an environment this case controls: a
+  # tmux pane inherits the session's own environment, so the stub would reach it
+  # there and this branch would never run.
+  rm -f "$run_dir/run.json"
   printf '{"current": "fixture"}\n' >"$run_dir/resume.json"
   selftest_resume_record "$phase" "$rel" "$run_dir" "" 1
   ( unset DRIVER_STUB_RC; CLIO_RESUME=1 run_session "$phase" "$rel" ) \
     >/dev/null 2>&1 || true
-  if grep -q "is resuming (prior state unreadable); the run is not archived" "$LOG" \
+  if grep -q "is resuming (prior state none); the run is not archived" "$LOG" \
       && ! grep -q 'restarting it with --fresh' "$LOG"; then
     echo "ok: a resume never restarts the run it continues with --fresh"
   else
@@ -143,8 +143,9 @@ selftest_case_resume() {
   rm -f "$run_dir/resume.json"
   printf '{"phase": "100010", "state": "blocked"}\n' >"$run_dir/run.json"
 
-  # The ledger proof and the board fence, in their own file: each is a guard the
-  # resume runs before it launches, and each has its own cases.
+  # The gate, the ledger proof and the board fence, in their own file: each is a
+  # guard the resume runs before it launches, and each has its own cases.
+  selftest_resume_gate_cases
   selftest_resume_ledger_cases
   selftest_resume_fence_cases
 
@@ -186,6 +187,14 @@ selftest_case_resume() {
     echo "FAIL: --resume N read the record's run directory for the named phase"; fail=1
     printf '      resume_cmd said: %s\n' "${resume_out:-<nothing>}"
   fi
+  # `--resume N` must not consume a record that names another phase: that halt is
+  # still the queue's work. The named phase launched above, so the record must
+  # still be there and still name 100499.
+  if [ -f "$HALT_RECORD" ] && grep -q '"phase": "100499"' "$HALT_RECORD"; then
+    echo "ok: --resume N leaves another phase's record in place"
+  else
+    echo "FAIL: --resume N consumed another phase's record"; fail=1
+  fi
   rm -rf "$other"
   # `--resume N` is the operator's half of the same feature: it resumes while the
   # line stays halted, so the marker it found must still be there afterwards.
@@ -209,6 +218,39 @@ selftest_case_resume() {
     printf '      DRIVE_RC=[%s]\n' "${_DRIVE_RC:-}"
     printf '      marker=[%s]\n' "$(tr '\n' ' ' <"$HALT" 2>/dev/null || echo absent)"
   fi
+
+  # branch-before-proof: the ledger proof must be taken on the HEAD the launch
+  # uses. The branch step moves HEAD, so it runs before the proof. A phase branch
+  # whose tip is behind a later master commit would pass a proof-then-branch
+  # order and launch on an unproven HEAD; a branch-then-proof order refuses. The
+  # phase branch name is deterministic from the phase file, so the case builds it
+  # without running the real branch helper first, and undoes it afterwards.
+  local bproof_branch="feature/fixture" bproof_base bproof_pin bproof_launches
+  bproof_base="$(git -C "$REPO" rev-parse HEAD 2>/dev/null || true)"
+  git -C "$REPO" checkout -q master 2>/dev/null || true
+  git -C "$REPO" checkout -q -b "$bproof_branch" "$bproof_base" 2>/dev/null || true
+  git -C "$REPO" checkout -q master 2>/dev/null || true
+  git -C "$REPO" commit -q --allow-empty -m 'resume fixture: master past the phase branch' 2>/dev/null || true
+  bproof_pin="$(git -C "$REPO" rev-parse HEAD 2>/dev/null || true)"
+  selftest_resume_record "$phase" "$rel" "$run_dir" blocked 1
+  printf '{"phase": "%s", "state": "blocked"}\n' "$phase" >"$run_dir/run.json"
+  printf '{"steps": {"fixture": {"git_head": "%s"}}}\n' "$bproof_pin" >"$run_dir/ledger.json"
+  # Unset so the real branch helper runs and moves HEAD to the existing branch.
+  unset DRIVER_STUB_COORDINATION
+  bproof_launches="$(selftest_resume_launches)"
+  log_before="$(wc -l <"$LOG" 2>/dev/null || printf '0')"
+  drive --self-test || true
+  if tail -n "+$((log_before + 1))" "$LOG" 2>/dev/null | grep -q 'HEAD does not descend from' \
+      && [ "$(selftest_resume_launches)" = "$bproof_launches" ]; then
+    echo "ok: the ledger proof is taken on the branch the launch uses"
+  else
+    echo "FAIL: the ledger proof ran before the branch step"; fail=1
+    { tail -n "+$((log_before + 1))" "$LOG" 2>/dev/null | sed 's/^/      /'; } || true
+  fi
+  DRIVER_STUB_COORDINATION="$old_coordination"; export DRIVER_STUB_COORDINATION
+  git -C "$REPO" checkout -q master 2>/dev/null || true
+  git -C "$REPO" reset -q --hard "$bproof_base" 2>/dev/null || true
+  git -C "$REPO" branch -D "$bproof_branch" 2>/dev/null || true
 
   rm -f "$HALT" "$run_dir/ledger.json"
   DRIVER_STUB_SLEEP="$old_sleep"

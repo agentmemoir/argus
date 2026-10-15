@@ -323,8 +323,11 @@ run_session() {
           # The record is written beside the marker, and only here: an operator
           # stop or a signal leaves a run the board claim recovers, and a record
           # would make the resume gate refuse it.
+          # The record keeps the raw state, which may be empty: the resume gate
+          # tells an absent run.json (the interrupted class) from a present but
+          # damaged one, and an `unknown` placeholder would hide that difference.
           halt_record_write "$number" "$rel" "$(phase_run_dir "$number" "$rel")" \
-            "${state:-unknown}" "$rc" rc
+            "$state" "$rc" rc
           log "halt-start: phase $number rc=$rc state=${state:-unknown} source=rc; marker written"
           # The title is set before the window closes, so the halt survives the
           # phase window going away and the idle display taking over.

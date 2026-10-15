@@ -8,8 +8,10 @@
 # one works it, so the fence is renewed from the halt or taken fresh, and any
 # conflict fails closed with the board own answer carried into the refusal.
 
-resume_reservation_field() {   # <field>
-  "$PYTHON" - "$1" <<'PY'
+resume_reservation_field() {   # <field>  (JSON on stdin)
+  # `-c`, not a heredoc: a heredoc is the program itself, so `sys.stdin` would
+  # be the program text and the piped reply would never be read.
+  "$PYTHON" -c '
 import json, sys
 try:
     data = json.load(sys.stdin)
@@ -19,7 +21,7 @@ record = data.get("reservation") if isinstance(data, dict) else None
 if not isinstance(record, dict):
     record = data if isinstance(data, dict) else {}
 print(record.get(sys.argv[1], ""))
-PY
+' "$1"
 }
 
 # Establish the board fence the resumed run launches under.
@@ -71,6 +73,20 @@ resume_fence_renew() {   # <phase> <reservation_id> <generation>
 }
 
 # Take a fresh reservation when the halted one is gone and the slot is free.
+#
+# The board call is behind a hook so a self-test can feed a real-shaped reply
+# through the real parser without a board. stderr is kept out of stdout, so a
+# diagnostic line cannot be parsed as the reply.
+resume_fence_reserve_cmd() {   # <phase>
+  case "${DRIVER_STUB_BOARD_REPLY:-}" in
+    "") "$PYTHON" "$ARGUS/board/reservations.py" reserve \
+          "${ARGUS_CONFIG_ARGS[@]}" "${BOARD_KIND_ARGS[@]+"${BOARD_KIND_ARGS[@]}"}" \
+          --repo-root "$REPO" --phase "$1" --machine-id "$PHASE_MACHINE_ID" \
+          --run-id "phase-$1" ;;
+    *) printf '%s\n' "$DRIVER_STUB_BOARD_REPLY" ;;
+  esac
+}
+
 resume_fence_reserve() {   # <phase>
   local phase="$1" out="" rc=0
   case "${DRIVER_STUB_BOARD_FENCE:-}" in
@@ -82,10 +98,7 @@ resume_fence_reserve() {   # <phase>
       RESUME_REFUSAL="the board refused both a renewal and a fresh reservation for phase $phase"
       return 1 ;;
   esac
-  out="$("$PYTHON" "$ARGUS/board/reservations.py" reserve \
-    "${ARGUS_CONFIG_ARGS[@]}" "${BOARD_KIND_ARGS[@]+"${BOARD_KIND_ARGS[@]}"}" \
-    --repo-root "$REPO" --phase "$phase" --machine-id "$PHASE_MACHINE_ID" \
-    --run-id "phase-$phase" 2>&1)" || rc=$?
+  out="$(resume_fence_reserve_cmd "$phase" 2>"$RUN_DIR/fence-reserve-$phase.err")" || rc=$?
   if [ "$rc" -ne 0 ]; then
     RESUME_REFUSAL="the board would not grant a fence for phase $phase: $(printf '%s' "$out" | tr '\n' ' ')"
     return 1
@@ -93,7 +106,7 @@ resume_fence_reserve() {   # <phase>
   RESUME_RESERVATION_ID="$(printf '%s' "$out" | resume_reservation_field reservation_id)"
   RESUME_RESERVATION_GENERATION="$(printf '%s' "$out" | resume_reservation_field generation)"
   if [ -z "$RESUME_RESERVATION_ID" ] || [ -z "$RESUME_RESERVATION_GENERATION" ]; then
-    RESUME_REFUSAL="the board returned no fence for phase $phase"
+    RESUME_REFUSAL="the board returned no fence for phase $phase: $(printf '%s' "$out" | tr '\n' ' ')"
     return 1
   fi
   return 0

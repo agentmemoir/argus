@@ -2,12 +2,15 @@
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
 # SPDX-License-Identifier: Apache-2.0
 #
-# The resume: resolve the target, prove the ledger, hold the fence, cut the
-# branch, launch.
+# The resume: resolve the target, cut the branch, prove the ledger, hold the
+# fence, launch.
 #
-# Every check runs before the launch, so a refusal leaves the run untouched,
-# rewrites the record and writes the marker. Nothing here archives the run it
-# continues: a resume exists to keep the stage state `--fresh` would throw away.
+# The branch is cut before the ledger proof, because the proof proves the pins
+# against the launch HEAD and the branch step can move HEAD: proving first left
+# the launch on a HEAD the proof never saw. Every check runs before the launch,
+# so a refusal leaves the run untouched, rewrites the record and writes the
+# marker. Nothing here archives the run it continues: a resume exists to keep
+# the stage state `--fresh` would throw away.
 
 resume_phase_file_of() {   # <number>
   "$PYTHON" - "$ARGUS" "$REPO" "$1" "${ARGUS_CONFIG_ARGS[@]}" <<'PY'
@@ -75,19 +78,17 @@ _drive_resume() {   # [<number>]
   local target="$requested" run_dir reason
   RESUME_REFUSAL=""
   RESUME_REFUSE_QUIET=0
+  RESUME_PHASE_FILE=""
+  RESUME_LIVE_STATE=""
   # `_drive` clears this before a tick, but `--resume` never runs `_drive`, so a
   # resume clears it itself: `set -u` makes a missing one fatal at the check
   # below, and a stale one would abort a launch that already happened.
   _DRIVE_RC=""
 
-  if ! work_preflight; then
-    resume_refuse "$target" "$PREFLIGHT_REASON"
-    return 1
-  fi
-
-  # Read the record once, before the branch: a named phase takes its fence from
-  # it too when it names the same phase. `halt_record_read` clears the fields
-  # first, so a resume never acts on fields an earlier read left behind.
+  # Read the record first, before anything can refuse: a refusal rewrites or
+  # writes a record for the target, and a named phase takes its fence from it too
+  # when it names the same phase. `halt_record_read` clears the fields first, so
+  # a resume never acts on fields an earlier read left behind.
   local record_ok=0
   if halt_record_read "$HALT_RECORD"; then
     record_ok=1
@@ -109,6 +110,7 @@ _drive_resume() {   # [<number>]
     target="$number"
     rel="$HALT_REC_PHASE_FILE"
   fi
+  RESUME_PHASE_FILE="$rel"
 
   # The record is one slot and may belong to another phase: `--resume N` names a
   # phase the record need not. Its run directory, its state snapshot and its
@@ -124,9 +126,14 @@ _drive_resume() {   # [<number>]
 
   run_dir="$HALT_REC_RUN_DIR"
   if [ -z "$run_dir" ]; then
-    run_dir="$(phase_run_dir "$number" "$rel")"
+    run_dir="$(phase_run_dir "$number" "$rel" 2>/dev/null)" || run_dir=""
   fi
   RESUME_RUN_DIR="$run_dir"
+
+  if ! work_preflight; then
+    resume_refuse "$target" "$PREFLIGHT_REASON"
+    return 1
+  fi
 
   # The gate is asked of two states, and both must pass. The record's snapshot is
   # the state the halt left and what the record promises a reader; the live run is
@@ -137,6 +144,7 @@ _drive_resume() {   # [<number>]
   # only state there is.
   local gate_state live_state
   live_state="$(phase_state "$number" "$rel")"
+  RESUME_LIVE_STATE="$live_state"
   gate_state="${HALT_REC_STATE:-$live_state}"
   reason="$(resume_gate_reason "$gate_state" "$run_dir")" || {
     resume_refuse "$target" "$reason"
@@ -149,17 +157,22 @@ _drive_resume() {   # [<number>]
     }
   fi
 
+  # The branch is cut before the ledger proof, because the proof proves the pins
+  # against the HEAD the launch uses and the branch step can move HEAD. Proving
+  # first and cutting after left the launch on a HEAD the proof never saw.
+  # `group_active` reads GROUP_MEMBERS only, so the reorder is safe, and every
+  # failure path still refuses.
+  if ! _drive_resume_branch "$number" "$rel"; then
+    resume_refuse "$target" "$RESUME_REFUSAL"
+    return 1
+  fi
+
   if ! resume_ledger_proof "$run_dir" "$number" "$rel"; then
     resume_refuse "$target" "$RESUME_REFUSAL"
     return 1
   fi
 
   if ! resume_fence "$number"; then
-    resume_refuse "$target" "$RESUME_REFUSAL"
-    return 1
-  fi
-
-  if ! _drive_resume_branch "$number" "$rel"; then
     resume_refuse "$target" "$RESUME_REFUSAL"
     return 1
   fi
@@ -175,6 +188,11 @@ _drive_resume() {   # [<number>]
   stage="$(resume_stage "$run_dir")"
   RESUME_STAGE="$stage"
 
+  # The record's identity, taken before the launch: a child that halts again and
+  # rewrites the record must survive the consume below.
+  local record_identity
+  record_identity="$(halt_record_identity "$HALT_RECORD")"
+
   RESUME_MODE=1
   _drive_launch
   if [ "${_DRIVE_RC:-0}" != 0 ]; then
@@ -187,7 +205,13 @@ _drive_resume() {   # [<number>]
     return 1
   fi
 
-  rm -f "$HALT_RECORD"
+  # Consume the record only when it names the launched phase and nothing rewrote
+  # it under us: another phase's halt, or a newer halt the child just wrote, must
+  # survive.
+  if [ "$HALT_REC_PHASE" = "$number" ] && [ -n "$record_identity" ] \
+      && [ "$(halt_record_identity "$HALT_RECORD")" = "$record_identity" ]; then
+    rm -f "$HALT_RECORD"
+  fi
   log "halt-clear: phase $number resume launched (stage $stage, reservation $reservation_id gen $reservation_generation)"
   return 0
 }

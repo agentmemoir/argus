@@ -2,12 +2,49 @@
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
 # SPDX-License-Identifier: Apache-2.0
 #
-# Self-test cases: the two guards a resume runs before it launches.
+# Self-test cases: the guards a resume runs before it launches.
 #
-# The ledger proof is what stops a resume from continuing a run whose step pins
-# no longer describe the tree, and the board fence is what stops a second
-# machine from owning the phase while this one works it. Both fail closed, so
-# every case here asserts that a refusal launched nothing.
+# The gate is what separates a resumable run from a damaged result, the ledger
+# proof is what stops a resume from continuing a run whose step pins no longer
+# describe the tree, and the board fence is what stops a second machine from
+# owning the phase while this one works it. All three fail closed, so every case
+# here asserts that a refusal launched nothing.
+
+selftest_resume_gate_cases() {
+  # A damaged run result is not the interrupted class. The interrupted class has
+  # no run.json at all; a run.json present but unreadable must be refused by
+  # name, because reading it as interrupted let a damaged result reach the
+  # launch.
+  selftest_resume_record "$phase" "$rel" "$run_dir" "" 1
+  printf 'not json at all\n' >"$run_dir/run.json"
+  printf '{"current": "fixture"}\n' >"$run_dir/resume.json"
+  launches="$(selftest_resume_launches)"
+  drive --self-test || true
+  if grep -q 'run.json is unreadable or damaged' "$LOG" \
+      && [ "$(selftest_resume_launches)" = "$launches" ]; then
+    echo "ok: a damaged run.json refuses even with a resume.json beside it"
+  else
+    echo "FAIL: a damaged run.json was accepted as the interrupted class"; fail=1
+  fi
+  rm -f "$run_dir/resume.json"
+  printf '{"phase": "%s", "state": "blocked"}\n' "$phase" >"$run_dir/run.json"
+
+  # A record whose fields have the wrong types is not a resume either: the
+  # reader must refuse it. A numeric `state`, a string `rc`, and an empty
+  # `source` are the shapes the schema refuses.
+  printf '{"version": 1, "phase": "%s", "phase_file": "%s", "run_dir": "%s", "state": 5, "rc": "x", "source": "", "marker": "", "reservation_id": "", "generation": "", "recorded_at": ""}\n' \
+    "$phase" "$rel" "$run_dir" >"$HALT_RECORD"
+  rm -f "$HALT"
+  launches="$(selftest_resume_launches)"
+  drive --self-test || true
+  if grep -q 'is missing or malformed' "$LOG" \
+      && [ "$(selftest_resume_launches)" = "$launches" ]; then
+    echo "ok: a record with wrong field types is refused"
+  else
+    echo "FAIL: a record with wrong field types was acted on"; fail=1
+  fi
+  rm -f "$HALT" "$HALT_RECORD"
+}
 
 selftest_resume_ledger_cases() {
   # A pin HEAD does not descend from must fail closed and name the command a
@@ -95,6 +132,29 @@ selftest_resume_ledger_cases() {
 }
 
 selftest_resume_fence_cases() {
+  # A real board reply flows through the real parser: `reserve` prints
+  # {"state": "OK", "reservation": {...}}. The nested id and generation must
+  # reach the halt-clear line and the claim file. The record's fence is a fake,
+  # so the real renew refuses and the fresh reservation (the stub reply) is
+  # taken.
+  selftest_resume_record "$phase" "$rel" "$run_dir" blocked 1
+  printf '{"phase": "%s", "state": "blocked"}\n' "$phase" >"$run_dir/run.json"
+  DRIVER_STUB_BOARD_REPLY='{"state": "OK", "reservation": {"reservation_id": "rsv-real-shape", "generation": 42}}'
+  unset DRIVER_STUB_BOARD_FENCE
+  export DRIVER_STUB_BOARD_REPLY
+  launches="$(selftest_resume_launches)"
+  drive --self-test || true
+  wait_phase_window_gone
+  sleep 0.3
+  if grep -q "halt-clear: phase $phase resume launched (stage .*reservation rsv-real-shape gen 42)" "$LOG" \
+      && grep -q 'rsv-real-shape' "$CLAIM" \
+      && [ "$(selftest_resume_launches)" != "$launches" ]; then
+    echo "ok: the real reserve reply is parsed into the fence"
+  else
+    echo "FAIL: the real reserve reply was not parsed"; fail=1
+  fi
+  unset DRIVER_STUB_BOARD_REPLY
+
   # The fence: the halted reservation is renewed when it can be, and when it
   # cannot, a free slot is taken. Both refusals stop the resume, because a launch
   # with no fence would let a second machine own the phase.

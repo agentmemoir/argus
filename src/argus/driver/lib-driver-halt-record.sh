@@ -29,6 +29,10 @@ RESUME_RUN_DIR=""
 RESUME_RESERVATION_ID=""
 RESUME_RESERVATION_GENERATION=""
 RESUME_FROM_TICK=0
+# The target phase file and its live state, so a refusal can write a record for
+# the target when the halt record names another phase or none at all.
+RESUME_PHASE_FILE=""
+RESUME_LIVE_STATE=""
 # The stage the launch resumed from, read before the launch so a fast child
 # cannot move it out from under the log line and the closing message.
 RESUME_STAGE=""
@@ -42,10 +46,7 @@ RESUME_REFUSE_QUIET=0
 # reader never sees half of one. The fence the halted run held is read from the
 # claim file, because it is the fence candidate a resume starts from.
 halt_record_write() {   # <phase> <phase_file> <run_dir> <state> <rc> <source> [reason]
-  local marker="" reservation_id="" generation="" rc="$5"
-  if [ -f "$HALT" ]; then
-    marker="$(tr '\n' ' ' <"$HALT")"
-  fi
+  local reservation_id="" generation="" rc="$5"
   if claim_read_fields "$CLAIM"; then
     reservation_id="$CLAIM_ID"
     generation="$CLAIM_GEN"
@@ -60,11 +61,20 @@ halt_record_write() {   # <phase> <phase_file> <run_dir> <state> <rc> <source> [
   # The rename is done in Python, not with `mv`. The installed-command test runs
   # the driver with a PATH holding only the commands the configuration declares,
   # and `mv` is not one of them.
-  "$PYTHON" - "$tmp" "$1" "$2" "$3" "$4" "$rc" "$6" "${7:-}" "$marker" \
+  #
+  # argv[9] is the marker FILE, read inside Python, so the record holds the exact
+  # marker bytes: folding newlines with `tr` would change the text a reader
+  # compares against the marker on disk.
+  "$PYTHON" - "$tmp" "$1" "$2" "$3" "$4" "$rc" "$6" "${7:-}" "$HALT" \
     "$reservation_id" "$generation" "$(ts)" "$HALT_RECORD" <<'PY'
 import json, os, sys
 # argv[13] is the destination. The temp file is written beside it and replaced in
 # one step, so a reader never sees half a record.
+try:
+    with open(sys.argv[9], encoding="utf-8") as handle:
+        marker = handle.read()
+except OSError:
+    marker = ""
 record = {
     "version": 1,
     "phase": sys.argv[2],
@@ -74,7 +84,7 @@ record = {
     "rc": int(sys.argv[6]) if sys.argv[6] else None,
     "source": sys.argv[7],
     "reason": sys.argv[8],
-    "marker": sys.argv[9],
+    "marker": marker,
     "reservation_id": sys.argv[10],
     "generation": sys.argv[11],
     "recorded_at": sys.argv[12],
@@ -86,11 +96,30 @@ os.replace(sys.argv[1], sys.argv[13])
 PY
 }
 
+# A sha256 of the record file, or nothing when it is absent.
+#
+# A resume consumes the record only when this value is unchanged, so a newer
+# halt a child just wrote is not deleted out from under it. The heredoc is fine
+# here: the path is an argument, not a data pipe.
+halt_record_identity() {   # <path>
+  [ -f "$1" ] || return 0
+  "$PYTHON" - "$1" <<'PY'
+import hashlib, sys
+try:
+    with open(sys.argv[1], "rb") as handle:
+        print(hashlib.sha256(handle.read()).hexdigest())
+except OSError:
+    pass
+PY
+}
+
 # Read and validate the halt record into the HALT_REC_* globals.
 #
-# A record that is not version 1, or that carries no phase, phase file or run
-# directory, is refused: a resume cannot act on it, so it must not be acted on.
-# Returns non-zero with every global empty when the record is unusable.
+# A record that is not version 1, or that carries the wrong field types, is
+# refused: a resume cannot act on it, so it must not be acted on. Every string
+# field must be a string, the three path fields non-empty, `source` non-empty,
+# and `rc` either absent or an int. Returns non-zero with every global empty when
+# the record is unusable.
 halt_record_read() {   # <path>
   local out line
   HALT_REC_PHASE=""; HALT_REC_PHASE_FILE=""; HALT_REC_RUN_DIR=""
@@ -110,6 +139,14 @@ if not isinstance(record, dict) or record.get("version") != 1:
 for key in ("phase", "phase_file", "run_dir"):
     if not isinstance(record.get(key), str) or not record.get(key):
         raise SystemExit(1)
+for key in ("marker", "reservation_id", "generation", "recorded_at",
+            "state", "source"):
+    if not isinstance(record.get(key), str):
+        raise SystemExit(1)
+if not record.get("source"):
+    raise SystemExit(1)
+if record.get("rc") is not None and not isinstance(record.get("rc"), int):
+    raise SystemExit(1)
 for key in keys:
     value = record.get(key)
     print(f"{key}={'' if value is None else value}")
@@ -135,15 +172,22 @@ PY
 
 # Refuse a resume: write the marker the next tick halts on, and rewrite the
 # record so the reason and a fresh timestamp are what a reader sees. The record
-# is kept, not consumed, so the next attempt can try again. Only a record for the
-# phase being resumed is rewritten: a request for another phase must not clobber
-# the halt that is still standing.
+# is kept, not consumed, so the next attempt can try again.
+#
+# The record rewritten is the target's: the current record when it names the
+# target, or a fresh one for the target when no usable record does. A record
+# that names a DIFFERENT phase is left standing, because that halt is still the
+# queue's work and the slot holds only one.
 resume_refuse() {   # <phase> <reason>
   local phase="$1" reason="$2"
   printf 'resume refused: %s\n' "$reason" >"$HALT"
   if [ -n "$HALT_REC_PHASE" ] && [ "$HALT_REC_PHASE" = "$phase" ]; then
     halt_record_write "$HALT_REC_PHASE" "$HALT_REC_PHASE_FILE" \
       "$HALT_REC_RUN_DIR" "$HALT_REC_STATE" "$HALT_REC_RC" resume-refused "$reason"
+  elif [ -z "$HALT_REC_PHASE" ] && [ -n "$phase" ] \
+      && [ -n "$RESUME_PHASE_FILE" ] && [ -n "$RESUME_RUN_DIR" ]; then
+    halt_record_write "$phase" "$RESUME_PHASE_FILE" "$RESUME_RUN_DIR" \
+      "${RESUME_LIVE_STATE:-}" "" resume-refused "$reason"
   fi
   RESUME_REFUSAL="$reason"
   log "resume refused: phase ${phase:-unknown}: $reason"
@@ -155,26 +199,36 @@ resume_refuse() {   # <phase> <reason>
 # Why a run cannot resume, or nothing when it can.
 #
 # Two classes resume: a run glide recorded as `blocked`, and a run directory with
-# no readable `run.json` but a `resume.json` beside it (an interrupted run).
-# Everything else fails closed and names the reason.
+# no `run.json` but a `resume.json` beside it (an interrupted run). An existing
+# `run.json` that is unreadable or damaged is refused by name: it is not the same
+# as an absent one, and treating it as the interrupted class let a damaged result
+# reach the launch. Everything else fails closed and names the reason.
 resume_gate_reason() {   # <state> <run_dir>
   local state="$1" run_dir="$2"
-  if [ "$state" = blocked ]; then
+  if [ "$state" = blocked ]; then return 0; fi
+  # A named state is a decision about this run, whatever the result file now
+  # says: refuse it by name. Only an empty state reaches the file checks below,
+  # where an absent run.json is the interrupted class and a present-but-damaged
+  # one must still refuse.
+  if [ -n "$state" ]; then
+    case "$state" in
+      completed)
+        printf 'the run is completed; clear the halt marker to let the queue advance' ;;
+      rejected|remedy_escalated)
+        printf 'the run ended as %s; that phase needs a decision, not a resume' "$state" ;;
+      *)
+        printf 'the run state %s is not blocked' "$state" ;;
+    esac
+    return 1
+  fi
+  if [ -f "$run_dir/run.json" ]; then
+    printf 'the run result %s/run.json is unreadable or damaged; repair it, or abandon the phase' "$run_dir"
+    return 1
+  fi
+  if [ -f "$run_dir/resume.json" ]; then
     return 0
   fi
-  if [ -z "$state" ] && [ -f "$run_dir/resume.json" ]; then
-    return 0
-  fi
-  case "$state" in
-    completed)
-      printf 'the run is completed; clear the halt marker to let the queue advance' ;;
-    rejected|remedy_escalated)
-      printf 'the run ended as %s; that phase needs a decision, not a resume' "$state" ;;
-    "")
-      printf 'run.json is absent or unreadable and %s has no resume.json' "$run_dir" ;;
-    *)
-      printf 'the run state %s is not blocked' "$state" ;;
-  esac
+  printf 'run.json is absent and %s has no resume.json' "$run_dir"
   return 1
 }
 
