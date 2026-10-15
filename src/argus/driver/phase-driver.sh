@@ -148,7 +148,7 @@ for helper in \
   phase-tmux.sh lib-stat.sh \
   lib-driver-config.sh lib-driver-log.sh lib-driver-notify.sh \
   lib-driver-run.sh lib-driver-select.sh lib-driver-check.sh \
-  lib-driver-drive.sh lib-driver-dryrun.sh lib-driver-select-flow.sh lib-driver-repair.sh \
+  lib-driver-drive.sh lib-driver-release.sh lib-driver-dryrun.sh lib-driver-select-flow.sh lib-driver-repair.sh \
   lib-driver-select-stub.sh lib-driver-select-real.sh lib-driver-maintenance.sh lib-driver-launch.sh \
   lib-driver-halt-record.sh lib-driver-ledger.sh lib-driver-fence.sh \
   lib-driver-resume.sh lib-driver-abandon.sh \
@@ -193,6 +193,10 @@ done
 # The tick: reserve, branch, and launch.
 # shellcheck disable=SC1091
 . "$ARGUS_DIR/lib-driver-drive.sh"
+# Releasing a group without halting: `release`, and the phase-window wait it
+# shares with `stop`.
+# shellcheck disable=SC1091
+. "$ARGUS_DIR/lib-driver-release.sh"
 # Self-healing: a repair run for a pull request whose checks finished red.
 # shellcheck disable=SC1091
 . "$ARGUS_DIR/lib-driver-repair.sh"

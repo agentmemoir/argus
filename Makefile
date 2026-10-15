@@ -16,7 +16,7 @@ LINE_LIMIT := 350
 # migration ends. It is empty now: the last file was split.
 LINE_EXEMPT :=
 
-.PHONY: install sync lint fmt fmt-check typecheck typecheck-strict lines prose check dry-run example-check \
+.PHONY: install sync llc lint fmt fmt-check typecheck typecheck-strict lines prose check dry-run example-check \
         self-test identifiers leakscan noexecscan guard-faults wheel install-check
 install:
 	install -d "$(DESTDIR)$(BINDIR)"
@@ -26,8 +26,18 @@ install:
 sync:
 	$(UV) sync
 
+# The 450-line cap over every tracked and untracked working-tree source file, so a new file is caught before it is staged; it runs before ruff, so an over-long file fails in seconds.
+llc:
+	@git ls-files -z --cached --others --exclude-standard -- \
+		'*.rs' '*.py' '*.sh' '*.bash' \
+		'*.js' '*.ts' '*.jsx' '*.tsx' \
+		'*.go' '*.java' '*.kt' '*.scala' \
+		'*.c' '*.h' '*.cc' '*.hh' '*.cpp' '*.hpp' '*.cxx' '*.hxx' \
+		'*.rb' '*.php' '*.swift' '*.m' '*.mm' \
+		| xargs -0 -r awk 'FNR == 451 { printf "ERROR: %s exceeds 450 lines\n", FILENAME; failed = 1; nextfile } END { exit failed }'
+
 # Lint and the one formatter (ruff, 88 columns). CI runs lint and fmt-check.
-lint:
+lint: llc
 	$(RUN) ruff check .
 
 fmt:

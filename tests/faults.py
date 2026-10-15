@@ -210,7 +210,7 @@ FAULTS = (
             "name": "release-keeps-manual-stop-hold",
             "breaks": "a release leaves the manual-stop hold in place, so the "
             "release the docs name as a stopped line's exit cannot free it",
-            "file": "src/argus/driver/lib-driver-drive.sh",
+            "file": "src/argus/driver/lib-driver-release.sh",
             "find": '  rm -f "$RUN_DIR/stopped-claim"\n'
             "  # The array the run covered, for the log line below.",
             "replace": "  # The array the run covered, for the log line below.",
