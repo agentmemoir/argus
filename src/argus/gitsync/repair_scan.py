@@ -5,6 +5,7 @@
 import re
 from typing import Any
 
+from argus.gitsync.gh_gate import GhRead
 from argus.gitsync.pr_signal_fetch import normalize_alert, open_alerts
 
 # A workflow check links to its run, so `gh run view` can open it. A code-scanning
@@ -25,11 +26,12 @@ def run_ids(rows: list[dict[str, Any]]) -> list[int]:
     )
 
 
-def scan_names(rows: list[dict[str, Any]]) -> list[str]:
-    """The failing checks that carry no Actions run to read a log from.
+def checks_without_run(rows: list[dict[str, Any]]) -> list[str]:
+    """The failing checks that carry no workflow run to read a log from.
 
-    A code-scanning check reports a result rather than a workflow run, so its
-    failure is written as an alert on the pull request instead of in a run log.
+    A check published by an app rather than by Actions reports its result
+    somewhere ``gh run view`` cannot reach. A code-scanning check is the case
+    that matters: its failure is written as an alert on the pull request.
     """
     return [
         str(row.get("name"))
@@ -39,15 +41,18 @@ def scan_names(rows: list[dict[str, Any]]) -> list[str]:
     ]
 
 
-def scan_report(ref: dict[str, Any]) -> str | None:
-    """The pull request's open code-scanning alerts, as the text the task carries.
+def alert_report(ref: dict[str, Any]) -> GhRead[str]:
+    """The pull request's open code-scanning alerts as task text, or why not.
 
-    This stands in for a run log: each alert names the rule, its severity, and the
-    file and line the finding sits on, which is what a repair has to go and fix.
+    ``value`` is ``None`` when the pull request has no open alert, and ``why``
+    says whether the read failed instead. The two must not be read as one
+    answer: an unreadable alert list is not an empty one.
     """
-    rows, _why = open_alerts(ref["owner"], ref["repo"], ref["number"], ref["host"])
+    rows, why = open_alerts(ref["owner"], ref["repo"], ref["number"], ref["host"])
+    if rows is None:
+        return GhRead(None, why)
     lines: list[str] = []
-    for row in rows or []:
+    for row in rows:
         alert = normalize_alert(row)
         where = str(alert.get("path") or "no file given")
         line = f":{alert['line']}" if alert.get("line") else ""
@@ -55,7 +60,7 @@ def scan_report(ref: dict[str, Any]) -> str | None:
             f"- {alert.get('severity')} {alert.get('rule')} at {where}{line}"
             f" - {alert.get('url')}"
         )
-    return "\n".join(lines) if lines else None
+    return GhRead("\n".join(lines) if lines else None, "")
 
 
-__all__ = ["run_ids", "scan_names", "scan_report"]
+__all__ = ["alert_report", "checks_without_run", "run_ids"]
