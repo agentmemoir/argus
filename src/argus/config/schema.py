@@ -88,6 +88,8 @@ SCHEMA = (
     Field("repair.pipeline", "path", "repair"),
     Field("repair.attempts", "int", "repair"),
     Field("repair.wait", "int", "repair"),
+    Field("estimate.factors-file", "path", "optional"),
+    Field("estimate.ideal-days", "str", "optional"),
 )
 
 # Dotted key -> shell variable, in the same order as SCHEMA. The shell format
@@ -138,6 +140,8 @@ SHELL_VARS = {
     "repair.pipeline": "REPAIR_PIPELINE",
     "repair.attempts": "REPAIR_ATTEMPTS",
     "repair.wait": "REPAIR_WAIT",
+    "estimate.factors-file": "ESTIMATE_FACTORS_FILE",
+    "estimate.ideal-days": "ESTIMATE_IDEAL_DAYS",
 }
 SHELL_VARS.update(
     {
@@ -180,6 +184,7 @@ _OBJECT_KEYS = (
     "notify",
     "issues",
     "repair",
+    "estimate",
 )
 
 # Two keys name one value: the file a machine reads its own name from, and the

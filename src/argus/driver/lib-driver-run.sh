@@ -201,7 +201,8 @@ handle_escalation() {
 }
 
 run_session() {
-  local number="$1" rel="$2" rc=0 state
+  local number="$1" rel="$2" rc=0 state started_at estimate_run=""
+  started_at="$(date +%s)"
   CUR_PHASE="$number"
   CUR_PHASE_FILE="$rel"
   mkdir -p "$RUN_DIR"
@@ -276,6 +277,13 @@ run_session() {
       # alone, and a missing run.json means there is nothing to archive.
       local prior_state fresh_args=()
       prior_state="$(terminal_state_of_file "$(phase_run_dir "$number" "$rel")/run.json")"
+      # A run that continues an earlier one measures only part of the phase, so
+      # the estimate factor skips it (estimate_run=1 marks it resumed).
+      estimate_run=0
+      if [ "${CLIO_RESUME:-}" = 1 ] \
+        || { [ -z "$prior_state" ] && [ -f "$(phase_run_dir "$number" "$rel")/run.json" ]; }; then
+        estimate_run=1
+      fi
       if [ "${CLIO_RESUME:-}" = 1 ]; then
         # The parent proved the ledger against HEAD and asked glide to continue
         # the run it stopped. `--fresh` archives exactly the state the resume
@@ -313,6 +321,8 @@ run_session() {
     0)   # Land the closing run-state writes before the next phase's publish
          # has to look at them; see gitsync_clean.
          gitsync_clean "$number"
+         [ "${work_kind:-phase}" != phase ] || [ -z "$estimate_run" ] \
+           || estimate_update "$number" "$rel" "$started_at" "$estimate_run"
          tmux_set_title "${work_kind:-phase} $number done"
          notify_phase "$rel" completed ;;
     3)   : ;;

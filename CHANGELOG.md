@@ -4,6 +4,8 @@ Notable changes to this project are documented here. The format follows [Keep a 
 
 ## [Unreleased]
 
+- Estimate factor: with an `estimate` object in the configuration, a phase that finishes from a fresh start moves its developer harness's factor toward phase hours / (ideal days × 2), at most 20% per phase, and the driver commits and pushes the factor file alone. A resumed run is skipped, a harness with no factor starts from the slowest one, and a failed commit puts the file back.
+
 - `make self-test` and `make guard-faults` refuse to start unless the `CI` variable is set; `ARGUS_ALLOW_LOCAL=1` overrides. `make quick` runs the lint, format, type, line-limit, and prose checks without tests.
 
 - Phase helpers can open a draft after the first commit, stage checkpoint paths, and record one CI read. The driver retries readiness for lone and grouped phases.

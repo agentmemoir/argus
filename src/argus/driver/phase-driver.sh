@@ -151,7 +151,7 @@ for helper in \
   lib-driver-drive.sh lib-driver-dryrun.sh lib-driver-select-flow.sh lib-driver-repair.sh \
   lib-driver-select-stub.sh lib-driver-select-real.sh lib-driver-maintenance.sh lib-driver-launch.sh \
   lib-driver-halt-record.sh lib-driver-ledger.sh lib-driver-fence.sh \
-  lib-driver-resume.sh lib-driver-abandon.sh \
+  lib-driver-resume.sh lib-driver-abandon.sh lib-driver-estimate.sh \
   lib-selftest.sh lib-selftest-launch.sh lib-selftest-flow.sh \
   lib-selftest-unavailable.sh lib-selftest-reasons.sh lib-selftest-recovery.sh \
   lib-selftest-merge.sh lib-selftest-stranding.sh lib-selftest-group.sh \
@@ -180,6 +180,8 @@ done
 # Run state: sessions, stall checks, escalation, and the phase run directory.
 # shellcheck disable=SC1091
 . "$ARGUS_DIR/lib-driver-run.sh"
+# The estimate factor update a finished phase makes.
+. "$ARGUS_DIR/lib-driver-estimate.sh"
 # The work selector, reservation results, and the merge check.
 # shellcheck disable=SC1091
 . "$ARGUS_DIR/lib-driver-select.sh"
