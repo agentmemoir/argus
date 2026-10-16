@@ -35,7 +35,28 @@ def exercise(package: Path, base: Path) -> None:
     )
     project = checkout(base, "project", env)
     board = checkout(base, "notes-checkout", env)
-    phases = project / "foo/bar/phases"
+    # The phases repository is a checkout of its own, nested in the project so
+    # the driver may launch from it, and a distinct Git destination so the
+    # separation proof holds. The project ignores it, as it would a submodule.
+    phases_remote = base / "phases-checkout.git"
+    result = run(
+        ["git", "init", "--bare", "--initial-branch=master", str(phases_remote)],
+        base,
+        env,
+    )
+    require(result.returncode == 0, "fixture phases remote", result.stderr)
+    phases_repo = project / "phases-checkout"
+    for command in (
+        ["git", "clone", str(phases_remote), str(phases_repo)],
+        ["git", "-C", str(phases_repo), "config", "user.email", "test@example.com"],
+        ["git", "-C", str(phases_repo), "config", "user.name", "Fixture"],
+        ["git", "-C", str(phases_repo), "commit", "--allow-empty", "-m", "phases"],
+        ["git", "-C", str(phases_repo), "push", "-u", "origin", "master"],
+    ):
+        result = run(command, base, env)
+        require(result.returncode == 0, "fixture phases git command", result.stderr)
+    (project / ".git/info/exclude").write_text("phases-checkout/\n", encoding="utf-8")
+    phases = phases_repo / "foo/bar/phases"
     phases.mkdir(parents=True)
     item = phases / "phase-100010-first.md"
     item.write_text("# First\n- [ ] Work remains.\n")
@@ -111,6 +132,7 @@ sys.exit(2)
         project=project,
         board=board,
         phases=phases,
+        phases_repo=phases_repo,
         runs=runs,
         pipeline=pipeline,
         python=sys.executable,
