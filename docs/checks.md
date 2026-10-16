@@ -20,7 +20,7 @@ Run the checks from the repository root. The tooling runs through `uv run`; the 
 | `make check` | The readiness report against `CONFIG` (default `config.json`). |
 | `make dry-run` | What the next tick would do, without launching. |
 
-`make self-test` and `make guard-faults` build throwaway checkouts and a board; no agent runs and nothing is published. `make guard-faults` changes each guard in the source on purpose, requires the named failure, restores the file, and checks its digest. Both run in CI only: without the `CI` variable they stop at once and name the `ARGUS_ALLOW_LOCAL=1` override. `--only NAME` (through `uv run python tests/guard_faults.py`) narrows the fault run to one fault, and `--order reverse` or `--order shuffle` checks that the result does not depend on order.
+`make self-test` and `make guard-faults` build throwaway checkouts and a board; no agent runs and nothing is published. `make guard-faults` changes each guard in the source on purpose, requires the named failure, restores the file, and checks its digest. Both run in CI only: without the `CI` variable they stop at once and name the `ARGUS_ALLOW_LOCAL=1` override. `--only NAME` (through `uv run python tests/guard_faults.py`) narrows the fault run to one fault, and `--order reverse` or `--order shuffle` checks that the result does not depend on order. `SELFTEST_CASES=flow` runs only the named driver self-test cases, so one case can be checked without the whole suite.
 
 Issue faults cover trust, delimiter escaping, text caps, preference validation, task containment, launch preflight, and the separate board file. They run only the affected source, driver, or board check.
 

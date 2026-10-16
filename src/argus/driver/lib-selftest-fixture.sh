@@ -34,6 +34,12 @@
 # Returns 0 on success. On failure prints the reason to stderr and returns 1,
 # so a caller that ignores the status is choosing to run cases against a root
 # that does not exist, which is worse than not running them.
+#
+# A caller that then ticks the fixture sees WAIT_FOR_CLAIM, not RESERVED: the
+# claim this function makes belongs to the suite's own machine id, and the
+# selector answers a held phase before it looks at any later one. A case that
+# needs a fresh RESERVED must first let that claim finish, release, or expire;
+# a second phase alone does not help.
 selftest_fixture_root() {
   local root="$1" base="$2"
   mkdir -p "$base" || return 1
