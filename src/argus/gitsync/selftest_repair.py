@@ -83,10 +83,21 @@ def _record(pub: Path) -> Path:
 
 
 def _routes(
-    *buckets: str, log: str | None = LOG, pr: dict[str, Any] = OPEN
+    *buckets: str,
+    log: str | None = LOG,
+    pr: dict[str, Any] = OPEN,
+    checks: str | None = None,
+    scan: str | None = None,
 ) -> dict[str, Any]:
     run: dict[str, Any] = {"returncode": 1} if log is None else {"stdout": log}
-    return {"pr view": pr, "pr checks": _checks(*buckets), "run view": run}
+    routes: dict[str, Any] = {
+        "pr view": pr,
+        "pr checks": {"stdout": checks} if checks is not None else _checks(*buckets),
+        "run view": run,
+    }
+    if scan is not None:
+        routes["api --paginate"] = {"stdout": scan}
+    return routes
 
 
 def _ask(pub: Path, routes: dict[str, Any]) -> tuple[dict[str, Any], _RoutedGH]:
@@ -97,7 +108,7 @@ def _ask(pub: Path, routes: dict[str, Any]) -> tuple[dict[str, Any], _RoutedGH]:
 def _repair_checks(base: Path) -> list[Result]:
     results: list[Result] = []
     pub = _fixture(base, "red")
-    got, _ = _ask(pub, _routes("pass", "fail"))
+    got, gh = _ask(pub, _routes("pass", "fail"))
     task = Path(got.get("task", "/nowhere"))
     text = task.read_text() if task.is_file() else ""
     results.append(
@@ -118,6 +129,13 @@ def _repair_checks(base: Path) -> list[Result]:
             "the attempt is counted when the task is made",
             json.loads(_record(pub).read_text())["attempts"] == 1,
             _record(pub).read_text(),
+        )
+    )
+    results.append(
+        (
+            "a workflow failure reads no alerts, so the common case costs no call",
+            gh.ran("run view") and not gh.ran("api --paginate"),
+            f"calls={[call[1:3] for call in gh.calls]}",
         )
     )
     again, _ = _ask(pub, _routes("pass", "fail"))
@@ -234,4 +252,10 @@ def _repair_step_checks(base: Path) -> list[Result]:
     )
 
 
-__all__ = ["_repair_step_checks"]
+__all__ = [
+    "_ask",
+    "_fixture",
+    "_record",
+    "_repair_step_checks",
+    "_routes",
+]

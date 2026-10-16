@@ -30,7 +30,7 @@ The result is the `group_gate` object in the publication output: `state` (`WAITI
 
 ## Repair
 
-With a `repair` object in the configuration, a tick that is about to select work first looks at the pull requests this machine published that are still open. One whose checks have all finished, with at least one failed, gets one repair run. The driver puts the checkout on the pull request's branch, writes a task file (the failing checks, the lines of the failed log that explain each failure, and the whole log beside it), and runs the configured pipeline once in the phase window.
+With a `repair` object in the configuration, a tick that is about to select work first looks at the pull requests this machine published that are still open. One whose checks have all finished, with at least one failed, gets one repair run. The driver puts the checkout on the pull request's branch, writes a task file (the failing checks, the lines of each failed workflow run that explain the failure, and, for a failing check with no workflow run, the pull request's open code-scanning alerts), and runs the configured pipeline once in the phase window. The whole failed log and the whole alert list are kept in the run's folder beside the task.
 
 The pipeline takes the inputs `repair_id` and `repair_task` and keeps its run folder under the driver's state folder. Its agent fixes and commits on the branch, the driver pushes without force, and the next tick reads the checks of the new head.
 
