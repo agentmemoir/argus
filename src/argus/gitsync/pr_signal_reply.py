@@ -71,7 +71,7 @@ def _recorded_reason(recorded: Snapshot | None, cid: str, ref: dict[str, Any]) -
     row = cast("dict[str, Any]", comments).get(cid)
     if row is None:
         return "comment is not in the recorded snapshot"
-    if row.get("trusted") is not True:
+    if row.get("allowed") is not True:
         return "the comment's author is not trusted, so the agent may not answer it"
     if row["in_reply_to"] is not None:
         return "replies to replies are not supported"
@@ -177,7 +177,7 @@ def reply_to_comment(
     )
     if cid not in rows:
         return _refused("comment is no longer on the pull request")
-    if rows[cid].get("trusted") is not True:
+    if rows[cid].get("allowed") is not True:
         return _refused(
             "the comment's author is not trusted, so the agent may not answer it"
         )

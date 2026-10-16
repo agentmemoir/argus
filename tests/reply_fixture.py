@@ -23,7 +23,7 @@ def comment(_cid: int, in_reply_to: int | None = None, body: str = "Fix it.") ->
         "in_reply_to": in_reply_to,
         "updated_at": "t",
         "reactions": 0,
-        "trusted": True,
+        "allowed": True,
         "body": body,
     }
 

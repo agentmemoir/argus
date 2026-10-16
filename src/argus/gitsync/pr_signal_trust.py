@@ -27,13 +27,13 @@ class Allows(Protocol):
 class Visibility:
     """Which comments show their text, and whether untrusted text is shown as data."""
 
-    trusted: Callable[[Row], bool]
+    allowed: Callable[[Row], bool]
     show_untrusted: bool
 
     @staticmethod
     def closed() -> "Visibility":
         """Trust nothing: no comment text is shown."""
-        return Visibility(trusted=lambda _row: False, show_untrusted=False)
+        return Visibility(allowed=lambda _row: False, show_untrusted=False)
 
 
 def adapt(checker: Allows) -> Callable[[Row], bool]:
@@ -60,4 +60,4 @@ def build_visibility(root: Path) -> Visibility:
     client = IssueClient() if needs_teams else None
     trust = Trust(root, client)
     show = conventions.setting("issues.untrusted-comments", "ignore") == "data-only"
-    return Visibility(trusted=adapt(trust), show_untrusted=show)
+    return Visibility(allowed=adapt(trust), show_untrusted=show)

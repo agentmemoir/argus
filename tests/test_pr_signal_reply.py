@@ -137,7 +137,7 @@ def test_a_failed_post_is_logged_as_failed(
 
 
 def test_refuses_a_comment_whose_author_is_not_trusted(tmp_path: Path) -> None:
-    record(tmp_path, {"10": {**comment(10), "trusted": False}})
+    record(tmp_path, {"10": {**comment(10), "allowed": False}})
     out = reply_to_comment(tmp_path, REF, 10, text="Done.", fetch=fresh({}))
     assert out["state"] == "REFUSED"
     assert "not trusted" in out["reasons"][0]
@@ -195,7 +195,7 @@ def test_refuses_when_the_fresh_read_no_longer_trusts_the_comment(
 ) -> None:
     record(tmp_path, {"10": comment(10)})
     posts = spy_gh(monkeypatch)
-    rows = {"10": {**comment(10), "trusted": False}}
+    rows = {"10": {**comment(10), "allowed": False}}
     out = reply_to_comment(tmp_path, REF, 10, text="Done.", fetch=fresh(rows))
     assert out["state"] == "REFUSED"
     assert "not trusted" in out["reasons"][0]
