@@ -76,6 +76,9 @@ selftest_case_flow() {
   RECOVER_OWN_CLAIM=0; export RECOVER_OWN_CLAIM
 
   # Coordination failure: the normal driver path must refuse before tmux launch.
+  # The fixture is reservable but unsyncable: a real board and phase so
+  # selection reserves, with the public checkout broken so --mode start fails
+  # and the sync gate refuses before any tmux window opens.
   old_repo="$REPO"; old_board_dir="$BOARD_DIR"; old_wf="$WF"
   old_argus="$ARGUS"; old_notifier="$NOTIFIER"
   old_run_dir="$RUN_DIR"; old_lock="$LOCK"; old_halt="$HALT"; old_stall="$STALL"
@@ -83,30 +86,34 @@ selftest_case_flow() {
   old_log="$LOG"; old_session="$SESSION"
   coord_root="$tmp/coordination-failure-root"
   coord_config="$tmp/coordination-failure-config.json"
-  mkdir -p "$coord_root/$BOARD_DIR/plans" "$coord_root/$BOARD_DIR/history"
-  cp "$PIPELINE" "$coord_root/$BOARD_DIR/flow.yaml"
-  REPO="$coord_root"
-  selftest_write_config "$coord_root" "$coord_config" "$BOARD_DIR" \
-    "$tmp/absent-board-checkout"
-  load_fixture_config "$coord_config"
-  WORK_SOURCE_FLAGS=(--source roadmap)
-  # Use the bundled publisher so this case reaches the coordination sync.
-  ARGUS="$old_argus"; NOTIFIER="$old_notifier"
-  set_config_args
-  RUN_DIR="$WF/$DRIVER_STATE"
-  mkdir -p "$RUN_DIR"
-  LOCK="$RUN_DIR/driver.lock"; HALT="$RUN_DIR/halted"; STALL="$RUN_DIR/stalled"
-  CURRENT="$RUN_DIR/current"; PIDFILE="$RUN_DIR/pid"
-  NOTIFY_BROKEN="$RUN_DIR/notify-broken"; LOG="$RUN_DIR/driver.log"
-  SESSION="ar-driver-coord-failure-$$"
-  drive || true
-  if grep -q "coordination checkout sync failed" "$LOG" \
-      && ! tmux_window_exists 2>/dev/null; then
-    echo "ok: coordination failure refuses launch"; coord_fail_ok=1
+  if ! selftest_fixture_root "$coord_root" "$tmp/coordination-failure-base"; then
+    echo "FAIL: the coordination-failure fixture could not be built, so the refusal was not tested"
+    fail=1
   else
-    echo "FAIL: coordination failure did not refuse launch"; coord_fail_ok=0; fail=1
+    REPO="$coord_root"; BOARD_DIR=board-data
+    selftest_write_config "$coord_root" "$coord_config" "$BOARD_DIR"
+    load_fixture_config "$coord_config"
+    WORK_SOURCE_FLAGS=(--source roadmap)
+    ARGUS="$coord_root/$BOARD_DIR/argus"; NOTIFIER="$ARGUS/notify/notifications.py"
+    set_config_args
+    RUN_DIR="$WF/$DRIVER_STATE"
+    mkdir -p "$RUN_DIR"
+    LOCK="$RUN_DIR/driver.lock"; HALT="$RUN_DIR/halted"; STALL="$RUN_DIR/stalled"
+    CURRENT="$RUN_DIR/current"; PIDFILE="$RUN_DIR/pid"
+    NOTIFY_BROKEN="$RUN_DIR/notify-broken"; LOG="$RUN_DIR/driver.log"
+    SESSION="ar-driver-coord-failure-$$"
+    rm -rf "$coord_root/.git"
+    drive || true
+    coord_sync_refused=0; coord_no_window=0
+    grep -q "coordination checkout sync failed" "$LOG" && coord_sync_refused=1
+    ! tmux_window_exists 2>/dev/null && coord_no_window=1
+    if [ "$coord_sync_refused" = 1 ] && [ "$coord_no_window" = 1 ]; then
+      echo "ok: coordination failure refuses launch"; coord_fail_ok=1
+    else
+      echo "FAIL: coordination failure did not refuse launch (sync_refused=$coord_sync_refused no_window=$coord_no_window)"; coord_fail_ok=0; fail=1
+    fi
+    tmux kill-session -t "$SESSION" 2>/dev/null || true
   fi
-  tmux kill-session -t "$SESSION" 2>/dev/null || true
   REPO="$old_repo"; BOARD_DIR="$old_board_dir"; WF="$old_wf"
   ARGUS="$old_argus"; NOTIFIER="$old_notifier"
   load_fixture_config "$selftest_config"

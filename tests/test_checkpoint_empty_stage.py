@@ -121,7 +121,7 @@ def test_root_scope_checkpoint_skips_an_ignored_tree(tmp_path: Path) -> None:
     # skipping it; the root spec must leave it alone and commit the rest.
     pub = _phase_clone(tmp_path)
     (pub / ".git" / "info" / "exclude").write_text("private/\n", encoding="utf-8")
-    ignored = pub / "private" / "clio-private" / "runs"
+    ignored = pub / "private" / "host-checkout" / "runs"
     ignored.mkdir(parents=True)
     (ignored / "state.json").write_text("{}\n", encoding="utf-8")
     (pub / "wanted.txt").write_text("work\n", encoding="utf-8")
