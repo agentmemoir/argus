@@ -12,8 +12,10 @@ The Python tools live in role packages under `src/argus/`. Every role package is
 - `gitsync/issue_*.py` and `gitsync/publish_issue.py` publish an issue branch, scope private task and run data, and return a checkout to its integration branch after GitHub review.
 - `config/` reads the settings file: `cli.py` is its command line, `schema.py` is the key table and the shell names, `loader.py` reads and resolves the file, and `render.py` prints it.
 - `notify/` formats notices: `notifications.py`.
-- `cli.py`, `conventions.py` and `exec_tempdir.py` sit at the package root. `conventions.py` shares the loaded settings across every tool.
+- `cli.py`, `conventions.py`, `estimate.py`, `_bootstrap.py` and `exec_tempdir.py` sit at the package root. `conventions.py` shares the loaded settings across every tool. `estimate.py` moves a developer harness's estimate factor toward the wall time a finished phase took. `_bootstrap.py` registers the source package under the name `argus` for direct source commands, so the checkout folder can have any name.
 
 The driver and its shell helpers live in `driver/`: `driver/phase-driver.sh` is the entry point and `driver/lib-*.sh` is one module per concern. `driver/lib-driver-group.sh` holds the group side of a tick: the member array a selection carries, the one branch the group publishes on, and the renewal the tick loop owes a running group. `driver/lib-driver-repair.sh` holds the repair hook a tick asks first and the repair session. `driver/lib-selftest-*.sh` holds the self-test case stages, one file per group, each named after the cases it runs.
 
 `exec_tempdir.py` is a copy of a shared test helper. It differs from that copy by the fixture-name prefix and by one behavior: this copy creates its build-tree fallback on first use, so a hardened host that mounts its temporary directories `noexec` still has somewhere to run a fixture. Re-copy it when the shared helper changes, and keep that difference.
+
+Related: [Configuration](configuration.md) · [Checks](checks.md)

@@ -27,11 +27,14 @@ The file's rules:
 - `driver.merge-check-max` — how many published phases one tick checks for a merge before it starts more work. Required.
 - `driver.recover-own-claim` — whether a tick may take back this host's own claim when its run died. Required.
 - `machine.id-file` — a file whose first non-empty line is the machine's name, recorded as the owner of a claim. Required. A relative path resolves against the config file, so each machine keeps its own file while the rest of the configuration is shared.
+- `machine.settings-file` — an overlay file this machine loads before the flags. Optional. See [Overrides](#overrides).
 - `commands.glide`, `commands.git`, `commands.tmux`, `commands.python`, `commands.hermes`, `commands.gh` — the external commands, named rather than searched for. Required.
+- `commands.reply-check` — a command that reads a draft pull request reply on stdin and exits non-zero to refuse it. Optional; an empty string disables the check.
 - `tmux.session`, `tmux.width`, `tmux.height`, `tmux.idle-window`, `tmux.phase-window`, `tmux.idle-script`, `tmux.refresh` — the tmux session and its geometry. Required.
 - `board.repo`, `board.file`, `board.branch`, `board.remote` — the shared board. Required only when the `board` object is present.
 - `notify.profile`, `notify.channel`, `notify.disabled` — the notification target. Required when the `notify` object is present. `notify.fallback`, `notify.heartbeat` — optional.
 - `repair.pipeline`, `repair.attempts`, `repair.wait` — self-healing: the pipeline a repair run executes, how many repair runs one pull request gets, and how many seconds the line waits for a published pull request's checks to finish. All required when the `repair` object is present; omit the object to leave failing checks to a person. See [Repair](paths-and-ownership.md#repair).
+- `estimate.factors-file`, `estimate.ideal-days` — the estimate factor: both keys switch it on. `factors-file` is a JSON file inside a git checkout with an upstream, holding `{"factors": {"<harness id>": 1.0}}`; a harness with no factor starts from the slowest one in the file. `ideal-days` runs from `repo-root` and prints one phase's ideal days, with the phase number added as its last argument; no number, no update. Optional. After a phase finishes from a fresh start, the driver moves the developer harness's factor toward phase hours / (ideal days x 2), by at most 20% per phase, then commits and pushes the file alone. A resumed run is skipped.
 
 The notification values belong to whoever receives the notices, so a configuration file that holds them must not be committed to a public tree.
 

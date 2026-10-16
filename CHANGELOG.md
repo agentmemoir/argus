@@ -4,6 +4,8 @@ Notable changes to this project are documented here. The format follows [Keep a 
 
 ## [Unreleased]
 
+- The README is now a landing page that links into `docs/` instead of restating it, and the `docs/` set names every configuration key, the package-root program files, and every run mode, including `--merge-check-only` and `abandon`.
+
 - The `verify` workflow sets `permissions: contents: read`, so its jobs run with a read-only `GITHUB_TOKEN` instead of the repository default.
 
 - A pull request signal snapshot and its events name the comment-trust boolean `allowed` instead of `trusted`, and the `Visibility` field, the fetch parameter, and the reply check follow the new name. The old name is also a static-analysis pattern for sensitive data, so it raised a false code-scanning alert on the signal print.
