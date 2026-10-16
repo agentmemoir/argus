@@ -18,19 +18,22 @@ def validate_phases(values: dict[str, object]) -> None:
     """
     repo = Path(cast("Path", values["phases.repo"])).resolve()
     directory = cast("str", values["phases.directory"])
-    folder = Path(directory)
-    if (
-        not directory.strip()
-        or folder.is_absolute()
-        or not folder.parts
-        or ".." in folder.parts
-        or folder.parts[0] == ".git"
-    ):
+    if not directory.strip():
         raise ConfigError(
             "invalid value for key 'phases.directory': use a safe "
             "repository-relative path"
         )
-    if not (repo / folder).resolve().is_relative_to(repo):
+    folder = Path(directory)
+    if folder.is_absolute():
+        resolved = folder.resolve()
+    else:
+        if not folder.parts or ".." in folder.parts or folder.parts[0] == ".git":
+            raise ConfigError(
+                "invalid value for key 'phases.directory': use a safe "
+                "repository-relative path"
+            )
+        resolved = (repo / folder).resolve()
+    if not resolved.is_relative_to(repo):
         raise ConfigError(
             "invalid value for key 'phases.directory': must stay inside phases.repo"
         )
