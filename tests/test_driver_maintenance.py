@@ -301,9 +301,9 @@ _drive
 
 def test_pending_scan_reads_pipeline_receipts_without_selecting(tmp_path: Path) -> None:
     config = copy.deepcopy(BASE)
-    config.update({"repo-root": ".", "phases": PHASES_LOCAL})
-    (tmp_path / "plans").mkdir()
-    (tmp_path / "plans/phase-100010-fixture.md").write_text("# Fixture\n")
+    config.update({"repo-root": ".", "phases": {**PHASES_LOCAL, "repo": "project"}})
+    (tmp_path / "project/plans").mkdir(parents=True)
+    (tmp_path / "project/plans/phase-100010-fixture.md").write_text("# Fixture\n")
     (tmp_path / "pipeline.yaml").write_text(
         "run_dir: history/phase-{phase_number:06d}\n"
         "inputs:\n  phase_number: {type: int}\n  phase_file: {}\n"

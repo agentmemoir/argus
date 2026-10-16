@@ -145,31 +145,35 @@ def resync_integration(repo: str | Path, base: str | None = None) -> dict[str, A
 
 
 def _shared_destination(checkouts: dict[str, Path]) -> str | None:
-    """A reason two named checkouts cannot be synced, or None when separate."""
-    sets = {
-        role: (configured_remote_urls(path), configured_remote_urls(path, push=True))
-        for role, path in checkouts.items()
-    }
-    for role, (fetch, push) in sets.items():
+    """A reason the sync must refuse, or None when it can go ahead.
+
+    Only the public checkout must differ from the private ones. The board and
+    the phases may share one destination among themselves, so they are never
+    compared with each other. A checkout missing a fetch or push URL still
+    fails closed.
+    """
+    public_fetch = configured_remote_urls(checkouts["public"])
+    public_push = configured_remote_urls(checkouts["public"], push=True)
+    if not public_fetch or not public_push:
+        return (
+            "cannot prove separate Git destinations for the public "
+            "repository; refusing to sync"
+        )
+    for role, path in checkouts.items():
+        if role == "public":
+            continue
+        fetch = configured_remote_urls(path)
+        push = configured_remote_urls(path, push=True)
         if not fetch or not push:
             return (
                 f"cannot prove separate Git destinations for the {role} "
                 "repository; refusing to sync"
             )
-    roles = sorted(sets)
-    for index, left in enumerate(roles):
-        left_fetch, left_push = sets[left]
-        for right in roles[index + 1 :]:
-            right_fetch, right_push = sets[right]
-            if (
-                left_push & right_push
-                or left_push & right_fetch
-                or left_fetch & right_push
-            ):
-                return (
-                    f"{left} and {right} repositories share a Git push/fetch "
-                    "destination; refusing to sync"
-                )
+        if public_push & push or public_push & fetch or public_fetch & push:
+            return (
+                f"public and {role} repositories share a Git push/fetch "
+                "destination; refusing to sync"
+            )
     return None
 
 

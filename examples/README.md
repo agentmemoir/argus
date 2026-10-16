@@ -9,8 +9,10 @@ examples/
   check-bin/glide                        # a stand-in used only by `make example-check`
   project/pipeline.yaml                  # the pipeline a tick runs
   project/stages/build.md                # the prompt for its one step
-  project/plans/phase-000001-example.md  # one work item
+  project/plans/phase-000001-example.md  # one work item, copied into the phases checkout
 ```
+
+The configuration names `project/phases/` as the phases repository: a checkout of its own, with a Git remote that differs from the project's. `make example-check` creates that checkout (git-ignored), copies the work item into it, and commits, so the example obeys the separation rule without committing a nested Git directory.
 
 ## Checking It
 
@@ -32,4 +34,4 @@ glide run --pipeline examples/project/pipeline.yaml \
 
 ## Copying It
 
-Copy `argus-config.jsonc`, `machine.id`, and the `project/` folder next to your own pipeline and work items, then change every path. The configuration rules are in [docs/configuration.md](../docs/configuration.md), and the fields that name a command are yours to fill with your own toolchain.
+Copy `argus-config.jsonc`, `machine.id`, and the `project/` folder next to your own pipeline and work items, then change every path. Give the `project/phases/` folder a checkout of its own with a Git remote that differs from the project's. The configuration rules are in [docs/configuration.md](../docs/configuration.md), and the fields that name a command are yours to fill with your own toolchain.

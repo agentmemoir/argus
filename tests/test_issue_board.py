@@ -65,6 +65,37 @@ def board(
     return phases, issues, rival
 
 
+def test_board_construction_does_not_read_the_phases_repo(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    executable = shutil.which("git")
+    assert executable is not None
+    project = tmp_path / "public-client-1"
+    phases = tmp_path / "phases"
+    phases.mkdir()
+    subprocess.run([executable, "init", "-q", str(phases)], check=True)
+    monkeypatch.setattr(
+        conventions,
+        "_settings",
+        {
+            "repo-root": project,
+            "board.repo": tmp_path / "board-client-1",
+            "board.branch": "fixture-claims",
+            "board.remote": "origin",
+            "board.file": "coordination/phases.json",
+            "commands.git": executable,
+            "driver.runs": "runs",
+            "phases.repo": str(phases),
+        },
+    )
+    _git_test_repo(tmp_path, "public")
+    _git_test_repo(tmp_path, "board")
+    # The phases repository has no remote, which the old three-way proof would
+    # have refused. The board no longer reads it, so construction succeeds.
+    store = ReservationStore(project)
+    assert store.root == project.resolve()
+
+
 @pytest.mark.parametrize(
     ("value", "key", "number"),
     [

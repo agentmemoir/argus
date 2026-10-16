@@ -6,6 +6,7 @@ from pathlib import Path
 
 from argus import conventions
 from argus.board.filecommit import file_transaction
+from argus.board.git import _is_git_repo, assert_public_separate
 from argus.phases.evidence import (
     INDEX_HEAD_RE,
     INDEX_ROW_RE,
@@ -140,6 +141,14 @@ def _annotate_index_complete(
         target.write_text(annotated)
         return True
 
+    # Defence in depth before the push. The configured public checkout must
+    # use a different Git destination from the private phases checkout, so the
+    # same proof the board makes at construction is made at this write. The
+    # board is not named: the phases and the board may share one checkout, and
+    # this write only needs the public checkout to differ.
+    public = Path(conventions.setting("repo-root", repo)).resolve()
+    if _is_git_repo(public):
+        assert_public_separate(public, {"phases": owner})
     file_transaction(
         owner,
         remote,

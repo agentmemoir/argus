@@ -6,7 +6,6 @@ import json
 from pathlib import Path
 from typing import Any
 
-from argus import conventions
 from argus.board.branch import (
     _branch_setting,
     _fetch_branch_ref,
@@ -46,9 +45,7 @@ class _StoreBase:
         self.root, self.private = _resolve_private_repo(repo_root, private_repo)
         self.branch = _branch_setting(branch)
         self.remote = _remote_setting(remote)
-        _assert_private_boundary(
-            self.root, self.private, conventions.phases_repo(self.root)
-        )
+        _assert_private_boundary(self.root, self.private)
         if issues:
             # Refuse a missing, unsafe or shared issue file before any board read.
             state_rel(issues=True)

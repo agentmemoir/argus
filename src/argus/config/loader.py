@@ -158,10 +158,11 @@ def _build(
         validate_trust(issues)
     if provider == "issues":
         validate_issues(values)
-    # The folder grows from the phases repository. A folder named by a flag for
-    # one run is the operator's word, exactly as the old path key's flag was, so
-    # only a value that came from the file is confined to the checkout.
-    if phases is not None and sources.get("phases.directory") != "flag":
+    # The folder grows from the phases repository, so it is always confined to
+    # it, whether the file or a flag named it. A flag that reached outside the
+    # checkout would read a stranger's tree and write the index into it, and the
+    # operator's word is not worth that.
+    if phases is not None:
         validate_phases(values)
     return Config(path, values, sources)
 

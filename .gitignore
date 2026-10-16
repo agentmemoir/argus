@@ -10,3 +10,6 @@ target/
 !.vscode
 !.github
 !.gitattributes
+
+# The example phases checkout is created by `make example-check`, not committed.
+examples/project/phases/

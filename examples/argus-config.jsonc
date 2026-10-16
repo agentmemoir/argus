@@ -14,8 +14,10 @@
 
   // The phases repository: where the work-item files live, and where Argus
   // commits and pushes what it writes there. Required for the phase source.
+  // It is a separate checkout from repo-root, with a Git remote of its own.
+  // `make example-check` gives examples/project/phases that checkout.
   "phases": {
-    "repo": "./project",
+    "repo": "./project/phases",
     "directory": "plans",
     "branch": "main",
     "remote": "origin"

@@ -92,9 +92,27 @@ dry-run:
 # machine with no Glide installed must still be able to check the example. The
 # runs folder is created here: it is git-ignored, and the driver needs the
 # configured run-state folder to exist before it starts.
+#
+# The phases repository is a separate checkout, so this target builds one at
+# examples/project/phases: a Git directory with a remote of its own, holding the
+# example's work item. That folder is git-ignored and never committed. The last
+# step runs the code's own separation proof, so the example cannot ship a
+# phases destination that matches the public repo-root or the board.
 example-check:
 	@mkdir -p examples/runs
+	@if [ ! -d examples/project/phases/.git ]; then \
+		git init -q --bare examples/runs/phases.git; \
+		git init -q -b main examples/project/phases; \
+		git -C examples/project/phases remote add origin "$(CURDIR)/examples/runs/phases.git"; \
+	fi
+	@mkdir -p examples/project/phases/plans
+	@cp examples/project/plans/phase-000001-example.md examples/project/phases/plans/
+	@git -C examples/project/phases add -A
+	@git -C examples/project/phases rev-parse -q --verify HEAD >/dev/null 2>&1 \
+		|| git -C examples/project/phases -c user.email=argus@example.invalid \
+			-c user.name=argus commit -q -m 'example phases checkout'
 	@PATH="$(CURDIR)/examples/check-bin:$$PATH" $(RUN) bin/argus --config examples/argus-config.jsonc --check
+	@$(RUN) python -c 'from pathlib import Path; from argus import conventions; from argus.board.git import assert_public_separate; conventions.configure_from_file("examples/argus-config.jsonc"); board = conventions.board_repo(); privates = {"phases": conventions.phases_repo()}; privates.update({"board": board} if board else {}); assert_public_separate(Path(conventions.setting("repo-root")), privates); print("example destinations are separate: " + ", ".join(sorted(privates)))'
 
 self-test:
 	$(ci_only)

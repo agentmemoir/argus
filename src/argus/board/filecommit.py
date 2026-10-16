@@ -25,25 +25,24 @@ from argus.board.worktree import _detached_worktree, sweep_stale_worktrees
 
 def _commit_paths(checkout: Path, paths: list[str], message: str) -> str | None:
     """Stage exactly ``paths`` and commit them; ``None`` when nothing changed."""
+    named = ", ".join(paths)
     rc, _, err = _git(checkout, "add", "--", *paths)
     if rc != 0:
-        raise CoordinationUnavailable(
-            f"cannot stage coordination state: {_safe_detail(err)}"
-        )
+        raise CoordinationUnavailable(f"cannot stage {named}: {_safe_detail(err)}")
     rc, out, err = _git(checkout, "commit", "-q", "-m", message)
     if rc != 0:
         combined = _safe_detail(f"{out} {err}")
         if "nothing to commit" in combined.lower():
             return None
-        raise CoordinationUnavailable(f"coordination state commit failed: {combined}")
+        raise CoordinationUnavailable(f"cannot commit {named}: {combined}")
     rc, commit, _ = _git(checkout, "rev-parse", "HEAD")
     if rc != 0 or not commit:
-        raise CoordinationUnavailable("coordination commit has no revision")
+        raise CoordinationUnavailable(f"cannot commit {named}: no revision")
     return commit
 
 
 def file_transaction(
-    private: Path,
+    repo: Path,
     remote: str,
     branch: str,
     paths: list[str | Path],
@@ -77,8 +76,8 @@ def file_transaction(
         )
     staged = [Path(path).as_posix() for path in paths]
     for attempt in range(MAX_TRANSACTION_ATTEMPTS):
-        ref, _commit = _fetch_branch_ref(private, remote, branch)
-        with _detached_worktree(private, ref) as checkout:
+        ref, _commit = _fetch_branch_ref(repo, remote, branch)
+        with _detached_worktree(repo, ref) as checkout:
             changed = write(checkout.path)
             if not changed:
                 return
@@ -100,7 +99,8 @@ def file_transaction(
             return
         last_error = _safe_detail(f"{out} {err}")
     raise CoordinationUnavailable(
-        f"coordination state push failed after retries: {last_error or 'unknown error'}"
+        f"cannot push {', '.join(staged)} after retries: "
+        f"{last_error or 'unknown error'}"
     )
 
 

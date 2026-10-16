@@ -143,6 +143,55 @@ def test_bad_values_name_key():
         expect_error(lambda: cfgmod.load(str(path)), "driver.include")
 
 
+def test_legacy_roadmap_dir_is_refused_naming_both():
+    with tempfile.TemporaryDirectory() as tmp:
+        document = copy.deepcopy(BASE)
+        document["roadmap-dir"] = "plans"
+        path = write(tmp, json.dumps(document))
+        try:
+            cfgmod.load(str(path))
+        except cfgmod.ConfigError as exc:
+            text = str(exc)
+            check("roadmap-dir" in text, text)
+            check("phases.directory" in text, text)
+            return
+        raise AssertionError("the legacy roadmap-dir key was accepted")
+
+
+def test_phase_source_without_a_phases_object_is_refused():
+    with tempfile.TemporaryDirectory() as tmp:
+        document = copy.deepcopy(BASE)
+        del document["phases"]
+        path = write(tmp, json.dumps(document))
+        expect_error(lambda: cfgmod.load(str(path)), "phases.repo")
+
+
+def test_phases_folder_must_stay_inside_the_phases_repo():
+    with tempfile.TemporaryDirectory() as tmp:
+        outside = (Path(tmp) / "outside").resolve()
+        outside.mkdir()
+        document = copy.deepcopy(BASE)
+        document["phases"]["directory"] = str(outside)
+        path = write(tmp, json.dumps(document))
+        expect_error(lambda: cfgmod.load(str(path)), "phases.directory")
+        # A flag cannot leave the checkout either.
+        document = copy.deepcopy(BASE)
+        path = write(tmp, json.dumps(document))
+        expect_error(
+            lambda: cfgmod.load(str(path), {"phases-directory": str(outside)}),
+            "phases.directory",
+        )
+
+
+def test_phases_repo_must_be_a_git_work_tree():
+    with tempfile.TemporaryDirectory() as tmp:
+        (Path(tmp) / "plain").mkdir()
+        document = copy.deepcopy(BASE)
+        document["phases"]["repo"] = "plain"
+        path = write(tmp, json.dumps(document))
+        expect_error(lambda: cfgmod.load(str(path)), "phases.repo")
+
+
 def test_repair_object_needs_all_three_keys_and_sane_values():
     with tempfile.TemporaryDirectory() as tmp:
         whole = {"pipeline": "repair.yaml", "attempts": 3, "wait": 0}
@@ -184,7 +233,10 @@ def test_sample_loads_with_every_schema_key():
             key = cfgmod._REPORT_KEY.get(field.key, field.key)
             check(key in config.values, f"sample missing {key}")
         check(config.get("repo-root") == base / "project", config.get("repo-root"))
-        check(config.get("phases.repo") == base / "project", config.get("phases.repo"))
+        check(
+            config.get("phases.repo") == base / "project" / "phases",
+            config.get("phases.repo"),
+        )
         check(config.get("phases.directory") == "plans", config.get("phases.directory"))
         check(config.get("board.repo") == base, config.get("board.repo"))
         check(config.get("board.file") == "claims.json", config.get("board.file"))
@@ -234,6 +286,10 @@ TESTS = (
     ("missing required key", test_missing_required_key_names_it),
     ("wrong type", test_wrong_type_names_key),
     ("bad values", test_bad_values_name_key),
+    ("legacy roadmap-dir", test_legacy_roadmap_dir_is_refused_naming_both),
+    ("phases object required", test_phase_source_without_a_phases_object_is_refused),
+    ("phases folder inside repo", test_phases_folder_must_stay_inside_the_phases_repo),
+    ("phases repo work tree", test_phases_repo_must_be_a_git_work_tree),
     ("repair object", test_repair_object_needs_all_three_keys_and_sane_values),
     ("sample", test_sample_loads_with_every_schema_key),
     ("shell format", test_config_cli.test_shell_format),

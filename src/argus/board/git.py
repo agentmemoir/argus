@@ -122,38 +122,34 @@ def _url_sets(repo: str | Path) -> tuple[set[str], set[str]]:
     return fetch, push
 
 
-def _assert_separate_destinations(checkouts: Mapping[str, Path]) -> None:
-    """Refuse when two named checkouts share a Git push/fetch destination.
+def assert_public_separate(public: str | Path, privates: Mapping[str, Path]) -> None:
+    """Refuse when the public checkout shares a Git destination with a private one.
 
-    Separation is a property of the configured destinations, read from every
-    remote, not of the branches or the layout. Every checkout must carry both a
-    fetch and a push URL, or the proof is impossible and the check fails closed.
+    The public destination must differ from each private destination; the
+    private checkouts may share one among themselves, so they are never compared
+    with each other. Separation is a property of the configured destinations,
+    read from every remote, not of the branches or the layout. Every checkout
+    must carry both a fetch and a push URL, or the proof is impossible and the
+    check fails closed.
     """
-    destinations = {role: _url_sets(path) for role, path in checkouts.items()}
-    for role, (fetch, push) in destinations.items():
+    public_fetch, public_push = _url_sets(public)
+    if not public_fetch or not public_push:
+        raise CoordinationUnavailable(
+            "cannot prove separate Git destinations for the public repository"
+        )
+    for role, path in privates.items():
+        fetch, push = _url_sets(path)
         if not fetch or not push:
             raise CoordinationUnavailable(
                 f"cannot prove separate Git destinations for the {role} repository"
             )
-    roles = sorted(destinations)
-    for index, left in enumerate(roles):
-        left_fetch, left_push = destinations[left]
-        for right in roles[index + 1 :]:
-            right_fetch, right_push = destinations[right]
-            if (
-                left_push & right_push
-                or left_push & right_fetch
-                or left_fetch & right_push
-            ):
-                raise CoordinationUnavailable(
-                    f"{left} and {right} repositories share a Git "
-                    "push/fetch destination"
-                )
+        if public_push & push or public_push & fetch or public_fetch & push:
+            raise CoordinationUnavailable(
+                f"public and {role} repositories share a Git push/fetch destination"
+            )
 
 
-def _assert_private_boundary(
-    root: str | Path, private: str | Path, phases: str | Path | None = None
-) -> None:
+def _assert_private_boundary(root: str | Path, private: str | Path) -> None:
     # Only a directory that is its own work-tree top level is the public
     # repository. `git rev-parse --is-inside-work-tree` is true for a plain
     # directory that merely sits inside an enclosing repository, so testing the
@@ -163,14 +159,16 @@ def _assert_private_boundary(
     # at read(), not here. Accepted trade-off: a repo-root configured as a
     # subdirectory of a repository is no longer boundary-checked; the supported
     # layout is a checkout root, which is its own top level.
+    #
+    # This is the board's own proof, and it names exactly the two checkouts the
+    # board reads and writes. The phases repository is not one of them: a board
+    # store must not depend on the phases configuration, so the phases checkout
+    # is proved at its own write, in the phases index.
     resolved = Path(root).resolve()
     rc_t, top, _ = _git(root, "rev-parse", "--show-toplevel")
     if rc_t != 0 or not top or Path(top).resolve() != resolved:
         return
-    checkouts = {"public": Path(root), "board": Path(private)}
-    if phases is not None:
-        checkouts["phases"] = Path(phases)
-    _assert_separate_destinations(checkouts)
+    assert_public_separate(Path(root), {"board": Path(private)})
 
 
 def _head(repo: str | Path) -> str | None:
@@ -180,9 +178,9 @@ def _head(repo: str | Path) -> str | None:
 
 __all__ = [
     "_assert_private_boundary",
-    "_assert_separate_destinations",
     "_git",
     "_head",
     "_is_git_repo",
+    "assert_public_separate",
     "isolate_self_test_git",
 ]

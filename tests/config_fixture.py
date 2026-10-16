@@ -69,6 +69,7 @@ def check(condition: object, detail: object = "") -> None:
 def write(directory: str | Path, text: str, name: str = "config.json") -> Path:
     # Every config here names machine.id-file, so the file it points at is
     # written beside it. The sample does the same for the tests that load it.
+    _work_tree(directory)
     (Path(directory) / "machine.id").write_text("machine-1\n", encoding="utf-8")
     path = Path(directory) / name
     path.write_text(text, encoding="utf-8")
@@ -77,10 +78,40 @@ def write(directory: str | Path, text: str, name: str = "config.json") -> Path:
 
 def sample_in(directory: str | Path) -> Path:
     """Copy the sample beside the machine-id file it names."""
+    _work_tree(directory)
     (Path(directory) / "machine.id").write_text("sample-machine\n", encoding="utf-8")
     path = Path(directory) / "config.json"
     path.write_text(SAMPLE.read_text(encoding="utf-8"), encoding="utf-8")
     return path
+
+
+def _work_tree(directory: str | Path) -> None:
+    """Make the ``project`` and its nested ``phases`` real Git work trees.
+
+    The loader refuses a ``phases.repo`` that is not a Git work tree. ``BASE``
+    names ``project`` for phases; the sample names ``project/phases``, a
+    distinct checkout nested in the project, so both are provided. Each gets a
+    remote of its own, because a config that also names a board makes the
+    board's own public/board separation proof run, and that proof needs both to
+    carry a destination that differs.
+    """
+    for relative in (Path("project"), Path("project") / "phases"):
+        repo = Path(directory) / relative
+        repo.mkdir(parents=True, exist_ok=True)
+        if not (repo / ".git").exists():
+            subprocess.run(["git", "init", "-q", str(repo)], check=True)
+            subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    str(repo),
+                    "remote",
+                    "add",
+                    "origin",
+                    str(repo) + ".git",
+                ],
+                check=True,
+            )
 
 
 def commented(document: object) -> str:

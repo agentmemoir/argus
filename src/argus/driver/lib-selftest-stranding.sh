@@ -151,12 +151,25 @@ strand_expect_refused() {
     # The phase each folder offers is one the fixture board knows nothing about,
     # so a claim appears only if this tick takes one. Nothing else in the fixture
     # refers to them.
-    strand_outside="$tmp/strand-outside-phases"
+    #
+    # The folder must sit inside the phases repository it names, because the
+    # configuration now refuses a folder that escapes its checkout even when a
+    # flag named it. An outside repository holds the folder, so containment
+    # passes and the driver's own locality guard — which compares against the
+    # checkout it launches from — is what refuses.
+    strand_outside_repo="$tmp/strand-outside-repo"
+    strand_outside="$strand_outside_repo/strand-phases"
     strand_unclaimed=100099
     mkdir -p "$strand_outside"
+    git init -q "$strand_outside_repo"
     printf '# %s. Outside Strand Fixture\n- [ ] Required approval is obtained.\n' \
       "$strand_unclaimed" >"$strand_outside/phase-$strand_unclaimed-outside-strand.md"
     printf 'Plan ready\n' >"$strand_outside/index.md"
+    strand_config="$ARGUS_CONFIG_FILE"
+    strand_outside_config="$tmp/strand-outside-config.json"
+    selftest_write_config "$strand_root" "$strand_outside_config" "$BOARD_DIR" \
+      "" "" "" "$strand_outside_repo"
+    load_fixture_config "$strand_outside_config"
     PHASES_DIRECTORY="$strand_outside"
     WORK_SOURCE_FLAGS=(--phases "$strand_outside")
     if strand_expect_refused \
@@ -171,6 +184,7 @@ strand_expect_refused() {
       strand_ok=0; fail=1
       strand_diagnose
     fi
+    load_fixture_config "$strand_config"
     wait_phase_window_gone
 
     # A folder that is not there at all. Same claim to strand, same place to

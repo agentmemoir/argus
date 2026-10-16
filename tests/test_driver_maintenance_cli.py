@@ -15,7 +15,7 @@ DRIVER = Path(__file__).resolve().parents[1] / "src/argus/driver/phase-driver.sh
 
 def test_public_maintenance_mode_settles_a_halted_idle_tick(tmp_path: Path) -> None:
     config = copy.deepcopy(BASE)
-    config.update({"repo-root": ".", "phases": PHASES_LOCAL})
+    config.update({"repo-root": ".", "phases": {**PHASES_LOCAL, "repo": "project"}})
     config["commands"]["python"] = sys.executable
     (tmp_path / "plans").mkdir()
     (tmp_path / "pipeline.yaml").write_text(

@@ -298,14 +298,16 @@ DOC
 #                                  absolute and resolve as written)
 #   $3  the board folder name inside the root
 #   $4  optional board checkout; $5 optional board file; $6 optional branch
+#   $7  optional phases repository (a work tree; default the root's phases-data)
 selftest_write_config() {
   "$PYTHON" - "$1" "$2" "$3" "${4:-}" "${5:-claims.json}" \
-      "${6:-fixture-claims}" "$PHASE_MACHINE_ID" <<'PY'
+      "${6:-fixture-claims}" "$PHASE_MACHINE_ID" "${7:-}" <<'PY'
 import json
 import sys
 from pathlib import Path
 
-root, config, board_dir, board_repo, board_file, board_branch, machine_id = sys.argv[1:]
+root, config, board_dir, board_repo, board_file, board_branch, machine_id, \
+    phases_repo = sys.argv[1:]
 root = Path(root).resolve()
 board_dir = Path(board_dir)
 board = Path(board_repo).resolve() if board_repo else (root / board_dir).resolve()
@@ -313,7 +315,7 @@ doc = {
     "repo-root": str(root),
     "pipeline": str(root / board_dir / "flow.yaml"),
     "phases": {
-        "repo": str(root / "phases-data"), "directory": "plans",
+        "repo": phases_repo or str(root / "phases-data"), "directory": "plans",
         "branch": "master", "remote": "origin",
     },
     "number-input": "phase_number",
