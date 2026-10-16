@@ -173,13 +173,13 @@ def test_watch_binds_the_snapshot_to_the_pull_request(tmp_path: Path) -> None:
 
 def test_untrusted_comment_text_is_not_kept_by_default() -> None:
     record = pr_signal_fetch.normalize_comment(_comment(10), False, False)
-    assert record["trusted"] is False
+    assert record["allowed"] is False
     assert record["body"] is None
 
 
 def test_untrusted_text_is_kept_as_data_only_when_configured() -> None:
     record = pr_signal_fetch.normalize_comment(_comment(10), False, True)
-    assert record["trusted"] is False
+    assert record["allowed"] is False
     assert record["body"] == "Hard-coded salt."
 
 
@@ -200,7 +200,7 @@ def test_fetch_keeps_comment_text_only_for_trusted_authors(
 
     monkeypatch.setattr(pr_signal_fetch, "_gh", fake_gh)
     visibility = Visibility(
-        trusted=lambda row: row["user"]["login"] == "reviewer", show_untrusted=False
+        allowed=lambda row: row["user"]["login"] == "reviewer", show_untrusted=False
     )
     snap, why = pr_signal_fetch.fetch_snapshot(
         "example-org", "example-repo", 7, None, visibility
@@ -209,4 +209,4 @@ def test_fetch_keeps_comment_text_only_for_trusted_authors(
     assert snap is not None
     assert snap["comments"]["10"]["body"] == "Hard-coded salt."
     assert snap["comments"]["11"]["body"] is None
-    assert snap["comments"]["11"]["trusted"] is False
+    assert snap["comments"]["11"]["allowed"] is False

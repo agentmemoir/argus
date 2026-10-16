@@ -32,7 +32,7 @@ def test_adapt_maps_a_review_comment_onto_the_issue_trust_item() -> None:
 
 def test_closed_visibility_trusts_nothing_and_shows_no_untrusted_text() -> None:
     row = {"author_association": "OWNER", "user": {"login": "owner", "type": "User"}}
-    assert Visibility.closed().trusted(row) is False
+    assert Visibility.closed().allowed(row) is False
     assert Visibility.closed().show_untrusted is False
 
 
@@ -44,7 +44,7 @@ def test_build_visibility_reads_trust_without_an_issue_source(tmp_path: Path) ->
         visibility = build_visibility(tmp_path)
         member = {"author_association": "NONE", "user": {"login": "reviewer"}}
         outsider = {"author_association": "NONE", "user": {"login": "outsider"}}
-        assert visibility.trusted(member) is True
-        assert visibility.trusted(outsider) is False
+        assert visibility.allowed(member) is True
+        assert visibility.allowed(outsider) is False
     finally:
         conventions.configure(previous)

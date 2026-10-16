@@ -64,7 +64,7 @@ def normalize_alert(row: Row) -> Row:
     }
 
 
-def normalize_comment(row: Row, trusted: bool, show_untrusted: bool) -> Row:
+def normalize_comment(row: Row, allowed: bool, show_untrusted: bool) -> Row:
     """The fields of one review comment that the watch compares.
 
     The text is kept only for a trusted author, or for any author when untrusted
@@ -79,8 +79,8 @@ def normalize_comment(row: Row, trusted: bool, show_untrusted: bool) -> Row:
         "in_reply_to": row.get("in_reply_to_id"),
         "updated_at": row.get("updated_at"),
         "reactions": reactions.get("total_count", 0),
-        "trusted": trusted,
-        "body": (row.get("body") or "") if trusted or show_untrusted else None,
+        "allowed": allowed,
+        "body": (row.get("body") or "") if allowed or show_untrusted else None,
     }
 
 
@@ -113,9 +113,9 @@ def fetch_snapshot(
         return None, why
     comment_records: dict[str, Row] = {}
     for row in comments:
-        trusted = view.trusted(row)
+        allowed = view.allowed(row)
         comment_records[str(row["id"])] = normalize_comment(
-            row, trusted, view.show_untrusted
+            row, allowed, view.show_untrusted
         )
     snapshot: Snapshot = {
         "alerts": {str(row["number"]): normalize_alert(row) for row in alerts},
