@@ -9,9 +9,9 @@ from typing import Any
 
 from argus import conventions
 from argus.board.reservations import ReservationStore
-from argus.roadmap.evidence import is_done
-from argus.roadmap.selftest_fixture import BOARD_REL
-from argus.roadmap.server import select_server_phase
+from argus.phases.evidence import is_done
+from argus.phases.selftest_fixture import BOARD_REL
+from argus.phases.server import select_server_phase
 
 
 def _board_checks() -> None:
@@ -24,16 +24,16 @@ def _board_checks() -> None:
         _, clients = _git_test_repo(Path(tmp).resolve(), "real-ordering")
         repo = Path(tmp).resolve() / "root"
         nested = repo / BOARD_REL
-        (nested / "roadmap").mkdir(parents=True)
+        (nested / "phases").mkdir(parents=True)
         (nested / "runs").mkdir()
-        (nested / "roadmap" / "index.md").write_text("Plan ready\n")
+        (nested / "phases" / "index.md").write_text("Plan ready\n")
         for number in (100440, 100460, 100601, 100602):
-            (nested / "roadmap" / f"phase-{number}-synthetic.md").write_text("x\n")
-        roadmap = nested / "roadmap"
+            (nested / "phases" / f"phase-{number}-synthetic.md").write_text("x\n")
+        phases = nested / "phases"
         store_server = ReservationStore(repo, private_repo=clients[0])
         store_local = ReservationStore(repo, private_repo=clients[1])
         first = select_server_phase(
-            repo, "server-01", store=store_server, roadmap=roadmap
+            repo, "server-01", store=store_server, phases=phases
         )
         assert first["state"] == "RESERVED" and first["phase"] == "100440", first
         local = store_local.reserve(100601, "local-01")
@@ -60,7 +60,7 @@ def _board_checks() -> None:
         finally:
             conventions.configure(old_runs)
         following = select_server_phase(
-            repo, "server-01", store=store_server, roadmap=roadmap
+            repo, "server-01", store=store_server, phases=phases
         )
         assert following["state"] == "RESERVED" and following["phase"] == "100460", (
             following
@@ -83,7 +83,7 @@ def _board_checks() -> None:
             conventions.configure(old_runs)
         store_local.reserve(100602, "local-01")
         waiting = select_server_phase(
-            repo, "server-01", store=store_server, roadmap=roadmap
+            repo, "server-01", store=store_server, phases=phases
         )
         assert waiting["state"] == "WAIT_FOR_CLAIM" and waiting["phase"] == "100602", (
             waiting
@@ -96,7 +96,7 @@ def _board_checks() -> None:
         # behaviour waited here for a human, which meant an abandoned pull
         # request parked every later phase with no way back.
         review_phase = 100590
-        review_file = roadmap / f"phase-{review_phase}-awaiting-review.md"
+        review_file = phases / f"phase-{review_phase}-awaiting-review.md"
         review_file.write_text("- [ ] Required approval is obtained.\n")
         (nested / "runs" / f"phase-{review_phase}").mkdir(parents=True, exist_ok=True)
         (nested / "runs" / f"phase-{review_phase}" / "publication.json").write_text(
@@ -112,10 +112,10 @@ def _board_checks() -> None:
                 }
             )
         )
-        later_file = roadmap / "phase-100591-after-review.md"
+        later_file = phases / "phase-100591-after-review.md"
         later_file.write_text("- [ ] Required approval is obtained.\n")
         review = select_server_phase(
-            repo, "server-01", store=store_server, roadmap=roadmap
+            repo, "server-01", store=store_server, phases=phases
         )
         # The line moves past the open pull request...
         assert review["state"] == "RESERVED" and review["phase"] == "100591", review
@@ -130,7 +130,7 @@ def _board_checks() -> None:
         assert not is_done(repo, review_phase, review_file, set())
         # And it must never be handed out for a run of its own.
         offered = select_server_phase(
-            repo, "server-01", store=store_server, reserve=False, roadmap=roadmap
+            repo, "server-01", store=store_server, reserve=False, phases=phases
         )
         assert offered["phase"] == "100591", offered
         # The skipped phase rides along on an outcome that does not launch
@@ -155,13 +155,13 @@ def _board_checks() -> None:
         finally:
             conventions.configure(old_runs)
         drained = select_server_phase(
-            repo, "server-01", store=store_server, roadmap=roadmap
+            repo, "server-01", store=store_server, phases=phases
         )
         drained_skipped: list[dict[str, Any]] = drained.get("awaiting_review") or []
         assert [e["phase"] for e in drained_skipped] == [f"{review_phase:06d}"], drained
         # And on the one outcome that is not a launch at all.
         drained_state = select_server_phase(
-            repo, "server-01", store=store_server, reserve=False, roadmap=roadmap
+            repo, "server-01", store=store_server, reserve=False, phases=phases
         )
         state_skipped: list[dict[str, Any]] = drained_state.get("awaiting_review") or []
         assert [e["phase"] for e in state_skipped] == [f"{review_phase:06d}"], (
@@ -178,17 +178,17 @@ def _board_checks() -> None:
         decoy = _git_test_repo(case, "decoy")[1][0]
         repo = case / "root"
         nested = repo / BOARD_REL
-        (nested / "roadmap").mkdir(parents=True)
+        (nested / "phases").mkdir(parents=True)
         (nested / "runs").mkdir()
-        (nested / "roadmap" / "index.md").write_text("Plan ready\n")
+        (nested / "phases" / "index.md").write_text("Plan ready\n")
         number = 100777
-        (nested / "roadmap" / f"phase-{number}-hermetic.md").write_text("x\n")
+        (nested / "phases" / f"phase-{number}-hermetic.md").write_text("x\n")
         own_private = _git_test_repo(case, "hermetic")[1][0]
         (own_private / "runs").mkdir(exist_ok=True)
         conventions.override(
             {
                 "repo-root": repo,
-                "roadmap-dir": BOARD_REL / "roadmap",
+                "phases-dir": BOARD_REL / "phases",
                 "driver.runs": BOARD_REL / "runs",
                 "board.repo": decoy,
             }
@@ -197,7 +197,7 @@ def _board_checks() -> None:
         store = ReservationStore(repo, private_repo=own_private)
         assert store.private == own_private.resolve(), store.private
         got = select_server_phase(
-            repo, "server-01", store=store, roadmap=nested / "roadmap"
+            repo, "server-01", store=store, phases=nested / "phases"
         )
         assert got["state"] == "RESERVED" and got["phase"] == str(number), got
         assert not (decoy / "runs" / f"phase-{number}" / "reservation.json").exists()

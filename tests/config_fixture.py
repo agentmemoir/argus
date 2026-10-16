@@ -17,7 +17,7 @@ SAMPLE = HERE.parent / "config.sample.jsonc"
 BASE: dict[str, Any] = {
     "repo-root": "project",
     "pipeline": "pipeline.yaml",
-    "roadmap-dir": "roadmap",
+    "phases-dir": "phases",
     "number-input": "phase_number",
     "file-input": "phase_file",
     "driver": {

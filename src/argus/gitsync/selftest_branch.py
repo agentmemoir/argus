@@ -156,14 +156,14 @@ def _phase_branch_name_checks(base: Path) -> list[tuple[str, object, str]]:
 
     The branch is pushed to the public repository, where the number is an
     internal label a reviewer should not have to read past. The behaviour part
-    is what identifies the phase's roadmap file, so the number is still checked
+    is what identifies the phase's phases file, so the number is still checked
     against the phase the caller means: that check now reads the file name,
     because the branch no longer carries the number at all.
     """
     results: list[tuple[str, object, str]] = []
     fixture = base / "branch-name"
     _configure_self_test(
-        fixture, fixture / BOARD_REL, roadmap=Path(BOARD_REL) / "roadmap"
+        fixture, fixture / BOARD_REL, phases=Path(BOARD_REL) / "phases"
     )
     name = "phase-100440-backup-archive-format-and-directory.md"
     branch = phase_branch_for(100440, name)
@@ -176,7 +176,7 @@ def _phase_branch_name_checks(base: Path) -> list[tuple[str, object, str]]:
         )
     )
 
-    # The wrong roadmap file must still be refused, or a phase could be launched
+    # The wrong phases file must still be refused, or a phase could be launched
     # on another phase's branch.
     try:
         phase_branch_for(100841, name)
@@ -185,7 +185,7 @@ def _phase_branch_name_checks(base: Path) -> list[tuple[str, object, str]]:
         wrong = str(exc)
     results.append(
         (
-            "a roadmap file for another phase is still refused",
+            "a phases file for another phase is still refused",
             wrong is not None and "100440" in wrong and "100841" in wrong,
             f"error={wrong}",
         )
@@ -195,11 +195,11 @@ def _phase_branch_name_checks(base: Path) -> list[tuple[str, object, str]]:
     # must stop the launch: otherwise the second phase would resume the first
     # phase's branch and inherit its commits.
     root = fixture
-    roadmap = root / BOARD_REL / "roadmap"
-    roadmap.mkdir(parents=True)
-    (roadmap / name).write_text("x\n")
+    phases = root / BOARD_REL / "phases"
+    phases.mkdir(parents=True)
+    (phases / name).write_text("x\n")
     clash_name = "phase-100460-backup-archive-format-and-directory.md"
-    (roadmap / clash_name).write_text("x\n")
+    (phases / clash_name).write_text("x\n")
     clash: dict[str, Any] = assert_phase_branch_unique(root, 100440, name)
     results.append(
         (
@@ -209,7 +209,7 @@ def _phase_branch_name_checks(base: Path) -> list[tuple[str, object, str]]:
         )
     )
 
-    (roadmap / clash_name).unlink()
+    (phases / clash_name).unlink()
     unique: dict[str, Any] = assert_phase_branch_unique(root, 100440, name)
     results.append(
         (
@@ -223,8 +223,8 @@ def _phase_branch_name_checks(base: Path) -> list[tuple[str, object, str]]:
     # scanned. Reading the derived one instead would leave a collision inside a
     # configured folder unseen, which is the exact failure this check refuses.
     named = base / "branch-name-named"
-    (named / BOARD_REL / "roadmap").mkdir(parents=True)
-    elsewhere = named / "other-roadmap"
+    (named / BOARD_REL / "phases").mkdir(parents=True)
+    elsewhere = named / "other-phases"
     elsewhere.mkdir()
     (elsewhere / name).write_text("x\n")
     (elsewhere / clash_name).write_text("x\n")
@@ -240,7 +240,7 @@ def _phase_branch_name_checks(base: Path) -> list[tuple[str, object, str]]:
         )
     )
     relative: dict[str, Any] = assert_phase_branch_unique(
-        named, 100440, name, "other-roadmap"
+        named, 100440, name, "other-phases"
     )
     results.append(
         (
@@ -257,7 +257,7 @@ def _phase_branch_name_checks(base: Path) -> list[tuple[str, object, str]]:
     # reached the uniqueness check at all refuses, and one that dropped the
     # folder would carry on to try to cut a branch in a directory that is not a
     # repository, which is a different failure.
-    refused: dict[str, Any] = mode_branch(named, 100440, name, "other-roadmap")
+    refused: dict[str, Any] = mode_branch(named, 100440, name, "other-phases")
     results.append(
         (
             "the branch mode scans the configured folder and refuses the collision",

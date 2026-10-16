@@ -100,7 +100,7 @@ def _configure_self_test(
     board: str | Path,
     *,
     pipeline: str | Path | None = None,
-    roadmap: str | Path | None = None,
+    phases: str | Path | None = None,
     runs: str | Path | None = None,
     include: tuple[str, ...] = ("phase-*.md",),
     exclude: tuple[str, ...] = (),
@@ -124,7 +124,7 @@ def _configure_self_test(
         {
             "repo-root": pub,
             "pipeline": pipeline,
-            "roadmap-dir": Path(roadmap or Path(board) / "roadmap"),
+            "phases-dir": Path(phases or Path(board) / "phases"),
             "driver.runs": Path(runs or Path(board) / "runs"),
             "driver.state": ".driver",
             "driver.merge-check-max": 5,
@@ -208,11 +208,11 @@ def _gh_says(state: str, extra: str = "") -> dict[str, str]:
     }
 
 
-def _write_group_phases(roadmap: Path, members: Sequence[int], behaviour: str) -> None:
-    """Two phase documents declaring one symmetric group, in a fixture roadmap."""
+def _write_group_phases(phases: Path, members: Sequence[int], behaviour: str) -> None:
+    """Two phase documents declaring one symmetric group, in a fixture phases."""
     declaration = f"`together: {members[0]:06d}, {members[1]:06d}`"
     for number in members:
-        (roadmap / f"phase-{number:06d}-{behaviour}.md").write_text(
+        (phases / f"phase-{number:06d}-{behaviour}.md").write_text(
             f"# {number}. Group member\n\n- [ ] Work to do.\n\n"
             f"### Reservation Group\n\n{declaration}\n",
             encoding="utf-8",

@@ -59,7 +59,7 @@ check() {
   echo "config file: ${ARGUS_CONFIG_FILE:-none}"
   echo "configuration precedence: $CONFIG_PRECEDENCE"
   echo "driver home: $ARGUS_DRIVER"
-  for var in REPO PIPELINE ROADMAP_DIR PHASE_NUMBER_INPUT PHASE_FILE_INPUT \
+  for var in REPO PIPELINE PHASES_DIR PHASE_NUMBER_INPUT PHASE_FILE_INPUT \
              DRIVER PHASE_INCLUDE PHASE_EXCLUDE WF DRIVER_STATE \
              STALE_AFTER_SEC OUTAGE_STALE_SEC QUIET_MINUTES LOG_KEEP_DAYS \
              MERGE_CHECK_MAX RECOVER_OWN_CLAIM PHASE_MACHINE_ID \
@@ -81,7 +81,7 @@ check() {
       warned=1
     fi
   done
-  echo "work source: ${WORK_SOURCE:-roadmap}"
+  echo "work source: ${WORK_SOURCE:-phases}"
   # A halt, and the record a resume reads, in the report an operator runs when
   # the line will not advance. The record is named separately because it survives
   # `clear-halt`, and it is what decides whether the next tick resumes or
@@ -91,7 +91,7 @@ check() {
   elif [ -f "$HALT_RECORD" ] && halt_record_read "$HALT_RECORD"; then
     echo "halt record: phase $HALT_REC_PHASE (state ${HALT_REC_STATE:-unknown}); the next tick resumes it"
   fi
-  if [ "${WORK_SOURCE:-roadmap}" = issues ]; then
+  if [ "${WORK_SOURCE:-phases}" = issues ]; then
     for var in BOARD_ISSUES_FILE MACHINE_SETTINGS_FILE ISSUES_REPO ISSUES_PREFERENCE \
         ISSUES_CATEGORY ISSUES_SEARCH ISSUES_TASK_DIR ISSUES_CODEOWNERS_FILE \
         ISSUES_TRUSTED_AUTHORS ISSUES_TRUSTED_APPS ISSUES_TRUSTED_ASSOCIATIONS \
@@ -132,15 +132,15 @@ check() {
   fi
   # The launch suffix says whether this machine can actually run what it
   # selects: a folder outside this checkout is readable but not launchable.
-  if [ -n "$ROADMAP_DIR" ]; then
-    if roadmap_dir_readable; then
-      echo "roadmap dir: $(roadmap_dir) (configured)"
+  if [ -n "$PHASES_DIR" ]; then
+    if phases_dir_readable; then
+      echo "phases dir: $(phases_dir) (configured)"
     else
-      echo "roadmap dir: $(roadmap_dir) MISSING OR UNREADABLE, this machine's ticks will refuse to launch"
+      echo "phases dir: $(phases_dir) MISSING OR UNREADABLE, this machine's ticks will refuse to launch"
       warned=1
     fi
-    roadmap_dir_is_local \
-      || { echo "roadmap dir: WARNING outside this checkout, so its phases cannot be launched here"; warned=1; }
+    phases_dir_is_local \
+      || { echo "phases dir: WARNING outside this checkout, so its phases cannot be launched here"; warned=1; }
   fi
   # The configured work-source command line, actually run. A source name nothing
   # recognises and a folder that cannot be read both stop the selector with exit

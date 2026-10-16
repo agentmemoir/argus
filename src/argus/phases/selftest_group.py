@@ -7,7 +7,7 @@ import tempfile
 from pathlib import Path
 
 from argus import conventions
-from argus.roadmap.group import ReservationGroupError, resolve_group
+from argus.phases.group import ReservationGroupError, resolve_group
 
 
 def _declaration_checks() -> None:
@@ -20,8 +20,8 @@ def _declaration_checks() -> None:
         # These assertions cover the group a phase resolves to and the
         # documents that are refused.
         repo = Path(tmp).resolve()
-        roadmap = repo / "roadmap"
-        roadmap.mkdir()
+        phases = repo / "phases"
+        phases.mkdir()
         old = conventions.override(
             {
                 "driver.include": ["phase-*.md"],
@@ -36,7 +36,7 @@ def _declaration_checks() -> None:
                 if together is not None:
                     text += "### Reservation Group\n\n"
                     text += f"`together: {together}`\n"
-                (roadmap / name).write_text(text)
+                (phases / name).write_text(text)
 
             # A symmetric three-member group with one member finished: the
             # remainder is the other two, in declaration order.
@@ -46,11 +46,11 @@ def _declaration_checks() -> None:
             (repo / "runs" / "phase-100410" / "run.json").write_text(
                 json.dumps({"state": "completed"})
             )
-            got = resolve_group(repo, roadmap, 100420)
+            got = resolve_group(repo, phases, 100420)
             assert got["state"] == "GROUP", got
             assert got["group"] == ["100410", "100420", "100430"], got
             assert got["remainder"] == ["100420", "100430"], got
-            from_other = resolve_group(repo, roadmap, 100410)
+            from_other = resolve_group(repo, phases, 100410)
             assert from_other["group"] == got["group"], from_other
             assert from_other["remainder"] == ["100420", "100430"], from_other
 
@@ -59,15 +59,15 @@ def _declaration_checks() -> None:
                 rd = repo / "runs" / f"phase-{number}"
                 rd.mkdir(parents=True, exist_ok=True)
                 (rd / "run.json").write_text(json.dumps({"state": "completed"}))
-            assert resolve_group(repo, roadmap, 100430)["remainder"] == [], (
-                resolve_group(repo, roadmap, 100430)
+            assert resolve_group(repo, phases, 100430)["remainder"] == [], (
+                resolve_group(repo, phases, 100430)
             )
 
             # A phase with no group section is refused, and the message says
             # which section is missing.
             write_phase("phase-100440-d.md")
             try:
-                resolve_group(repo, roadmap, 100440)
+                resolve_group(repo, phases, 100440)
                 refused = False
             except ReservationGroupError as exc:
                 refused = True
@@ -80,7 +80,7 @@ def _declaration_checks() -> None:
             write_phase("phase-100460-f.md", "100450, 100470")
             write_phase("phase-100470-g.md", "100470, 100450")
             try:
-                resolve_group(repo, roadmap, 100450)
+                resolve_group(repo, phases, 100450)
                 refused = False
             except ReservationGroupError as exc:
                 refused = True
@@ -90,7 +90,7 @@ def _declaration_checks() -> None:
             # A member named in a declaration that has no document.
             write_phase("phase-100480-h.md", "100480, 100490")
             try:
-                resolve_group(repo, roadmap, 100480)
+                resolve_group(repo, phases, 100480)
                 refused = False
             except ReservationGroupError as exc:
                 refused = True
@@ -101,7 +101,7 @@ def _declaration_checks() -> None:
             write_phase("phase-100500-i.md", "100510")
             write_phase("phase-100510-l.md", "100510")
             try:
-                resolve_group(repo, roadmap, 100500)
+                resolve_group(repo, phases, 100500)
                 refused = False
             except ReservationGroupError as exc:
                 refused = True
@@ -111,7 +111,7 @@ def _declaration_checks() -> None:
             # A token that is not a six-digit phase number.
             write_phase("phase-100520-j.md", "12345")
             try:
-                resolve_group(repo, roadmap, 100520)
+                resolve_group(repo, phases, 100520)
                 refused = False
             except ReservationGroupError as exc:
                 refused = True
@@ -120,7 +120,7 @@ def _declaration_checks() -> None:
 
             # A group of one is legal; it is unfinished until done.
             write_phase("phase-100530-k.md", "100530")
-            solo = resolve_group(repo, roadmap, 100530)
+            solo = resolve_group(repo, phases, 100530)
             assert solo["group"] == ["100530"], solo
             assert solo["remainder"] == ["100530"], solo
         finally:

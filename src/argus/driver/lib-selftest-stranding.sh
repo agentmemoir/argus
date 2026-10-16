@@ -92,7 +92,7 @@ strand_expect_refused() {
     old_current="$CURRENT"; old_pid="$PIDFILE"; old_notify_broken="$NOTIFY_BROKEN"
     old_log="$LOG"; old_session="$SESSION"; old_argus="$ARGUS"
     old_notifier="$NOTIFIER"; old_pipeline="$PIPELINE"
-    old_roadmap_dir="$ROADMAP_DIR"; old_work_source="$WORK_SOURCE"
+    old_phases_dir="$PHASES_DIR"; old_work_source="$WORK_SOURCE"
     old_work_source_flags=("${WORK_SOURCE_FLAGS[@]+"${WORK_SOURCE_FLAGS[@]}"}")
     REPO="$strand_root"; BOARD_DIR=board-data
     ARGUS="$strand_root/$BOARD_DIR/argus"
@@ -102,7 +102,7 @@ strand_expect_refused() {
     ARGUS_CONFIG_FILE="$tmp/strand-config.jsonc"
     selftest_write_config "$strand_root" "$ARGUS_CONFIG_FILE" "$BOARD_DIR"
     load_fixture_config "$ARGUS_CONFIG_FILE"
-    WORK_SOURCE_FLAGS=(--source roadmap)
+    WORK_SOURCE_FLAGS=(--source phases)
     strand_run="$WF/$DRIVER_STATE"
     mkdir -p "$strand_run"
     RUN_DIR="$strand_run"
@@ -151,14 +151,14 @@ strand_expect_refused() {
     # The phase each folder offers is one the fixture board knows nothing about,
     # so a claim appears only if this tick takes one. Nothing else in the fixture
     # refers to them.
-    strand_outside="$tmp/strand-outside-roadmap"
+    strand_outside="$tmp/strand-outside-phases"
     strand_unclaimed=100099
     mkdir -p "$strand_outside"
     printf '# %s. Outside Strand Fixture\n- [ ] Required approval is obtained.\n' \
       "$strand_unclaimed" >"$strand_outside/phase-$strand_unclaimed-outside-strand.md"
     printf 'Plan ready\n' >"$strand_outside/index.md"
-    ROADMAP_DIR="$strand_outside"
-    WORK_SOURCE_FLAGS=(--roadmap "$strand_outside")
+    PHASES_DIR="$strand_outside"
+    WORK_SOURCE_FLAGS=(--phases "$strand_outside")
     if strand_expect_refused \
         "outside $REPO, so its phase files cannot be launched"; then
       echo "ok: a folder outside the checkout refuses, and the board is untouched"
@@ -175,16 +175,16 @@ strand_expect_refused() {
 
     # A folder that is not there at all. Same claim to strand, same place to
     # refuse, and it is the one a typo in a settings file produces.
-    ROADMAP_DIR="$tmp/strand-absent-roadmap"
-    WORK_SOURCE_FLAGS=(--roadmap "$ROADMAP_DIR")
+    PHASES_DIR="$tmp/strand-absent-phases"
+    WORK_SOURCE_FLAGS=(--phases "$PHASES_DIR")
     if strand_expect_refused \
-        "configured roadmap folder $tmp/strand-absent-roadmap is missing or unreadable"; then
-      echo "ok: a missing roadmap folder refuses, and the board is untouched"
+        "configured phases folder $tmp/strand-absent-phases is missing or unreadable"; then
+      echo "ok: a missing phases folder refuses, and the board is untouched"
     else
       case $? in
-        2) echo "FAIL: a missing roadmap folder was allowed to claim, so the line would be stranded";;
+        2) echo "FAIL: a missing phases folder was allowed to claim, so the line would be stranded";;
         3) echo "FAIL: the fixture board could not be read, so the no-claim check proves nothing";;
-        *) echo "FAIL: a missing roadmap folder was allowed to launch";;
+        *) echo "FAIL: a missing phases folder was allowed to launch";;
       esac
       strand_ok=0; fail=1
       strand_diagnose
@@ -195,7 +195,7 @@ strand_expect_refused() {
     # than by the driver's shell, so it is the case that would pass if only the
     # shell's own check were trusted: the shell does not check the source at all,
     # and the selector's refusal has to arrive before anything is claimed.
-    ROADMAP_DIR=""
+    PHASES_DIR=""
     WORK_SOURCE_FLAGS=(--source no-such-source)
     if strand_expect_refused "unknown work source 'no-such-source'"; then
       echo "ok: an unknown work source refuses, and the board is untouched"
@@ -211,7 +211,7 @@ strand_expect_refused() {
     wait_phase_window_gone
 
     # Back to the fixture's own folder: every case below selects from it.
-    ROADMAP_DIR=""; WORK_SOURCE_FLAGS=()
+    PHASES_DIR=""; WORK_SOURCE_FLAGS=()
 
     # Then the takeover: the tick must reach the launch with the phase's work
     # still in the index and both remotes moved.
@@ -239,7 +239,7 @@ strand_expect_refused() {
     # operator sets by hand, and it has to drive the whole path: selection,
     # reservation, branch cut and window. Safe here and nowhere else, because
     # this repository and this board are the fixture's own.
-    WORK_SOURCE_FLAGS=(--source roadmap)
+    WORK_SOURCE_FLAGS=(--source phases)
     # Counts, not presence. The log is cumulative and an earlier case in this
     # same fixture refused an unknown source on purpose, so a presence test would
     # read that deliberate refusal as this tick failing.
@@ -302,7 +302,7 @@ strand_expect_refused() {
     CURRENT="$old_current"; PIDFILE="$old_pid"; NOTIFY_BROKEN="$old_notify_broken"
     LOG="$old_log"; SESSION="$old_session"; ARGUS="$old_argus"
     NOTIFIER="$old_notifier"; PIPELINE="$old_pipeline"
-    ROADMAP_DIR="$old_roadmap_dir"; WORK_SOURCE="$old_work_source"
+    PHASES_DIR="$old_phases_dir"; WORK_SOURCE="$old_work_source"
     WORK_SOURCE_FLAGS=("${old_work_source_flags[@]+"${old_work_source_flags[@]}"}")
     load_fixture_config "$selftest_config"
   else

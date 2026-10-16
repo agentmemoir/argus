@@ -36,7 +36,7 @@
 # --config or found at ./config.json. No value is read from the environment or
 # from a machine-local file, and no value has a default in code: a missing
 # required key stops the tick and names the key. The four flags --driver,
-# --repo-root, --roadmap-dir and --phase-glob override the file for one run,
+# --repo-root, --phases-dir and --phase-glob override the file for one run,
 # and --check prints every value with the flag-or-file source it came from.
 #
 # The selector's own refusals are recorded three ways, one for each reader:
@@ -54,7 +54,7 @@
 # size, so the display cannot resize the agent's pane.
 #
 # The launch is opened with the repository root as its working directory and
-# given a phase file path relative to it, so a roadmap folder outside this
+# given a phase file path relative to it, so a phases folder outside this
 # checkout cannot be launched from here. The folder is still read, and the
 # selector reports such a file as an absolute path; this is where that stops.
 # A machine that needs it has to run the driver from that checkout.
@@ -74,22 +74,22 @@ set -euo pipefail
 
 # Parse the mode flags before reading the configuration file. The four layout
 # flags are one-run overrides of the file; --config names the file.
-CLI_DRIVER=""; CLI_REPO=""; CLI_ROADMAP=""; CLI_GLOB=(); CLI_CONFIG=""
+CLI_DRIVER=""; CLI_REPO=""; CLI_PHASES=""; CLI_GLOB=(); CLI_CONFIG=""
 MODE_ARGS=()
 while [ "$#" -gt 0 ]; do
   case "$1" in
-    --driver|--repo-root|--roadmap-dir|--phase-glob|--config)
+    --driver|--repo-root|--phases-dir|--phase-glob|--config)
       [ "$#" -ge 2 ] && [ -n "$2" ] || { printf 'argus: %s needs a value\n' "$1" >&2; exit 2; }
       case "$1" in
         --driver) CLI_DRIVER="$2" ;;
         --repo-root) CLI_REPO="$2" ;;
-        --roadmap-dir) CLI_ROADMAP="$2" ;;
+        --phases-dir) CLI_PHASES="$2" ;;
         --phase-glob) CLI_GLOB+=("$2") ;;
         --config) CLI_CONFIG="$2" ;;
       esac
       shift 2 ;;
     --help|-h)
-      echo 'usage: argus [--config FILE] [--driver phase] [--repo-root PATH] [--roadmap-dir PATH] [--phase-glob GLOB] [--dry-run|--check|--merge-check-only|--self-test|--stop|--release]'
+      echo 'usage: argus [--config FILE] [--driver phase] [--repo-root PATH] [--phases-dir PATH] [--phase-glob GLOB] [--dry-run|--check|--merge-check-only|--self-test|--stop|--release]'
       echo '       argus --session NUMBER PHASE_FILE'
       echo '       argus --resume [NUMBER]'
       echo '       argus abandon NUMBER [--reason TEXT]'
@@ -122,7 +122,7 @@ ARGUS="$ARGUS_PKG"
 SELF="$ARGUS_DIR/$(basename "$_SCRIPT_SRC")"
 ARGUS_CONFIG_ARGS=()
 ARGUS_CONFIG_VARS=(
-  REPO PIPELINE ROADMAP_DIR PHASE_NUMBER_INPUT PHASE_FILE_INPUT DRIVER
+  REPO PIPELINE PHASES_DIR PHASE_NUMBER_INPUT PHASE_FILE_INPUT DRIVER
   PHASE_INCLUDE PHASE_EXCLUDE WF DRIVER_STATE STALE_AFTER_SEC OUTAGE_STALE_SEC
   QUIET_MINUTES LOG_KEEP_DAYS MERGE_CHECK_MAX RECOVER_OWN_CLAIM PHASE_MACHINE_ID
   CMD_GLIDE CMD_GIT CMD_TMUX CMD_PYTHON CMD_HERMES CMD_GH SESSION_NAME

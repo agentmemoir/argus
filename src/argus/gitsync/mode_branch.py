@@ -18,8 +18,8 @@ from argus.gitsync.review import open_predecessor, phase_work_on_integration
 def mode_branch(
     root: str | Path,
     phase: int | str,
-    roadmap: str | None,
-    roadmap_dir: str | Path | None = None,
+    phases: str | None,
+    phases_dir: str | Path | None = None,
     group: list[str] | None = None,
 ) -> dict[str, Any]:
     """Put the public checkout on this phase's branch, then report.
@@ -29,7 +29,7 @@ def mode_branch(
     refusal on this path outside the reach of any test — the one place a
     fail-closed branch must never be.
 
-    ``roadmap_dir`` is the folder the phase file was chosen from, so the
+    ``phases_dir`` is the folder the phase file was chosen from, so the
     uniqueness check below scans the same phases the selector saw.
 
     ``group`` lists a reservation group's declared members, and gives the group
@@ -46,9 +46,9 @@ def mode_branch(
     unique = assert_phase_branch_unique(
         root,
         phase,
-        roadmap,
-        roadmap_dir,
-        branch=group_branch(root, group, roadmap_dir) if group else None,
+        phases,
+        phases_dir,
+        branch=group_branch(root, group, phases_dir) if group else None,
     )
     if not unique["ok"]:
         return {
@@ -62,7 +62,7 @@ def mode_branch(
     if group:
         # A group branch comes from the group's lowest member, so two groups can
         # derive one name even when no phase branch collides with it.
-        shared = assert_group_branch_unique(root, branch, group, roadmap_dir)
+        shared = assert_group_branch_unique(root, branch, group, phases_dir)
         if not shared["ok"]:
             return {
                 "ok": False,

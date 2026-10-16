@@ -37,7 +37,7 @@ def test_cli_branches_the_issue_namespace(
             "branch",
             "--phase",
             "1234567",
-            "--roadmap",
+            "--phases",
             str(task),
         ],
     )

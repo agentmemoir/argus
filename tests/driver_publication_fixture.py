@@ -89,7 +89,7 @@ class DriverPublication:
         assert git(self.private, "merge", "--ff-only", "origin/main")[0] == 0
         for token in tokens:
             number = int(token["phase"])
-            document = self.private / "roadmap" / f"phase-{number}-member-{number}.md"
+            document = self.private / "phases" / f"phase-{number}-member-{number}.md"
             for old in document.parent.glob(f"phase-{number}-*.md"):
                 old.unlink()
             document.write_text(
@@ -128,7 +128,7 @@ def driver_publication_fixture(
     exclude = private / ".git/info/exclude"
     exclude.write_text(exclude.read_text().rstrip("\n") + "\nruns/.driver/\n")
     assert git(private, "check-ignore", "runs/.driver/halted")[0] == 0
-    plans = private / "roadmap"
+    plans = private / "phases"
     plans.mkdir()
     document = plans / f"phase-{PHASE}-settle-receipt.md"
     document.write_text(f"# {PHASE}. Settle receipt\n\n- [ ] Work to do.\n")
@@ -168,7 +168,7 @@ def driver_publication_fixture(
         {
             "repo-root": str(root),
             "pipeline": str(pipeline),
-            "roadmap-dir": str(plans),
+            "phases-dir": str(plans),
             "board": {
                 "repo": str(private),
                 "file": "claims.json",

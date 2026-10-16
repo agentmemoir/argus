@@ -253,7 +253,7 @@ driver_self_test() {
   #
   # So the suite no longer has a real checkout to reach. Every case from here on
   # runs against a fixture with its own public checkout, private checkout, board
-  # and roadmap, and the driver is pointed at it before anything is invoked. The
+  # and phases, and the driver is pointed at it before anything is invoked. The
   # tripwire stays, because a layout that stops being honest still has to be
   # reported, but it is now a net under a floor rather than the floor.
   BOARD_DIR=board-data
@@ -289,7 +289,7 @@ driver_self_test() {
     echo "driver self-test: skip (exit 77)"
     return 77
   fi
-  WORK_SOURCE_FLAGS=(--source roadmap)
+  WORK_SOURCE_FLAGS=(--source phases)
   # The driver's own state lives inside the configured run folder, so a child
   # tick, which derives the same path from the same file, writes its log, halt
   # marker and pid where this suite reads them.

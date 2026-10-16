@@ -33,7 +33,7 @@ HALT="$RUN_DIR/halted"; HALT_RECORD="$RUN_DIR/halted.json"
 CLAIM="$RUN_DIR/claim"; CURRENT="$RUN_DIR/current"
 PIDFILE="$RUN_DIR/pid"; STALL="$RUN_DIR/stall"; LOCK="$RUN_DIR/lock"
 GROUPFILE="$RUN_DIR/group"; GROUPBRANCH="$RUN_DIR/group-branch"
-DRY_RUN=0; MERGE_CHECK_MAX=5; work_kind=phase; WORK_SOURCE=roadmap
+DRY_RUN=0; MERGE_CHECK_MAX=5; work_kind=phase; WORK_SOURCE=phases
 ARGUS_CONFIG_ARGS=(--config fixture.json); GITSYNC_KIND_ARGS=(); WORK_SOURCE_FLAGS=()
 PHASE_MACHINE_ID=fixture; SESSION=fixture
 log() { printf '%s\\n' "$*" >>"$RUN_DIR/events"; }
@@ -301,7 +301,7 @@ _drive
 
 def test_pending_scan_reads_pipeline_receipts_without_selecting(tmp_path: Path) -> None:
     config = copy.deepcopy(BASE)
-    config.update({"repo-root": ".", "roadmap-dir": "plans"})
+    config.update({"repo-root": ".", "phases-dir": "plans"})
     (tmp_path / "plans").mkdir()
     (tmp_path / "plans/phase-100010-fixture.md").write_text("# Fixture\n")
     (tmp_path / "pipeline.yaml").write_text(

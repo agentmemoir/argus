@@ -17,9 +17,9 @@ from typing import Any
 import pytest
 
 from argus import conventions
-from argus.roadmap import runstate
-from argus.roadmap.evidence import is_done, needs_decision
-from argus.roadmap.server import select_server_phase
+from argus.phases import runstate
+from argus.phases.evidence import is_done, needs_decision
+from argus.phases.server import select_server_phase
 
 APPROVAL_TICKED = "- [x] Required approval is obtained"
 APPROVAL_EMPTY = "- [ ] Required approval is obtained"
@@ -27,14 +27,14 @@ APPROVAL_EMPTY = "- [ ] Required approval is obtained"
 
 @pytest.fixture
 def repo(tmp_path: Path) -> Iterator[Path]:
-    """A configured project root with a roadmap folder, restored after the test."""
+    """A configured project root with a phases folder, restored after the test."""
     root = tmp_path / "project"
-    (root / "roadmap").mkdir(parents=True)
+    (root / "phases").mkdir(parents=True)
     previous = conventions.configure(
         {
             "repo-root": root,
             "pipeline": None,
-            "roadmap-dir": Path("roadmap"),
+            "phases-dir": Path("phases"),
             "number-input": "phase_number",
             "file-input": "phase_file",
             "driver.runs": Path("runs"),
@@ -50,7 +50,7 @@ def repo(tmp_path: Path) -> Iterator[Path]:
 
 def phase_file(repo: Path, number: int, *, approved: bool = False) -> Path:
     """The phase file for one number, with the approval box as asked."""
-    path = repo / "roadmap" / f"phase-{number:06d}-first.md"
+    path = repo / "phases" / f"phase-{number:06d}-first.md"
     box = APPROVAL_TICKED if approved else APPROVAL_EMPTY
     path.write_text(f"# Phase {number}\n\n{box}\n", encoding="utf-8")
     return path
@@ -183,7 +183,7 @@ GATE_OPEN = (
 
 def gated_phase_file(repo: Path, number: int) -> Path:
     """A phase file whose plan carries an open decision gate."""
-    path = repo / "roadmap" / f"phase-{number:06d}-first.md"
+    path = repo / "phases" / f"phase-{number:06d}-first.md"
     path.write_text(GATE_OPEN, encoding="utf-8")
     return path
 
@@ -199,7 +199,7 @@ def abandon(repo: Path, number: int) -> None:
 def select(repo: Path, store: FakeStore) -> dict[str, Any]:
     """Run the selector read-only against a board double."""
     return select_server_phase(
-        repo, "server-01", store=store, reserve=False, roadmap=repo / "roadmap"
+        repo, "server-01", store=store, reserve=False, phases=repo / "phases"
     )
 
 
@@ -220,7 +220,7 @@ def test_abandoned_phase_with_an_open_gate_is_reported(repo: Path) -> None:
     assert got["needs_decision"] == [
         {
             "phase": f"{number:06d}",
-            "path": f"roadmap/phase-{number:06d}-first.md",
+            "path": f"phases/phase-{number:06d}-first.md",
             "state": "abandoned",
         }
     ], got

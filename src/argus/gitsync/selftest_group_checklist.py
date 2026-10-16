@@ -94,10 +94,10 @@ def _checklist_checks(base: Path, results: list[tuple[str, object, str]]) -> Non
         )
     )
     pub = _receipt_fixture(base, "group-checklist")
-    roadmap = pub / BOARD_REL / "roadmap"
-    roadmap.mkdir(parents=True, exist_ok=True)
-    (roadmap / "phase-100020-cache-warm.md").write_text("# 20\n", encoding="utf-8")
-    (roadmap / "phase-100030-index-build.md").write_text("# 30\n", encoding="utf-8")
+    phases = pub / BOARD_REL / "phases"
+    phases.mkdir(parents=True, exist_ok=True)
+    (phases / "phase-100020-cache-warm.md").write_text("# 20\n", encoding="utf-8")
+    (phases / "phase-100030-index-build.md").write_text("# 30\n", encoding="utf-8")
     labels = _group_task_labels(pub, ["100020", "100030"])
     results.append(
         (

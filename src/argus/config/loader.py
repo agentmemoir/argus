@@ -49,7 +49,7 @@ def load(
     """Read, clean, resolve, and validate one configuration file.
 
     `config_path=None` uses `./config.json` when it is a file. `overrides` may
-    hold the four flag names `repo-root`, `roadmap-dir`, `phase-glob`, and
+    hold the four flag names `repo-root`, `phases-dir`, `phase-glob`, and
     `driver`; each present one wins over the file and its source is `flag`. A
     relative flag path resolves against the working directory.
     """

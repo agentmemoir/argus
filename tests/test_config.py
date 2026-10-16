@@ -62,16 +62,16 @@ def test_flag_overrides_file_and_records_source():
             str(path),
             {
                 "repo-root": str(other),
-                "roadmap-dir": str(other),
+                "phases-dir": str(other),
                 "phase-glob": "work-*.md",
-                "driver": "roadmap",
+                "driver": "phases",
             },
         )
         check(config.get("repo-root") == other, config.get("repo-root"))
         check(config.source("repo-root") == "flag", config.source("repo-root"))
-        check(config.get("roadmap-dir") == other, config.get("roadmap-dir"))
-        check(config.source("roadmap-dir") == "flag", config.source("roadmap-dir"))
-        check(config.get("driver.provider") == "roadmap", config.get("driver.provider"))
+        check(config.get("phases-dir") == other, config.get("phases-dir"))
+        check(config.source("phases-dir") == "flag", config.source("phases-dir"))
+        check(config.get("driver.provider") == "phases", config.get("driver.provider"))
         check(
             config.source("driver.provider") == "flag", config.source("driver.provider")
         )
@@ -178,7 +178,7 @@ def test_sample_loads_with_every_schema_key():
             key = cfgmod._REPORT_KEY.get(field.key, field.key)
             check(key in config.values, f"sample missing {key}")
         check(config.get("repo-root") == base / "project", config.get("repo-root"))
-        check(config.get("roadmap-dir") == base / "plans", config.get("roadmap-dir"))
+        check(config.get("phases-dir") == base / "plans", config.get("phases-dir"))
         check(config.get("board.repo") == base, config.get("board.repo"))
         check(config.get("board.file") == "claims.json", config.get("board.file"))
         check(

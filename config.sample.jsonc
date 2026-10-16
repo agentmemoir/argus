@@ -25,7 +25,7 @@
   "pipeline": "pipeline.yaml",
 
   // The folder holding the work-item files. Required. Relative to this file.
-  "roadmap-dir": "plans",
+  "phases-dir": "plans",
 
   // The pipeline input names that carry the work-item number and file. Optional,
   // but a pipeline that declares inputs needs them named.
@@ -33,8 +33,8 @@
   "file-input": "phase_file",
 
   "driver": {
-    // Which work source runs the queue. Required: "phase" for a roadmap, or
-    // "issues" for a GitHub issue backlog (see docs/issues.md).
+    // Which work source runs the queue. Required: "phase" for the phases
+    // folder, or "issues" for a GitHub issue backlog (see docs/issues.md).
     "provider": "phase",
 
     // The work-item files to consider, as globs. Required. A list, so more than

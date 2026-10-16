@@ -7,11 +7,11 @@ from pathlib import Path
 from typing import Any, cast
 
 from argus.conventions import phase_file_parts, phase_paths
-from argus.roadmap.evidence import (
+from argus.phases.evidence import (
     index_complete,
     is_done,
     reported_path,
-    resolve_roadmap,
+    resolve_phases,
 )
 from argus.select.work_source import WorkSourceError
 
@@ -171,14 +171,14 @@ def _phase_number(value: object) -> int:
     return number
 
 
-def _phase_file(roadmap: str | Path, number: int) -> Path | None:
+def _phase_file(phases: str | Path, number: int) -> Path | None:
     """The phase file whose number matches, or ``None``.
 
     The match is the same one the selector uses: a file's first numeric
     filename token is its phase number, so a member named in a declaration is
     found the way the pipeline would find it.
     """
-    for path in phase_paths(roadmap):
+    for path in phase_paths(phases):
         parts = phase_file_parts(path)
         if parts and parts[0] == number:
             return path
@@ -186,7 +186,7 @@ def _phase_file(roadmap: str | Path, number: int) -> Path | None:
 
 
 def resolve_group(
-    repo: str | Path, roadmap: str | Path | None, phase: int | str
+    repo: str | Path, phases: str | Path | None, phase: int | str
 ) -> dict[str, Any]:
     """Resolve a phase to its reservation group and unfinished remainder.
 
@@ -194,10 +194,10 @@ def resolve_group(
     is read, each member must name the same set in return, and each member
     must have a document. The remainder is the members with no completion
     evidence, in declaration order, so a caller can run the group as one unit.
-    Nothing is claimed and nothing is written; this is a read of the roadmap.
+    Nothing is claimed and nothing is written; this is a read of the phases.
     """
     number = _phase_number(phase)
-    folder = resolve_roadmap(repo, roadmap)
+    folder = resolve_phases(repo, phases)
     path = _phase_file(folder, number)
     if path is None:
         raise ReservationGroupError(f"phase {number:06d} has no document in {folder}")
@@ -246,7 +246,7 @@ def resolve_group(
 
 
 def resolve_group_or_none(
-    repo: str | Path, roadmap: str | Path | None, phase: int | str
+    repo: str | Path, phases: str | Path | None, phase: int | str
 ) -> dict[str, Any] | None:
     """The phase's group, or ``None`` when its document declares none.
 
@@ -256,7 +256,7 @@ def resolve_group_or_none(
     closed: only a genuinely absent declaration means "run this phase alone".
     """
     number = _phase_number(phase)
-    folder = resolve_roadmap(repo, roadmap)
+    folder = resolve_phases(repo, phases)
     path = _phase_file(folder, number)
     if path is None:
         return None
@@ -264,4 +264,4 @@ def resolve_group_or_none(
         _parse_group_members(path, number)
     except ReservationGroupMissing:
         return None
-    return resolve_group(repo, roadmap, phase)
+    return resolve_group(repo, phases, phase)

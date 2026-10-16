@@ -2,7 +2,7 @@
 {
   "repo-root": "./project",
   "pipeline": "./project/issue-pipeline.yaml",
-  "roadmap-dir": "./project/plans",
+  "phases-dir": "./project/plans",
   "number-input": "issue_number",
   "file-input": "issue_file",
   "driver": {

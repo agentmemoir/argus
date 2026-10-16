@@ -5,8 +5,8 @@
 # Configuration: schema loading, path resolution, and startup for the Argus driver.
 # Sourced by phase-driver.sh; not executable on its own.
 #
-roadmap_dir_is_local() {
-  case "$(roadmap_dir)" in
+phases_dir_is_local() {
+  case "$(phases_dir)" in
     "$REPO"/*) return 0 ;;
     *) return 1 ;;
   esac
@@ -59,7 +59,7 @@ set_config_args() {
   ARGUS_CONFIG_ARGS=()
   [ -z "${ARGUS_CONFIG_FILE:-}" ] || ARGUS_CONFIG_ARGS+=(--config "$ARGUS_CONFIG_FILE")
   [ -z "$CLI_REPO" ] || ARGUS_CONFIG_ARGS+=(--repo-root "$CLI_REPO")
-  [ -z "$CLI_ROADMAP" ] || ARGUS_CONFIG_ARGS+=(--roadmap-dir "$CLI_ROADMAP")
+  [ -z "$CLI_PHASES" ] || ARGUS_CONFIG_ARGS+=(--phases-dir "$CLI_PHASES")
   for _glob in "${CLI_GLOB[@]+"${CLI_GLOB[@]}"}"; do
     ARGUS_CONFIG_ARGS+=(--phase-glob "$_glob")
   done
@@ -79,11 +79,11 @@ load_fixture_config() {
 # refusal earlier and with the folder named, because the alternative is a log
 # line about coordination being unavailable several steps later over what is a
 # typo in a settings file.
-roadmap_dir_readable() {
-  [ -d "$(roadmap_dir)" ] && [ -r "$(roadmap_dir)" ]
+phases_dir_readable() {
+  [ -d "$(phases_dir)" ] && [ -r "$(phases_dir)" ]
 }
 
-# Whether this machine's roadmap folder can be used for a launch, and why not
+# Whether this machine's phases folder can be used for a launch, and why not
 # when it cannot. One answer for the dry run and the tick, so the two cannot
 # disagree about whether a folder is launchable.
 #
@@ -138,25 +138,25 @@ PY
     PREFLIGHT_REASON="invalid pipeline configuration: $pipeline_error"
     return 1
   fi
-  if [ "${WORK_SOURCE:-roadmap}" = issues ]; then
+  if [ "${WORK_SOURCE:-phases}" = issues ]; then
     issue_preflight
     return $?
   fi
-  if [ -z "$ROADMAP_DIR" ]; then
+  if [ -z "$PHASES_DIR" ]; then
     return 0
   fi
-  if ! roadmap_dir_readable; then
-    PREFLIGHT_REASON="configured roadmap folder $(roadmap_dir) is missing or unreadable"
+  if ! phases_dir_readable; then
+    PREFLIGHT_REASON="configured phases folder $(phases_dir) is missing or unreadable"
     return 1
   fi
-  if ! roadmap_dir_is_local; then
-    PREFLIGHT_REASON="configured roadmap folder $(roadmap_dir) is outside $REPO, so its phase files cannot be launched from this checkout"
+  if ! phases_dir_is_local; then
+    PREFLIGHT_REASON="configured phases folder $(phases_dir) is outside $REPO, so its phase files cannot be launched from this checkout"
     return 1
   fi
   return 0
 }
 
-# The roadmap folder this machine reads, as an absolute path. Computed per call
+# The phases folder this machine reads, as an absolute path. Computed per call
 # rather than stored, because REPO is reassigned by the self-test's strand
 # fixture and a stored path would keep pointing at the real checkout.
 #
@@ -164,10 +164,10 @@ PY
 # working directory, for the same reason the selector does it: cron starts the
 # driver from an arbitrary directory. Both sides must agree, so both anchor to
 # REPO.
-roadmap_dir() {
-  case "$ROADMAP_DIR" in
-    /*) printf '%s' "$ROADMAP_DIR" ;;
-    *) printf '%s' "$REPO/$ROADMAP_DIR" ;;
+phases_dir() {
+  case "$PHASES_DIR" in
+    /*) printf '%s' "$PHASES_DIR" ;;
+    *) printf '%s' "$REPO/$PHASES_DIR" ;;
   esac
 }
 
@@ -187,7 +187,7 @@ argus_init() {
   SELF_TEST_MODE=0
   [ "${1:-}" = "--self-test" ] && SELF_TEST_MODE=1
   if [ "$SELF_TEST_MODE" = 1 ]; then
-    CLI_DRIVER=""; CLI_REPO=""; CLI_ROADMAP=""; CLI_GLOB=(); CLI_CONFIG=""
+    CLI_DRIVER=""; CLI_REPO=""; CLI_PHASES=""; CLI_GLOB=(); CLI_CONFIG=""
   fi
 
   # Keep the caller's PATH. The operator installs Glide and chooses Python there.
@@ -206,12 +206,12 @@ argus_init() {
     # elsewhere (a tmux session starts in the project), so fix it here, as
     # ARGUS_CONFIG_FILE is below.
     case "$CLI_REPO" in ''|/*) : ;; *) CLI_REPO="$PWD/$CLI_REPO" ;; esac
-    case "$CLI_ROADMAP" in ''|/*) : ;; *) CLI_ROADMAP="$PWD/$CLI_ROADMAP" ;; esac
+    case "$CLI_PHASES" in ''|/*) : ;; *) CLI_PHASES="$PWD/$CLI_PHASES" ;; esac
     _config_args=()
     [ -z "$CLI_CONFIG" ] || _config_args+=(--config "$CLI_CONFIG")
     _config_args+=(--format shell)
     [ -z "$CLI_REPO" ] || _config_args+=(--repo-root "$CLI_REPO")
-    [ -z "$CLI_ROADMAP" ] || _config_args+=(--roadmap-dir "$CLI_ROADMAP")
+    [ -z "$CLI_PHASES" ] || _config_args+=(--phases-dir "$CLI_PHASES")
     for _glob in "${CLI_GLOB[@]+"${CLI_GLOB[@]}"}"; do
       _config_args+=(--phase-glob "$_glob")
     done
@@ -239,7 +239,7 @@ argus_init() {
     CMD_HERMES=hermes
     CMD_GH=gh
     DRIVER=phase
-    WORK_SOURCE=roadmap
+    WORK_SOURCE=phases
     PHASE_MACHINE_ID=argus-selftest
     BOARD_DIR=board-data
     ARGUS_CONFIG_FILE=""
@@ -254,7 +254,7 @@ argus_init() {
   # it for this run. Nothing is read from the environment: the driver sets these
   # variables for its children; it does not take them from a caller.
   case "$DRIVER" in
-    phase|roadmap) DRIVER=phase; WORK_SOURCE=roadmap ;;
+    phase|phases) DRIVER=phase; WORK_SOURCE=phases ;;
     issues) DRIVER=issues; WORK_SOURCE=issues ;;
     *) printf 'argus: unknown driver %s; known drivers: phase, issues\n' "$DRIVER" >&2; exit 2 ;;
   esac

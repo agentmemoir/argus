@@ -7,13 +7,13 @@ A work source is wherever the driver gets its work. The driver asks the active
 source what to run next and gets back the same result shape whatever answered,
 so claiming, running, notifying, halting and writing results back stay identical
 no matter which source supplied the item. That is the whole reason the concept
-exists: the roadmap is one place work can come from, not the place work comes
+exists: the phases is one place work can come from, not the place work comes
 from.
 
 THE CONTRACT
 
 ``name``
-    The name a machine configures. Today that is ``roadmap``.
+    The name a machine configures. Today that is ``phases``.
 
 ``select(machine_id, reserve=...)``
     Return the next item to claim, and claim it, as a result dict. The states,
@@ -52,13 +52,13 @@ from argus import conventions
 
 #: The source a machine gets when it has configured none. Every machine runs
 #: this today, so it is the default rather than a special case.
-DEFAULT_SOURCE = "roadmap"
+DEFAULT_SOURCE = "phases"
 
 #: Configured name -> (module, class) implementing it. Held as text and
 #: imported on demand because an implementation imports this module for the
 #: contract: importing both ways at module scope would be a cycle.
 SOURCES = {
-    "roadmap": ("argus.roadmap.source", "RoadmapSource"),
+    "phases": ("argus.phases.source", "PhasesSource"),
     "issues": ("argus.issues.source", "IssuesSource"),
 }
 
@@ -100,12 +100,12 @@ def implementation(name: str) -> Any:
 
 
 def resolve(
-    name: str | None, repo: str | Path, roadmap: str | Path | None = None
+    name: str | None, repo: str | Path, phases: str | Path | None = None
 ) -> Any:
     """Build the configured source, or raise WorkSourceError naming the known ones.
 
     ``name`` is None when a machine has configured nothing, which is the
-    roadmap source and the behaviour every machine has today.
+    phases source and the behaviour every machine has today.
     """
     key = name or DEFAULT_SOURCE
     if key not in SOURCES:
@@ -114,7 +114,7 @@ def resolve(
         )
     factory = implementation(key)
     try:
-        return factory(Path(repo), roadmap)
+        return factory(Path(repo), phases)
     except WorkSourceError as exc:
         # A source that cannot read its work stops the tick the same way an
         # unknown name does, carrying the source's own words about why.
@@ -126,7 +126,7 @@ def self_test() -> None:
         {
             "repo-root": Path(),
             "pipeline": None,
-            "roadmap-dir": Path(),
+            "phases-dir": Path(),
             "driver.include": ["phase-*.md"],
             "driver.exclude": [],
             "driver.runs": Path("runs"),
@@ -149,10 +149,10 @@ def _self_test() -> None:
         assert factory.name == key, (key, factory.name)
 
     resolved = resolve(None, ".")
-    assert isinstance(resolved, implementation("roadmap")), resolved
-    assert resolved.name == "roadmap", resolved.name
+    assert isinstance(resolved, implementation("phases")), resolved
+    assert resolved.name == "phases", resolved.name
     # No named folder means today's behaviour, not an error.
-    assert resolve("roadmap", ".").roadmap == resolved.roadmap
+    assert resolve("phases", ".").phases == resolved.phases
 
     try:
         resolve("unknown-source", ".")
@@ -161,7 +161,7 @@ def _self_test() -> None:
         refused = True
         # The message must name what is available, or the operator is left
         # guessing at a name they were never given.
-        assert "roadmap" in str(exc) and "issues" in str(exc), exc
+        assert "phases" in str(exc) and "issues" in str(exc), exc
     assert refused, "an unknown work source must stop the tick, not fall back"
 
     _self_test_second_source()
@@ -193,7 +193,7 @@ class _FixtureSource(WorkSource):
 def _self_test_second_source():
     """A second registered source must be reachable, or the registry is prose.
 
-    Only the roadmap source exists today, so every other way of exercising the
+    Only the phases source exists today, so every other way of exercising the
     contract — a machine naming something other than the default, a source
     answering from memory rather than reading a folder, the registry resolving
     to something other than the fallback — is untested until a second one lands.
@@ -220,7 +220,7 @@ def _self_test_second_source():
             refused = False
         except WorkSourceError as exc:
             refused = True
-            assert "roadmap" in str(exc), exc
+            assert "phases" in str(exc), exc
         assert refused, "an unregistered source must stop the tick"
     finally:
         SOURCES.pop("fixture", None)

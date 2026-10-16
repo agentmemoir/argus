@@ -13,7 +13,7 @@ from argus.board.reservations import (
     reservation_file,
     save_reservation_file,
 )
-from argus.roadmap.evidence import reported_path
+from argus.phases.evidence import reported_path
 
 
 def _gitsync(_repo: str | Path) -> Callable[..., Any]:

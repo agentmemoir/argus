@@ -151,23 +151,23 @@ def _group_task_labels(
 ) -> list[tuple[str, str]]:
     """One public label per group member, in declaration order.
 
-    The label is the roadmap behaviour slug, never the phase number: the branch
+    The label is the phases behaviour slug, never the phase number: the branch
     already carries the slug, so it is public by construction. A member with no
     document falls back to a numbered task, which keeps checkboxes distinct
     without leaking anything.
     """
     from argus.conventions import phase_file_parts, phase_paths
-    from argus.gitsync.paths import roadmap_folder
+    from argus.gitsync.paths import phases_folder
 
     keys = [f"{int(member):06d}" for member in members]
     slugs: dict[str, str] = {}
     try:
-        folder = roadmap_folder(root)
+        folder = phases_folder(root)
         for path in phase_paths(folder):
             parts = phase_file_parts(path)
             if parts is not None and f"{int(parts[0]):06d}" in keys:
                 slugs[f"{int(parts[0]):06d}"] = str(parts[1])
-    except Exception:  # noqa: BLE001 - a missing roadmap falls back below
+    except Exception:  # noqa: BLE001 - a missing phases falls back below
         slugs = {}
     labels: list[tuple[str, str]] = []
     for i, key in enumerate(keys):

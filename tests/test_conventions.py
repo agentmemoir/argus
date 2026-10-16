@@ -11,7 +11,7 @@ from pathlib import Path
 from argus import conventions
 from argus.board import reservations as board
 from argus.notify import notifications as notify
-from argus.roadmap import source as roadmap_source
+from argus.phases import source as phases_source
 from argus.select import policy, work_source
 
 
@@ -27,7 +27,7 @@ class ConventionTests(unittest.TestCase):
         self.settings = {
             "repo-root": self.repo,
             "pipeline": None,
-            "roadmap-dir": Path("plans"),
+            "phases-dir": Path("plans"),
             "number-input": "phase_number",
             "file-input": "phase_file",
             "driver.include": ["phase-*.md"],
@@ -51,10 +51,10 @@ class ConventionTests(unittest.TestCase):
         )
 
     def test_include_and_exclude_settings_select_work_items(self):
-        roadmap = self.repo / "plans"
-        roadmap.mkdir()
-        phase = roadmap / "phase-100042-api.md"
-        excluded = roadmap / "phase-100043-skip.md"
+        phases = self.repo / "plans"
+        phases.mkdir()
+        phase = phases / "phase-100042-api.md"
+        excluded = phases / "phase-100043-skip.md"
         for path in (phase, excluded):
             path.write_text("### Decision Gates\nnone\n", encoding="utf-8")
         conventions.configure(
@@ -65,24 +65,22 @@ class ConventionTests(unittest.TestCase):
             }
         )
         self.assertEqual(conventions.phase_globs(), ["phase-*.md", "work-*.md"])
-        self.assertEqual(
-            roadmap_source.candidates(self.repo, roadmap), [(100042, phase)]
-        )
+        self.assertEqual(phases_source.candidates(self.repo, phases), [(100042, phase)])
         self.assertEqual(conventions.resolve_phase_file(self.repo, 100042), phase)
         self.assertTrue(conventions.phase_excluded(excluded.name))
         self.assertFalse(conventions.phase_excluded(phase.name))
 
     def test_configured_patterns_drive_gate_report(self):
-        roadmap = self.repo / "plans"
-        roadmap.mkdir()
-        (roadmap / "phase-100042-api.md").write_text(
+        phases = self.repo / "plans"
+        phases.mkdir()
+        (phases / "phase-100042-api.md").write_text(
             "### Decision Gates\nnone\n", encoding="utf-8"
         )
-        (roadmap / "other-100043-api.md").write_text(
+        (phases / "other-100043-api.md").write_text(
             "### Decision Gates\nnone\n", encoding="utf-8"
         )
         conventions.configure({**self.settings, "driver.include": ["phase-*.md"]})
-        self.assertEqual(list(policy.scan_gates(roadmap)), ["100042"])
+        self.assertEqual(list(policy.scan_gates(phases)), ["100042"])
 
     def test_pipeline_controls_typed_inputs_and_every_run_path(self):
         self.pipeline.write_text(
@@ -122,7 +120,7 @@ class ConventionTests(unittest.TestCase):
         (expected / "run.json").write_text(
             json.dumps({"state": "completed"}), encoding="utf-8"
         )
-        self.assertTrue(roadmap_source.run_completed(self.repo, 42, phase))
+        self.assertTrue(phases_source.run_completed(self.repo, 42, phase))
 
     def test_bad_pipeline_path_fails_without_fallback(self):
         conventions.configure({**self.settings, "pipeline": self.repo / "missing.yaml"})
@@ -152,9 +150,7 @@ class ConventionTests(unittest.TestCase):
         self.assertEqual(conventions.setting("machine.id"), "machine-1")
 
     def test_registry_imports_the_package_implementation(self):
-        self.assertIs(
-            work_source.implementation("roadmap"), roadmap_source.RoadmapSource
-        )
+        self.assertIs(work_source.implementation("phases"), phases_source.PhasesSource)
         work_source.self_test()
 
 

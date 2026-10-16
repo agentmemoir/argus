@@ -1,6 +1,6 @@
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
 # SPDX-License-Identifier: Apache-2.0
-"""The phase and group branch names derived from roadmap file names."""
+"""The phase and group branch names derived from phases file names."""
 
 from collections.abc import Iterable
 from pathlib import Path
@@ -9,22 +9,22 @@ from typing import Any, cast
 from argus.conventions import board_repo, phase_file_parts, phase_paths, setting
 from argus.gitsync.git import ConfigError, blocked
 
-# A phase branch is named from the behaviour in the phase's roadmap file, and
+# A phase branch is named from the behaviour in the phase's phases file, and
 # never from its number. The branch is pushed to the public repository, where
 # the number reads as an internal label to every reviewer, and the behaviour is
 # the part that says what the change carries. `phase-100440-backup-archive-
 # format-and-directory.md` becomes `feature/backup-archive-format-and-
 # directory`. A file carrying no behaviour is refused, and the number is still
-# checked against the phase the caller means, so the wrong roadmap file cannot
+# checked against the phase the caller means, so the wrong phases file cannot
 # put a phase's work on another phase's branch.
 PHASE_BRANCH_PREFIX = "feature/"
 
 
-def _phase_file_parts(roadmap_name: str | None) -> tuple[str, str]:
-    """Split a roadmap file's base name into its number and its behaviour.
+def _phase_file_parts(phases_name: str | None) -> tuple[str, str]:
+    """Split a phases file's base name into its number and its behaviour.
 
     Args:
-        roadmap_name: A roadmap file's base name, with or without ``.md``.
+        phases_name: A phases file's base name, with or without ``.md``.
 
     Returns:
         ``(number, behaviour)``, for example
@@ -33,24 +33,24 @@ def _phase_file_parts(roadmap_name: str | None) -> tuple[str, str]:
     Raises:
         ConfigError: The name is not a phase file, or carries no behaviour.
     """
-    name = str(roadmap_name or "")
+    name = str(phases_name or "")
     parts = phase_file_parts(name if name.endswith(".md") else name + ".md")
     if parts is None:
         raise ConfigError(
-            f"cannot derive a phase branch from {roadmap_name!r}: "
+            f"cannot derive a phase branch from {phases_name!r}: "
             "expected a configured phase filename with a behaviour"
         )
     number, behaviour = parts
     if not behaviour:
-        raise ConfigError(f"phase file carries no behaviour: {roadmap_name!r}")
+        raise ConfigError(f"phase file carries no behaviour: {phases_name!r}")
     return str(number), behaviour
 
 
-def phase_branch(roadmap_name: str | None) -> str:
-    """The branch name for a phase, derived from its roadmap file name.
+def phase_branch(phases_name: str | None) -> str:
+    """The branch name for a phase, derived from its phases file name.
 
     Args:
-        roadmap_name: A roadmap file's base name, with or without ``.md``.
+        phases_name: A phases file's base name, with or without ``.md``.
 
     Returns:
         The branch name, for example ``feature/backup-archive-format``. The
@@ -60,29 +60,29 @@ def phase_branch(roadmap_name: str | None) -> str:
     Raises:
         ConfigError: The name is not a phase file, or carries no behaviour.
     """
-    _number, behaviour = _phase_file_parts(roadmap_name)
+    _number, behaviour = _phase_file_parts(phases_name)
     return f"{PHASE_BRANCH_PREFIX}{behaviour}"
 
 
-def phase_branch_for(phase: int | str, roadmap_name: str | None) -> str:
+def phase_branch_for(phase: int | str, phases_name: str | None) -> str:
     """The branch for a phase, checked against the phase number the caller
-    expects. A mismatch means the wrong roadmap file was passed, which would
+    expects. A mismatch means the wrong phases file was passed, which would
     put the phase's work on another phase's branch.
 
     The number is read from the file name rather than from the branch, because
     the branch no longer carries it.
     """
-    number, _behaviour = _phase_file_parts(roadmap_name)
+    number, _behaviour = _phase_file_parts(phases_name)
     if int(number) != int(phase):
         raise ConfigError(
-            f"roadmap file {roadmap_name!r} belongs to phase {int(number):06d}, "
+            f"phases file {phases_name!r} belongs to phase {int(number):06d}, "
             f"not {int(phase):06d}; refusing to guess a branch name"
         )
-    return phase_branch(roadmap_name)
+    return phase_branch(phases_name)
 
 
-def roadmap_folder(root: str | Path, configured: str | Path | None = None) -> Path:
-    """The roadmap folder to scan, as a Path.
+def phases_folder(root: str | Path, configured: str | Path | None = None) -> Path:
+    """The phases folder to scan, as a Path.
 
     A folder named by the caller is taken as the operator's word and is never
     silently replaced by the derived one: the branch-uniqueness check must look
@@ -90,11 +90,11 @@ def roadmap_folder(root: str | Path, configured: str | Path | None = None) -> Pa
     configured folder is invisible to it. A relative value resolves against the
     repository root, matching the selector's own rule and the driver's shell.
     """
-    configured = configured or setting("roadmap-dir")
+    configured = configured or setting("phases-dir")
     if configured:
         base = Path(configured)
         return base if base.is_absolute() else Path(root) / base
-    return cast("Path", board_repo(root)) / "roadmap"
+    return cast("Path", board_repo(root)) / "phases"
 
 
 #: The marker a group branch carries between the prefix and its lowest member's
@@ -121,7 +121,7 @@ def _phase_file_for(folder: Path, number: int) -> Path | None:
 def group_branch(
     root: str | Path,
     members: Iterable[int | str] | None,
-    roadmap_dir: str | Path | None = None,
+    phases_dir: str | Path | None = None,
 ) -> str:
     """The one branch a reservation group's work lives on.
 
@@ -137,7 +137,7 @@ def group_branch(
 
     Raises:
         ConfigError: The group is empty, a member is not a phase number, or the
-            lowest member has no document in the roadmap folder.
+            lowest member has no document in the phases folder.
     """
     numbers: set[int] = set()
     for member in members or ():
@@ -147,7 +147,7 @@ def group_branch(
             raise ConfigError(f"not a phase number: {member!r}") from exc
     if not numbers:
         raise ConfigError("a group branch needs at least one member")
-    folder = roadmap_folder(root, roadmap_dir)
+    folder = phases_folder(root, phases_dir)
     lowest = min(numbers)
     path = _phase_file_for(folder, lowest)
     if path is None:
@@ -162,8 +162,8 @@ def group_branch(
 def assert_phase_branch_unique(
     root: str | Path,
     phase: int | str,
-    roadmap_name: str | None,
-    roadmap_dir: str | Path | None = None,
+    phases_name: str | None,
+    phases_dir: str | Path | None = None,
     branch: str | None = None,
 ) -> dict[str, Any]:
     """Refuse a branch name another of this checkout's phases also earns.
@@ -173,7 +173,7 @@ def assert_phase_branch_unique(
     the second phase resume the first one's branch and silently inherit its
     commits, so this fails closed and leaves the rename to the operator.
 
-    ``roadmap_dir`` is the folder the phases were chosen from. It defaults to
+    ``phases_dir`` is the folder the phases were chosen from. It defaults to
     the derived one, which is what every machine reads unless it configured
     otherwise.
 
@@ -186,14 +186,14 @@ def assert_phase_branch_unique(
     Returns a result dict; ok is the success flag.
     """
     root = Path(root).resolve()
-    branch = branch or phase_branch_for(phase, roadmap_name)
+    branch = branch or phase_branch_for(phase, phases_name)
     info: dict[str, Any] = {
         "repo": str(root),
         "phase": f"{int(phase):06d}",
         "branch": branch,
     }
-    roadmap = roadmap_folder(root, roadmap_dir)
-    for path in phase_paths(roadmap):
+    phases = phases_folder(root, phases_dir)
+    for path in phase_paths(phases):
         if phase_file_parts(path) is None:
             continue
         number, _behaviour = _phase_file_parts(path.name)
@@ -212,7 +212,7 @@ def assert_group_branch_unique(
     root: str | Path,
     branch: str,
     members: Iterable[int | str] | None,
-    roadmap_dir: str | Path | None = None,
+    phases_dir: str | Path | None = None,
 ) -> dict[str, Any]:
     """Refuse a group branch another declared group would also earn.
 
@@ -229,25 +229,25 @@ def assert_group_branch_unique(
 
     Returns a result dict; ok is the success flag.
     """
-    from argus.roadmap import source as roadmap_source
+    from argus.phases import source as phases_source
 
     root = Path(root).resolve()
     wanted = sorted(f"{int(member):06d}" for member in members or ())
     info: dict[str, Any] = {"repo": str(root), "branch": branch, "group": wanted}
-    folder = roadmap_folder(root, roadmap_dir)
+    folder = phases_folder(root, phases_dir)
     for path in phase_paths(folder):
         parts = phase_file_parts(path)
         if parts is None:
             continue
         try:
-            other = roadmap_source.declared_group_members(path, int(parts[0]))
-        except roadmap_source.ReservationGroupError:
+            other = phases_source.declared_group_members(path, int(parts[0]))
+        except phases_source.ReservationGroupError:
             continue
         if not other:
             continue
         if sorted(f"{int(member):06d}" for member in other) == wanted:
             continue
-        if group_branch(root, other, roadmap_dir) != branch:
+        if group_branch(root, other, phases_dir) != branch:
             continue
         other_members = [f"{int(member):06d}" for member in other]
         return blocked(

@@ -4,8 +4,8 @@
 """Pick the next piece of work for the driver.
 
 This file is the entry point the driver calls. It resolves the configured work
-source and asks it what to run next. It knows nothing about phases, roadmaps,
-labels or issues: those belong to the source that answers. The roadmap source
+source and asks it what to run next. It knows nothing about phases, labels or
+issues: those belong to the source that answers. The phases source
 and the issue source are registered in work_source.py, beside the contract
 they satisfy.
 
@@ -75,7 +75,7 @@ from argus.board.reservations import (  # noqa: E402 - path set just above
     ReservationStore,
 )
 from argus.config.loader import ConfigError
-from argus.roadmap.source import (  # noqa: E402,F401 - path set just above
+from argus.phases.source import (  # noqa: E402,F401 - path set just above
     publication_receipt_done,
     reported_path,
     resolve_group,
@@ -109,7 +109,7 @@ def main(
     )
     parser.add_argument("--repo-root", "--repo", dest="config_repo_root")
     parser.add_argument(
-        "--source", default=None, help="work source to ask (default: roadmap)"
+        "--source", default=None, help="work source to ask (default: phases)"
     )
     parser.add_argument(
         "--phase-glob",
@@ -117,7 +117,7 @@ def main(
         action="append",
         help="work-item file glob (repeatable)",
     )
-    parser.add_argument("--roadmap-dir", "--roadmap", dest="config_roadmap_dir")
+    parser.add_argument("--phases-dir", "--phases", dest="config_phases_dir")
     parser.add_argument("--driver", dest="config_driver")
     parser.add_argument("--config")
     parser.add_argument("--self-test", action="store_true")
@@ -198,8 +198,8 @@ def main(
             settings = dict(_settings)
             if args.config_repo_root is not None:
                 settings["repo-root"] = Path(args.config_repo_root)
-            if args.config_roadmap_dir is not None:
-                settings["roadmap-dir"] = Path(args.config_roadmap_dir)
+            if args.config_phases_dir is not None:
+                settings["phases-dir"] = Path(args.config_phases_dir)
             if args.config_phase_glob is not None:
                 settings["driver.include"] = list(args.config_phase_glob)
             conventions.configure(settings)
@@ -207,13 +207,13 @@ def main(
         print(f"error: {exc}", file=sys.stderr)
         return 2
     repo = Path(conventions.setting("repo-root")).resolve()
-    roadmap = conventions.setting("roadmap-dir")
+    phases = conventions.setting("phases-dir")
     # The group query is read-only and comes before anything that writes. It
     # resolves the group from the phase documents and claims nothing, so it
     # needs neither the board nor the work-source registry.
     if args.resolve_group is not None:
         try:
-            result = resolve_group(repo, roadmap, args.resolve_group)
+            result = resolve_group(repo, phases, args.resolve_group)
         except WorkSourceError as exc:
             result = {
                 "state": "GROUP_UNAVAILABLE",
@@ -227,9 +227,9 @@ def main(
             return 2
         print(json.dumps(result, sort_keys=True))
         return 0
-    # Before the roadmap is resolved, because this step needs the repository and
+    # Before the phases is resolved, because this step needs the repository and
     # nothing else. A machine can migrate its coordination branch even while its
-    # roadmap folder is unreadable, and the two failures are unrelated.
+    # phases folder is unreadable, and the two failures are unrelated.
     if args.migrate_board:
         try:
             created = ReservationStore(
@@ -246,7 +246,7 @@ def main(
         print(json.dumps({"state": "BOARD_READY", "created": created}, sort_keys=True))
         return 0
     try:
-        source = resolve(args.source, repo, roadmap)
+        source = resolve(args.source, repo, phases)
     except WorkSourceError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2

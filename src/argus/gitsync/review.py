@@ -157,8 +157,8 @@ def open_predecessor(
     ever. The human merged the pull request; the receipt was never updated; and
     the line had no way to notice.
 
-    Scanning the run directories rather than the roadmap is deliberate. The
-    roadmap lists every phase the operator has written, including ones that have
+    Scanning the run directories rather than the phases is deliberate. The
+    phases lists every phase the operator has written, including ones that have
     never run; only a receipt proves a phase reached review. A phase whose
     receipt is unreadable is skipped, matching ``phase_receipt``, because an
     unreadable receipt must never be treated as a base branch.

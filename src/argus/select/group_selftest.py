@@ -45,7 +45,7 @@ def _configure(repo: Path, *, board: dict[str, Any] | None = None) -> None:
     settings: dict[str, Any] = {
         "repo-root": repo,
         "pipeline": None,
-        "roadmap-dir": repo / "roadmap",
+        "phases-dir": repo / "phases",
         "driver.include": ["phase-*.md"],
         "driver.exclude": [],
         "driver.runs": repo / "runs",
@@ -58,21 +58,21 @@ def _configure(repo: Path, *, board: dict[str, Any] | None = None) -> None:
     conventions.configure(settings)
 
 
-def _write_group(roadmap: Path, members: list[str]) -> None:
+def _write_group(phases: Path, members: list[str]) -> None:
     """Write one symmetric together declaration into every member file."""
     text = "### Reservation Group\n\n`together: " + ", ".join(members) + "`\n"
     for member in members:
-        (roadmap / f"phase-{member}-x.md").write_text(text)
+        (phases / f"phase-{member}-x.md").write_text(text)
 
 
 def _self_test_missing_declaration(checks: list[dict[str, Any]]) -> None:
     with tempfile.TemporaryDirectory() as tmp:
         repo = Path(tmp).resolve()
-        roadmap = repo / "roadmap"
-        roadmap.mkdir()
-        (roadmap / "phase-100010-a.md").write_text("## 1. Objective\n")
+        phases = repo / "phases"
+        phases.mkdir()
+        (phases / "phase-100010-a.md").write_text("## 1. Objective\n")
         _configure(repo)
-        result, code = _request(repo, roadmap, "100010", "server-01")
+        result, code = _request(repo, phases, "100010", "server-01")
         _check(
             checks,
             "a phase with no declaration is refused and names the document",
@@ -86,15 +86,15 @@ def _self_test_missing_declaration(checks: list[dict[str, Any]]) -> None:
 def _self_test_already_completed(checks: list[dict[str, Any]]) -> None:
     with tempfile.TemporaryDirectory() as tmp:
         repo = Path(tmp).resolve()
-        roadmap = repo / "roadmap"
-        roadmap.mkdir()
-        _write_group(roadmap, ["100010", "100020"])
+        phases = repo / "phases"
+        phases.mkdir()
+        _write_group(phases, ["100010", "100020"])
         for member in ("100010", "100020"):
             run = repo / "runs" / f"phase-{member}"
             run.mkdir(parents=True)
             (run / "run.json").write_text(json.dumps({"state": "completed"}))
         _configure(repo)
-        result, code = _request(repo, roadmap, "100010", "server-01")
+        result, code = _request(repo, phases, "100010", "server-01")
         _check(
             checks,
             "an all-completed group is refused as already completed",
@@ -138,12 +138,12 @@ def _self_test_group_claim(checks: list[dict[str, Any]]) -> None:
             },
         )
         repo = root
-        roadmap = root / "roadmap"
-        roadmap.mkdir()
-        _write_group(roadmap, ["100010", "100020", "100030"])
-        _write_group(roadmap, ["100050", "100060"])
-        _write_group(roadmap, ["100070", "100080"])
-        _write_group(roadmap, ["100090", "100100"])
+        phases = root / "phases"
+        phases.mkdir()
+        _write_group(phases, ["100010", "100020", "100030"])
+        _write_group(phases, ["100050", "100060"])
+        _write_group(phases, ["100070", "100080"])
+        _write_group(phases, ["100090", "100100"])
         done_run = root / "runs" / "phase-100100"
         done_run.mkdir(parents=True)
         (done_run / "run.json").write_text(json.dumps({"state": "completed"}))
@@ -179,7 +179,7 @@ def _self_test_group_claim(checks: list[dict[str, Any]]) -> None:
             f"refused={refused} holder={holder} after={after['phases']}",
         )
 
-        result, code = _request(repo, roadmap, "100050", "server-03")
+        result, code = _request(repo, phases, "100050", "server-03")
         rows = cast("list[dict[str, Any]]", result)
         array_ok: bool = (
             code == 0
@@ -210,7 +210,7 @@ def _self_test_group_claim(checks: list[dict[str, Any]]) -> None:
             str(rows),
         )
 
-        held, held_code = _request(repo, roadmap, "100060", "server-05", store=other)
+        held, held_code = _request(repo, phases, "100060", "server-05", store=other)
         _check(
             checks,
             "a group another agent holds names the holding agent",
@@ -223,7 +223,7 @@ def _self_test_group_claim(checks: list[dict[str, Any]]) -> None:
         # A member already completed is never re-reserved, so the answer is
         # the remainder alone.
         partial, partial_code = _request(
-            repo, roadmap, "100090", "server-07", store=other
+            repo, phases, "100090", "server-07", store=other
         )
         partial_rows = cast("list[dict[str, Any]]", partial)
         _check(
@@ -251,7 +251,7 @@ def _self_test_group_claim(checks: list[dict[str, Any]]) -> None:
 
         cooling, cold_code = _request(
             repo,
-            roadmap,
+            phases,
             "100070",
             "server-06",
             store=cast("ReservationStore", _CooldownStore()),
@@ -267,7 +267,7 @@ def _self_test_group_claim(checks: list[dict[str, Any]]) -> None:
 
         # A second request from the owner answers the same array: the call is
         # idempotent, and an owner is never refused its own reservation.
-        again, again_code = _request(repo, roadmap, "100050", "server-03", store=store)
+        again, again_code = _request(repo, phases, "100050", "server-03", store=store)
         again_rows = cast("list[dict[str, Any]]", again)
         _check(
             checks,

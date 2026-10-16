@@ -23,7 +23,7 @@ class Field(NamedTuple):
 SCHEMA = (
     Field("repo-root", "path", "required"),
     Field("pipeline", "path", "required"),
-    Field("roadmap-dir", "path", "required"),
+    Field("phases-dir", "path", "required"),
     Field("number-input", "str", "optional"),
     Field("file-input", "str", "optional"),
     Field("driver.provider", "str", "required"),
@@ -97,7 +97,7 @@ SCHEMA = (
 SHELL_VARS = {
     "repo-root": "REPO",
     "pipeline": "PIPELINE",
-    "roadmap-dir": "ROADMAP_DIR",
+    "phases-dir": "PHASES_DIR",
     "number-input": "PHASE_NUMBER_INPUT",
     "file-input": "PHASE_FILE_INPUT",
     "driver.provider": "DRIVER",
@@ -170,7 +170,7 @@ ISSUES_DEFAULTS: dict[str, object] = {
 # Repeated --phase-glob flags replace the file's include list with that list.
 _OVERRIDES = {
     "repo-root": ("repo-root", False),
-    "roadmap-dir": ("roadmap-dir", False),
+    "phases-dir": ("phases-dir", False),
     "phase-glob": ("driver.include", True),
     "driver": ("driver.provider", False),
 }

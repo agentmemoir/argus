@@ -46,11 +46,11 @@ PY
 # names the branch the rest of the group's joins expect instead of stacking a
 # branch of this member's own. A declaration that cannot be read is refused
 # rather than read as "runs alone": a resume that cannot see the group would cut
-# exactly the wrong branch. The refusal carries the roadmap reader's own words,
+# exactly the wrong branch. The refusal carries the phases reader's own words,
 # which name the document to fix, and the way out of the refusal, because a
 # halted line stays halted until the declaration is fixed or the phase is parked.
 _drive_resume_branch() {   # <number> <rel>
-  local number="$1" rel="$2" roadmap_name
+  local number="$1" rel="$2" phases_name
   if [ -n "${DRIVER_STUB_COORDINATION:-}" ]; then
     return 0
   fi
@@ -58,11 +58,11 @@ _drive_resume_branch() {   # <number> <rel>
     RESUME_REFUSAL="the reservation group of phase $number could not be read (${GROUP_ERROR:-no reason reported}); fix the group declaration, or abandon the phase"
     return 1
   fi
-  roadmap_name="$(basename "$rel" .md)"
+  phases_name="$(basename "$rel" .md)"
   if ! "$PYTHON" "$ARGUS/gitsync/main.py" "${ARGUS_CONFIG_ARGS[@]}" --root "$REPO" \
-      --mode branch --phase "$number" --roadmap "$roadmap_name" \
+      --mode branch --phase "$number" --phases "$phases_name" \
       "${GITSYNC_KIND_ARGS[@]+"${GITSYNC_KIND_ARGS[@]}"}" \
-      --roadmap-dir "$(roadmap_dir)" \
+      --phases-dir "$(phases_dir)" \
       "${GROUP_ARGS[@]+"${GROUP_ARGS[@]}"}" \
       >"$RUN_DIR/phase-branch.json" 2>/dev/null; then
     RESUME_REFUSAL="the branch helper refused (see $RUN_DIR/phase-branch.json); a dirty checkout is the usual cause"

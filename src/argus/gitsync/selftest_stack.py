@@ -48,7 +48,7 @@ def _two_phase_stack_checks(base: Path) -> list[tuple[str, object, str]]:
         # checked against, one with a clean tree and one carrying uncommitted
         # work. They are past the two phases above so neither is a predecessor of
         # the other.
-        third_roadmap = "phase-100472-evidence-freshness-sweep.md"
+        third_phases = "phase-100472-evidence-freshness-sweep.md"
 
         def reserve(phase: int) -> None:
             git(nested, "fetch", "-q", "origin")
@@ -66,11 +66,11 @@ def _two_phase_stack_checks(base: Path) -> list[tuple[str, object, str]]:
 
         # Phase one: branched from the integration branch, worked on,
         # published, waiting for a human.
-        (nested / "roadmap").mkdir(parents=True, exist_ok=True)
-        (nested / "roadmap" / "phase-100470-stack-first.md").write_text("x\n")
-        (nested / "roadmap" / "phase-100471-stack-second.md").write_text("x\n")
+        (nested / "phases").mkdir(parents=True, exist_ok=True)
+        (nested / "phases" / "phase-100470-stack-first.md").write_text("x\n")
+        (nested / "phases" / "phase-100471-stack-second.md").write_text("x\n")
         git(nested, "add", "-A")
-        git(nested, "commit", "-q", "-m", "roadmap")
+        git(nested, "commit", "-q", "-m", "phases")
         git(nested, "push", "-q", "origin", integration_branch(nested))
         one_branch = mode_branch(pub, 100470, "phase-100470-stack-first.md")
         results.append(
@@ -223,13 +223,13 @@ def _two_phase_stack_checks(base: Path) -> list[tuple[str, object, str]]:
         # branch, which is a state the pipeline only passes through. It never
         # asked what happens after something returns the checkout, so every fix
         # built on it passed the self-test and stopped on the real machine.
-        (nested / "roadmap" / third_roadmap).write_text("x\n")
+        (nested / "phases" / third_phases).write_text("x\n")
         git(nested, "add", "-A")
-        git(nested, "commit", "-q", "-m", "roadmap")
+        git(nested, "commit", "-q", "-m", "phases")
         git(nested, "push", "-q", "origin", integration_branch(nested))
-        third_branch = phase_branch_for(100472, third_roadmap)
+        third_branch = phase_branch_for(100472, third_phases)
         started_on_integration = current_branch(pub) == base_branch
-        three = mode_branch(pub, 100472, third_roadmap)
+        three = mode_branch(pub, 100472, third_phases)
         results.append(
             (
                 "a phase launches onto an open predecessor's branch while the "
@@ -252,12 +252,12 @@ def _two_phase_stack_checks(base: Path) -> list[tuple[str, object, str]]:
         # the one way this move can lose someone's changes.
         git(pub, "checkout", "-q", base_branch)
         (pub / "uncommitted.txt").write_text("work in progress\n")
-        fourth_roadmap = "phase-100473-guard-the-guard.md"
-        (nested / "roadmap" / fourth_roadmap).write_text("x\n")
+        fourth_phases = "phase-100473-guard-the-guard.md"
+        (nested / "phases" / fourth_phases).write_text("x\n")
         git(nested, "add", "-A")
-        git(nested, "commit", "-q", "-m", "roadmap")
+        git(nested, "commit", "-q", "-m", "phases")
         git(nested, "push", "-q", "origin", integration_branch(nested))
-        four = mode_branch(pub, 100473, fourth_roadmap)
+        four = mode_branch(pub, 100473, fourth_phases)
         results.append(
             (
                 "uncommitted work on the integration branch still stops the launch",
@@ -268,7 +268,7 @@ def _two_phase_stack_checks(base: Path) -> list[tuple[str, object, str]]:
                     pub,
                     "rev-parse",
                     "--verify",
-                    f"refs/heads/{phase_branch_for(100473, fourth_roadmap)}",
+                    f"refs/heads/{phase_branch_for(100473, fourth_phases)}",
                 )[0]
                 != 0,
                 f"ok={four.get('ok')} branch={current_branch(pub)} "

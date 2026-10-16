@@ -82,7 +82,7 @@ if result.get("assignment_error"):
 }
 
 issue_announce() {
-  [ "${WORK_SOURCE:-roadmap}" = issues ] || return 0
+  [ "${WORK_SOURCE:-phases}" = issues ] || return 0
   [ "${ISSUES_ANNOUNCE:-1}" = 1 ] || return 0
   [ -n "$1" ] || return 0
   "$PYTHON" "$ARGUS/issues/lifecycle.py" announce \

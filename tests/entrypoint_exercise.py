@@ -35,11 +35,11 @@ def exercise(package: Path, base: Path) -> None:
     )
     project = checkout(base, "project", env)
     board = checkout(base, "notes-checkout", env)
-    roadmap = project / "foo/bar/roadmap"
-    roadmap.mkdir(parents=True)
-    item = roadmap / "phase-100010-first.md"
+    phases = project / "foo/bar/phases"
+    phases.mkdir(parents=True)
+    item = phases / "phase-100010-first.md"
     item.write_text("# First\n- [ ] Work remains.\n")
-    (roadmap / "index.md").write_text("Plan ready\n")
+    (phases / "index.md").write_text("Plan ready\n")
     runs = board / "runs"
     runs.mkdir()
     pipeline = project / "pipeline.yaml"
@@ -110,7 +110,7 @@ sys.exit(2)
         config,
         project=project,
         board=board,
-        roadmap=roadmap,
+        phases=phases,
         runs=runs,
         pipeline=pipeline,
         python=sys.executable,
@@ -143,7 +143,7 @@ sys.exit(2)
         "the report did not name the configuration file",
         readiness.stdout,
     )
-    for key in ("REPO", "PIPELINE", "ROADMAP_DIR", "WF", "BOARD_REPO"):
+    for key in ("REPO", "PIPELINE", "PHASES_DIR", "WF", "BOARD_REPO"):
         require(
             re.search(rf"^{key}: .* \(file\)$", readiness.stdout, re.M),
             f"the report did not name {key} with its file source",

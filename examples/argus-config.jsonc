@@ -13,7 +13,7 @@
   "pipeline": "./project/pipeline.yaml",
 
   // The folder holding the work-item files. Required.
-  "roadmap-dir": "./project/plans",
+  "phases-dir": "./project/plans",
 
   // The pipeline input names that carry the work-item number and file. The
   // example pipeline declares both, so both are named here.

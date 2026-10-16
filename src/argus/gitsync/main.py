@@ -121,7 +121,7 @@ def main() -> int:
     ap.add_argument("--config")
     ap.add_argument("--kind", choices=["phase", "issue"], default="phase")
     ap.add_argument("--driver", dest="config_driver")
-    ap.add_argument("--roadmap-dir", dest="config_roadmap_dir")
+    ap.add_argument("--phases-dir", dest="config_phases_dir")
     ap.add_argument("--phase-glob", dest="config_phase_glob", action="append")
     ap.add_argument("--repo", default=None, help="sync one checkout instead of --root")
     ap.add_argument(
@@ -194,7 +194,7 @@ def main() -> int:
         "--self-test", action="store_true", help="run stubbed-remote checks and exit"
     )
     ap.add_argument(
-        "--roadmap", default=None, help="phase roadmap file name, for --mode branch"
+        "--phases", default=None, help="phase phases file name, for --mode branch"
     )
     ap.add_argument(
         "--group",
@@ -224,15 +224,15 @@ def main() -> int:
         if issue_result is not None:
             out = issue_result
         elif args.mode == "branch":
-            if args.phase is None or not args.roadmap:
+            if args.phase is None or not args.phases:
                 raise ConfigError(
-                    "--phase and --roadmap are required with --mode branch"
+                    "--phase and --phases are required with --mode branch"
                 )
             out = mode_branch(
                 args.root,
                 args.phase,
-                args.roadmap,
-                conventions.setting("roadmap-dir"),
+                args.phases,
+                conventions.setting("phases-dir"),
                 group=args.group,
             )
         elif args.mode == "publish":

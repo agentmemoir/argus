@@ -50,7 +50,7 @@ def settings(repo: Path, binary: Path) -> dict[str, Any]:
         "repo-root": repo,
         "machine.id": "worker-one",
         "pipeline": None,
-        "roadmap-dir": repo,
+        "phases-dir": repo,
         "driver.runs": repo / "runs",
         "commands.gh": str(binary),
         "commands.git": "git",

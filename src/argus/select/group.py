@@ -5,7 +5,7 @@
 
 An agent identifies itself by its machine id and names one phase. The phase
 documents declare the group, so the request resolves the group from the
-roadmap, drops the members that are already completed, and claims the
+phases, drops the members that are already completed, and claims the
 unfinished remainder in one board write under one shared reservation id. The
 answer is the array of the members it now owns; there is no separate accept
 step, because the request is the claim.
@@ -60,7 +60,7 @@ from argus.board.reservations import (  # noqa: E402 - path set just above
     reservation_file,
     save_reservation_file,
 )
-from argus.roadmap.source import resolve_group
+from argus.phases.source import resolve_group
 from argus.select.work_source import WorkSourceError
 
 #: Exit code per request state. Anything unlisted is an error, so a new state
@@ -118,7 +118,7 @@ def _held_group(
 
 def _request(
     repo: str | Path,
-    roadmap: str | Path,
+    phases: str | Path,
     phase: str,
     machine_id: str,
     *,
@@ -133,7 +133,7 @@ def _request(
     with no declaration is named rather than guessed.
     """
     try:
-        group = resolve_group(repo, roadmap, phase)
+        group = resolve_group(repo, phases, phase)
     except WorkSourceError as exc:
         result = {
             "state": "GROUP_UNAVAILABLE",

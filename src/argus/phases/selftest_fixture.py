@@ -1,6 +1,6 @@
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
 # SPDX-License-Identifier: Apache-2.0
-"""Board doubles the roadmap self-test drives the selector with.
+"""Board doubles the phases self-test drives the selector with.
 
 The real store talks to a Git board. These answer from memory instead, so the
 selector's own rules -- which phase is offered, who holds it, what a refusal

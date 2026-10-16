@@ -14,7 +14,7 @@ DRIVER = Path(__file__).resolve().parents[1] / "src/argus/driver"
 PRELUDE = """\
 set -euo pipefail
 export PYTHON=python3 REPO=/repo RUN_DIR="$FAKE/state" LOG="$FAKE/log" DRY_RUN=0
-export ARGUS="$FAKE/argus" WORK_SOURCE=roadmap work_kind=phase
+export ARGUS="$FAKE/argus" WORK_SOURCE=phases work_kind=phase
 ARGUS_CONFIG_ARGS=(--config c.jsonc)
 mkdir -p "$RUN_DIR"
 source "$DRIVER/lib-driver-log.sh"

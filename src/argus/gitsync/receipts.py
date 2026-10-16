@@ -16,7 +16,7 @@ from argus.conventions import (
     setting,
 )
 from argus.gitsync.git import git
-from argus.gitsync.paths import roadmap_folder
+from argus.gitsync.paths import phases_folder
 
 
 def _published_head(results: list[dict[str, Any]], repo: str | Path) -> Any:
@@ -94,8 +94,8 @@ def _run_phase_number(entry: Path) -> int | None:
 
 def _phase_run_entries(root: str | Path) -> Iterator[tuple[int, Path]]:
     if setting("pipeline", None) is not None:
-        roadmap = roadmap_folder(root)
-        for phase_file in phase_paths(roadmap):
+        phases = phases_folder(root)
+        for phase_file in phase_paths(phases):
             parts = phase_file_parts(phase_file)
             if parts is not None:
                 entry = phase_run_dir(root, parts[0], phase_file)
@@ -176,7 +176,7 @@ def receipt_for_branch(repo: str | Path, branch: str) -> dict[str, Any] | None:
     The branch name is the join key, not the phase number, because the branch
     no longer carries the number. Scanning every run directory is deliberate:
     a receipt is the only evidence that a phase reached review, and a phase the
-    operator has only written in the roadmap has none.
+    operator has only written in the phases has none.
     """
     for _number, entry in _phase_run_entries(repo):
         try:

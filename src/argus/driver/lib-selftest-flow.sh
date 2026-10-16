@@ -99,7 +99,7 @@ selftest_case_flow() {
     REPO="$coord_root"
     selftest_write_config "$coord_root" "$coord_config" "$BOARD_DIR"
     load_fixture_config "$coord_config"
-    WORK_SOURCE_FLAGS=(--source roadmap)
+    WORK_SOURCE_FLAGS=(--source phases)
     ARGUS="$coord_root/$BOARD_DIR/argus"; NOTIFIER="$ARGUS/notify/notifications.py"
     set_config_args
     RUN_DIR="$WF/$DRIVER_STATE"
@@ -149,7 +149,7 @@ selftest_case_flow() {
     ARGUS_CONFIG_FILE="$tmp/dead-branch-config.jsonc"
     selftest_write_config "$dead_root" "$ARGUS_CONFIG_FILE" "$BOARD_DIR"
     load_fixture_config "$ARGUS_CONFIG_FILE"
-    WORK_SOURCE_FLAGS=(--source roadmap)
+    WORK_SOURCE_FLAGS=(--source phases)
     ARGUS="$dead_root/$BOARD_DIR/argus"
     NOTIFIER="$ARGUS/notify/notifications.py"
     RUN_DIR="$WF/$DRIVER_STATE"; mkdir -p "$RUN_DIR"

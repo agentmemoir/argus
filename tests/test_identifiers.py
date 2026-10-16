@@ -245,7 +245,7 @@ def test_the_patterns_fire_and_do_not_overreach():
         ('"profile": "example-profile"', 0),  # a documented placeholder
         ('"channel": "discord:000000000000000000"', 0),
         ("an ordinary sentence about phases, ids and profiles", 0),
-        ("the roadmap folder is /srv/roadmap", 0),
+        ("the phases folder is /srv/phases", 0),
     )
     for sample, expected in cases:
         actual = len(scan("fixture", sample))

@@ -51,10 +51,10 @@ _drive_choose_selection() {
         if [ "$work_kind" = issue ]; then group_take_selection ""; else group_take_selection "$selection"; fi
         if group_active; then
           # The board claimed the whole group under one reservation id, and this
-          # tick runs the member the selection names. Its own roadmap file is
+          # tick runs the member the selection names. Its own phases file is
           # what the launch and the branch check need.
           if ! group_resolve_member "$number"; then
-            log "group member $number has no roadmap document; refusing to launch"
+            log "group member $number has no phases document; refusing to launch"
             { _DRIVE_RC=1; return 0; }
           fi
           rel="$GROUP_MEMBER_REL"
@@ -102,9 +102,9 @@ _drive_choose_selection() {
             number="$wait_phase"
             # The launch path comes from the work source, because the source is
             # what named the claim and is the only thing that knows where its
-            # items live. This used to be a glob of the roadmap folder done here,
-            # which put roadmap knowledge back into the driver for no reason: an
-            # issue source's recovery would have been searching a roadmap for a
+            # items live. This used to be a glob of the phases folder done here,
+            # which put phases knowledge back into the driver for no reason: an
+            # issue source's recovery would have been searching a phases for a
             # file named after an issue. Fail closed rather than fall back to a
             # guess if a result ever arrives without one.
             rel="$(printf '%s' "$selection" | selection_value path)"
@@ -115,7 +115,7 @@ _drive_choose_selection() {
               # resolved to its own document here rather than launched against
               # the file the selection happened to carry.
               if ! group_resolve_member "$wait_phase"; then
-                log "group member $wait_phase has no roadmap document; refusing to launch"
+                log "group member $wait_phase has no phases document; refusing to launch"
                 { _DRIVE_RC=1; return 0; }
               fi
               rel="$GROUP_MEMBER_REL"

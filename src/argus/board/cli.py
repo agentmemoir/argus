@@ -29,7 +29,7 @@ def _cli_store(args: argparse.Namespace) -> ReservationStore:
 def _add_store_args(parser: argparse.ArgumentParser, *, issues: bool = True) -> None:
     parser.add_argument("--config")
     parser.add_argument("--repo-root", dest="config_repo_root")
-    parser.add_argument("--roadmap-dir", dest="config_roadmap_dir")
+    parser.add_argument("--phases-dir", dest="config_phases_dir")
     parser.add_argument("--phase-glob", dest="config_phase_glob", action="append")
     parser.add_argument("--driver", dest="config_driver")
     if issues:

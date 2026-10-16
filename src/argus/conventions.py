@@ -51,7 +51,7 @@ def configure_from_args(args: Any) -> "Config":
     overrides: dict[str, object] = {}
     for key, name in (
         ("repo-root", "config_repo_root"),
-        ("roadmap-dir", "config_roadmap_dir"),
+        ("phases-dir", "config_phases_dir"),
         ("phase-glob", "config_phase_glob"),
         ("driver", "config_driver"),
     ):
@@ -68,7 +68,7 @@ def configure_from_cli(argv: list[str]) -> "Config":
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("--config")
     parser.add_argument("--repo-root", dest="config_repo_root")
-    parser.add_argument("--roadmap-dir", dest="config_roadmap_dir")
+    parser.add_argument("--phases-dir", dest="config_phases_dir")
     parser.add_argument("--phase-glob", dest="config_phase_glob", action="append")
     parser.add_argument("--driver", dest="config_driver")
     args, _unknown = parser.parse_known_args(argv)
@@ -138,10 +138,10 @@ def phase_file_parts(path: str | Path) -> tuple[int, str] | None:
 
 def resolve_phase_file(repo: str | Path, number: int) -> Path | None:
     """Find the configured work-item file with ``number`` in its name."""
-    roadmap = Path(setting("roadmap-dir"))
-    if not roadmap.is_absolute():
-        roadmap = Path(repo) / roadmap
-    for path in phase_paths(roadmap):
+    phases = Path(setting("phases-dir"))
+    if not phases.is_absolute():
+        phases = Path(repo) / phases
+    for path in phase_paths(phases):
         parts = phase_file_parts(path)
         if parts and parts[0] == int(number):
             return path

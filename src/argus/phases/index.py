@@ -1,20 +1,20 @@
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
 # SPDX-License-Identifier: Apache-2.0
-"""roadmap/index.md drift: report it, and repair the half that is mechanical."""
+"""phases/index.md drift: report it, and repair the half that is mechanical."""
 
 from pathlib import Path
 
-from argus.roadmap.evidence import (
+from argus.phases.evidence import (
     INDEX_HEAD_RE,
     INDEX_ROW_RE,
     index_complete,
     signals,
 )
-from argus.roadmap.queue import candidates
+from argus.phases.queue import candidates
 
 
 def audit(
-    repo: str | Path, roadmap: str | Path | None, apply_index: bool = False
+    repo: str | Path, phases: str | Path | None, apply_index: bool = False
 ) -> int:
     """Report index.md drift. Returns issue count.
 
@@ -29,10 +29,10 @@ def audit(
     with no marker is a claim the evidence does not support, and dropping the
     index entry is an operator decision, not a mechanical fix.
     """
-    index_done = index_complete(repo, roadmap)
+    index_done = index_complete(repo, phases)
     issues = 0
     drifted: list[tuple[int, Path]] = []
-    for number, path in candidates(repo, roadmap):
+    for number, path in candidates(repo, phases):
         s = signals(repo, number, path, index_done)
         markers = (
             s["run"]
@@ -64,7 +64,7 @@ def audit(
                 f"not selected ({path.name})"
             )
     if apply_index and drifted:
-        applied, skipped = _annotate_index_complete(repo, roadmap, drifted)
+        applied, skipped = _annotate_index_complete(repo, phases, drifted)
         print(
             f"index: marked {applied} entr(ies) Complete"
             + (f", {skipped} left for a human" if skipped else "")
@@ -74,7 +74,7 @@ def audit(
 
 def _annotate_index_complete(
     _repo: str | Path,
-    roadmap: str | Path | None,
+    phases: str | Path | None,
     drifted: list[tuple[int, Path]],
 ) -> tuple[int, int]:
     """Mark each named phase's index.md entry Complete, in place.
@@ -93,9 +93,9 @@ def _annotate_index_complete(
     to re-run. Anything not matching one of those shapes is reported, not
     guessed at.
     """
-    if roadmap is None:
+    if phases is None:
         return 0, 0
-    path = Path(roadmap) / "index.md"
+    path = Path(phases) / "index.md"
     try:
         text = path.read_text()
     except OSError as exc:

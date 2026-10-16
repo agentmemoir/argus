@@ -111,13 +111,13 @@ def issue_mode(args: Namespace) -> dict[str, Any] | None:
 
 def _issue_mode(args: Namespace) -> dict[str, Any] | None:
     if args.mode == "branch":
-        if args.phase is None or not args.roadmap:
+        if args.phase is None or not args.phases:
             raise ConfigError(
-                "--phase and --roadmap are required with issue branch mode"
+                "--phase and --phases are required with issue branch mode"
             )
         if args.group:
             raise ConfigError("issue branches do not accept phase groups")
-        return mode_issue_branch(args.root, args.phase, args.roadmap)
+        return mode_issue_branch(args.root, args.phase, args.phases)
     if args.mode == "publish":
         if args.phase is None:
             raise ConfigError("--phase is required with issue publish mode")

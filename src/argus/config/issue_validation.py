@@ -27,9 +27,9 @@ def validate_presence(
     board: dict[str, Any] | None,
 ) -> None:
     """Reject incomplete or contradictory work-source settings before loading paths."""
-    if provider not in ("phase", "roadmap", "issues", None):
+    if provider not in ("phase", "phases", "issues", None):
         raise ConfigError(
-            "invalid value for key 'driver.provider': known drivers: phase, roadmap, issues"
+            "invalid value for key 'driver.provider': known drivers: phase, phases, issues"
         )
     if provider == "issues":
         if issues is None:

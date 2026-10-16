@@ -24,7 +24,7 @@
 # --- the throwaway checkout ------------------------------------------------
 
 # Build a complete, disposable pipeline checkout: a bare public remote and a
-# bare private remote, a clone of each, the driver's own code, a roadmap, a
+# bare private remote, a clone of each, the driver's own code, a phases, a
 # workflow file, run state, and a real reservation on the fixture board for this
 # host.
 #
@@ -76,7 +76,7 @@ selftest_fixture_root() {
   # The private checkout ignores bytecode, so the fixture must too or the
   # tick's own imports show up as dirt.
   printf '__pycache__/\n' >"$root/$BOARD_DIR/.gitignore"
-  # A roadmap, because the selection path reads it to find the phase file, and
+  # A phases, because the selection path reads it to find the phase file, and
   # the workflow folder, because the driver refuses a tick whose pipeline file
   # is missing rather than inventing one. A fixture that omitted it would have
   # tested the refusal instead of the launch.
@@ -119,7 +119,7 @@ STAGE
   # staged and uncommitted, which is the whole point of the stranding case: a
   # `git add -A` here would commit the review baseline and leave a clean index.
   git -C "$root/$BOARD_DIR" add argus plans history flow.yaml fixture.md .gitignore
-  git -C "$root/$BOARD_DIR" commit -q -m "driver, roadmap and run state"
+  git -C "$root/$BOARD_DIR" commit -q -m "driver, phases and run state"
   git -C "$root/$BOARD_DIR" push -q origin master
   # A real claim for this host, so a tick takes the real coordination path.
   # Stubbing coordination would skip the sync, which is the code under test.
@@ -229,14 +229,14 @@ selftest_fixture_stage_work() {
   done
 }
 
-# Add a two-member reservation group to a fixture's roadmap, and commit it.
+# Add a two-member reservation group to a fixture's phases, and commit it.
 #
 # A group's declaration is symmetric: every member names the same set, so a
 # document that names only itself is refused. The phase documents are the
 # project's own content, so a fixture that wants a group writes them.
 #
 # The fixture's single blocked phase goes with them. A group case needs the
-# lowest uncompleted phase in the roadmap to be a member of the group, and the
+# lowest uncompleted phase in the phases to be a member of the group, and the
 # blocked one would otherwise be selected first and run alone.
 #
 # The two behaviours are what the group's one branch is named from: the branch
@@ -261,14 +261,14 @@ selftest_fixture_group_phases() {
 DOC
   done
   git -C "$root/$BOARD_DIR" add -A
-  git -C "$root/$BOARD_DIR" commit -q -m "roadmap: declare a two-member reservation group"
+  git -C "$root/$BOARD_DIR" commit -q -m "phases: declare a two-member reservation group"
   git -C "$root/$BOARD_DIR" push -q origin master
 }
 
 # Write a complete configuration file for a fixture checkout.
 #
 # The suite runs the same configuration path a real tick does: the file names
-# the fixture's own checkout, pipeline, roadmap, run state and board, and the
+# the fixture's own checkout, pipeline, phases, run state and board, and the
 # driver reads it with the module rather than from the shell's surroundings.
 # Written for each fixture root, because a sub-fixture that repoints the driver
 # launches children, and those children must read the sub-fixture too.
@@ -292,7 +292,7 @@ board = Path(board_repo).resolve() if board_repo else (root / board_dir).resolve
 doc = {
     "repo-root": str(root),
     "pipeline": str(root / board_dir / "flow.yaml"),
-    "roadmap-dir": str(root / board_dir / "plans"),
+    "phases-dir": str(root / board_dir / "plans"),
     "number-input": "phase_number",
     "file-input": "phase_file",
     "driver": {
@@ -333,7 +333,7 @@ SELFTEST_GROUP_SAVED=()
 
 # Point the suite at a group case's own sub-fixture.
 #
-# A group case needs a roadmap whose lowest uncompleted phase is a member of a
+# A group case needs a phases whose lowest uncompleted phase is a member of a
 # group, and the suite's own fixture is used by the cases around it, so each case
 # builds its own. This is the one place that knows which settings such a case
 # repoints, which is what stops the fourth case from forgetting the tenth
@@ -365,7 +365,7 @@ selftest_group_begin() {   # <name> <root> <base> <config>
   NOTIFIER="$ARGUS/notify/notifications.py"
   selftest_write_config "$2" "$4" "$BOARD_DIR"
   load_fixture_config "$4"
-  WORK_SOURCE_FLAGS=(--source roadmap)
+  WORK_SOURCE_FLAGS=(--source phases)
   RUN_DIR="$WF/$DRIVER_STATE"
   mkdir -p "$RUN_DIR"
   LOCK="$RUN_DIR/driver.lock"; HALT="$RUN_DIR/halted"; STALL="$RUN_DIR/stalled"
@@ -392,6 +392,6 @@ selftest_group_end() {
   GROUPBRANCH="${SELFTEST_GROUP_SAVED[16]}"
   NOTIFY_BROKEN="${SELFTEST_GROUP_SAVED[17]}"
   load_fixture_config "$selftest_config"
-  WORK_SOURCE_FLAGS=(--source roadmap)
+  WORK_SOURCE_FLAGS=(--source phases)
 }
 
