@@ -18,23 +18,35 @@ Every member records the group's single pull request in its receipt, and a membe
 
 The group gate runs when a member publishes, and again on every tick that finds a published member waiting for its pull request to merge (`--mode gate --phase NUMBER` runs it by hand). It does two things.
 
-First, it merges the open pull requests whose base is the group branch, so a fix for a bug an earlier member left reaches the branch before the next member starts. A pull request is merged only when it is ready for review, comes from this repository and not from a fork, is mergeable, has no review requesting changes, and has passing checks. The merge is pinned to the head those checks were read for and never uses administrator rights. Any other pull request stays open, and the result names it with the reason.
+First, it merges the open pull requests whose base is the group branch, so a fix for a bug an earlier member left reaches the branch before the next member starts. A pull request is merged only when it is ready for review, comes from this repository and not from a fork, is mergeable, has no review requesting changes, and has passing checks.
 
-Second, once every member has published, it makes the shared pull request ready for review, but only when the checks on it all pass. A pull request whose checks are failing, still running, or not reported yet stays in draft, and the result says which. A fix merged by the same run holds it too, because the merge moves the head the checks judge. The transition happens once, so a person who sets the pull request back to draft is not undone on the next tick.
+The merge is pinned to the head those checks were read for and never uses administrator rights. Any other pull request stays open, and the result names it with the reason.
+
+Second, once every member has published, it makes the shared pull request ready for review, but only when the checks on it all pass. A pull request whose checks are failing, still running, or not reported yet stays in draft, and the result says which.
+
+A fix merged by the same run holds it too, because the merge moves the head the checks judge. The transition happens once, so a person who sets the pull request back to draft is not undone on the next tick.
 
 The result is the `group_gate` object in the publication output: `state` (`WAITING` while a member is still to publish, `HELD`, or `READY`), the `reasons` it is held, and `fix_pull_requests` with the numbers merged and the pull requests held. The driver logs a changed answer once, not on every tick.
 
 ## Repair
 
-With a `repair` object in the configuration, a tick that is about to select work first looks at the pull requests this machine published that are still open. One whose checks have all finished, with at least one failed, gets one repair run. The driver puts the checkout on the pull request's branch, writes a task file (the failing checks, the lines of the failed log that explain each failure, and the whole log beside it), and runs the configured pipeline once in the phase window. The pipeline takes the inputs `repair_id` and `repair_task` and keeps its run folder under the driver's state folder. Its agent fixes and commits on the branch, the driver pushes without force, and the next tick reads the checks of the new head.
+With a `repair` object in the configuration, a tick that is about to select work first looks at the pull requests this machine published that are still open. One whose checks have all finished, with at least one failed, gets one repair run. The driver puts the checkout on the pull request's branch, writes a task file (the failing checks, the lines of the failed log that explain each failure, and the whole log beside it), and runs the configured pipeline once in the phase window.
 
-This covers both moments a red result matters. After a group's last member publishes, the machine is idle, so the next tick repairs the group's pull request before it is readied. Between two members the repair check comes before the next member is reserved, so a failure does not ride along into that member's work. Checks that are still running, or not reported yet, hold the tick for up to `repair.wait` seconds, because a result for a head that has been replaced is never seen again. A `wait` of 0 never holds.
+The pipeline takes the inputs `repair_id` and `repair_task` and keeps its run folder under the driver's state folder. Its agent fixes and commits on the branch, the driver pushes without force, and the next tick reads the checks of the new head.
 
-Each pull request gets `repair.attempts` runs, and the count starts again when its checks pass. When the count is used up, the driver logs it, sends one notice, and goes on with its normal work: a pull request that cannot be repaired does not stop the line. A repair run never writes the halt marker. A run that ends without a repair and leaves uncommitted edits sends a notice, and the next repair will not switch branches over those edits. `--mode repair` prints the plan the tick acts on, and its records live in the state folder's `repair/` folder, which is untracked.
+This covers both moments a red result matters. After a group's last member publishes, the machine is idle, so the next tick repairs the group's pull request before it is readied. Between two members the repair check comes before the next member is reserved, so a failure does not ride along into that member's work.
+
+Checks that are still running, or not reported yet, hold the tick for up to `repair.wait` seconds, because a result for a head that has been replaced is never seen again. A `wait` of 0 never holds.
+
+Each pull request gets `repair.attempts` runs, and the count starts again when its checks pass. When the count is used up, the driver logs it, sends one notice, and goes on with its normal work: a pull request that cannot be repaired does not stop the line. A repair run never writes the halt marker.
+
+A run that ends without a repair and leaves uncommitted edits sends a notice, and the next repair does not switch branches over those edits. `--mode repair` prints the plan the tick acts on, and its records live in the state folder's `repair/` folder, which is untracked.
 
 ## Issue Work
 
-An issue machine keeps its claims in `board.issues-file`, a second file on the same board branch. A phase claim and an issue claim never share a record, even for the same number. The pipeline's `run_dir` names each issue run directory, for example `runs/issue-000295`, and the issue's reservation token lives there. The frozen task file lives in `issues.task-dir`, which must be inside the checkout. An issue run writes no `publication.json`: GitHub's own issue and pull request state is the completion record.
+An issue machine keeps its claims in `board.issues-file`, a second file on the same board branch. A phase claim and an issue claim never share a record, even for the same number.
+
+The pipeline's `run_dir` names each issue run directory, for example `runs/issue-000295`, and the issue's reservation token lives there. The frozen task file lives in `issues.task-dir`, which must be inside the checkout. An issue run writes no `publication.json`: GitHub's own issue and pull request state is the completion record.
 
 ## The Glide Contract
 
@@ -45,3 +57,5 @@ Argus does not search for project folders. The config file names every project p
 ## Work Items
 
 Work-item files end in `.md`. The first number separated by `-` or `_` is the phase number, and the text after it is the branch slug. Appendix files are skipped. For example, `work-100010-cache.md` matches an include glob of `work-*.md`.
+
+See [configuration.md](configuration.md) for every configuration key, and [running.md](running.md) for the run modes.
