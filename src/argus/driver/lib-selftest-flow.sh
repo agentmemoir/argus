@@ -78,11 +78,12 @@ selftest_case_flow() {
   # Coordination failure: the normal driver path must refuse before tmux launch.
   # Reservable but unsyncable: a real fixture board so the tick reaches the
   # sync gate, with the public checkout broken so --mode start fails there.
-  # Selector states for a fixture_root: the root reserves 100010 for this
-  # host, so the next tick re-encounters its own claim as WAIT_FOR_CLAIM
-  # rather than a fresh RESERVED; the sync gate runs before the state
-  # dispatch, so it still refuses with the asserted line. A bare extra phase
-  # would not give RESERVED on its own while 100010 stays held.
+  # Selector states for a fixture_root: the root reserves 100010 under the
+  # self-test machine id (argus-selftest), so the next tick re-encounters its
+  # own claim as WAIT_FOR_CLAIM rather than a fresh RESERVED; the sync gate
+  # runs before the state dispatch, so it still refuses with the asserted
+  # line. A bare extra phase would not give RESERVED on its own while 100010
+  # stays held.
   # Repo-internal pattern, same as the dead-branch case below.
   old_repo="$REPO"; old_board_dir="$BOARD_DIR"; old_wf="$WF"
   old_argus="$ARGUS"; old_notifier="$NOTIFIER"
@@ -107,16 +108,20 @@ selftest_case_flow() {
     CURRENT="$RUN_DIR/current"; PIDFILE="$RUN_DIR/pid"
     NOTIFY_BROKEN="$RUN_DIR/notify-broken"; LOG="$RUN_DIR/driver.log"
     SESSION="ar-driver-coord-failure-$$"
+    # The state the tick sees, read without reserving. The driver refuses at the
+    # sync gate before its state dispatch, so it never logs this on this path;
+    # the failure line below carries it instead.
+    coord_state="$(coordination_select --read-only 2>/dev/null | selection_value state || true)"
     rm -rf "$coord_root/.git"
     drive || true
     coord_sync_refused=0; coord_no_window=0
     grep -q "coordination checkout sync failed" "$LOG" && coord_sync_refused=1
     ! tmux_window_exists 2>/dev/null && coord_no_window=1
     if [ "$coord_sync_refused" = 1 ] && [ "$coord_no_window" = 1 ]; then
-      echo "ok: coordination failure refuses launch"; coord_fail_ok=1
+      echo "ok: coordination failure refuses launch"
     else
       coord_sync_hint="$( { head -c 300 "$RUN_DIR/coordination-sync.json" 2>/dev/null || true; } | tr '\n' ' ' )"
-      echo "FAIL: coordination failure did not refuse launch (sync_refused=$coord_sync_refused no_window=$coord_no_window sync=$coord_sync_hint)"; coord_fail_ok=0; fail=1
+      echo "FAIL: coordination failure did not refuse launch (sync_refused=$coord_sync_refused no_window=$coord_no_window selection_state=${coord_state:-unknown} sync=$coord_sync_hint)"; fail=1
     fi
     tmux kill-session -t "$SESSION" 2>/dev/null || true
   fi
