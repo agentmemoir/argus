@@ -4,6 +4,8 @@
 
 from pathlib import Path
 
+from argus import conventions
+from argus.board.filecommit import file_transaction
 from argus.phases.evidence import (
     INDEX_HEAD_RE,
     INDEX_ROW_RE,
@@ -73,11 +75,11 @@ def audit(
 
 
 def _annotate_index_complete(
-    _repo: str | Path,
+    repo: str | Path,
     phases: str | Path | None,
     drifted: list[tuple[int, Path]],
 ) -> tuple[int, int]:
-    """Mark each named phase's index.md entry Complete, in place.
+    """Mark each named phase's index.md entry Complete.
 
     Two shapes exist and they need different edits:
 
@@ -92,16 +94,70 @@ def _annotate_index_complete(
     A row or heading that already says Complete is left alone, so this is safe
     to re-run. Anything not matching one of those shapes is reported, not
     guessed at.
+
+    When a phases repository, branch and remote are configured the edit is
+    committed and pushed through ``file_transaction``, so the write reaches
+    every machine through the phases branch rather than staying in one
+    checkout. Without that configuration the file is written where it lies and
+    nothing is committed, which is what a plain local phases folder gets.
     """
     if phases is None:
         return 0, 0
     path = Path(phases) / "index.md"
-    try:
-        text = path.read_text()
-    except OSError as exc:
-        print(f"index: cannot read index.md ({exc})")
-        return 0, 0
     wanted = {f"{number:06d}" for number, _ in drifted}
+    owner = conventions.phases_repo(repo)
+    branch = conventions.setting("phases.branch", None)
+    remote = conventions.setting("phases.remote", None)
+    if owner is None or not branch or not remote:
+        try:
+            text = path.read_text()
+        except OSError as exc:
+            print(f"index: cannot read index.md ({exc})")
+            return 0, 0
+        annotated, applied, skipped = _apply_annotations(text, wanted)
+        if applied:
+            path.write_text(annotated)
+        return applied, skipped
+    try:
+        rel = path.resolve().relative_to(owner)
+    except ValueError:
+        print(f"index: {path} is outside the configured phases repository")
+        return 0, 0
+    applied = 0
+    skipped = 0
+
+    def write(checkout: Path) -> bool:
+        nonlocal applied, skipped
+        target = checkout / rel
+        try:
+            text = target.read_text()
+        except OSError as exc:
+            print(f"index: cannot read index.md ({exc})")
+            return False
+        annotated, applied, skipped = _apply_annotations(text, wanted)
+        if not applied:
+            return False
+        target.write_text(annotated)
+        return True
+
+    file_transaction(
+        owner,
+        remote,
+        branch,
+        [rel],
+        write,
+        "index: mark drifted phases Complete",
+    )
+    return applied, skipped
+
+
+def _apply_annotations(text: str, wanted: set[str]) -> tuple[str, int, int]:
+    """Return ``text`` with each named phase marked Complete, and the counts.
+
+    Pure: it reads nothing and writes nothing, so the same input always yields
+    the same output. That is what lets a transaction re-run it on the copy it
+    just fetched, where the drift it was told about may already be gone.
+    """
     lines = text.splitlines(keepends=True)
     # Column 0 is the phase number in every table here. The header labels it
     # "Slice" or "Phase" rather than a number, so the status column is tracked
@@ -140,9 +196,7 @@ def _annotate_index_complete(
         else:
             applied += 1
             out.append(new)
-    if applied:
-        path.write_text("".join(out))
-    return applied, skipped
+    return "".join(out), applied, skipped
 
 
 def _is_header_row(cells: list[str]) -> bool:

@@ -272,4 +272,4 @@ def _base_revisions(root: Path, private: Path) -> dict[str, Any]:
     return {"public": public, "private": private_revision}
 
 
-__all__ = ["_base_revisions", "_transaction"]
+__all__ = ["_base_revisions", "_detached_worktree", "_transaction"]
