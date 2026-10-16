@@ -16,6 +16,7 @@ from argus.board.core import (
     ReservationFenced,
     _print_json,
 )
+from argus.board.git import isolate_self_test_git
 from argus.board.selftest_board import (
     _bad_phase_key_check,
     _deleted_state_check,
@@ -296,6 +297,11 @@ def self_test_checks() -> list[dict[str, Any]]:
 
 
 def self_test() -> int:
+    # Every fixture below is a scratch repository, and the git commands in it
+    # must answer to the fixture alone: a host global `core.hooksPath`, signing
+    # key, template, or alias must not change how long this takes or what it
+    # decides. Set once, here, so nothing below can run git first.
+    isolate_self_test_git()
     checks = self_test_checks()
     ok = all(item["ok"] for item in checks)
     # The named FAIL lines and the verdict go to stderr and the JSON record to

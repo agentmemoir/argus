@@ -6,6 +6,7 @@ import tempfile
 from pathlib import Path
 
 from argus import conventions
+from argus.board.git import isolate_self_test_git
 from argus.roadmap.select import _gitsync
 from argus.roadmap.selftest_board import _board_checks
 from argus.roadmap.selftest_evidence import _evidence_checks
@@ -16,6 +17,11 @@ from argus.roadmap.server import RoadmapSource
 
 
 def self_test() -> None:
+    # The board checks below build scratch repositories and run git in them, and
+    # they must answer to the fixture alone: a host global `core.hooksPath`,
+    # signing key, template, or alias must not change how long this takes or what
+    # it decides. Set before the first check, so nothing can run git first.
+    isolate_self_test_git()
     conventions.configure(
         {
             "repo-root": Path(),
