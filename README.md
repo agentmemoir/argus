@@ -28,7 +28,7 @@ The values:
 
 - `repo-root` — the project checkout; required.
 - `pipeline` — the pipeline file a tick runs; required.
-- `roadmap-dir` — the folder holding the work-item files; required.
+- `phases` — the phases repository holding the work-item files: `repo`, `directory`, `branch`, `remote`; required for the phase source.
 - `number-input`, `file-input` — the pipeline input names that carry the work-item number and file; optional, but a pipeline that declares those inputs needs them named.
 - `driver.provider` — the work source; required.
 - `driver.include` — the work-item file globs; required. `driver.exclude` — file names to ignore; optional.
@@ -40,7 +40,7 @@ The values:
 - `board.repo`, `board.file`, `board.branch`, `board.remote` — the shared board; required only when the `board` object is present.
 - `notify.profile`, `notify.channel`, `notify.disabled` — the notification target; required when the `notify` object is present. `notify.fallback`, `notify.heartbeat` — optional.
 
-The four override flags `--driver`, `--repo-root`, `--roadmap-dir`, and repeatable `--phase-glob` beat the file for one run. The readiness report prints every value with the flag-or-file source it came from.
+The four override flags `--driver`, `--repo-root`, `--phases-directory`, and repeatable `--phase-glob` beat the file for one run. The readiness report prints every value with the flag-or-file source it came from.
 
 ## Paths and ownership
 
@@ -60,7 +60,7 @@ Work-item files end in `.md`. The first number separated by `-` or `_` is the ph
 
 ## Program files
 
-`bin/argus` is the development command and `cli.py` is the installed one. Both call the same shell driver. The Python tools sit in role packages under `src/argus/`, each one a namespace package: `select/` picks the work (`next_phase.py`, `work_source.py`, `policy.py`, `group.py`), `roadmap/` is the roadmap work source (`source.py`), `board/` owns the board, the claim and the remedy record (`reservations.py`), `gitsync/` syncs checkouts and checks publication (`main.py`), `config/` reads settings (`cli.py`), and `notify/` formats notices (`notifications.py`). `conventions.py` and `exec_tempdir.py` sit at the package root.
+`bin/argus` is the development command and `cli.py` is the installed one. Both call the same shell driver. The Python tools sit in role packages under `src/argus/`, each one a namespace package: `select/` picks the work (`next_phase.py`, `work_source.py`, `policy.py`, `group.py`), `phases/` is the phases work source (`source.py`), `board/` owns the board, the claim and the remedy record (`reservations.py`), `gitsync/` syncs checkouts and checks publication (`main.py`), `config/` reads settings (`cli.py`), and `notify/` formats notices (`notifications.py`). `conventions.py` and `exec_tempdir.py` sit at the package root.
 
 The driver and its shell helpers sit in `driver/`: `phase-driver.sh` is the entry point and `lib-driver-*.sh` is one module per concern. `driver/lib-driver-group.sh` holds the group side of a tick: the member array a selection carries, the one branch the group publishes on, and the renewal the tick loop owes a running group.
 

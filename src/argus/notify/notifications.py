@@ -225,7 +225,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--config")
     parser.add_argument("--driver", dest="config_driver")
     parser.add_argument("--repo-root", dest="config_repo_root")
-    parser.add_argument("--roadmap-dir", dest="config_roadmap_dir")
+    parser.add_argument("--phases-directory", dest="config_phases_directory")
     parser.add_argument("--phase-glob", dest="config_phase_glob", action="append")
     return parser
 

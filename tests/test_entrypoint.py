@@ -3,8 +3,8 @@
 # SPDX-License-Identifier: Apache-2.0
 """Exercise an installed source copy against an unrelated, local-only project.
 
-The project's layout is deliberately unguessable: the roadmap sits at
-``foo/bar/roadmap`` and the board in a separate checkout. Every value the tick
+The project's layout is deliberately unguessable: the phases sits at
+``foo/bar/phases`` and the board in a separate checkout. Every value the tick
 needs comes from one configuration file, so nothing here relies on a folder name
 or on the caller's environment.
 """

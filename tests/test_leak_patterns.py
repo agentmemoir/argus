@@ -43,7 +43,7 @@ def test_each_pattern_actually_matches(pattern: re.Pattern[str], sample: str) ->
         'reason="token=secret-value"',
         "self.token_secret_cache = compute()",
         "HARNESS_TOKEN = 'harness'",
-        "the roadmap folder is /srv/plans",
+        "the phases folder is /srv/plans",
         "see docs/program-files.md for the map",
         "api_key_here_is_a_name_not_a_value",
     ],

@@ -14,7 +14,7 @@ The file's rules:
 
 - `repo-root` — the project checkout. Required.
 - `pipeline` — the pipeline file a tick runs. Required.
-- `roadmap-dir` — the folder holding the work-item files. Required.
+- `phases` — the phases repository the work-item files live in: `repo` (a separate checkout), `directory` (a folder inside it), `branch`, and `remote`, where Argus commits and pushes what it writes. Required for the phase source. The checkout must be its own repository, with a Git destination different from the public `repo-root`'s. The board and the phases are both private: they may share one Git destination, so one private checkout can hold both.
 - `number-input`, `file-input` — the pipeline input names that carry the work-item number and file. Optional, but a pipeline that declares those inputs needs them named.
 - `driver.provider` — the work source. Required. An `issues` block that holds only the trust keys (`trusted-authors`, `trusted-apps`, `trusted-associations`, `codeowners-file`, `resolve-teams`, `comment-trust`, `untrusted-comments`) is allowed for any provider; the issue-source keys still require the `issues` provider.
 - `driver.include` — the work-item file globs. Required. `driver.exclude` — file names to ignore. Optional.
@@ -37,7 +37,7 @@ The notification values belong to whoever receives the notices, so a configurati
 
 ## Overrides
 
-The four flags `--driver`, `--repo-root`, `--roadmap-dir`, and repeatable `--phase-glob` beat the file for one run. The readiness report prints every value with the flag-or-file source it came from.
+The four flags `--driver`, `--repo-root`, `--phases-directory`, and repeatable `--phase-glob` beat the file for one run. The readiness report prints every value with the flag-or-file source it came from.
 
 `machine.settings-file` loads one JSONC overlay before those flags. It may replace only keys already present in the base file. Paths from the overlay resolve against its own folder. The report marks these values as `overlay`.
 

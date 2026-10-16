@@ -50,10 +50,10 @@ class _FakeGitHub:
 
 def _sequence_fixture(base: Path, name: str) -> tuple[Path, str]:
     pub = _receipt_fixture(base, name)
-    roadmap = pub / BOARD_REL / "roadmap"
-    roadmap.mkdir(parents=True, exist_ok=True)
-    (roadmap / "phase-100020-cache-warm.md").write_text("# 20\n", encoding="utf-8")
-    (roadmap / "phase-100030-index-build.md").write_text("# 30\n", encoding="utf-8")
+    phases = pub / BOARD_REL / "phases"
+    phases.mkdir(parents=True, exist_ok=True)
+    (phases / "phase-100020-cache-warm.md").write_text("# 20\n", encoding="utf-8")
+    (phases / "phase-100030-index-build.md").write_text("# 30\n", encoding="utf-8")
     url = "https://github.com/example-org/example-repo/pull/7"
     _write_receipt(
         pub,

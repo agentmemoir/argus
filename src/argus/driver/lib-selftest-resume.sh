@@ -293,8 +293,8 @@ selftest_case_group_resume() {
   # The group's one branch, cut the way the group's first tick cuts it, so the
   # resume starts where a member of a half-run group really starts.
   "$PYTHON" "$ARGUS/gitsync/main.py" "${ARGUS_CONFIG_ARGS[@]}" --root "$REPO" \
-    --mode branch --phase 100030 --roadmap phase-100030-cache-read \
-    --roadmap-dir "$(roadmap_dir)" --group 100020 --group 100030 \
+    --mode branch --phase 100030 --phases phase-100030-cache-read \
+    --phases-directory "$(phases_dir)" --group 100020 --group 100030 \
     >"$RUN_DIR/group-cut.json" 2>&1 || rc=$?
   head="$(git -C "$REPO" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
   if [ "$rc" -eq 0 ] && [ "$head" = "$group_branch" ]; then
@@ -334,10 +334,10 @@ selftest_case_group_resume() {
 
   # A declaration the resume cannot read is refused, not read as "runs alone": a
   # resume that cannot see the group would cut exactly the wrong branch. One
-  # member naming a set the other does not is the malformed case the roadmap
+  # member naming a set the other does not is the malformed case the phases
   # reader refuses.
   wait_phase_window_gone
-  cat >"$REPO/$BOARD_DIR/plans/phase-100020-cache-warm.md" <<DOC
+  cat >"$REPO/phases-data/plans/phase-100020-cache-warm.md" <<DOC
 # 100020. Group member
 
 - [ ] Work to do.
@@ -346,13 +346,13 @@ selftest_case_group_resume() {
 
 \`together: 100020\`
 DOC
-  git -C "$REPO/$BOARD_DIR" add -A
-  git -C "$REPO/$BOARD_DIR" commit -q -m "roadmap: break the group declaration"
+  git -C "$REPO/phases-data" add -A
+  git -C "$REPO/phases-data" commit -q -m "phases: break the group declaration"
   launches="$(selftest_resume_launches)"
   printf '{"phase": "100030", "state": "blocked"}\n' >"$run_dir/run.json"
   selftest_resume_record 100030 "$rel" "$run_dir" blocked 1
   drive || true
-  # One logged line has to carry all three facts: the refusal, the roadmap
+  # One logged line has to carry all three facts: the refusal, the phases
   # reader's own words naming the document to fix, and the way out of the
   # refusal. A refusal that only says the group could not be read sends the
   # operator looking for the file.

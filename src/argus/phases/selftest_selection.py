@@ -8,30 +8,28 @@ from pathlib import Path
 from typing import Any
 
 from argus.board.reservations import CoordinationError, reservation_file
-from argus.roadmap.evidence import needs_decision, signals
-from argus.roadmap.queue import gate_block
-from argus.roadmap.selftest_fixture import (
+from argus.phases.evidence import needs_decision, signals
+from argus.phases.queue import gate_block
+from argus.phases.selftest_fixture import (
     BOARD_REL,
     _EmptyStore,
     _FailingStore,
     _FakeGateStore,
     _FakeStore,
 )
-from argus.roadmap.server import select_server_phase
+from argus.phases.server import select_server_phase
 
 
 def _selection_checks() -> None:
     """What the selector offers, waits for, skips, or refuses to claim."""
     with tempfile.TemporaryDirectory() as tmp:
         repo = Path(tmp).resolve()
-        (repo / "roadmap").mkdir()
+        (repo / "phases").mkdir()
         (repo / BOARD_REL).mkdir(parents=True)
         for number in (100440, 100460, 100601):
-            (repo / "roadmap" / f"phase-{number}-synthetic.md").write_text("x\\n")
+            (repo / "phases" / f"phase-{number}-synthetic.md").write_text("x\\n")
         fake = _FakeStore(private=repo / BOARD_REL)
-        got = select_server_phase(
-            repo, "server-01", store=fake, roadmap=repo / "roadmap"
-        )
+        got = select_server_phase(repo, "server-01", store=fake, phases=repo / "phases")
         assert got["state"] == "RESERVED" and got["phase"] == "100440", got
         fake.state["phases"]["100440"]["status"] = "completed"
         (repo / BOARD_REL / "runs" / "phase-100440").mkdir(parents=True, exist_ok=True)
@@ -45,9 +43,7 @@ def _selection_checks() -> None:
             "generation": 1,
             "run_id": "phase-100601",
         }
-        got = select_server_phase(
-            repo, "server-01", store=fake, roadmap=repo / "roadmap"
-        )
+        got = select_server_phase(repo, "server-01", store=fake, phases=repo / "phases")
         assert got["state"] == "RESERVED" and got["phase"] == "100460", got
         fake.state["phases"]["100460"]["status"] = "completed"
         (repo / BOARD_REL / "runs" / "phase-100460").mkdir(parents=True, exist_ok=True)
@@ -55,7 +51,7 @@ def _selection_checks() -> None:
             json.dumps({"state": "completed"})
         )
         got = select_server_phase(
-            repo, "server-01", store=fake, reserve=False, roadmap=repo / "roadmap"
+            repo, "server-01", store=fake, reserve=False, phases=repo / "phases"
         )
         assert got["state"] == "WAIT_FOR_CLAIM" and got["phase"] == "100601", got
 
@@ -68,15 +64,15 @@ def _selection_checks() -> None:
         # the tick count. A tick on a phase nothing ever ran no longer retires
         # it: the box alone used to be enough, and a phase could be marked
         # finished with no run, no ledger and no receipt anywhere.
-        (repo / "roadmap" / "phase-100620-synthetic.md").write_text("x\\n")
+        (repo / "phases" / "phase-100620-synthetic.md").write_text("x\\n")
         (repo / BOARD_REL / "runs" / "phase-100601").mkdir(parents=True, exist_ok=True)
         (repo / BOARD_REL / "runs" / "phase-100601" / "run.json").write_text(
             json.dumps({"state": "rejected"})
         )
-        p601 = repo / "roadmap" / "phase-100601-synthetic.md"
+        p601 = repo / "phases" / "phase-100601-synthetic.md"
         p601.write_text("- [x] Required approval is obtained\n")
         got = select_server_phase(
-            repo, "server-01", store=fake, reserve=False, roadmap=repo / "roadmap"
+            repo, "server-01", store=fake, reserve=False, phases=repo / "phases"
         )
         assert got["state"] == "AVAILABLE" and got["phase"] == "100620", got
         p601.write_text("x\n")
@@ -87,13 +83,13 @@ def _selection_checks() -> None:
         (repo / BOARD_REL / "runs" / "phase-100601").mkdir(parents=True, exist_ok=True)
         fake.state["phases"]["100601"]["status"] = "completed"
         got = select_server_phase(
-            repo, "server-01", store=fake, reserve=False, roadmap=repo / "roadmap"
+            repo, "server-01", store=fake, reserve=False, phases=repo / "phases"
         )
         assert got["state"] == "COORDINATION_INCONSISTENT", got
 
         try:
             select_server_phase(
-                repo, "server-01", store=_FailingStore(), roadmap=repo / "roadmap"
+                repo, "server-01", store=_FailingStore(), phases=repo / "phases"
             )
             launch_refused = False
         except CoordinationError:
@@ -105,15 +101,13 @@ def _selection_checks() -> None:
         # and reported as an array. A phase with no declaration still selects
         # alone through the same path, which is the backward-compatible half.
         repo = Path(tmp).resolve()
-        (repo / "roadmap").mkdir()
+        (repo / "phases").mkdir()
         (repo / BOARD_REL).mkdir(parents=True)
         together = "### Reservation Group\n\n`together: 100010, 100020, 100030`\n"
         for number in (100010, 100020, 100030):
-            (repo / "roadmap" / f"phase-{number}-synthetic.md").write_text(together)
+            (repo / "phases" / f"phase-{number}-synthetic.md").write_text(together)
         fake = _FakeStore(private=repo / BOARD_REL)
-        got = select_server_phase(
-            repo, "server-01", store=fake, roadmap=repo / "roadmap"
-        )
+        got = select_server_phase(repo, "server-01", store=fake, phases=repo / "phases")
         assert got["state"] == "RESERVED", got
         assert got["group"] == ["100010", "100020", "100030"], got
         assert [member["phase"] for member in got["members"]] == [
@@ -127,20 +121,18 @@ def _selection_checks() -> None:
             assert token["reservation_id"] == member["reservation_id"], token
         # The whole group is held now, so the same selection waits for it.
         got = select_server_phase(
-            repo, "server-01", store=fake, reserve=False, roadmap=repo / "roadmap"
+            repo, "server-01", store=fake, reserve=False, phases=repo / "phases"
         )
         assert got["state"] == "WAIT_FOR_CLAIM", got
     with tempfile.TemporaryDirectory() as tmp:
         # A single phase that declares no group is still selected alone and
         # reported without a group array: the single-phase contract is intact.
         repo = Path(tmp).resolve()
-        (repo / "roadmap").mkdir()
+        (repo / "phases").mkdir()
         (repo / BOARD_REL).mkdir(parents=True)
-        (repo / "roadmap" / "phase-100010-plain.md").write_text("## 1. Objective\n")
+        (repo / "phases" / "phase-100010-plain.md").write_text("## 1. Objective\n")
         fake = _FakeStore(private=repo / BOARD_REL)
-        got = select_server_phase(
-            repo, "server-01", store=fake, roadmap=repo / "roadmap"
-        )
+        got = select_server_phase(repo, "server-01", store=fake, phases=repo / "phases")
         assert got["state"] == "RESERVED" and got["phase"] == "100010", got
         assert "members" not in got and "group" not in got, got
     with tempfile.TemporaryDirectory() as tmp:
@@ -150,14 +142,14 @@ def _selection_checks() -> None:
         # glide's "already finished" refusal, halting the line on every tick.
         # This is the phase-100878 wedge (issue #56).
         repo = Path(tmp).resolve()
-        (repo / "roadmap").mkdir()
+        (repo / "phases").mkdir()
         (repo / BOARD_REL / "runs").mkdir(parents=True)
         for number, state in (
             (100010, "rejected"),
             (100020, "remedy_escalated"),
             (100030, "completed"),
         ):
-            (repo / "roadmap" / f"phase-{number}-synthetic.md").write_text("x\n")
+            (repo / "phases" / f"phase-{number}-synthetic.md").write_text("x\n")
             run_dir = repo / BOARD_REL / "runs" / f"phase-{number:06d}"
             run_dir.mkdir(parents=True)
             (run_dir / "run.json").write_text(json.dumps({"state": state}))
@@ -167,7 +159,7 @@ def _selection_checks() -> None:
             "server-01",
             store=_EmptyStore(private=repo / BOARD_REL),
             reserve=False,
-            roadmap=repo / "roadmap",
+            phases=repo / "phases",
         )
         assert got["state"] == "NO_PHASE", got
         skipped: list[dict[str, Any]] = got.get("needs_decision") or []
@@ -178,9 +170,9 @@ def _selection_checks() -> None:
         assert needs_decision(repo, 100010) == "rejected"
         assert needs_decision(repo, 100030) is None
         assert (
-            signals(
-                repo, 100020, repo / "roadmap" / "phase-100020-synthetic.md", set()
-            )["needs_decision"]
+            signals(repo, 100020, repo / "phases" / "phase-100020-synthetic.md", set())[
+                "needs_decision"
+            ]
             is True
         )
     with tempfile.TemporaryDirectory() as tmp:
@@ -191,10 +183,10 @@ def _selection_checks() -> None:
         # choice makes the very same phase selectable with no other change.
 
         repo = Path(tmp).resolve()
-        (repo / "roadmap").mkdir()
+        (repo / "phases").mkdir()
         (repo / BOARD_REL).mkdir(parents=True)
-        (repo / "roadmap" / "index.md").write_text("Plan ready\n")
-        gate_plan = repo / "roadmap" / "phase-100440-gated.md"
+        (repo / "phases" / "index.md").write_text("Plan ready\n")
+        gate_plan = repo / "phases" / "phase-100440-gated.md"
         gate_plan.write_text(
             "## 1. Objective\n"
             "### Sources\n"
@@ -208,7 +200,7 @@ def _selection_checks() -> None:
         )
         store = _FakeGateStore(private=repo / BOARD_REL)
         got = select_server_phase(
-            repo, "server-01", store=store, roadmap=repo / "roadmap"
+            repo, "server-01", store=store, phases=repo / "phases"
         )
         assert got["state"] == "BLOCKED_ON_GATE", got
         assert got["phase"] == "100440", got
@@ -229,7 +221,7 @@ def _selection_checks() -> None:
             "| Option 1 | Option 2 |\n"
         )
         got = select_server_phase(
-            repo, "server-01", store=store, roadmap=repo / "roadmap"
+            repo, "server-01", store=store, phases=repo / "phases"
         )
         assert got["state"] == "RESERVED" and got["phase"] == "100440", got
         assert store.reserved == [100440], store.reserved

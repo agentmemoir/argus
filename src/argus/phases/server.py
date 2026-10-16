@@ -14,19 +14,19 @@ from argus.board.reservations import (
     reservation_file,
     save_reservation_file,
 )
-from argus.roadmap.evidence import (
+from argus.phases.evidence import (
     index_complete,
     is_done,
     needs_decision,
     reported_path,
-    resolve_roadmap,
+    resolve_phases,
     signals,
 )
-from argus.roadmap.group import resolve_group_or_none
-from argus.roadmap.index import audit
-from argus.roadmap.queue import candidates, gate_block, select_next
-from argus.roadmap.runstate import run_abandoned
-from argus.roadmap.select import _awaiting_review, _reservation_result, _select_group
+from argus.phases.group import resolve_group_or_none
+from argus.phases.index import audit
+from argus.phases.queue import candidates, gate_block, select_next
+from argus.phases.runstate import run_abandoned
+from argus.phases.select import _awaiting_review, _reservation_result, _select_group
 from argus.select.work_source import WorkSource, WorkSourceError
 
 
@@ -36,7 +36,7 @@ def select_server_phase(
     *,
     reserve: bool = True,
     store: Any = None,
-    roadmap: str | Path | None = None,
+    phases: str | Path | None = None,
 ) -> dict[str, Any]:
     """Select the lowest incomplete phase and claim it on the shared board.
 
@@ -77,7 +77,7 @@ def select_server_phase(
             raise
         store.migrate_board()
         state, _commit = store.read()
-    index_done = index_complete(repo, roadmap)
+    index_done = index_complete(repo, phases)
     reviews: list[dict[str, Any]] = []
     decisions: list[dict[str, Any]] = []
 
@@ -117,7 +117,7 @@ def select_server_phase(
         if error is not None:
             result["error"] = error
         try:
-            declared = resolve_group_or_none(repo, roadmap, number)
+            declared = resolve_group_or_none(repo, phases, number)
         except WorkSourceError as exc:
             return {
                 "state": "GROUP_UNAVAILABLE",
@@ -129,7 +129,7 @@ def select_server_phase(
             result["group"] = list(declared["group"])
         return result
 
-    for number, path in candidates(repo, roadmap):
+    for number, path in candidates(repo, phases):
         key = f"{number:06d}"
         record = state.get("phases", {}).get(key)
         done = is_done(repo, number, path, index_done)
@@ -237,7 +237,7 @@ def select_server_phase(
         # phase whose document declares no group is selected alone, as before,
         # so the single-phase contract is unchanged for it.
         try:
-            group = resolve_group_or_none(repo, roadmap, number)
+            group = resolve_group_or_none(repo, phases, number)
         except WorkSourceError as exc:
             result = {
                 "state": "GROUP_UNAVAILABLE",
@@ -303,22 +303,22 @@ def select_server_phase(
     return finish({"state": "NO_PHASE"})
 
 
-class RoadmapSource(WorkSource):
-    """Work from the phase files in a roadmap folder.
+class PhasesSource(WorkSource):
+    """Work from the phase files in a phases folder.
 
     ``select`` is the whole contract the driver depends on; the rest is the
-    roadmap's own reporting, which the selector's diagnostic flags drive.
+    phases's own reporting, which the selector's diagnostic flags drive.
 
     An instance is built once per invocation and holds the folder it resolved,
     so no caller re-derives the layout and two parts of one tick cannot end up
     reading different folders.
     """
 
-    name = "roadmap"
+    name = "phases"
 
-    def __init__(self, repo: str | Path, roadmap: str | Path | None = None) -> None:
+    def __init__(self, repo: str | Path, phases: str | Path | None = None) -> None:
         self.repo = Path(repo)
-        self.roadmap = resolve_roadmap(self.repo, roadmap)
+        self.phases = resolve_phases(self.repo, phases)
 
     def select(
         self,
@@ -329,22 +329,22 @@ class RoadmapSource(WorkSource):
     ) -> dict[str, Any]:
         """Return the next claimable phase as a result dict, claiming it."""
         return select_server_phase(
-            self.repo, machine_id, reserve=reserve, store=store, roadmap=self.roadmap
+            self.repo, machine_id, reserve=reserve, store=store, phases=self.phases
         )
 
     def select_next(self) -> tuple[int, Path] | None:
         """The lowest incomplete phase, or None. Never claims anything."""
-        return select_next(self.repo, self.roadmap)
+        return select_next(self.repo, self.phases)
 
     def candidates(self) -> list[tuple[int, Path]]:
         """Every runnable phase file, lowest number first."""
-        return candidates(self.repo, self.roadmap)
+        return candidates(self.repo, self.phases)
 
     def index_complete(self) -> set[int]:
-        return index_complete(self.repo, self.roadmap)
+        return index_complete(self.repo, self.phases)
 
     def signals(self, item: tuple[int, Path]) -> dict[str, bool]:
         return signals(self.repo, item[0], item[1], self.index_complete())
 
     def audit(self, apply_index: bool = False) -> int:
-        return audit(self.repo, self.roadmap, apply_index=apply_index)
+        return audit(self.repo, self.phases, apply_index=apply_index)

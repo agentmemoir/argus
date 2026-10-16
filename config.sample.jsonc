@@ -24,8 +24,26 @@
   // The pipeline file that gets run. Required. Relative to this file.
   "pipeline": "pipeline.yaml",
 
-  // The folder holding the work-item files. Required. Relative to this file.
-  "roadmap-dir": "plans",
+  // The phases repository: where the work-item files live, and where Argus
+  // commits and pushes what it writes there (the index, mainly). Required for
+  // the phase source. It is a peer of the board, so it needs its own checkout,
+  // branch and remote. Its Git destination must differ from the public
+  // repo-root's; the board and the phases may share one checkout instead.
+  "phases": {
+    // The checkout that owns the phases. Relative here, so it is this file's
+    // folder plus "project/phases". A submodule folder works too: name the
+    // submodule. This is a separate checkout nested in the project.
+    "repo": "./project/phases",
+
+    // The folder inside that checkout holding the work-item files. Required.
+    "directory": "plans",
+
+    // Where Argus commits and pushes the phases. Required. Every machine that
+    // writes phases names the same branch and remote, because two branches are
+    // two phase sets.
+    "branch": "main",
+    "remote": "origin"
+  },
 
   // The pipeline input names that carry the work-item number and file. Optional,
   // but a pipeline that declares inputs needs them named.
@@ -33,8 +51,8 @@
   "file-input": "phase_file",
 
   "driver": {
-    // Which work source runs the queue. Required: "phase" for a roadmap, or
-    // "issues" for a GitHub issue backlog (see docs/issues.md).
+    // Which work source runs the queue. Required: "phase" for the phases
+    // folder, or "issues" for a GitHub issue backlog (see docs/issues.md).
     "provider": "phase",
 
     // The work-item files to consider, as globs. Required. A list, so more than

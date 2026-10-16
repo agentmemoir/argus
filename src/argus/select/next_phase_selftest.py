@@ -9,14 +9,14 @@ import tempfile
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
-from argus.roadmap.source import self_test as roadmap_source_self_test
+from argus.phases.source import self_test as phases_source_self_test
 from argus.select.next_phase import main
 from argus.select.work_source import WorkSourceError, resolve
 from argus.select.work_source import self_test as work_source_self_test
 
 
 def self_test() -> None:
-    roadmap_source_self_test()
+    phases_source_self_test()
     work_source_self_test()
     _self_test_configuration()
     _self_test_group_query()
@@ -41,26 +41,26 @@ def _self_test_configuration() -> None:
         repo.mkdir()
         elsewhere = Path(tmp) / "elsewhere"
         elsewhere.mkdir()
-        (repo / "roadmap").mkdir()
-        (repo / "roadmap" / "index.md").write_text("Plan ready\n")
-        (repo / "roadmap" / "phase-100440-first.md").write_text(
+        (repo / "phases").mkdir()
+        (repo / "phases" / "index.md").write_text("Plan ready\n")
+        (repo / "phases" / "phase-100440-first.md").write_text(
             "- [ ] Required approval is obtained.\n"
         )
 
-        # Unconfigured is the roadmap source reading the derived folder, which
+        # Unconfigured is the phases source reading the derived folder, which
         # is what the source returns when the caller gives it a folder.
-        default = resolve(None, repo, repo / "roadmap")
-        assert default.name == "roadmap", default.name
-        assert default.roadmap == repo / "roadmap", default.roadmap
+        default = resolve(None, repo, repo / "phases")
+        assert default.name == "phases", default.name
+        assert default.phases == repo / "phases", default.phases
 
         # Named explicitly, the same source is chosen.
-        assert resolve("roadmap", repo, repo / "roadmap").name == "roadmap"
+        assert resolve("phases", repo, repo / "phases").name == "phases"
 
         # A folder inside the repository is read instead of the derived one.
         named = repo / "named"
         named.mkdir()
         (named / "phase-100450-named.md").write_text("x\n")
-        assert resolve("roadmap", repo, named).roadmap == named
+        assert resolve("phases", repo, named).phases == named
 
         # A relative configured folder resolves against the repository root and
         # not the working directory. Cron starts the driver from an arbitrary
@@ -68,10 +68,10 @@ def _self_test_configuration() -> None:
         # must never disagree about which folder a name refers to.
         os.chdir(elsewhere)
         try:
-            resolved = resolve("roadmap", repo, "named")
+            resolved = resolve("phases", repo, "named")
         finally:
             os.chdir(repo)
-        assert resolved.roadmap == named, resolved.roadmap
+        assert resolved.phases == named, resolved.phases
 
         # A name nobody recognises is refused, and the refusal names what is
         # available rather than falling back to a source that would work.
@@ -80,17 +80,17 @@ def _self_test_configuration() -> None:
             refused = False
         except WorkSourceError as exc:
             refused = True
-            assert "roadmap" in str(exc), exc
+            assert "phases" in str(exc), exc
         assert refused, "an unknown work source must not fall back"
 
         # A folder that cannot be read stops the tick, with the folder named.
         try:
-            resolve("roadmap", repo, repo / "absent")
+            resolve("phases", repo, repo / "absent")
             refused = False
         except WorkSourceError as exc:
             refused = True
             assert "absent" in str(exc), exc
-        assert refused, "an unreadable roadmap folder must not fall back"
+        assert refused, "an unreadable phases folder must not fall back"
 
     # main() turns both refusals into exit 2 with a message on stderr and
     # nothing on stdout, so a caller reading the result sees an error and not
@@ -100,8 +100,8 @@ def _self_test_configuration() -> None:
         for argv, expected in (
             (["--repo", tmp, "--source", "unknown-source"], "unknown work source"),
             (
-                ["--repo", tmp, "--roadmap", str(Path(tmp) / "absent")],
-                "configured roadmap folder",
+                ["--repo", tmp, "--phases", str(Path(tmp) / "absent")],
+                "configured phases folder",
             ),
         ):
             out, err = io.StringIO(), io.StringIO()
@@ -111,7 +111,7 @@ def _self_test_configuration() -> None:
                     _settings={
                         "repo-root": Path(tmp),
                         "pipeline": None,
-                        "roadmap-dir": Path(tmp) / "roadmap",
+                        "phases.directory": Path(tmp) / "phases",
                         "driver.include": ["phase-*.md"],
                         "driver.exclude": [],
                         "driver.runs": Path(tmp) / "runs",
@@ -128,14 +128,14 @@ def _self_test_configuration() -> None:
     # every other glob.
     with tempfile.TemporaryDirectory() as tmp:
         repo = Path(tmp)
-        (repo / "roadmap").mkdir()
-        (repo / "roadmap" / "phase-100460-first.md").write_text(
+        (repo / "phases").mkdir()
+        (repo / "phases" / "phase-100460-first.md").write_text(
             "- [ ] Required approval is obtained.\n"
         )
-        (repo / "roadmap" / "work-100461-renamed.md").write_text(
+        (repo / "phases" / "work-100461-renamed.md").write_text(
             "- [ ] Required approval is obtained.\n"
         )
-        (repo / "roadmap" / "work-100462-skip.md").write_text(
+        (repo / "phases" / "work-100462-skip.md").write_text(
             "- [ ] Required approval is obtained.\n"
         )
         out, err = io.StringIO(), io.StringIO()
@@ -145,9 +145,9 @@ def _self_test_configuration() -> None:
                     "--repo",
                     str(repo),
                     "--source",
-                    "roadmap",
-                    "--roadmap",
-                    str(repo / "roadmap"),
+                    "phases",
+                    "--phases",
+                    str(repo / "phases"),
                     "--verbose",
                     "--phase-glob",
                     "phase-*.md",
@@ -157,7 +157,7 @@ def _self_test_configuration() -> None:
                 _settings={
                     "repo-root": repo,
                     "pipeline": None,
-                    "roadmap-dir": repo / "roadmap",
+                    "phases.directory": repo / "phases",
                     "driver.include": ["ignored-*.md"],
                     "driver.exclude": ["work-100462-skip.md"],
                     "driver.runs": repo / "runs",
@@ -171,7 +171,7 @@ def _self_test_configuration() -> None:
 
 
 def _self_test_group_query() -> None:
-    """The read-only group query answers from the roadmap and needs no board.
+    """The read-only group query answers from the phases and needs no board.
 
     The settings below name no board at all. That absence is the proof that
     matters: if the query reached the board it would fail on the missing
@@ -180,20 +180,20 @@ def _self_test_group_query() -> None:
     """
     with tempfile.TemporaryDirectory() as tmp:
         repo = Path(tmp).resolve()
-        roadmap = repo / "roadmap"
-        roadmap.mkdir()
+        phases = repo / "phases"
+        phases.mkdir()
         for number in (100010, 100020, 100030):
-            (roadmap / f"phase-{number}-x.md").write_text(
+            (phases / f"phase-{number}-x.md").write_text(
                 "### Reservation Group\n\n`together: 100010, 100020, 100030`\n"
             )
-        (roadmap / "phase-100040-y.md").write_text("## 1. Objective\n")
+        (phases / "phase-100040-y.md").write_text("## 1. Objective\n")
         rundir = repo / "runs" / "phase-100010"
         rundir.mkdir(parents=True)
         (rundir / "run.json").write_text(json.dumps({"state": "completed"}))
         settings = {
             "repo-root": repo,
             "pipeline": None,
-            "roadmap-dir": roadmap,
+            "phases.directory": phases,
             "driver.include": ["phase-*.md"],
             "driver.exclude": [],
             "driver.runs": repo / "runs",

@@ -87,7 +87,7 @@ FAULTS = (
         {
             "name": "publisher-lookup-answers-nothing-found",
             "breaks": "the selector answers without its bundled publisher",
-            "file": "src/argus/roadmap/select.py",
+            "file": "src/argus/phases/select.py",
             "find": "        from argus.gitsync.review import awaiting_review",
             "replace": "        return None  # FAULT: publisher unavailable but lookup succeeds\n        from argus.gitsync.review import awaiting_review",
             "cases": "recovery_sources",
@@ -97,7 +97,7 @@ FAULTS = (
             "name": "group-declaration-missing-swallowed",
             "breaks": "a phase with no together declaration is handed a group of "
             "itself instead of being refused",
-            "file": "src/argus/roadmap/group.py",
+            "file": "src/argus/phases/group.py",
             "find": "        raise ReservationGroupMissing(\n"
             "            f\"{path} has no '### Reservation Group' section\", document=path\n"
             "        )",
@@ -168,7 +168,7 @@ FAULTS = (
             "breaks": "a group's one branch is not asked for, so each member gets a "
             "branch of its own and the group publishes several",
             "file": "src/argus/gitsync/mode_branch.py",
-            "find": "        branch=group_branch(root, group, roadmap_dir) if group "
+            "find": "        branch=group_branch(root, group, phases_dir) if group "
             "else None,",
             "replace": "        branch=None,  # FAULT: the group's one branch is not used",
             "check": "driver",

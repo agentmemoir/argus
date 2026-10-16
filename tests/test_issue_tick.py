@@ -107,7 +107,6 @@ def backlog(tmp_path: Path, exec_dir: Path) -> Path:
             {
                 "repo-root": str(root),
                 "pipeline": str(board / "flow.yaml"),
-                "roadmap-dir": str(board),
                 "number-input": "issue_number",
                 "file-input": "issue_file",
                 "driver": {
@@ -283,7 +282,7 @@ def test_phase_machine_without_a_board_still_refuses_cleanly() -> None:
             "--config",
             str(ROOT / "examples/argus-config.jsonc"),
             "--source",
-            "roadmap",
+            "phases",
             "--server",
             "--machine-id",
             MACHINE,

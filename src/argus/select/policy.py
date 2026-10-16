@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
 # SPDX-License-Identifier: Apache-2.0
-"""Shared phase policy for the private roadmap pipeline.
+"""Shared phase policy for the private phases pipeline.
 
 Two independent rules live here:
 
-* Phase *numbers* at or above ``PARKED_PHASE_FLOOR`` are roadmap-only artifacts.
-  They stay visible in the roadmap and index for planning, but the pipeline
+* Phase *numbers* at or above ``PARKED_PHASE_FLOOR`` are phases-only artifacts.
+  They stay visible in the phases and index for planning, but the pipeline
   selector never picks them and the runner refuses to launch them.
 
 * Phase *decision gates* are declared in each plan's ``### Decision Gates``
   section and carry a state. An ``open`` gate means the owner owes a decision,
-  and the phase is not runnable. This is defined in ``roadmap/decision-gates.md``.
+  and the phase is not runnable. This is defined in ``phases/decision-gates.md``.
 
 The gate check is read-only. It reports; it does not gate selection, because
 wiring it into the selector changes which phases run and needs its own decision.
@@ -139,10 +139,10 @@ def phase_gates_blocked(path: str | pathlib.Path) -> bool:
     return state == "open"
 
 
-def scan_gates(roadmap_dir: str | pathlib.Path) -> dict[str, tuple[str, str, str]]:
+def scan_gates(phases_dir: str | pathlib.Path) -> dict[str, tuple[str, str, str]]:
     """Return ``{phase_number: (state, detail, filename)}`` for every plan."""
     found: dict[str, tuple[str, str, str]] = {}
-    for entry in phase_paths(roadmap_dir):
+    for entry in phase_paths(phases_dir):
         parts = phase_file_parts(entry)
         if parts is None or not entry.is_file():
             continue
@@ -161,11 +161,11 @@ def main(argv: list[str] | None = None) -> int:
         help="list phases whose decision gates are not runnable",
     )
     parser.add_argument(
-        "--roadmap",
-        "--roadmap-dir",
-        dest="config_roadmap_dir",
+        "--phases",
+        "--phases-directory",
+        dest="config_phases_directory",
         default=None,
-        help="roadmap directory for this run",
+        help="phases directory for this run",
     )
     parser.add_argument("--config")
     parser.add_argument("--driver", dest="config_driver")
@@ -185,8 +185,10 @@ def main(argv: list[str] | None = None) -> int:
         print(f"phase policy: {exc}", file=sys.stderr)
         return 2
 
-    roadmap = pathlib.Path(conventions.setting("roadmap-dir"))
-    gates = scan_gates(roadmap)
+    phases = conventions.require_phases_folder(
+        pathlib.Path(conventions.setting("repo-root")).resolve()
+    )
+    gates = scan_gates(phases)
     blocked = {n: v for n, v in gates.items() if v[0] == "open"}
     unknown = {n: v for n, v in gates.items() if v[0] == "unknown"}
     shown = gates if args.all else blocked

@@ -79,7 +79,7 @@ def test_cli_flag_beats_file():
                 "--phase-glob",
                 "work-*.md",
                 "--driver",
-                "roadmap",
+                "phases",
                 "--format",
                 "shell",
             ],
@@ -88,7 +88,7 @@ def test_cli_flag_beats_file():
         check(result.returncode == 0, result.stderr)
         check("ARGUS_SOURCE_REPO='flag'" in result.stdout, result.stdout)
         check(f"REPO={shlex.quote(str(other))}" in result.stdout, result.stdout)
-        check("DRIVER=roadmap" in result.stdout, result.stdout)
+        check("DRIVER=phases" in result.stdout, result.stdout)
         check("PHASE_INCLUDE=( 'work-*.md' )" in result.stdout, result.stdout)
 
 

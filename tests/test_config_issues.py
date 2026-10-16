@@ -65,9 +65,9 @@ def test_issue_optional_defaults_are_visible_only_on_issue_machines(
     assert config.source("issues.preference") == "file"
     assert config.source("issues.announce") == "default"
     assert config.get("issues.task-dir") == tmp_path / "project/runs/issue-tasks"
-    roadmap = cfgmod.load(write(tmp_path, json.dumps(BASE)))
-    assert not any(key.startswith("issues.") for key in roadmap.values)
-    assert roadmap.get("board.issues-file") is None
+    phases = cfgmod.load(write(tmp_path, json.dumps(BASE)))
+    assert not any(key.startswith("issues.") for key in phases.values)
+    assert phases.get("board.issues-file") is None
 
 
 @pytest.mark.parametrize(
@@ -92,8 +92,8 @@ def test_issue_provider_needs_issue_object_and_board(
         cfgmod.load(write(tmp_path, json.dumps(document)))
 
 
-@pytest.mark.parametrize("provider", ["phase", "roadmap"])
-def test_roadmap_provider_rejects_issue_object(tmp_path: Path, provider: str) -> None:
+@pytest.mark.parametrize("provider", ["phase", "phases"])
+def test_phases_provider_rejects_issue_object(tmp_path: Path, provider: str) -> None:
     document = issue_document()
     document["driver"]["provider"] = provider
     with pytest.raises(cfgmod.ConfigError, match="contradicts.*driver.provider"):

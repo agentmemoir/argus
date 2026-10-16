@@ -72,14 +72,14 @@ group_take_selection() {
 # A declaration that cannot be read is refused rather than read as "runs alone":
 # a resume that cannot see the group would cut exactly the wrong branch.
 #
-# Sets GROUP_ERROR to the roadmap reader's own words when the declaration cannot
+# Sets GROUP_ERROR to the phases reader's own words when the declaration cannot
 # be read. The refusal an operator reads is the only signal a halted line gives,
 # and the reader's message names the document to fix, so it travels with the
 # refusal instead of stopping at the driver's error stream.
 group_take_declared() {   # <number>
   local declared
   GROUP_ERROR=""
-  if ! declared="$("$PYTHON" - "$ARGUS" "$REPO" "$1" "$(roadmap_dir)" \
+  if ! declared="$("$PYTHON" - "$ARGUS" "$REPO" "$1" "$(phases_dir)" \
     "${ARGUS_CONFIG_ARGS[@]}" <<'PY'
 import json
 import sys
@@ -89,13 +89,13 @@ import _bootstrap
 from argus import conventions
 
 conventions.configure_from_cli(sys.argv[5:])
-from argus.roadmap import source as roadmap_source
+from argus.phases import source as phases_source
 
 try:
-    group = roadmap_source.resolve_group_or_none(
+    group = phases_source.resolve_group_or_none(
         sys.argv[2], sys.argv[4], int(sys.argv[3])
     )
-except roadmap_source.ReservationGroupError as exc:
+except phases_source.ReservationGroupError as exc:
     # The reason goes to stdout, which is what the caller reads. On stderr it
     # would be lost to the caller and the refusal would keep the vaguer words
     # below. A fault this reader did not expect still reaches stderr, as a
@@ -116,7 +116,7 @@ group_active() {
   [ -n "${GROUP_MEMBERS:-}" ]
 }
 
-# The roadmap file of the phase this tick launches.
+# The phases file of the phase this tick launches.
 #
 # A group's selection names the member to launch, and that member's own file is
 # what the launch needs. The selection's `phase` and its `path` are separate
@@ -140,7 +140,7 @@ print(resolve_phase_file(sys.argv[2], int(sys.argv[3])) or "")
 PY
 }
 
-# Resolve the member this tick launches to its own roadmap file.
+# Resolve the member this tick launches to its own phases file.
 #
 # Sets GROUP_MEMBER_REL and returns non-zero when the member has no document. A
 # member whose file cannot be found is the one failure this tick cannot recover

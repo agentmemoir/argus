@@ -8,14 +8,14 @@ import subprocess
 import sys
 from pathlib import Path
 
-from config_fixture import BASE, write
+from config_fixture import BASE, PHASES_LOCAL, write
 
 DRIVER = Path(__file__).resolve().parents[1] / "src/argus/driver/phase-driver.sh"
 
 
 def test_public_maintenance_mode_settles_a_halted_idle_tick(tmp_path: Path) -> None:
     config = copy.deepcopy(BASE)
-    config.update({"repo-root": ".", "roadmap-dir": "plans"})
+    config.update({"repo-root": ".", "phases": {**PHASES_LOCAL, "repo": "project"}})
     config["commands"]["python"] = sys.executable
     (tmp_path / "plans").mkdir()
     (tmp_path / "pipeline.yaml").write_text(

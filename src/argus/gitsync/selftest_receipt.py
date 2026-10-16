@@ -111,15 +111,15 @@ def _group_publication_check(base: Path) -> tuple[bool, str]:
         exclude.write("runs/.driver/\n")
     # The declaration lives in the phase documents, so where a group is read
     # from is where it has to be written.
-    roadmap = nested / "roadmap"
-    roadmap.mkdir(parents=True, exist_ok=True)
+    phases = nested / "phases"
+    phases.mkdir(parents=True, exist_ok=True)
     for number, behaviour in ((100020, "cache-warm"), (100030, "cache-read")):
-        (roadmap / f"phase-{number:06d}-{behaviour}.md").write_text(
+        (phases / f"phase-{number:06d}-{behaviour}.md").write_text(
             f"# {number}. Group member\n\n- [ ] Work to do.\n\n"
             "### Reservation Group\n\n`together: 100020, 100030`\n",
             encoding="utf-8",
         )
-    _configure_self_test(pub, nested, roadmap=roadmap)
+    _configure_self_test(pub, nested, phases=phases)
     members = ["100020", "100030"]
     try:
         from argus.board.reservations import ReservationStore, save_reservation_file
@@ -241,9 +241,9 @@ def _portable_publication_check(base: Path) -> tuple[bool, str]:
         run = private / "artifacts" / f"item-{phase:06d}"
         run.parent.mkdir()
         (private / "runs" / f"phase-{phase:06d}").rename(run)
-        roadmap = private / "plans"
-        roadmap.mkdir()
-        document = roadmap / f"release_{phase}_generic-release.md"
+        phases = private / "plans"
+        phases.mkdir()
+        document = phases / f"release_{phase}_generic-release.md"
         document.write_text("generic release\n")
         pipeline = pub.parent / "custom-pipeline.yaml"
         pipeline.write_text(
@@ -255,7 +255,7 @@ def _portable_publication_check(base: Path) -> tuple[bool, str]:
             pub,
             private,
             pipeline=pipeline,
-            roadmap=roadmap,
+            phases=phases,
             runs=run.parent,
             include=("release_*.md",),
             number_input="ticket",

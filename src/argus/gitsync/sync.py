@@ -5,7 +5,7 @@
 from pathlib import Path
 from typing import Any
 
-from argus.conventions import board_repo
+from argus.conventions import board_repo, phases_repo
 from argus.gitsync.git import (
     FETCH_TIMEOUT_S,
     blocked,
@@ -144,53 +144,71 @@ def resync_integration(repo: str | Path, base: str | None = None) -> dict[str, A
     return _merge(info, repo, upstream, ahead, behind, abort_on_conflict=False)
 
 
+def _shared_destination(checkouts: dict[str, Path]) -> str | None:
+    """A reason the sync must refuse, or None when it can go ahead.
+
+    Only the public checkout must differ from the private ones. The board and
+    the phases may share one destination among themselves, so they are never
+    compared with each other. A checkout missing a fetch or push URL still
+    fails closed.
+    """
+    public_fetch = configured_remote_urls(checkouts["public"])
+    public_push = configured_remote_urls(checkouts["public"], push=True)
+    if not public_fetch or not public_push:
+        return (
+            "cannot prove separate Git destinations for the public "
+            "repository; refusing to sync"
+        )
+    for role, path in checkouts.items():
+        if role == "public":
+            continue
+        fetch = configured_remote_urls(path)
+        push = configured_remote_urls(path, push=True)
+        if not fetch or not push:
+            return (
+                f"cannot prove separate Git destinations for the {role} "
+                "repository; refusing to sync"
+            )
+        if public_push & push or public_push & fetch or public_fetch & push:
+            return (
+                f"public and {role} repositories share a Git push/fetch "
+                "destination; refusing to sync"
+            )
+    return None
+
+
 def sync_all(root: str | Path, mode: str, branch: str | None = None) -> dict[str, Any]:
-    """Sync the public checkout and the nested private checkout, if present.
+    """Sync the public checkout, the board, and the phases checkout, if present.
 
     ``branch`` is the branch the public checkout must be on, and it reaches that
-    checkout alone: the private one is read on the integration branch, so naming
-    a group branch for it would refuse it for no reason. A caller that names no
-    branch leaves the check comparing a checkout's own branch against itself,
-    which is what every caller did before a group could name a branch at all.
+    checkout alone: the board and the phases are read on their own branches, so
+    naming a group branch for them would refuse them for no reason. A caller
+    that names no branch leaves the check comparing a checkout's own branch
+    against itself, which is what every caller did before a group could name a
+    branch at all.
     """
     root = Path(root).resolve()
-    repos = [root]
+    checkouts: dict[str, Path] = {"public": root}
     nested = board_repo(root)
     if nested is not None and is_git_repo(nested):
-        repos.append(nested)
-    if nested is not None and len(repos) == 2:
-        public_fetch = configured_remote_urls(root)
-        public_push = configured_remote_urls(root, push=True)
-        private_fetch = configured_remote_urls(nested)
-        private_push = configured_remote_urls(nested, push=True)
-        if not public_fetch or not public_push or not private_fetch or not private_push:
-            reason = (
-                "cannot prove separate public/private Git destinations; "
-                "refusing to sync either checkout"
-            )
-            results = [blocked({"repo": str(r), "mode": mode}, reason) for r in repos]
+        checkouts["board"] = nested
+    phases = phases_repo(root)
+    if phases is not None and phases not in checkouts.values() and is_git_repo(phases):
+        checkouts["phases"] = phases
+    if len(checkouts) > 1:
+        reason = _shared_destination(checkouts)
+        if reason is not None:
+            results = [
+                blocked({"repo": str(path), "mode": mode}, reason)
+                for path in checkouts.values()
+            ]
             return {
                 "ok": False,
                 "mode": mode,
                 "repos": results,
                 "summary": summarize(results, mode),
             }
-        if (
-            public_push & private_push
-            or public_push & private_fetch
-            or public_fetch & private_push
-        ):
-            reason = (
-                "nested private repo and public repo share a Git "
-                "push/fetch destination; refusing to sync either checkout"
-            )
-            results = [blocked({"repo": str(r), "mode": mode}, reason) for r in repos]
-            return {
-                "ok": False,
-                "mode": mode,
-                "repos": results,
-                "summary": summarize(results, mode),
-            }
+    repos = list(checkouts.values())
     results = [sync_one(repos[0], mode, branch=branch)]
     results += [sync_one(r, mode) for r in repos[1:]]
     ok = all(r["ok"] for r in results)
@@ -210,7 +228,12 @@ def mode_resync(root: str | Path) -> dict[str, Any]:
     # which is named rather than dropped so the two stay distinguishable in the
     # run record.
     nested = board_repo(root)
-    targets = [root] + ([nested] if nested is not None and is_git_repo(nested) else [])
+    targets = [root]
+    if nested is not None and is_git_repo(nested):
+        targets.append(nested)
+    phases = phases_repo(root)
+    if phases is not None and phases not in targets and is_git_repo(phases):
+        targets.append(phases)
     repos = [resync_integration(r) for r in targets]
     ok = all(r["ok"] for r in repos)
     return {

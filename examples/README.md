@@ -9,8 +9,10 @@ examples/
   check-bin/glide                        # a stand-in used only by `make example-check`
   project/pipeline.yaml                  # the pipeline a tick runs
   project/stages/build.md                # the prompt for its one step
-  project/plans/phase-000001-example.md  # one work item
+  project/phases/plans/phase-000001-example.md  # one work item, committed in the phases checkout
 ```
+
+The configuration names `project/phases/` as the phases repository: a checkout of its own, with a Git remote that differs from the project's. The sample work item is committed at `project/phases/plans/`. `make example-check` creates that checkout's Git state (git-ignored), commits the work item there, and runs the code's own separation proof, so the example obeys the separation rule without committing a nested Git directory.
 
 ## Checking It
 
@@ -26,10 +28,10 @@ The configuration writes its run state under `examples/runs/`, which git ignores
 
 ```sh
 glide run --pipeline examples/project/pipeline.yaml \
-  --input ticket=1 --input document=examples/project/plans/phase-000001-example.md \
+  --input ticket=1 --input document=examples/project/phases/plans/phase-000001-example.md \
   --repo examples/project --dry-run
 ```
 
 ## Copying It
 
-Copy `argus-config.jsonc`, `machine.id`, and the `project/` folder next to your own pipeline and work items, then change every path. The configuration rules are in [docs/configuration.md](../docs/configuration.md), and the fields that name a command are yours to fill with your own toolchain.
+Copy `argus-config.jsonc`, `machine.id`, and the `project/` folder next to your own pipeline and work items, then change every path. Give the `project/phases/` folder a checkout of its own with a Git remote that differs from the project's. The configuration rules are in [docs/configuration.md](../docs/configuration.md), and the fields that name a command are yours to fill with your own toolchain.

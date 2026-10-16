@@ -5,7 +5,7 @@
 # Self-test cases: the reservation group, as the driver runs it.
 #
 # Every case here builds its own sub-fixture, because a group case needs a
-# roadmap whose lowest uncompleted phase is a member of a group, and the suite's
+# phases whose lowest uncompleted phase is a member of a group, and the suite's
 # own fixture is used by the cases around them. `selftest_group_begin` points the
 # suite at that sub-fixture and saves what it repoints; `selftest_group_end` puts
 # it back. The suite runs every case in one process, so a case that leaves a path
@@ -67,8 +67,8 @@ selftest_case_group_run() {
     && echo "ok: the group's next member was launched" \
     || { echo "FAIL: the group's next member was not launched"; fail=1; }
   grep -q "next phase: 100030 (.*phase-100030-cache-read.md)" "$LOG" \
-    && echo "ok: the tick named the member's own roadmap file" \
-    || { echo "FAIL: the member's own roadmap file is launched"; fail=1; }
+    && echo "ok: the tick named the member's own phases file" \
+    || { echo "FAIL: the member's own phases file is launched"; fail=1; }
   if [ -s "$GROUPFILE" ] && grep -qx 100020 "$GROUPFILE" \
       && grep -qx 100030 "$GROUPFILE"; then
     echo "ok: the tick recorded the group's whole array"

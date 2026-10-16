@@ -17,9 +17,9 @@ _drive_stub_selection() {
       # carries the launch path the driver now reads from the result. Its shape
       # is the whole of what matters here: DRIVER_STUB_RC means the launch is
       # stubbed and no file is opened, and a path taken from this machine's real
-      # roadmap would make the case depend on which phases it happens to have.
+      # phases would make the case depend on which phases it happens to have.
       local stub_dir stub_path
-      stub_dir="$(roadmap_dir)"
+      stub_dir="$(phases_dir)"
       stub_path="${stub_dir#"$REPO"/}/phase-$stub_phase-stub-fixture.md"
       selection="$(printf '{"state":"WAIT_FOR_CLAIM","phase":"%s","path":"%s","owner":"%s","status":"claimed","reservation_id":"rsv-stale-old","generation":"7"}' \
         "$stub_phase" "$stub_path" "$PHASE_MACHINE_ID")"

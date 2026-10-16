@@ -4,11 +4,11 @@
 
 A phase is done when the pipeline's own records say so, so this module reads
 them: the run record, the ledger, the publication receipt, the finalize log and
-the roadmap index. The approval box corroborates and never completes on its own,
+the phases index. The approval box corroborates and never completes on its own,
 and a phase the index calls Complete with no marker at all still counts as done,
 with a warning, so a finished phase is never silently re-run.
 
-The roadmap folder a machine was told to read is resolved here too, and a phase
+The phases folder a machine was told to read is resolved here too, and a phase
 file is reported here the way the driver must launch it.
 """
 
@@ -20,7 +20,7 @@ from typing import Any, cast
 
 from argus import conventions
 from argus.conventions import phase_run_dir
-from argus.roadmap.runstate import run_abandoned, run_unfinished
+from argus.phases.runstate import run_abandoned, run_unfinished
 from argus.select.policy import is_runnable_phase
 from argus.select.work_source import WorkSourceError
 
@@ -29,8 +29,8 @@ INDEX_HEAD_RE = re.compile(r"^#{2,3}\s*(\d{4,6})\.\s")
 APPROVAL = "Required approval is obtained"
 
 
-class RoadmapUnavailable(WorkSourceError):
-    """The roadmap folder this machine was told to read cannot be read.
+class PhasesUnavailable(WorkSourceError):
+    """The phases folder this machine was told to read cannot be read.
 
     A work-source error, so the driver stops this tick rather than reading a
     different folder, but a distinct type because a folder that cannot be read
@@ -38,8 +38,8 @@ class RoadmapUnavailable(WorkSourceError):
     """
 
 
-def resolve_roadmap(repo: str | Path, configured: str | Path | None = None) -> Path:
-    """The roadmap folder to read, or None when there is none to read.
+def resolve_phases(repo: str | Path, configured: str | Path | None = None) -> Path:
+    """The phases folder to read, or None when there is none to read.
 
     A configured folder is taken as the operator's word and is never second-
     guessed by falling back to something else: a machine pointed at a folder
@@ -53,12 +53,13 @@ def resolve_roadmap(repo: str | Path, configured: str | Path | None = None) -> P
     reported as an absolute path, because a launch inside this checkout cannot
     express a path to somewhere else; ``reported_path`` is where that happens.
     """
-    base = Path(configured or conventions.setting("roadmap-dir"))
-    if not base.is_absolute():
-        base = Path(repo) / base
+    folder = conventions.phases_folder(repo, configured)
+    if folder is None:
+        raise PhasesUnavailable("no phases repository is configured")
+    base = folder
     if not base.is_dir():
-        raise RoadmapUnavailable(
-            f"configured roadmap folder {base} is missing or is not a directory"
+        raise PhasesUnavailable(
+            f"configured phases folder {base} is missing or is not a directory"
         )
     return base
 
@@ -232,11 +233,11 @@ def finalize_log_done(
     return False
 
 
-def index_complete(_repo: str | Path, roadmap: str | Path | None) -> set[int]:
-    """Phase numbers marked Complete in roadmap/index.md."""
-    if roadmap is None:
+def index_complete(_repo: str | Path, phases: str | Path | None) -> set[int]:
+    """Phase numbers marked Complete in phases/index.md."""
+    if phases is None:
         return set()
-    path = Path(roadmap) / "index.md"
+    path = Path(phases) / "index.md"
     try:
         text = path.read_text(errors="replace")
     except OSError:

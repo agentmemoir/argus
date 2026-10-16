@@ -7,7 +7,7 @@
 # Run the work selector and return its stdout, with its stderr recorded.
 #
 # stderr is captured because that is where a refusal names its reason and
-# nowhere else does: an unknown source or an unreadable roadmap folder gives
+# nowhere else does: an unknown source or an unreadable phases folder gives
 # empty stdout and exit 2, so without this the log would say only that nothing
 # was selected and the operator would have to reproduce it by hand.
 #

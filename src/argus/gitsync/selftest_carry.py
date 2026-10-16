@@ -202,11 +202,11 @@ def _group_branch_collision_checks(base: Path) -> list[tuple[str, object, str]]:
     d = base / "group-name"
     d.mkdir()
     pub: Path = _init_remote(d, "group-name")[1]
-    roadmap = pub / "roadmap"
-    roadmap.mkdir()
-    _write_group_phases(roadmap, (100020, 100021), "cache-warm")
-    _write_group_phases(roadmap, (100040, 100041), "warm-cache")
-    _configure_self_test(pub, pub / BOARD_REL, roadmap=roadmap)
+    phases = pub / "phases"
+    phases.mkdir()
+    _write_group_phases(phases, (100020, 100021), "cache-warm")
+    _write_group_phases(phases, (100040, 100041), "warm-cache")
+    _configure_self_test(pub, pub / BOARD_REL, phases=phases)
     branch = group_branch(pub, mine)
     same: dict[str, Any] = assert_group_branch_unique(pub, branch, mine)
     results.append(
@@ -220,11 +220,11 @@ def _group_branch_collision_checks(base: Path) -> list[tuple[str, object, str]]:
     d = base / "group-name-clash"
     d.mkdir()
     pub = _init_remote(d, "group-name-clash")[1]
-    roadmap = pub / "roadmap"
-    roadmap.mkdir()
-    _write_group_phases(roadmap, (100020, 100021), "cache-warm")
-    _write_group_phases(roadmap, (100040, 100041), "cache-warm")
-    _configure_self_test(pub, pub / BOARD_REL, roadmap=roadmap)
+    phases = pub / "phases"
+    phases.mkdir()
+    _write_group_phases(phases, (100020, 100021), "cache-warm")
+    _write_group_phases(phases, (100040, 100041), "cache-warm")
+    _configure_self_test(pub, pub / BOARD_REL, phases=phases)
     clash: dict[str, Any] = assert_group_branch_unique(
         pub, branch, ["100040", "100041"]
     )

@@ -211,8 +211,8 @@ _drive_cut_branch() {
   # helper reports that as stays-on-integration-branch, so the two checkouts stay
   # distinguishable in the phase's own record.
   if [ -z "${DRIVER_STUB_COORDINATION:-}" ]; then
-    local roadmap_name
-    roadmap_name="$(basename "$rel" .md)"
+    local phases_name
+    phases_name="$(basename "$rel" .md)"
     # Return the checkout to the integration branch when the phase it is on is
     # already recorded as published. Its own step, on its own tick, because the
     # merge check writes the receipt before it moves the branch: when the move
@@ -232,7 +232,7 @@ _drive_cut_branch() {
     # after. Putting it behind `if ! cmd; then rc=$?` cannot work: the `!`
     # resets $? to 0 before the body runs, so the guard below saw success even
     # when the sync refused, and the phase launched anyway.
-    # --roadmap-dir as well as --roadmap: the first names the phase file's
+    # --phases-directory as well as --phases: the first names the phase file's
     # behaviour, and the second names the folder that file was chosen from.
     # gitsync's branch mode scans that folder to refuse a branch name another
     # phase in it would also earn, so without it the check runs against the
@@ -243,9 +243,9 @@ _drive_cut_branch() {
     # name is derived from the group's lowest member, so every tick of the group
     # asks for the same branch whichever member it is launching.
     "$PYTHON" "$ARGUS/gitsync/main.py" "${ARGUS_CONFIG_ARGS[@]}" --root "$REPO" \
-      --mode branch --phase "$number" --roadmap "$roadmap_name" \
+      --mode branch --phase "$number" --phases "$phases_name" \
       "${GITSYNC_KIND_ARGS[@]+"${GITSYNC_KIND_ARGS[@]}"}" \
-      --roadmap-dir "$(roadmap_dir)" \
+      --phases-directory "$(phases_dir)" \
       "${GROUP_ARGS[@]+"${GROUP_ARGS[@]}"}" \
       >"$RUN_DIR/phase-branch.json" 2>/dev/null
     local branch_rc=$?
@@ -289,7 +289,7 @@ _drive_cut_branch() {
 drive() {
   local rc=0
   mkdir -p "$RUN_DIR"
-  log_changed configuration "configuration: driver=$DRIVER repo=$REPO roadmap=$(roadmap_dir) config=${ARGUS_CONFIG_FILE:-none}; $CONFIG_PRECEDENCE"
+  log_changed configuration "configuration: driver=$DRIVER repo=$REPO phases=$(phases_dir) config=${ARGUS_CONFIG_FILE:-none}; $CONFIG_PRECEDENCE"
   if command -v flock >/dev/null 2>&1; then
     _drive "${1:-}" || rc=$?
   else

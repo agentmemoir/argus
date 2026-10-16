@@ -51,7 +51,8 @@ def write_config(
     *,
     project: Path,
     board: Path,
-    roadmap: Path,
+    phases: Path,
+    phases_repo: Path,
     runs: Path,
     pipeline: Path,
     python: str,
@@ -63,7 +64,12 @@ def write_config(
 {{
   "repo-root": "{project.relative_to(path.parent)}",
   "pipeline": "{pipeline.relative_to(path.parent)}",
-  "roadmap-dir": "{roadmap.relative_to(path.parent)}",
+  "phases": {{
+    "repo": "{phases_repo.relative_to(path.parent)}",
+    "directory": "{phases.relative_to(phases_repo)}",
+    "branch": "master",
+    "remote": "origin"
+  }},
   "number-input": "ticket",
   "file-input": "document",
 

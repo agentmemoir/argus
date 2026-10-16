@@ -87,9 +87,10 @@ class DriverPublication:
         tokens = store.reserve_group([PHASE, PHASE + 1], "server-01")
         assert git(self.private, "fetch", "origin")[0] == 0
         assert git(self.private, "merge", "--ff-only", "origin/main")[0] == 0
+        phases_dir = self.root / "phases-data" / "phases"
         for token in tokens:
             number = int(token["phase"])
-            document = self.private / "roadmap" / f"phase-{number}-member-{number}.md"
+            document = phases_dir / f"phase-{number}-member-{number}.md"
             for old in document.parent.glob(f"phase-{number}-*.md"):
                 old.unlink()
             document.write_text(
@@ -100,6 +101,9 @@ class DriverPublication:
             run.mkdir(exist_ok=True)
             save_reservation_file(run / "reservation.json", token)
             (run / "run.json").write_text('{"state":"completed"}\n')
+        assert git(self.root / "phases-data", "add", "-A")[0] == 0
+        assert git(self.root / "phases-data", "commit", "-qm", "group members")[0] == 0
+        assert git(self.root / "phases-data", "push", "origin", "master")[0] == 0
         assert git(self.private, "add", "-A")[0] == 0
         assert git(self.private, "commit", "-qm", "completed group")[0] == 0
         assert git(self.private, "push", "origin", "main")[0] == 0
@@ -128,10 +132,26 @@ def driver_publication_fixture(
     exclude = private / ".git/info/exclude"
     exclude.write_text(exclude.read_text().rstrip("\n") + "\nruns/.driver/\n")
     assert git(private, "check-ignore", "runs/.driver/halted")[0] == 0
-    plans = private / "roadmap"
+    d = tmp_path / "saved-publication"
+    phases_remote = d / "phases.git"
+    subprocess.run(
+        ["git", "init", "-q", "--bare", "-b", "master", str(phases_remote)], check=True
+    )
+    phases = root / "phases-data"
+    subprocess.run(["git", "clone", "-q", str(phases_remote), str(phases)], check=True)
+    git(phases, "config", "user.email", "sync-test@example.com")
+    git(phases, "config", "user.name", "sync test")
+    phases_exclude = root / ".git/info/exclude"
+    phases_exclude.write_text(
+        phases_exclude.read_text().rstrip("\n") + "\nphases-data/\n"
+    )
+    plans = phases / "phases"
     plans.mkdir()
     document = plans / f"phase-{PHASE}-settle-receipt.md"
     document.write_text(f"# {PHASE}. Settle receipt\n\n- [ ] Work to do.\n")
+    git(phases, "add", "-A")
+    git(phases, "commit", "-q", "-m", "phases")
+    git(phases, "push", "-q", "-u", "origin", "master")
     pipeline = tmp_path / "pipeline.yaml"
     pipeline.write_text(
         f"run_dir: {private}/runs/phase-{{phase_number:06d}}\n"
@@ -168,7 +188,12 @@ def driver_publication_fixture(
         {
             "repo-root": str(root),
             "pipeline": str(pipeline),
-            "roadmap-dir": str(plans),
+            "phases": {
+                "repo": str(phases),
+                "directory": "phases",
+                "branch": "master",
+                "remote": "origin",
+            },
             "board": {
                 "repo": str(private),
                 "file": "claims.json",
@@ -200,7 +225,8 @@ def driver_publication_fixture(
     (root / "product.txt").write_text("completed phase product\n")
     for checkout in (root, private):
         assert git(checkout, "add", "-A")[0] == 0
-        assert git(checkout, "commit", "-qm", "completed phase")[0] == 0
+        if git(checkout, "diff", "--cached", "--quiet")[0] != 0:
+            assert git(checkout, "commit", "-qm", "completed phase")[0] == 0
     published = publish_phase(
         root, PHASE, pull_request="https://github.com/example/argus/pull/7"
     )

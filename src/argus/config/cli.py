@@ -75,7 +75,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--config", help="config file; defaults to ./config.json")
     parser.add_argument("--repo-root")
-    parser.add_argument("--roadmap-dir")
+    parser.add_argument("--phases-directory")
     parser.add_argument("--phase-glob", action="append")
     parser.add_argument("--driver")
     parser.add_argument(
@@ -86,8 +86,8 @@ def main(argv: list[str] | None = None) -> int:
     overrides: dict[str, object] = {}
     if args.repo_root is not None:
         overrides["repo-root"] = args.repo_root
-    if args.roadmap_dir is not None:
-        overrides["roadmap-dir"] = args.roadmap_dir
+    if args.phases_directory is not None:
+        overrides["phases-directory"] = args.phases_directory
     if args.phase_glob is not None:
         overrides["phase-glob"] = args.phase_glob
     if args.driver is not None:

@@ -17,7 +17,7 @@ from argus.gitsync.git import (
     resolve_upstream,
 )
 from argus.gitsync.group_review import _group_pull_request
-from argus.gitsync.paths import roadmap_folder
+from argus.gitsync.paths import phases_folder
 from argus.gitsync.receipts import (
     _published_head,
     phase_receipt,
@@ -30,20 +30,20 @@ from argus.gitsync.runstate import commit_leftover_run_state
 def _declared_group(root: str | Path, phase: int) -> dict[str, Any] | None:
     """The reservation group a phase declares, or ``None``.
 
-    Read from the roadmap documents, which is where a declaration lives. A
+    Read from the phases documents, which is where a declaration lives. A
     malformed one is refused rather than read as "runs alone": a phase whose
     group nobody can read is not a phase that ran by itself, and publishing it
     as one would record the wrong branch. An absent declaration, and a machine
-    with no roadmap folder to read, are the ordinary single-phase case.
+    with no phases folder to read, are the ordinary single-phase case.
     """
-    from argus.roadmap import source as roadmap_source
+    from argus.phases import source as phases_source
 
-    folder = roadmap_folder(root)
+    folder = phases_folder(root)
     if not Path(folder).is_dir():
         return None
     try:
-        return roadmap_source.resolve_group_or_none(root, folder, phase)
-    except roadmap_source.ReservationGroupMissing:
+        return phases_source.resolve_group_or_none(root, folder, phase)
+    except phases_source.ReservationGroupMissing:
         return None
     except Exception as exc:  # noqa: BLE001 - reported as a configuration error
         raise ConfigError(

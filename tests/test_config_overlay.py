@@ -119,7 +119,7 @@ def test_flags_beat_overlay_and_resolve_against_cwd(
         document,
         {
             "repo-root": "../overlay-project",
-            "driver": {"include": ["overlay-*.md"], "provider": "roadmap"},
+            "driver": {"include": ["overlay-*.md"], "provider": "phases"},
         },
     )
     cwd = tmp_path / "cwd"

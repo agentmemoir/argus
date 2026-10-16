@@ -77,7 +77,7 @@ selftest_case_reasons() {
   # because a dry run's stdout is its result, and this case reads the result
   # twice.
   old_work_source_flags=("${WORK_SOURCE_FLAGS[@]+"${WORK_SOURCE_FLAGS[@]}"}")
-  WORK_SOURCE_FLAGS=(--source roadmap)
+  WORK_SOURCE_FLAGS=(--source phases)
   load_board_override "$tmp/absent-board-checkout"
   # The tick's own answer is planted first, so the case can tell a dry run that
   # left it alone from one that wrote over it. It is the file an outage

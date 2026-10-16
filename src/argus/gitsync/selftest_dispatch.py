@@ -70,13 +70,13 @@ def _tidy_and_dispatch_checks(base: Path) -> list[tuple[str, object, str]]:
         git(pub2, "add", "first.txt")
         git(pub2, "commit", "-q", "-m", "phase 100456: the first change")
         publish_phase(pub2, 100456)
-        (nested2 / "roadmap").mkdir(parents=True, exist_ok=True)
-        (nested2 / "roadmap" / "phase-100457-dispatch-next.md").write_text("x\n")
-        (nested2 / "roadmap" / "phase-100458-dispatch-after.md").write_text("x\n")
+        (nested2 / "phases").mkdir(parents=True, exist_ok=True)
+        (nested2 / "phases" / "phase-100457-dispatch-next.md").write_text("x\n")
+        (nested2 / "phases" / "phase-100458-dispatch-after.md").write_text("x\n")
         git(nested2, "add", "-A")
-        git(nested2, "commit", "-q", "-m", "roadmap for the next phases")
+        git(nested2, "commit", "-q", "-m", "phases for the next phases")
         git(nested2, "push", "-q", "origin", "main")
-        # The branch comes from the roadmap file's behaviour, not the phase
+        # The branch comes from the phases file's behaviour, not the phase
         # number, so the test asks for the same branch the mode will create
         # rather than naming one and hoping they agree.
         second = phase_branch_for(100457, "phase-100457-dispatch-next.md")

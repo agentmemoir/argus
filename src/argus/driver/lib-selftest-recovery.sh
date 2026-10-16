@@ -37,9 +37,9 @@ selftest_case_recovery_sources() {
   sleep 0.3
 
   # The launch path on the recovery path comes from the work source's own result,
-  # not from the driver looking for the file. The driver used to glob the roadmap
-  # folder here, which put roadmap knowledge back into the driver for no reason:
-  # an issue source's recovery would have searched a roadmap for a file named
+  # not from the driver looking for the file. The driver used to glob the phases
+  # folder here, which put phases knowledge back into the driver for no reason:
+  # an issue source's recovery would have searched a phases for a file named
   # after an issue. The stub names a file the driver never opens, so if the driver
   # still searched, it would find the real phase file instead and print that.
   if grep -q "recovered phase 100010 (.*phase-100010-stub-fixture\.md)" "$LOG"; then
@@ -119,26 +119,26 @@ selftest_case_recovery_sources() {
     echo "FAIL: a selector refusal no longer reaches stderr, so the cron log loses it (stderr=$bogus_stderr)"; fail=1
   fi
 
-  # A roadmap folder that is not there is a settings mistake, not a queue that
+  # A phases folder that is not there is a settings mistake, not a queue that
   # has run dry. The two look identical from the selector's exit code, so the
   # refusal is proved here and the folder is named.
-  old_roadmap_dir="$ROADMAP_DIR"; old_work_source_flags=("${WORK_SOURCE_FLAGS[@]+"${WORK_SOURCE_FLAGS[@]}"}")
+  old_phases_dir="$PHASES_DIRECTORY"; old_work_source_flags=("${WORK_SOURCE_FLAGS[@]+"${WORK_SOURCE_FLAGS[@]}"}")
   missing_root="$(mktemp -d)"
-  ROADMAP_DIR="$missing_root/absent"
-  WORK_SOURCE_FLAGS=(--roadmap "$ROADMAP_DIR")
+  PHASES_DIRECTORY="$missing_root/absent"
+  WORK_SOURCE_FLAGS=(--phases "$PHASES_DIRECTORY")
   missing_launches="$(grep -c 'launched phase' "$LOG" || true)"
   drive --self-test || true
-  if grep -q "configured roadmap folder $missing_root/absent is missing or unreadable" "$LOG" \
+  if grep -q "configured phases folder $missing_root/absent is missing or unreadable" "$LOG" \
       && [ "$(grep -c 'launched phase' "$LOG" || true)" = "$missing_launches" ]; then
-    echo "ok: a missing roadmap folder stops the tick and names the folder"
+    echo "ok: a missing phases folder stops the tick and names the folder"
   else
-    echo "FAIL: a missing roadmap folder did not stop the tick"; fail=1
+    echo "FAIL: a missing phases folder did not stop the tick"; fail=1
   fi
   rm -rf "$missing_root"
-  ROADMAP_DIR="$old_roadmap_dir"
+  PHASES_DIRECTORY="$old_phases_dir"
   WORK_SOURCE_FLAGS=("${old_work_source_flags[@]+"${old_work_source_flags[@]}"}")
 
-  # A configured roadmap folder outside this checkout can be read but its
+  # A configured phases folder outside this checkout can be read but its
   # phases cannot be launched, because the launch is opened on the repository
   # root with a repository-relative phase file. Prove the refusal.
   #
@@ -153,27 +153,27 @@ selftest_case_recovery_sources() {
   # has one: an unconfigured host is the case most deployments are in, and a
   # check that only runs on a configured one would go unexecuted exactly where
   # it is cheapest to run.
-  old_roadmap_dir="$ROADMAP_DIR"; old_work_source_flags=("${WORK_SOURCE_FLAGS[@]+"${WORK_SOURCE_FLAGS[@]}"}")
+  old_phases_dir="$PHASES_DIRECTORY"; old_work_source_flags=("${WORK_SOURCE_FLAGS[@]+"${WORK_SOURCE_FLAGS[@]}"}")
   outside_root="$(mktemp -d)"
-  ROADMAP_DIR="$outside_root/outside"
-  mkdir -p "$ROADMAP_DIR"
+  PHASES_DIRECTORY="$outside_root/outside"
+  mkdir -p "$PHASES_DIRECTORY"
   # A phase file the selector will actually offer. An empty folder would return
   # NO_PHASE and the run would stop one step earlier than the refusal under
   # test, so the case would pass without reaching it.
   printf '# 100010. Outside Fixture\n- [ ] Required approval is obtained.\n' \
-    >"$ROADMAP_DIR/phase-100010-outside-fixture.md"
-  printf 'Plan ready\n' >"$ROADMAP_DIR/index.md"
-  WORK_SOURCE_FLAGS=(--roadmap "$ROADMAP_DIR")
+    >"$PHASES_DIRECTORY/phase-100010-outside-fixture.md"
+  printf 'Plan ready\n' >"$PHASES_DIRECTORY/index.md"
+  WORK_SOURCE_FLAGS=(--phases "$PHASES_DIRECTORY")
   outside_launches="$(grep -c 'launched phase' "$LOG" || true)"
   drive --self-test || true
   if grep -q "outside $REPO, so its phase files cannot be launched" "$LOG" \
       && [ "$(grep -c 'launched phase' "$LOG" || true)" = "$outside_launches" ]; then
-    echo "ok: a roadmap folder outside the checkout refuses to launch"
+    echo "ok: a phases folder outside the checkout refuses to launch"
   else
     echo "FAIL: a folder outside the checkout was allowed to launch"; fail=1
   fi
   rm -rf "$outside_root"
-  ROADMAP_DIR="$old_roadmap_dir"
+  PHASES_DIRECTORY="$old_phases_dir"
   WORK_SOURCE_FLAGS=("${old_work_source_flags[@]+"${old_work_source_flags[@]}"}")
 
   # Naming the default source explicitly has to work, not just be refused. Only
@@ -186,7 +186,7 @@ selftest_case_recovery_sources() {
   # named source reaching a real launch — is the strand fixture's case, which
   # runs against a throwaway repository.
   old_work_source_flags=("${WORK_SOURCE_FLAGS[@]+"${WORK_SOURCE_FLAGS[@]}"}")
-  WORK_SOURCE_FLAGS=(--source roadmap)
+  WORK_SOURCE_FLAGS=(--source phases)
   named_rc=0
   named_out="$(selector_run 2>/dev/null)" || named_rc=$?
   if [ "$named_rc" -eq 0 ] && [ "${named_out#*$'\t'}" != "$named_out" ]; then
@@ -211,19 +211,19 @@ selftest_case_recovery_sources() {
   else
     echo "FAIL: --check reported a bogus work source as healthy (exit 0)"; fail=1
   fi
-  old_roadmap_dir="$ROADMAP_DIR"
+  old_phases_dir="$PHASES_DIRECTORY"
   WORK_SOURCE="$old_work_source"
   WORK_SOURCE_FLAGS=()
-  ROADMAP_DIR="$tmp/check-absent-roadmap"
-  WORK_SOURCE_FLAGS=(--roadmap "$ROADMAP_DIR")
+  PHASES_DIRECTORY="$tmp/check-absent-phases"
+  WORK_SOURCE_FLAGS=(--phases "$PHASES_DIRECTORY")
   check_rc=0
   check >/dev/null 2>&1 || check_rc=$?
   if [ "$check_rc" -ne 0 ]; then
-    echo "ok: --check fails on a roadmap folder that is missing"
+    echo "ok: --check fails on a phases folder that is missing"
   else
-    echo "FAIL: --check reported a missing roadmap folder as healthy (exit 0)"; fail=1
+    echo "FAIL: --check reported a missing phases folder as healthy (exit 0)"; fail=1
   fi
-  ROADMAP_DIR="$old_roadmap_dir"
+  PHASES_DIRECTORY="$old_phases_dir"
   WORK_SOURCE_FLAGS=("${old_work_source_flags[@]+"${old_work_source_flags[@]}"}")
   check_rc=0
   # The report is kept rather than discarded. `--check` is the report an operator
