@@ -224,6 +224,8 @@ done
 # shellcheck disable=SC1091
 . "$ARGUS_DIR/lib-selftest.sh"
 # shellcheck disable=SC1091
+. "$ARGUS_DIR/lib-selftest-recover.sh"
+# shellcheck disable=SC1091
 . "$ARGUS_DIR/lib-selftest-launch.sh"
 # shellcheck disable=SC1091
 . "$ARGUS_DIR/lib-selftest-flow.sh"

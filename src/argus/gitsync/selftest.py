@@ -3,6 +3,7 @@
 """The self-test entry point and the delegated checks it collects."""
 
 import json
+import shutil
 from pathlib import Path
 from typing import Any
 
@@ -81,11 +82,17 @@ def _self_test_checks() -> list[dict[str, Any]]:
         )
         return checks
     base = Path(executable)
-
-    _sync_one_checks(base, checks)
-    _sync_refuse_checks(base, checks)
-    _runstate_checks(base, checks)
-    _delegated_checks(base, checks)
+    try:
+        _sync_one_checks(base, checks)
+        _sync_refuse_checks(base, checks)
+        _runstate_checks(base, checks)
+        _delegated_checks(base, checks)
+    finally:
+        # The fixture is scratch, and this run is the only thing that knows where
+        # it is: left behind, it is one more directory for the driver's recovery
+        # sweep to find, which is how 70-odd of them accumulated in one temporary
+        # directory.
+        shutil.rmtree(base, ignore_errors=True)
 
     return checks
 

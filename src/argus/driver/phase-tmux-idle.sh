@@ -12,6 +12,14 @@
 # is the window's shell or the tmux server; with it gone there is no window left
 # to hold open, and an unattended loop would be an orphan with no one to stop it.
 #
+# A session the self-test made is named after the run that owns it, so the last
+# field of its name is that run's pid and this script ends the session when that
+# run is gone. See argus/driver/lib-selftest-recover.sh. That is the one thing a
+# killed run cannot do for itself: SIGKILL runs no trap, so without this the
+# monitor redraws for as long as the session lives, and the session lives
+# forever. A production session is not named that way, so it has no anchor and
+# behaves exactly as it always did.
+#
 # Shows, in order:
 #   - a HALTED banner with the reason when the line is halted (Q2: the title
 #     also carries it, because a TV may not display a titlebar at all)
@@ -54,6 +62,19 @@ CONFIG_OUT="$("$PYTHON" "$PKG_DIR/config/cli.py" "$@" --format shell)" || exit 2
 eval "$CONFIG_OUT"
 PYTHON="$CMD_PYTHON"
 REPO="$(cd "$REPO" && pwd)"
+
+# The run this session belongs to, when the session is one the self-test made.
+# The name is read from tmux rather than from the configuration, because the case
+# that created the session may have named it something the configuration file
+# does not say.
+SESSION_NOW=""
+ANCHOR=""
+if [ -n "${TMUX_PANE:-}" ]; then
+  SESSION_NOW="$("$CMD_TMUX" display-message -p -t "$TMUX_PANE" '#S' 2>/dev/null || true)"
+  case "$SESSION_NOW" in
+    ar-driver-*-[0-9]*) ANCHOR="${SESSION_NOW##*-}" ;;
+  esac
+fi
 
 # Portable mtime helper, shared with the driver so the fix lives in one place.
 # shellcheck disable=SC1091
@@ -131,6 +152,14 @@ draw() {
 # Loop while the starter lives. `draw` is allowed to fail; the sleep keeps the
 # window alive either way, which is the property that protects the session.
 while kill -0 "$STARTER" 2>/dev/null; do
+  # A run that owns this session and is gone leaves nothing to show, so the
+  # session goes with it. Killing the session also closes the phase window, which
+  # is what the run's own teardown would have done; letting this window merely
+  # exit would leave the session standing while any other window lives.
+  if [ -n "$ANCHOR" ] && ! kill -0 "$ANCHOR" 2>/dev/null; then
+    "$CMD_TMUX" kill-session -t "$SESSION_NOW" 2>/dev/null || true
+    exit 0
+  fi
   draw || true
   sleep "$REFRESH" || sleep 5
 done

@@ -1,18 +1,21 @@
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
 # SPDX-License-Identifier: Apache-2.0
-"""A hard-killed self-test run is recovered by the next one.
+"""The recovery sweep for a self-test run that could not clean up after itself.
 
-SIGKILL runs no trap, so the teardown in the driver's self-test cannot clean up
-after a run that was killed that hard. The run records its own pid and its tmux
-socket directory inside its fixture, and the next run stops the sessions that
-name that pid, stops the server behind a socket that sits inside the fixture, and
-removes the fixture. A fixture whose recorded run is still alive is left alone,
-because two self-tests on one machine must not delete each other's.
+SIGKILL runs no trap, so a run killed that hard leaves its fixture behind, with
+the tmux server it started and the idle monitor inside it. The run records its own
+pid and its socket directory in `<fixture>/owner`, and the next run stops the
+sessions that name that pid, stops the server behind a socket inside the fixture,
+and removes the fixture. A fixture whose recorded run is still alive is left
+alone, because two self-tests on one machine must not delete each other's.
 
-``selftest_recover_leftovers`` takes the fixture bases as arguments, so each case
-here gets a base of its own. The base has to be short: a unix socket path is
-capped (103 bytes usable on macOS), and the socket of a fixture under ``tmp_path``
-is too deep for one.
+Two properties matter more than the happy path and each has a case here: a
+leftover must never stop the run that finds it, and a fixture must never be
+removed while a server that owns it may still be running.
+
+The sweep asks its helper where a fixture can be, so every case replaces that
+answer with a base of its own and the tests stay off every other run's
+directories. One case checks the answer itself.
 """
 
 from __future__ import annotations
@@ -27,27 +30,37 @@ from pathlib import Path
 
 import pytest
 
-ARGUS = Path(__file__).resolve().parents[1]
-LIB = ARGUS / "src/argus/driver/lib-selftest.sh"
+from argus.exec_tempdir import candidate_bases
 
-#: A pid no process can hold: a pid is 32-bit, and no host lets it get this
-#: large, so a fixture that records it always reads as abandoned. A real pid that
-#: has been reaped would pass until the kernel reused the number.
+ARGUS = Path(__file__).resolve().parents[1]
+LIB = ARGUS / "src/argus/driver/lib-selftest-recover.sh"
+
+#: A pid no process can hold: a pid is 32-bit, and no host lets it get this large,
+#: so a fixture that records it always reads as abandoned. A real pid that has
+#: been reaped would pass until the kernel reused the number.
 IMPOSSIBLE_PID = 999999999
 
-#: The short base the tmux socket of a fixture is made under, for the reason in
-#: the module docstring.
+#: A fixture older than this is swept on age alone when it has no usable record.
+STALE_SECONDS = 7200
+
+#: The short base a tmux socket needs: a unix socket path is capped at about 100
+#: bytes and the path under `tmp_path` is longer than that.
 SHORT_TMP = "/tmp"
 
-#: A fixture older than this is swept on age alone when it has no record.
-STALE_SECONDS = 7200
+
+def _short_tmp() -> str:
+    """The short base a tmux socket needs, or a skip naming why there is none."""
+    candidate = Path(SHORT_TMP)
+    if candidate.is_dir() and os.access(candidate, os.W_OK):
+        return SHORT_TMP
+    pytest.skip(f"{SHORT_TMP} cannot hold a unix socket on this host")
 
 
 def _env(socket: str) -> dict[str, str]:
     """This process's environment, pointed at one socket base.
 
-    ``TMUX`` is dropped so a test run inside tmux cannot aim these commands at
-    the developer's own server.
+    ``TMUX`` is dropped so a test run inside tmux cannot aim these commands at the
+    developer's own server.
     """
     env = {name: value for name, value in os.environ.items() if name != "TMUX"}
     env["TMUX_TMPDIR"] = socket
@@ -90,26 +103,27 @@ def _session(tmux: str, socket: str, name: str) -> None:
     )
 
 
-def _recover(base: Path) -> None:
-    result = subprocess.run(
+def _recover(base: Path, **extra: str) -> subprocess.CompletedProcess[str]:
+    """Run the sweep with its bases narrowed to one base of this test's own."""
+    env = dict(os.environ, ARGUS_SELFTEST_BASES=str(base), **extra)
+    return subprocess.run(
         [
             "bash",
             "-c",
-            'set -euo pipefail; . "$1"; selftest_recover_leftovers "$2"',
+            'set -euo pipefail; . "$1"; selftest_recover_leftovers',
             "_",
             str(LIB),
-            str(base),
         ],
+        env=env,
         capture_output=True,
         text=True,
     )
-    assert result.returncode == 0, result.stderr
 
 
 def test_the_next_run_recovers_a_hard_killed_run_and_spares_a_live_one() -> None:
     """The abandoned fixture and its session go; a live run's pair stays."""
     tmux = _tmux()
-    with tempfile.TemporaryDirectory(prefix="ag-recover-", dir=SHORT_TMP) as tmp:
+    with tempfile.TemporaryDirectory(prefix="ag-recover-", dir=_short_tmp()) as tmp:
         base = Path(tmp)
         abandoned, abandoned_socket = _fixture(base, "abandoned", IMPOSSIBLE_PID)
         live, live_socket = _fixture(base, "live", os.getpid())
@@ -117,68 +131,87 @@ def test_the_next_run_recovers_a_hard_killed_run_and_spares_a_live_one() -> None
         _session(tmux, abandoned_socket, f"ar-driver-selftest-{IMPOSSIBLE_PID}")
         _session(tmux, live_socket, live_name)
         try:
-            _recover(base)
+            result = _recover(base)
+            assert result.returncode == 0, result.stderr
             assert not abandoned.exists()
             assert _sessions(tmux, abandoned_socket) == []
             assert live.is_dir()
             assert _sessions(tmux, live_socket) == [live_name]
         finally:
-            subprocess.run(
-                [tmux, "kill-server"], env=_env(live_socket), capture_output=True
-            )
+            # Both servers, because a failed assertion must not leave either one
+            # running: the abandoned one is the leak this file exists to prevent.
+            for socket in (abandoned_socket, live_socket):
+                subprocess.run(
+                    [tmux, "kill-server"], env=_env(socket), capture_output=True
+                )
 
 
-def test_a_fixture_with_no_record_is_still_swept_by_age_alone() -> None:
-    """A directory made before the record existed keeps the old behaviour.
+def test_a_fixture_with_no_usable_record_is_swept_by_age_alone() -> None:
+    """A directory with no record, or one that cannot be read, is decided by age.
 
-    Both are removed on age and spared while fresh, which is what stops two
-    self-tests on one machine from deleting each other's fixture.
+    Reading an unreadable record under `set -e` is what turned one awkward
+    leftover into a run that skipped every check, so the read is guarded and the
+    age rule decides instead. Both fixtures here record a pid that is gone; only
+    the older one may go.
     """
-    with tempfile.TemporaryDirectory(prefix="ag-recover-", dir=SHORT_TMP) as tmp:
+    with tempfile.TemporaryDirectory(prefix="ag-recover-", dir=_short_tmp()) as tmp:
         base = Path(tmp)
-        stale = base / "argus-selftest-stale"
-        fresh = base / "argus-selftest-fresh"
-        stale.mkdir()
-        fresh.mkdir()
+        stale, _ = _fixture(base, "stale", IMPOSSIBLE_PID)
+        fresh, _ = _fixture(base, "fresh", IMPOSSIBLE_PID)
+        for fixture in (stale, fresh):
+            (fixture / "owner").chmod(0o000)
         moment = time.time() - STALE_SECONDS
         os.utime(stale, (moment, moment))
-        _recover(base)
+        result = _recover(base)
+        assert result.returncode == 0, result.stderr
         assert not stale.exists()
         assert fresh.is_dir()
 
 
-def test_the_sweep_looks_where_the_fixture_is_actually_put() -> None:
-    """A fixture under ``TMPDIR`` is found, which is where a macOS host puts it.
+def test_a_fixture_whose_sessions_cannot_be_stopped_is_left_in_place() -> None:
+    """Nothing is removed while a server that owns it may still be running.
 
-    The temporary-directory helper prefers the default temporary directory, so a
-    sweep that named ``/tmp`` alone never looked where the fixture went on a host
-    whose ``TMPDIR`` is somewhere else: the killed run's fixture and its sessions
-    stayed until someone removed them by hand.
+    Removing the fixture unlinks the socket, and a server whose socket is gone
+    cannot be found or stopped again: that is the one way to turn a leak someone
+    could find into one nobody can.
     """
-    with tempfile.TemporaryDirectory(prefix="ag-recover-", dir=SHORT_TMP) as tmp:
+    with tempfile.TemporaryDirectory(prefix="ag-recover-", dir=_short_tmp()) as tmp:
         base = Path(tmp)
-        abandoned, _socket = _fixture(base, "abandoned", IMPOSSIBLE_PID)
+        fixture, _socket = _fixture(base, "unreachable", IMPOSSIBLE_PID)
+        result = _recover(base, CMD_TMUX="/nonexistent-tmux-for-this-check")
+        assert result.returncode == 0, result.stderr
+        assert fixture.is_dir(), "removed without stopping the server behind it"
+        assert "still running" in result.stderr
+
+
+def test_the_sweep_bases_are_the_ones_the_helper_chooses(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The sweep looks where a fixture really goes, straight from the helper.
+
+    The helper prefers the default temporary directory, so a sweep that kept its
+    own copy of the list and named `/tmp` alone never found the fixture on a host
+    whose `TMPDIR` is somewhere else.
+    """
+    with tempfile.TemporaryDirectory(prefix="ag-recover-", dir=_short_tmp()) as tmp:
+        base = Path(tmp)
         result = subprocess.run(
             [
                 "bash",
                 "-c",
-                'set -euo pipefail; . "$1"; ARGUS="$2"; PYTHON="$3"; selftest_tmpdir',
+                'set -euo pipefail; . "$1"; selftest_fixture_bases',
                 "_",
                 str(LIB),
-                str(ARGUS / "src/argus"),
-                sys.executable,
             ],
-            env=dict(os.environ, TMPDIR=str(base)),
+            env=dict(
+                os.environ,
+                TMPDIR=str(base),
+                PYTHON=sys.executable,
+                ARGUS=str(ARGUS / "src/argus"),
+            ),
             capture_output=True,
             text=True,
         )
-        created = result.stdout.strip()
-        try:
-            assert result.returncode == 0, result.stderr
-            assert not abandoned.exists(), "the sweep did not look in TMPDIR"
-            # The helper really does put the fixture here, which is why the
-            # sweep has to look here.
-            assert Path(created).parent.resolve() == base.resolve(), created
-        finally:
-            if created:
-                shutil.rmtree(created, ignore_errors=True)
+        assert result.returncode == 0, result.stderr
+        monkeypatch.setattr(tempfile, "tempdir", str(base))
+        assert result.stdout.splitlines() == candidate_bases()
