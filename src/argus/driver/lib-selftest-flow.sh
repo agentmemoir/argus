@@ -77,7 +77,8 @@ selftest_case_flow() {
 
   # Coordination failure: the normal driver path must refuse before tmux launch.
   # Reservable but unsyncable: a real fixture board so the tick reaches the
-  # sync gate, with the public checkout broken so --mode start fails there.
+  # sync gate, with the public checkout's remote unreachable so --mode start
+  # fails there.
   # Selector states for a fixture_root: the root reserves 100010 under the
   # self-test machine id (argus-selftest), so the next tick re-encounters its
   # own claim as WAIT_FOR_CLAIM rather than a fresh RESERVED; the sync gate
@@ -112,7 +113,15 @@ selftest_case_flow() {
     # sync gate before its state dispatch, so it never logs this on this path;
     # the failure line below carries it instead.
     coord_state="$(coordination_select --read-only 2>/dev/null | selection_value state || true)"
-    rm -rf "$coord_root/.git"
+    # The sync gate is what this case is written for, so the checkout has to
+    # reach it. Its remote is pointed at a path that is not there, and its .git
+    # is left alone. Removing .git refuses one step earlier — the tick returns a
+    # published phase's checkout to the integration branch before the sync gate,
+    # and it cannot do that without a repository — and on a host whose temporary
+    # directory is `noexec` the fixture lives inside this checkout, where a
+    # missing .git is worse: `git -C` walks up out of the fixture and syncs the
+    # real checkout instead of failing.
+    git -C "$coord_root" remote set-url origin "$tmp/coordination-failure-remote-gone.git"
     drive || true
     coord_sync_refused=0; coord_no_window=0
     grep -q "coordination checkout sync failed" "$LOG" && coord_sync_refused=1
