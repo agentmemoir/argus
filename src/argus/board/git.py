@@ -17,6 +17,30 @@ def git_binary() -> str:
     return conventions.setting("commands.git")
 
 
+def isolate_self_test_git() -> None:
+    """Run git with one fixed configuration for the rest of this self-test run.
+
+    A self-test builds scratch repositories and runs hundreds of git commands in
+    them. Without this, each of those commands also reads this machine's global
+    and system config, so a machine-wide ``core.hooksPath`` starts its hooks
+    inside every fixture: a host whose hooks run a script pays a process per hook
+    per git call, which made the readiness report several times slower, and a
+    hook that fails makes both self-tests fail for a reason that is not in Argus.
+    ``GIT_CONFIG_GLOBAL`` at ``os.devnull`` and ``GIT_CONFIG_NOSYSTEM`` leave only
+    the repository's own config, which is where every fixture's identity already
+    lives; the installed-package exercise sets the same two variables.
+
+    Repository-local config outranks both, so the repository-local
+    ``core.hooksPath`` the rejected-push check installs keeps working, and the
+    empty repository-local identity the failed-commit check sets is still the
+    last word.
+
+    Self-tests only. A real run's git calls keep the machine's configuration.
+    """
+    os.environ["GIT_CONFIG_GLOBAL"] = os.devnull
+    os.environ["GIT_CONFIG_NOSYSTEM"] = "1"
+
+
 def _git(
     repo: str | Path, *args: str, timeout: int = GIT_TIMEOUT_S
 ) -> tuple[int, str, str]:
@@ -140,4 +164,10 @@ def _head(repo: str | Path) -> str | None:
     return out if rc == 0 and out else None
 
 
-__all__ = ["_assert_private_boundary", "_git", "_head", "_is_git_repo"]
+__all__ = [
+    "_assert_private_boundary",
+    "_git",
+    "_head",
+    "_is_git_repo",
+    "isolate_self_test_git",
+]

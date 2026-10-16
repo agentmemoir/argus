@@ -4,6 +4,9 @@
 #
 # The driver self-test: fixture directory, setup, teardown, and case order.
 #
+# Recovery of a run that was killed too hard to clean up after itself lives
+# beside this file, in lib-selftest-recover.sh.
+#
 # A temporary directory whose shell scripts this host will actually run.
 #
 # The self-test copies the driver's own code into a fixture root and hands a
@@ -26,24 +29,15 @@
 # to the helper's process would delete the directory the moment this function
 # returned, so the self-test owns the removal instead; see `driver_self_test`.
 selftest_tmpdir() {
-  local helper="$ARGUS/exec_tempdir.py" leftover
-  # Fixtures abandoned by an earlier run are removed here, so an interrupted run is
-  # cleaned up by the next one rather than waiting for a reboot. Keyed on this file's
-  # own prefix and limited to directories, so nothing outside the fixtures can be
-  # caught by it.
+  local helper="$ARGUS/exec_tempdir.py"
+  # Fixtures, and the tmux sessions they started, abandoned by an earlier run are
+  # recovered here; see lib-selftest-recover.sh for what that finds and why.
   #
-  # Only ones older than an hour, because two self-tests on one machine would
-  # otherwise delete each other's fixture: this sweep cannot tell an abandoned
-  # directory from one another run is using right now, and a fresh one is
-  # indistinguishable from that. The age is what tells them apart.
-  for leftover in /tmp/argus-selftest-* /dev/shm/argus-selftest-* \
-                  "$(dirname "$ARGUS")"/target/argus-selftest-*; do
-    [ -d "$leftover" ] || continue
-    # `find` prints the directory only when it is older than the age asked for, so
-    # an empty answer means too young to be abandoned.
-    [ -n "$(find "$leftover" -maxdepth 0 -mmin +60 2>/dev/null)" ] || continue
-    rm -rf "$leftover" 2>/dev/null
-  done
+  # Best effort on purpose. Recovery is a convenience, and a failure in it must
+  # never be the reason no check runs, which is what one unreadable leftover
+  # would otherwise cause. A failure is still said out loud.
+  selftest_recover_leftovers || printf 'self-test: leftover recovery did not finish\n' >&2
+
   # On stderr, not stdout: the caller captures this function's stdout to take the
   # directory path, so anything printed there would be swallowed into the path.
   # At this point the run directory may not exist yet, and a skip whose reason
@@ -143,6 +137,19 @@ driver_self_test() {
   TMUX_TMPDIR="${TMUX_TMPDIR:-$tmp/tmux}"
   mkdir -p "$TMUX_TMPDIR"
   export TMUX_TMPDIR
+  # The record the next run's sweep reads when this one is killed so hard that no
+  # trap runs. Its own pid, because that is what a liveness test can trust: this
+  # process is the run, and a run that is gone cannot come back under this pid.
+  # The socket directory goes with it because a caller may name one, and the
+  # server that made the socket is the only way back to the sessions.
+  #
+  # Named without `local` like the three below it, because the teardown reads it
+  # after this function has returned.
+  SELFTEST_OWNER="$tmp/owner"
+  {
+    printf 'pid=%s\n' "$$"
+    printf 'socket=%s\n' "$TMUX_TMPDIR"
+  } >"$SELFTEST_OWNER"
   SELFTEST_SESSION="ar-driver-selftest-$$"
   SELFTEST_REACHED_END=0
   selftest_teardown() {
@@ -217,6 +224,10 @@ driver_self_test() {
     # failed is usually in a file the fixture owned and the teardown deletes.
     if [ "${SELFTEST_KEEP_TMP:-0}" = "1" ] && [ "$rc" -ne 0 ]; then
       printf 'selftest fixture kept: %s\n' "$SELFTEST_TMP" >&2
+      # The record goes with the cleanup it describes, or the next run's sweep
+      # would read this run's now-dead pid and delete the fixture this branch
+      # exists to keep.
+      rm -f "${SELFTEST_OWNER:-}"
     else
       rm -rf "$SELFTEST_TMP"
     fi

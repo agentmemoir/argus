@@ -76,6 +76,44 @@ def _expand(parent: str | None) -> str | None:
     return os.path.expanduser(parent) if parent is not None else None
 
 
+def candidate_bases() -> list[str]:
+    """Where a scratch directory may be made, as absolute paths, in the order tried.
+
+    The same candidates `_executable_candidates` walks, so a caller looking for a
+    directory this module made looks where it put one instead of keeping a second
+    copy of the list. The first entry is the default temporary directory, which is
+    what `TMPDIR` names when it is set: that is where a fixture really goes on
+    macOS, and a sweep that named `/tmp` alone never found it there.
+    """
+    bases: list[str] = []
+    for parent in CANDIDATE_PARENTS:
+        base = _expand(parent)
+        bases.append(tempfile.gettempdir() if base is None else base)
+    return bases
+
+
+#: The record every scratch directory carries: the pid of the process that made
+#: it. `argus/driver/lib-selftest-recover.sh` reads it to tell a directory whose
+#: owner is gone from one another run is using right now.
+OWNER_RECORD = "owner"
+
+
+def _record_owner(directory: str) -> None:
+    """Name the process that owns this scratch directory, best effort.
+
+    A directory with no record is reclaimed on age alone, which is what happened
+    before the record existed, so a write that fails degrades to the old
+    behaviour instead of turning a scratch directory into an error the caller
+    never promised to handle.
+    """
+    try:
+        (Path(directory) / OWNER_RECORD).write_text(
+            f"pid={os.getpid()}\n", encoding="utf-8"
+        )
+    except OSError:
+        pass
+
+
 class _OwnedDirectory:
     """A temporary directory whose removal the caller controls.
 
@@ -223,6 +261,7 @@ def _executable_candidates(
         except OSError:
             continue
         if can_run(directory):
+            _record_owner(directory)
             yield os.path.realpath(directory)
         else:
             shutil.rmtree(directory, ignore_errors=True)

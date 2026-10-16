@@ -199,6 +199,9 @@ def run_selftest(
                 _kill_isolated_tmux(env)
         return proc.stdout.splitlines() + proc.stderr.splitlines(), proc.returncode
     finally:
+        # The fault's scratch space belongs to this harness and outlives the
+        # self-test it was handed to, so here is the only place it can be
+        # removed. It used to be left behind for the driver's sweep to find.
         shutil.rmtree(scratch, ignore_errors=True)
 
 
