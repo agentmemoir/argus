@@ -209,7 +209,7 @@ def main(
         print(f"error: {exc}", file=sys.stderr)
         return 2
     repo = Path(conventions.setting("repo-root")).resolve()
-    phases = conventions.require_phases_folder(repo)
+    phases = conventions.phases_folder(repo)
     # The group query is read-only and comes before anything that writes. It
     # resolves the group from the phase documents and claims nothing, so it
     # needs neither the board nor the work-source registry.
