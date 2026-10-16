@@ -4,6 +4,8 @@ Notable changes to this project are documented here. The format follows [Keep a 
 
 ## [Unreleased]
 
+- The repair step reads a pull request's code-scanning alerts when a failing check has no workflow run to open. A code-scanning check's link is a scan result, so `gh run view` can read no log for it, and the repair used to stop there with `BLOCKED`. The alerts are now written into the repair task, so a security failure is repaired rather than reported as blocked, and a check with nothing readable is named in the block instead of described as a missing log.
+
 - The README is now a landing page that links into `docs/` instead of restating it, and the `docs/` set names every configuration key, the package-root program files, and every run mode, including `--merge-check-only` and `abandon`.
 
 - The `verify` workflow sets `permissions: contents: read`, so its jobs run with a read-only `GITHUB_TOKEN` instead of the repository default.

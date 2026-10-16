@@ -64,6 +64,24 @@ def normalize_alert(row: Row) -> Row:
     }
 
 
+def open_alerts(
+    owner: str, repo: str, number: int, host: str | None = None
+) -> tuple[list[Row] | None, str]:
+    """The open code-scanning alerts on a pull request's head, or None and why not.
+
+    A code-scanning check reports a result rather than a workflow run, so this is
+    the only place its failure is written: ``gh run view`` has no run to open for
+    it. ``state=open`` is deliberate. The watch above keeps closed alerts so a fix
+    reads as a state change; a repair reads only what is still failing.
+    """
+    return _api_rows(
+        f"repos/{owner}/{repo}/code-scanning/alerts"
+        f"?state=open&pr={int(number)}&per_page=100",
+        host,
+        "number",
+    )
+
+
 def normalize_comment(row: Row, allowed: bool, show_untrusted: bool) -> Row:
     """The fields of one review comment that the watch compares.
 
