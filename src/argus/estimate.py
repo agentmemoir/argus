@@ -22,8 +22,9 @@ Two settings switch it on, and both must be present:
 * ``estimate.ideal-days``: a command that prints one phase's ideal days when
   the phase number is appended to it. It runs from ``repo-root``.
 
-The factor file is committed and pushed alone. When that fails, the file is put
-back, so the next phase's publish does not refuse a dirty tree. Nothing here
+The factor file is committed and pushed alone. When the commit fails, the file
+is put back, so the next phase's publish does not refuse a dirty tree. When the
+push fails, the commit is reverted, so the next sync does not conflict on it. Nothing here
 stops the line: every outcome is one log line.
 """
 
@@ -113,6 +114,13 @@ def _commit(repo: Path, rel: str, message: str) -> str:
     if rel in dirty_paths(repo):
         git(repo, "checkout", "--", rel)
         return "not committed, file put back"
+    # Committed but not pushed, most often because another machine pushed its
+    # own update first. A revert, not a reset, so no history is rewritten: the
+    # pair leaves the file as it was, and the next sync merges without a
+    # conflict on it.
+    if git(repo, "log", "-1", "--format=%s")[1] == message:
+        git(repo, "revert", "--no-edit", "HEAD")
+        return "not pushed; reverted locally"
     return "committed but not pushed"
 
 

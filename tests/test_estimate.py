@@ -127,3 +127,21 @@ def test_failed_commit_puts_the_file_back(setup: dict[str, Path]) -> None:
 def test_unconfigured_driver_does_nothing(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(conventions, "_settings", {})
     assert estimate.update(1, Path("/nonexistent"), 60, resumed=False) == ""
+
+
+def test_push_conflict_reverts_the_local_commit(
+    setup: dict[str, Path], tmp_path: Path
+) -> None:
+    # Another machine pushed its own update of the same factor first.
+    other = tmp_path / "other"
+    git(tmp_path, "clone", "-q", str(setup["remote"]), str(other))
+    git(other, "config", "user.email", "o@example.invalid")
+    git(other, "config", "user.name", "o")
+    (other / "factors.json").write_text(json.dumps({"factors": {HARNESS: 0.9}}))
+    git(other, "commit", "-q", "-am", "other machine")
+    git(other, "push", "-q", "origin", "master")
+    line = estimate.update(101041, setup["run_dir"], 460 * 60, resumed=False)
+    assert "reverted" in line
+    git(setup["repo"], "fetch", "-q", "origin")
+    git(setup["repo"], "merge", "-q", "--no-edit", "origin/master")
+    assert factor_in(setup["factors"]) == pytest.approx(0.9)
