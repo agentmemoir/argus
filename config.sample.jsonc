@@ -185,5 +185,20 @@
     // head that has been replaced is never seen again. 0 never waits. Required
     // with "repair".
     "wait": 1800
+  },
+
+  // Estimate factor. Optional; both keys switch it on. After a phase finishes
+  // from a fresh start, the driver sets the developer harness's factor toward
+  // phase hours / (ideal days x 2), moving it at most 20% per phase, then
+  // commits and pushes the file alone. A resumed run is skipped.
+  "estimate": {
+    // A JSON file inside a git checkout with an upstream:
+    // {"factors": {"<harness id>": 1.0}}. A harness with no factor starts from
+    // the slowest one in the file.
+    "factors-file": "estimation-factors.json",
+
+    // A command that prints one phase's ideal days; the phase number is added
+    // as its last argument. It runs from "repo-root". No number, no update.
+    "ideal-days": "python3 tools/ideal_days.py"
   }
 }
