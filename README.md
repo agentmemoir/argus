@@ -28,7 +28,7 @@ The values:
 
 - `repo-root` — the project checkout; required.
 - `pipeline` — the pipeline file a tick runs; required.
-- `phases-dir` — the folder holding the work-item files; required.
+- `phases` — the phases repository holding the work-item files: `repo`, `directory`, `branch`, `remote`; required for the phase source.
 - `number-input`, `file-input` — the pipeline input names that carry the work-item number and file; optional, but a pipeline that declares those inputs needs them named.
 - `driver.provider` — the work source; required.
 - `driver.include` — the work-item file globs; required. `driver.exclude` — file names to ignore; optional.
@@ -40,7 +40,7 @@ The values:
 - `board.repo`, `board.file`, `board.branch`, `board.remote` — the shared board; required only when the `board` object is present.
 - `notify.profile`, `notify.channel`, `notify.disabled` — the notification target; required when the `notify` object is present. `notify.fallback`, `notify.heartbeat` — optional.
 
-The four override flags `--driver`, `--repo-root`, `--phases-dir`, and repeatable `--phase-glob` beat the file for one run. The readiness report prints every value with the flag-or-file source it came from.
+The four override flags `--driver`, `--repo-root`, `--phases-directory`, and repeatable `--phase-glob` beat the file for one run. The readiness report prints every value with the flag-or-file source it came from.
 
 ## Paths and ownership
 

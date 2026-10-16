@@ -195,7 +195,7 @@ def _evidence_checks() -> None:
         (priv_map / "index.md").write_text("Plan ready\n")
         conventions.override(
             {
-                "phases-dir": BOARD_REL / "phases",
+                "phases.directory": BOARD_REL / "phases",
                 "driver.runs": BOARD_REL / "runs",
             }
         )

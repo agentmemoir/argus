@@ -45,7 +45,7 @@ def _configure(repo: Path, *, board: dict[str, Any] | None = None) -> None:
     settings: dict[str, Any] = {
         "repo-root": repo,
         "pipeline": None,
-        "phases-dir": repo / "phases",
+        "phases.directory": repo / "phases",
         "driver.include": ["phase-*.md"],
         "driver.exclude": [],
         "driver.runs": repo / "runs",

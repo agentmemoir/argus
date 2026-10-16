@@ -14,10 +14,17 @@ import argus.config.cli as cfgmod
 HERE = Path(__file__).resolve().parent
 SAMPLE = HERE.parent / "config.sample.jsonc"
 
+PHASES_LOCAL = {"repo": ".", "directory": "plans", "branch": "main", "remote": "origin"}
+
 BASE: dict[str, Any] = {
     "repo-root": "project",
     "pipeline": "pipeline.yaml",
-    "phases-dir": "phases",
+    "phases": {
+        "repo": "project",
+        "directory": "phases",
+        "branch": "main",
+        "remote": "origin",
+    },
     "number-input": "phase_number",
     "file-input": "phase_file",
     "driver": {

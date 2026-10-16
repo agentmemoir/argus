@@ -232,7 +232,7 @@ _drive_cut_branch() {
     # after. Putting it behind `if ! cmd; then rc=$?` cannot work: the `!`
     # resets $? to 0 before the body runs, so the guard below saw success even
     # when the sync refused, and the phase launched anyway.
-    # --phases-dir as well as --phases: the first names the phase file's
+    # --phases-directory as well as --phases: the first names the phase file's
     # behaviour, and the second names the folder that file was chosen from.
     # gitsync's branch mode scans that folder to refuse a branch name another
     # phase in it would also earn, so without it the check runs against the
@@ -245,7 +245,7 @@ _drive_cut_branch() {
     "$PYTHON" "$ARGUS/gitsync/main.py" "${ARGUS_CONFIG_ARGS[@]}" --root "$REPO" \
       --mode branch --phase "$number" --phases "$phases_name" \
       "${GITSYNC_KIND_ARGS[@]+"${GITSYNC_KIND_ARGS[@]}"}" \
-      --phases-dir "$(phases_dir)" \
+      --phases-directory "$(phases_dir)" \
       "${GROUP_ARGS[@]+"${GROUP_ARGS[@]}"}" \
       >"$RUN_DIR/phase-branch.json" 2>/dev/null
     local branch_rc=$?

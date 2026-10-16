@@ -292,7 +292,10 @@ board = Path(board_repo).resolve() if board_repo else (root / board_dir).resolve
 doc = {
     "repo-root": str(root),
     "pipeline": str(root / board_dir / "flow.yaml"),
-    "phases-dir": str(root / board_dir / "plans"),
+    "phases": {
+        "repo": str(root), "directory": str(board_dir / "plans"),
+        "branch": "master", "remote": "origin",
+    },
     "number-input": "phase_number",
     "file-input": "phase_file",
     "driver": {

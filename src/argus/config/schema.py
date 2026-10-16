@@ -17,13 +17,20 @@ class Field(NamedTuple):
 #   "required" - always needed;
 #   "optional" - never required;
 #   "board"    - required only when the `board` object is present;
+#   "phases"   - required only when the work source is the phase source;
 #   "notify"   - required only when the `notify` object is present;
 #   "issues"   - required only when the `issues` object is present;
 #   "repair"   - required only when the `repair` object is present.
 SCHEMA = (
     Field("repo-root", "path", "required"),
     Field("pipeline", "path", "required"),
-    Field("phases-dir", "path", "required"),
+    # The phases repository, a peer of the board. `repo` is a local checkout,
+    # `directory` a folder inside it, and branch/remote name where Argus commits
+    # and pushes. Required for the phase source.
+    Field("phases.repo", "path", "phases"),
+    Field("phases.directory", "str", "phases"),
+    Field("phases.branch", "str", "phases"),
+    Field("phases.remote", "str", "phases"),
     Field("number-input", "str", "optional"),
     Field("file-input", "str", "optional"),
     Field("driver.provider", "str", "required"),
@@ -97,7 +104,10 @@ SCHEMA = (
 SHELL_VARS = {
     "repo-root": "REPO",
     "pipeline": "PIPELINE",
-    "phases-dir": "PHASES_DIR",
+    "phases.repo": "PHASES_REPO",
+    "phases.directory": "PHASES_DIRECTORY",
+    "phases.branch": "PHASES_BRANCH",
+    "phases.remote": "PHASES_REMOTE",
     "number-input": "PHASE_NUMBER_INPUT",
     "file-input": "PHASE_FILE_INPUT",
     "driver.provider": "DRIVER",
@@ -170,7 +180,7 @@ ISSUES_DEFAULTS: dict[str, object] = {
 # Repeated --phase-glob flags replace the file's include list with that list.
 _OVERRIDES = {
     "repo-root": ("repo-root", False),
-    "phases-dir": ("phases-dir", False),
+    "phases-directory": ("phases.directory", False),
     "phase-glob": ("driver.include", True),
     "driver": ("driver.provider", False),
 }
@@ -181,6 +191,7 @@ _OBJECT_KEYS = (
     "commands",
     "tmux",
     "board",
+    "phases",
     "notify",
     "issues",
     "repair",

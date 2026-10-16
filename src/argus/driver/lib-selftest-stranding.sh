@@ -92,7 +92,7 @@ strand_expect_refused() {
     old_current="$CURRENT"; old_pid="$PIDFILE"; old_notify_broken="$NOTIFY_BROKEN"
     old_log="$LOG"; old_session="$SESSION"; old_argus="$ARGUS"
     old_notifier="$NOTIFIER"; old_pipeline="$PIPELINE"
-    old_phases_dir="$PHASES_DIR"; old_work_source="$WORK_SOURCE"
+    old_phases_dir="$PHASES_DIRECTORY"; old_work_source="$WORK_SOURCE"
     old_work_source_flags=("${WORK_SOURCE_FLAGS[@]+"${WORK_SOURCE_FLAGS[@]}"}")
     REPO="$strand_root"; BOARD_DIR=board-data
     ARGUS="$strand_root/$BOARD_DIR/argus"
@@ -157,7 +157,7 @@ strand_expect_refused() {
     printf '# %s. Outside Strand Fixture\n- [ ] Required approval is obtained.\n' \
       "$strand_unclaimed" >"$strand_outside/phase-$strand_unclaimed-outside-strand.md"
     printf 'Plan ready\n' >"$strand_outside/index.md"
-    PHASES_DIR="$strand_outside"
+    PHASES_DIRECTORY="$strand_outside"
     WORK_SOURCE_FLAGS=(--phases "$strand_outside")
     if strand_expect_refused \
         "outside $REPO, so its phase files cannot be launched"; then
@@ -175,8 +175,8 @@ strand_expect_refused() {
 
     # A folder that is not there at all. Same claim to strand, same place to
     # refuse, and it is the one a typo in a settings file produces.
-    PHASES_DIR="$tmp/strand-absent-phases"
-    WORK_SOURCE_FLAGS=(--phases "$PHASES_DIR")
+    PHASES_DIRECTORY="$tmp/strand-absent-phases"
+    WORK_SOURCE_FLAGS=(--phases "$PHASES_DIRECTORY")
     if strand_expect_refused \
         "configured phases folder $tmp/strand-absent-phases is missing or unreadable"; then
       echo "ok: a missing phases folder refuses, and the board is untouched"
@@ -195,7 +195,7 @@ strand_expect_refused() {
     # than by the driver's shell, so it is the case that would pass if only the
     # shell's own check were trusted: the shell does not check the source at all,
     # and the selector's refusal has to arrive before anything is claimed.
-    PHASES_DIR=""
+    PHASES_DIRECTORY=""
     WORK_SOURCE_FLAGS=(--source no-such-source)
     if strand_expect_refused "unknown work source 'no-such-source'"; then
       echo "ok: an unknown work source refuses, and the board is untouched"
@@ -211,7 +211,7 @@ strand_expect_refused() {
     wait_phase_window_gone
 
     # Back to the fixture's own folder: every case below selects from it.
-    PHASES_DIR=""; WORK_SOURCE_FLAGS=()
+    PHASES_DIRECTORY=""; WORK_SOURCE_FLAGS=()
 
     # Then the takeover: the tick must reach the launch with the phase's work
     # still in the index and both remotes moved.
@@ -302,7 +302,7 @@ strand_expect_refused() {
     CURRENT="$old_current"; PIDFILE="$old_pid"; NOTIFY_BROKEN="$old_notify_broken"
     LOG="$old_log"; SESSION="$old_session"; ARGUS="$old_argus"
     NOTIFIER="$old_notifier"; PIPELINE="$old_pipeline"
-    PHASES_DIR="$old_phases_dir"; WORK_SOURCE="$old_work_source"
+    PHASES_DIRECTORY="$old_phases_dir"; WORK_SOURCE="$old_work_source"
     WORK_SOURCE_FLAGS=("${old_work_source_flags[@]+"${old_work_source_flags[@]}"}")
     load_fixture_config "$selftest_config"
   else

@@ -117,7 +117,9 @@ def main(
         action="append",
         help="work-item file glob (repeatable)",
     )
-    parser.add_argument("--phases-dir", "--phases", dest="config_phases_dir")
+    parser.add_argument(
+        "--phases-directory", "--phases", dest="config_phases_directory"
+    )
     parser.add_argument("--driver", dest="config_driver")
     parser.add_argument("--config")
     parser.add_argument("--self-test", action="store_true")
@@ -198,8 +200,8 @@ def main(
             settings = dict(_settings)
             if args.config_repo_root is not None:
                 settings["repo-root"] = Path(args.config_repo_root)
-            if args.config_phases_dir is not None:
-                settings["phases-dir"] = Path(args.config_phases_dir)
+            if args.config_phases_directory is not None:
+                settings["phases.directory"] = args.config_phases_directory
             if args.config_phase_glob is not None:
                 settings["driver.include"] = list(args.config_phase_glob)
             conventions.configure(settings)
@@ -207,7 +209,7 @@ def main(
         print(f"error: {exc}", file=sys.stderr)
         return 2
     repo = Path(conventions.setting("repo-root")).resolve()
-    phases = conventions.setting("phases-dir")
+    phases = conventions.require_phases_folder(repo)
     # The group query is read-only and comes before anything that writes. It
     # resolves the group from the phase documents and claims nothing, so it
     # needs neither the board nor the work-source registry.

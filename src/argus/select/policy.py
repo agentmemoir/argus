@@ -162,8 +162,8 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--phases",
-        "--phases-dir",
-        dest="config_phases_dir",
+        "--phases-directory",
+        dest="config_phases_directory",
         default=None,
         help="phases directory for this run",
     )
@@ -185,7 +185,9 @@ def main(argv: list[str] | None = None) -> int:
         print(f"phase policy: {exc}", file=sys.stderr)
         return 2
 
-    phases = pathlib.Path(conventions.setting("phases-dir"))
+    phases = conventions.require_phases_folder(
+        pathlib.Path(conventions.setting("repo-root")).resolve()
+    )
     gates = scan_gates(phases)
     blocked = {n: v for n, v in gates.items() if v[0] == "open"}
     unknown = {n: v for n, v in gates.items() if v[0] == "unknown"}

@@ -50,7 +50,7 @@ def self_test_checks() -> list[dict[str, Any]]:
         {
             "repo-root": Path(),
             "pipeline": None,
-            "phases-dir": BOARD_REL / "phases",
+            "phases.directory": BOARD_REL / "phases",
             "driver.runs": BOARD_REL / "runs",
             "driver.include": ["phase-*.md"],
             "driver.exclude": [],

@@ -27,7 +27,7 @@ class ConventionTests(unittest.TestCase):
         self.settings = {
             "repo-root": self.repo,
             "pipeline": None,
-            "phases-dir": Path("plans"),
+            "phases.directory": Path("plans"),
             "number-input": "phase_number",
             "file-input": "phase_file",
             "driver.include": ["phase-*.md"],

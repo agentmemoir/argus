@@ -62,7 +62,7 @@ _drive_resume_branch() {   # <number> <rel>
   if ! "$PYTHON" "$ARGUS/gitsync/main.py" "${ARGUS_CONFIG_ARGS[@]}" --root "$REPO" \
       --mode branch --phase "$number" --phases "$phases_name" \
       "${GITSYNC_KIND_ARGS[@]+"${GITSYNC_KIND_ARGS[@]}"}" \
-      --phases-dir "$(phases_dir)" \
+      --phases-directory "$(phases_dir)" \
       "${GROUP_ARGS[@]+"${GROUP_ARGS[@]}"}" \
       >"$RUN_DIR/phase-branch.json" 2>/dev/null; then
     RESUME_REFUSAL="the branch helper refused (see $RUN_DIR/phase-branch.json); a dirty checkout is the usual cause"

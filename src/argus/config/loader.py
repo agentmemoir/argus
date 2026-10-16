@@ -15,6 +15,7 @@ from argus.config.issue_validation import (
     validate_trust,
 )
 from argus.config.overlay import apply_overlay
+from argus.config.phases_validation import validate_phases
 from argus.config.schema import (
     _OBJECT_KEYS,
     _OVERRIDES,
@@ -49,7 +50,7 @@ def load(
     """Read, clean, resolve, and validate one configuration file.
 
     `config_path=None` uses `./config.json` when it is a file. `overrides` may
-    hold the four flag names `repo-root`, `phases-dir`, `phase-glob`, and
+    hold the four flag names `repo-root`, `phases-directory`, `phase-glob`, and
     `driver`; each present one wins over the file and its source is `flag`. A
     relative flag path resolves against the working directory.
     """
@@ -79,6 +80,14 @@ def _build(
     overrides: dict[str, object],
     origins: dict[str, Path],
 ) -> Config:
+    for legacy in ("roadmap-dir", "phases-dir"):
+        if legacy in raw:
+            raise ConfigError(
+                f"key '{legacy}' was replaced by the 'phases' object: set "
+                "'phases.directory' to the folder holding the work-item files, "
+                "and 'phases.repo', 'phases.branch', 'phases.remote' with it"
+            )
+
     for name in _OBJECT_KEYS:
         if name in raw and raw[name] is not None and not isinstance(raw[name], dict):
             raise ConfigError(f"invalid type for key '{name}': expected object")
@@ -86,6 +95,10 @@ def _build(
     board_value = raw.get("board")
     board = (
         cast("dict[str, Any]", board_value) if isinstance(board_value, dict) else None
+    )
+    phases_value = raw.get("phases")
+    phases = (
+        cast("dict[str, Any]", phases_value) if isinstance(phases_value, dict) else None
     )
     notify_value = raw.get("notify")
     notify = (
@@ -145,6 +158,8 @@ def _build(
         validate_trust(issues)
     if provider == "issues":
         validate_issues(values)
+    if phases is not None:
+        validate_phases(values)
     return Config(path, values, sources)
 
 
@@ -160,6 +175,8 @@ def _is_required(
         return True
     if field.required == "board":
         return board is not None
+    if field.required == "phases":
+        return provider in (None, "phase", "phases")
     if field.required == "notify":
         return notify is not None
     if field.required == "issues":

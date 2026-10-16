@@ -51,7 +51,7 @@ def configure_from_args(args: Any) -> "Config":
     overrides: dict[str, object] = {}
     for key, name in (
         ("repo-root", "config_repo_root"),
-        ("phases-dir", "config_phases_dir"),
+        ("phases-directory", "config_phases_directory"),
         ("phase-glob", "config_phase_glob"),
         ("driver", "config_driver"),
     ):
@@ -68,7 +68,7 @@ def configure_from_cli(argv: list[str]) -> "Config":
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("--config")
     parser.add_argument("--repo-root", dest="config_repo_root")
-    parser.add_argument("--phases-dir", dest="config_phases_dir")
+    parser.add_argument("--phases-directory", dest="config_phases_directory")
     parser.add_argument("--phase-glob", dest="config_phase_glob", action="append")
     parser.add_argument("--driver", dest="config_driver")
     args, _unknown = parser.parse_known_args(argv)
@@ -93,6 +93,52 @@ def board_repo(repo: str | Path | None = None) -> Path | None:
     if not path.is_absolute():
         path = Path(repo or setting("repo-root")) / path
     return path.resolve()
+
+
+def phases_repo(repo: str | Path | None = None) -> Path | None:
+    """The configured checkout that owns the phases."""
+    path = setting("phases.repo", None)
+    if path is None:
+        return None
+    path = Path(path)
+    if not path.is_absolute():
+        path = Path(repo or setting("repo-root")) / path
+    return path.resolve()
+
+
+def phases_folder(
+    repo: str | Path | None = None, configured: str | Path | None = None
+) -> Path | None:
+    """The folder Argus reads phases from and writes their index to.
+
+    An explicit ``configured`` folder is the operator's word and is never
+    silently replaced. Otherwise the configured phases repository holds the
+    configured directory. ``None`` means no phases repository is configured,
+    which only the issue source reaches.
+    """
+    if configured is not None:
+        base = Path(configured)
+        return base if base.is_absolute() else Path(repo or setting("repo-root")) / base
+    directory = setting("phases.directory", None)
+    if directory is None:
+        return None
+    folder = Path(directory)
+    if folder.is_absolute():
+        return folder
+    owner = phases_repo(repo)
+    if owner is None:
+        return Path(repo or setting("repo-root")) / folder
+    return owner / folder
+
+
+def require_phases_folder(
+    repo: str | Path | None = None, configured: str | Path | None = None
+) -> Path:
+    """The phases folder, or an error when no phases repository is configured."""
+    folder = phases_folder(repo, configured)
+    if folder is None:
+        raise ValueError("no phases repository is configured")
+    return folder
 
 
 def phase_globs() -> list[str]:
@@ -138,9 +184,9 @@ def phase_file_parts(path: str | Path) -> tuple[int, str] | None:
 
 def resolve_phase_file(repo: str | Path, number: int) -> Path | None:
     """Find the configured work-item file with ``number`` in its name."""
-    phases = Path(setting("phases-dir"))
-    if not phases.is_absolute():
-        phases = Path(repo) / phases
+    phases = phases_folder(repo)
+    if phases is None:
+        return None
     for path in phase_paths(phases):
         parts = phase_file_parts(path)
         if parts and parts[0] == int(number):

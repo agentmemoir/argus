@@ -12,8 +12,14 @@
   // The pipeline a tick runs. Required. Relative to this file.
   "pipeline": "./project/pipeline.yaml",
 
-  // The folder holding the work-item files. Required.
-  "phases-dir": "./project/plans",
+  // The phases repository: where the work-item files live, and where Argus
+  // commits and pushes what it writes there. Required for the phase source.
+  "phases": {
+    "repo": "./project",
+    "directory": "plans",
+    "branch": "main",
+    "remote": "origin"
+  },
 
   // The pipeline input names that carry the work-item number and file. The
   // example pipeline declares both, so both are named here.

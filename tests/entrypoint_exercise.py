@@ -143,7 +143,16 @@ sys.exit(2)
         "the report did not name the configuration file",
         readiness.stdout,
     )
-    for key in ("REPO", "PIPELINE", "PHASES_DIR", "WF", "BOARD_REPO"):
+    for key in (
+        "REPO",
+        "PIPELINE",
+        "PHASES_REPO",
+        "PHASES_DIRECTORY",
+        "PHASES_BRANCH",
+        "PHASES_REMOTE",
+        "WF",
+        "BOARD_REPO",
+    ):
         require(
             re.search(rf"^{key}: .* \(file\)$", readiness.stdout, re.M),
             f"the report did not name {key} with its file source",

@@ -6,7 +6,14 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import Any, cast
 
-from argus.conventions import board_repo, phase_file_parts, phase_paths, setting
+from argus.conventions import (
+    board_repo,
+    phase_file_parts,
+    phase_paths,
+)
+from argus.conventions import (
+    phases_folder as _phases_folder,
+)
 from argus.gitsync.git import ConfigError, blocked
 
 # A phase branch is named from the behaviour in the phase's phases file, and
@@ -90,10 +97,9 @@ def phases_folder(root: str | Path, configured: str | Path | None = None) -> Pat
     configured folder is invisible to it. A relative value resolves against the
     repository root, matching the selector's own rule and the driver's shell.
     """
-    configured = configured or setting("phases-dir")
-    if configured:
-        base = Path(configured)
-        return base if base.is_absolute() else Path(root) / base
+    folder = _phases_folder(root, configured)
+    if folder is not None:
+        return folder
     return cast("Path", board_repo(root)) / "phases"
 
 

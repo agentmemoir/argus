@@ -25,7 +25,7 @@ Notable changes to this project are documented here. The format follows [Keep a 
 - Modes: `--check`, `--dry-run`, `--self-test`, `--stop`, and `--session <NUMBER> <PHASE-FILE>`.
 - Checks: the driver self-test, the guard-faults harness, and a wheel that ships the shell driver.
 - A publication lock left behind by a publish that died stops blocking after the 30 minute heartbeat window, so claim recovery and other phases' publishes proceed. A fresh lock still blocks both; `release-publication` still frees one early.
-- A relative `--repo-root` or `--phases-dir` resolves against the working directory, not the configuration file's folder, so `--root .` from the project root names the project root.
+- A relative `--repo-root` or `--phases-directory` resolves against the working directory, not the configuration file's folder, so `--root .` from the project root names the project root.
 - The tmux idle watcher ends when the process that started it is gone, so one run outside tmux, or after its tmux server died, no longer loops as an orphan.
 - A reservation group's pull request is made ready for review only when every member has published and its checks pass; a pull request with failing, running, or unreported checks stays in draft with the reason in the publication output, and the driver readies it on the first tick that finds the checks green.
 - Publishing a group member merges the open pull requests that target the group branch when they are ready, from this repository, mergeable, not blocked by a review, and green, so a fix for a bug an earlier member left lands before the next member starts. The new `--mode gate --phase NUMBER` runs the same step by hand.

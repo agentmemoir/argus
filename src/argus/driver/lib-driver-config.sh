@@ -59,7 +59,7 @@ set_config_args() {
   ARGUS_CONFIG_ARGS=()
   [ -z "${ARGUS_CONFIG_FILE:-}" ] || ARGUS_CONFIG_ARGS+=(--config "$ARGUS_CONFIG_FILE")
   [ -z "$CLI_REPO" ] || ARGUS_CONFIG_ARGS+=(--repo-root "$CLI_REPO")
-  [ -z "$CLI_PHASES" ] || ARGUS_CONFIG_ARGS+=(--phases-dir "$CLI_PHASES")
+  [ -z "$CLI_PHASES" ] || ARGUS_CONFIG_ARGS+=(--phases-directory "$CLI_PHASES")
   for _glob in "${CLI_GLOB[@]+"${CLI_GLOB[@]}"}"; do
     ARGUS_CONFIG_ARGS+=(--phase-glob "$_glob")
   done
@@ -142,7 +142,7 @@ PY
     issue_preflight
     return $?
   fi
-  if [ -z "$PHASES_DIR" ]; then
+  if [ -z "$PHASES_DIRECTORY" ]; then
     return 0
   fi
   if ! phases_dir_readable; then
@@ -165,9 +165,9 @@ PY
 # driver from an arbitrary directory. Both sides must agree, so both anchor to
 # REPO.
 phases_dir() {
-  case "$PHASES_DIR" in
-    /*) printf '%s' "$PHASES_DIR" ;;
-    *) printf '%s' "$REPO/$PHASES_DIR" ;;
+  case "$PHASES_DIRECTORY" in
+    /*) printf '%s' "$PHASES_DIRECTORY" ;;
+    *) printf '%s' "$PHASES_REPO/$PHASES_DIRECTORY" ;;
   esac
 }
 
@@ -211,7 +211,7 @@ argus_init() {
     [ -z "$CLI_CONFIG" ] || _config_args+=(--config "$CLI_CONFIG")
     _config_args+=(--format shell)
     [ -z "$CLI_REPO" ] || _config_args+=(--repo-root "$CLI_REPO")
-    [ -z "$CLI_PHASES" ] || _config_args+=(--phases-dir "$CLI_PHASES")
+    [ -z "$CLI_PHASES" ] || _config_args+=(--phases-directory "$CLI_PHASES")
     for _glob in "${CLI_GLOB[@]+"${CLI_GLOB[@]}"}"; do
       _config_args+=(--phase-glob "$_glob")
     done

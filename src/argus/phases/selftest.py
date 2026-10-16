@@ -25,7 +25,7 @@ def self_test() -> None:
     conventions.configure(
         {
             "repo-root": Path(),
-            "phases-dir": Path("phases"),
+            "phases.directory": Path("phases"),
             "driver.runs": Path("runs"),
             "driver.include": ["phase-*.md"],
             "driver.exclude": [],

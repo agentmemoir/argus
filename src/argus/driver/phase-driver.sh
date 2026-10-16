@@ -36,7 +36,7 @@
 # --config or found at ./config.json. No value is read from the environment or
 # from a machine-local file, and no value has a default in code: a missing
 # required key stops the tick and names the key. The four flags --driver,
-# --repo-root, --phases-dir and --phase-glob override the file for one run,
+# --repo-root, --phases-directory and --phase-glob override the file for one run,
 # and --check prints every value with the flag-or-file source it came from.
 #
 # The selector's own refusals are recorded three ways, one for each reader:
@@ -78,18 +78,18 @@ CLI_DRIVER=""; CLI_REPO=""; CLI_PHASES=""; CLI_GLOB=(); CLI_CONFIG=""
 MODE_ARGS=()
 while [ "$#" -gt 0 ]; do
   case "$1" in
-    --driver|--repo-root|--phases-dir|--phase-glob|--config)
+    --driver|--repo-root|--phases-directory|--phase-glob|--config)
       [ "$#" -ge 2 ] && [ -n "$2" ] || { printf 'argus: %s needs a value\n' "$1" >&2; exit 2; }
       case "$1" in
         --driver) CLI_DRIVER="$2" ;;
         --repo-root) CLI_REPO="$2" ;;
-        --phases-dir) CLI_PHASES="$2" ;;
+        --phases-directory) CLI_PHASES="$2" ;;
         --phase-glob) CLI_GLOB+=("$2") ;;
         --config) CLI_CONFIG="$2" ;;
       esac
       shift 2 ;;
     --help|-h)
-      echo 'usage: argus [--config FILE] [--driver phase] [--repo-root PATH] [--phases-dir PATH] [--phase-glob GLOB] [--dry-run|--check|--merge-check-only|--self-test|--stop|--release]'
+      echo 'usage: argus [--config FILE] [--driver phase] [--repo-root PATH] [--phases-directory PATH] [--phase-glob GLOB] [--dry-run|--check|--merge-check-only|--self-test|--stop|--release]'
       echo '       argus --session NUMBER PHASE_FILE'
       echo '       argus --resume [NUMBER]'
       echo '       argus abandon NUMBER [--reason TEXT]'
@@ -122,7 +122,7 @@ ARGUS="$ARGUS_PKG"
 SELF="$ARGUS_DIR/$(basename "$_SCRIPT_SRC")"
 ARGUS_CONFIG_ARGS=()
 ARGUS_CONFIG_VARS=(
-  REPO PIPELINE PHASES_DIR PHASE_NUMBER_INPUT PHASE_FILE_INPUT DRIVER
+  REPO PIPELINE PHASES_REPO PHASES_DIRECTORY PHASES_BRANCH PHASES_REMOTE PHASE_NUMBER_INPUT PHASE_FILE_INPUT DRIVER
   PHASE_INCLUDE PHASE_EXCLUDE WF DRIVER_STATE STALE_AFTER_SEC OUTAGE_STALE_SEC
   QUIET_MINUTES LOG_KEEP_DAYS MERGE_CHECK_MAX RECOVER_OWN_CLAIM PHASE_MACHINE_ID
   CMD_GLIDE CMD_GIT CMD_TMUX CMD_PYTHON CMD_HERMES CMD_GH SESSION_NAME

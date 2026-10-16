@@ -53,9 +53,10 @@ def resolve_phases(repo: str | Path, configured: str | Path | None = None) -> Pa
     reported as an absolute path, because a launch inside this checkout cannot
     express a path to somewhere else; ``reported_path`` is where that happens.
     """
-    base = Path(configured or conventions.setting("phases-dir"))
-    if not base.is_absolute():
-        base = Path(repo) / base
+    folder = conventions.phases_folder(repo, configured)
+    if folder is None:
+        raise PhasesUnavailable("no phases repository is configured")
+    base = folder
     if not base.is_dir():
         raise PhasesUnavailable(
             f"configured phases folder {base} is missing or is not a directory"

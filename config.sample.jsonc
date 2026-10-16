@@ -24,8 +24,24 @@
   // The pipeline file that gets run. Required. Relative to this file.
   "pipeline": "pipeline.yaml",
 
-  // The folder holding the work-item files. Required. Relative to this file.
-  "phases-dir": "plans",
+  // The phases repository: where the work-item files live, and where Argus
+  // commits and pushes what it writes there (the index, mainly). Required for
+  // the phase source. It is a peer of the board, so it needs its own checkout,
+  // branch and remote, and a Git destination different from the board's.
+  "phases": {
+    // The checkout that owns the phases. Relative here, so it is this file's
+    // folder plus "project". A submodule folder works too: name the submodule.
+    "repo": "./project",
+
+    // The folder inside that checkout holding the work-item files. Required.
+    "directory": "plans",
+
+    // Where Argus commits and pushes the phases. Required. Every machine that
+    // writes phases names the same branch and remote, because two branches are
+    // two phase sets.
+    "branch": "main",
+    "remote": "origin"
+  },
 
   // The pipeline input names that carry the work-item number and file. Optional,
   // but a pipeline that declares inputs needs them named.

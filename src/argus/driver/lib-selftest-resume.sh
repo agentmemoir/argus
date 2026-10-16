@@ -294,7 +294,7 @@ selftest_case_group_resume() {
   # resume starts where a member of a half-run group really starts.
   "$PYTHON" "$ARGUS/gitsync/main.py" "${ARGUS_CONFIG_ARGS[@]}" --root "$REPO" \
     --mode branch --phase 100030 --phases phase-100030-cache-read \
-    --phases-dir "$(phases_dir)" --group 100020 --group 100030 \
+    --phases-directory "$(phases_dir)" --group 100020 --group 100030 \
     >"$RUN_DIR/group-cut.json" 2>&1 || rc=$?
   head="$(git -C "$REPO" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
   if [ "$rc" -eq 0 ] && [ "$head" = "$group_branch" ]; then

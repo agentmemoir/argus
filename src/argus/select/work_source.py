@@ -126,7 +126,7 @@ def self_test() -> None:
         {
             "repo-root": Path(),
             "pipeline": None,
-            "phases-dir": Path(),
+            "phases.directory": Path(),
             "driver.include": ["phase-*.md"],
             "driver.exclude": [],
             "driver.runs": Path("runs"),

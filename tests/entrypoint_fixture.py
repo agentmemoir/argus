@@ -63,7 +63,12 @@ def write_config(
 {{
   "repo-root": "{project.relative_to(path.parent)}",
   "pipeline": "{pipeline.relative_to(path.parent)}",
-  "phases-dir": "{phases.relative_to(path.parent)}",
+  "phases": {{
+    "repo": ".",
+    "directory": "{phases.relative_to(path.parent)}",
+    "branch": "main",
+    "remote": "origin"
+  }},
   "number-input": "ticket",
   "file-input": "document",
 

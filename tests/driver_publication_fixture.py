@@ -168,7 +168,12 @@ def driver_publication_fixture(
         {
             "repo-root": str(root),
             "pipeline": str(pipeline),
-            "phases-dir": str(plans),
+            "phases": {
+                "repo": str(private),
+                "directory": "phases",
+                "branch": "main",
+                "remote": "origin",
+            },
             "board": {
                 "repo": str(private),
                 "file": "claims.json",

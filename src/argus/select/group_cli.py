@@ -50,7 +50,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="the fence generation when no token is present",
     )
     parser.add_argument("--repo-root", dest="config_repo_root")
-    parser.add_argument("--phases-dir", dest="config_phases_dir")
+    parser.add_argument("--phases-directory", dest="config_phases_directory")
     parser.add_argument("--phase-glob", dest="config_phase_glob", action="append")
     parser.add_argument("--driver", dest="config_driver")
     parser.add_argument("--config")
@@ -84,7 +84,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"phase_group: {exc}", file=sys.stderr)
         return 2
     repo = Path(conventions.setting("repo-root")).resolve()
-    phases = conventions.setting("phases-dir")
+    phases = conventions.require_phases_folder(repo)
     if args.release:
         result, code = _release(repo, phase, args)
     elif args.renew:

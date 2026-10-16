@@ -59,7 +59,7 @@ check() {
   echo "config file: ${ARGUS_CONFIG_FILE:-none}"
   echo "configuration precedence: $CONFIG_PRECEDENCE"
   echo "driver home: $ARGUS_DRIVER"
-  for var in REPO PIPELINE PHASES_DIR PHASE_NUMBER_INPUT PHASE_FILE_INPUT \
+  for var in REPO PIPELINE PHASES_REPO PHASES_DIRECTORY PHASES_BRANCH PHASES_REMOTE PHASE_NUMBER_INPUT PHASE_FILE_INPUT \
              DRIVER PHASE_INCLUDE PHASE_EXCLUDE WF DRIVER_STATE \
              STALE_AFTER_SEC OUTAGE_STALE_SEC QUIET_MINUTES LOG_KEEP_DAYS \
              MERGE_CHECK_MAX RECOVER_OWN_CLAIM PHASE_MACHINE_ID \
@@ -132,7 +132,7 @@ check() {
   fi
   # The launch suffix says whether this machine can actually run what it
   # selects: a folder outside this checkout is readable but not launchable.
-  if [ -n "$PHASES_DIR" ]; then
+  if [ -n "$PHASES_DIRECTORY" ]; then
     if phases_dir_readable; then
       echo "phases dir: $(phases_dir) (configured)"
     else

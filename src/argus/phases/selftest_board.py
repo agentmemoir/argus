@@ -188,7 +188,7 @@ def _board_checks() -> None:
         conventions.override(
             {
                 "repo-root": repo,
-                "phases-dir": BOARD_REL / "phases",
+                "phases.directory": BOARD_REL / "phases",
                 "driver.runs": BOARD_REL / "runs",
                 "board.repo": decoy,
             }

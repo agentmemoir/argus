@@ -124,7 +124,7 @@ def _configure_self_test(
         {
             "repo-root": pub,
             "pipeline": pipeline,
-            "phases-dir": Path(phases or Path(board) / "phases"),
+            "phases.directory": Path(phases or Path(board) / "phases"),
             "driver.runs": Path(runs or Path(board) / "runs"),
             "driver.state": ".driver",
             "driver.merge-check-max": 5,

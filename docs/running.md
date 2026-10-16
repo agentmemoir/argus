@@ -43,4 +43,4 @@ A hold controls local launches. Board ownership still uses the claim lease. Tick
 
 `--config` names the file. Without the flag, `config.json` in the current folder is used when it is there. `--self-test` reads no file.
 
-Four flags override the file for one run: `--driver`, `--repo-root`, `--phases-dir`, and repeatable `--phase-glob`. The readiness report prints which of the flag and the file supplied each value. [configuration.md](configuration.md) covers the values.
+Four flags override the file for one run: `--driver`, `--repo-root`, `--phases-directory`, and repeatable `--phase-glob`. The readiness report prints which of the flag and the file supplied each value. [configuration.md](configuration.md) covers the values.

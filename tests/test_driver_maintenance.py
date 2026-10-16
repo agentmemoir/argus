@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from config_fixture import BASE, write
+from config_fixture import BASE, PHASES_LOCAL, write
 
 DRIVER = Path(__file__).resolve().parents[1] / "src/argus/driver"
 
@@ -301,7 +301,7 @@ _drive
 
 def test_pending_scan_reads_pipeline_receipts_without_selecting(tmp_path: Path) -> None:
     config = copy.deepcopy(BASE)
-    config.update({"repo-root": ".", "phases-dir": "plans"})
+    config.update({"repo-root": ".", "phases": PHASES_LOCAL})
     (tmp_path / "plans").mkdir()
     (tmp_path / "plans/phase-100010-fixture.md").write_text("# Fixture\n")
     (tmp_path / "pipeline.yaml").write_text(

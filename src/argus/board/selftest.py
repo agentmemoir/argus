@@ -49,7 +49,7 @@ def self_test_checks() -> list[dict[str, Any]]:
         {
             "repo-root": Path(),
             "pipeline": None,
-            "phases-dir": Path("phases"),
+            "phases.directory": Path("phases"),
             "driver.runs": Path("runs"),
             "driver.include": ["phase-*.md"],
             "driver.exclude": [],

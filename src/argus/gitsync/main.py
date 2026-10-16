@@ -121,7 +121,7 @@ def main() -> int:
     ap.add_argument("--config")
     ap.add_argument("--kind", choices=["phase", "issue"], default="phase")
     ap.add_argument("--driver", dest="config_driver")
-    ap.add_argument("--phases-dir", dest="config_phases_dir")
+    ap.add_argument("--phases-directory", dest="config_phases_directory")
     ap.add_argument("--phase-glob", dest="config_phase_glob", action="append")
     ap.add_argument("--repo", default=None, help="sync one checkout instead of --root")
     ap.add_argument(
@@ -232,7 +232,7 @@ def main() -> int:
                 args.root,
                 args.phase,
                 args.phases,
-                conventions.setting("phases-dir"),
+                conventions.require_phases_folder(args.root),
                 group=args.group,
             )
         elif args.mode == "publish":

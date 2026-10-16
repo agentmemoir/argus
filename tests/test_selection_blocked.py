@@ -34,7 +34,7 @@ def repo(tmp_path: Path) -> Iterator[Path]:
         {
             "repo-root": root,
             "pipeline": None,
-            "phases-dir": Path("phases"),
+            "phases.directory": Path("phases"),
             "number-input": "phase_number",
             "file-input": "phase_file",
             "driver.runs": Path("runs"),

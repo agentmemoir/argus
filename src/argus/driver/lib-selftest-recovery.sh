@@ -122,10 +122,10 @@ selftest_case_recovery_sources() {
   # A phases folder that is not there is a settings mistake, not a queue that
   # has run dry. The two look identical from the selector's exit code, so the
   # refusal is proved here and the folder is named.
-  old_phases_dir="$PHASES_DIR"; old_work_source_flags=("${WORK_SOURCE_FLAGS[@]+"${WORK_SOURCE_FLAGS[@]}"}")
+  old_phases_dir="$PHASES_DIRECTORY"; old_work_source_flags=("${WORK_SOURCE_FLAGS[@]+"${WORK_SOURCE_FLAGS[@]}"}")
   missing_root="$(mktemp -d)"
-  PHASES_DIR="$missing_root/absent"
-  WORK_SOURCE_FLAGS=(--phases "$PHASES_DIR")
+  PHASES_DIRECTORY="$missing_root/absent"
+  WORK_SOURCE_FLAGS=(--phases "$PHASES_DIRECTORY")
   missing_launches="$(grep -c 'launched phase' "$LOG" || true)"
   drive --self-test || true
   if grep -q "configured phases folder $missing_root/absent is missing or unreadable" "$LOG" \
@@ -135,7 +135,7 @@ selftest_case_recovery_sources() {
     echo "FAIL: a missing phases folder did not stop the tick"; fail=1
   fi
   rm -rf "$missing_root"
-  PHASES_DIR="$old_phases_dir"
+  PHASES_DIRECTORY="$old_phases_dir"
   WORK_SOURCE_FLAGS=("${old_work_source_flags[@]+"${old_work_source_flags[@]}"}")
 
   # A configured phases folder outside this checkout can be read but its
@@ -153,17 +153,17 @@ selftest_case_recovery_sources() {
   # has one: an unconfigured host is the case most deployments are in, and a
   # check that only runs on a configured one would go unexecuted exactly where
   # it is cheapest to run.
-  old_phases_dir="$PHASES_DIR"; old_work_source_flags=("${WORK_SOURCE_FLAGS[@]+"${WORK_SOURCE_FLAGS[@]}"}")
+  old_phases_dir="$PHASES_DIRECTORY"; old_work_source_flags=("${WORK_SOURCE_FLAGS[@]+"${WORK_SOURCE_FLAGS[@]}"}")
   outside_root="$(mktemp -d)"
-  PHASES_DIR="$outside_root/outside"
-  mkdir -p "$PHASES_DIR"
+  PHASES_DIRECTORY="$outside_root/outside"
+  mkdir -p "$PHASES_DIRECTORY"
   # A phase file the selector will actually offer. An empty folder would return
   # NO_PHASE and the run would stop one step earlier than the refusal under
   # test, so the case would pass without reaching it.
   printf '# 100010. Outside Fixture\n- [ ] Required approval is obtained.\n' \
-    >"$PHASES_DIR/phase-100010-outside-fixture.md"
-  printf 'Plan ready\n' >"$PHASES_DIR/index.md"
-  WORK_SOURCE_FLAGS=(--phases "$PHASES_DIR")
+    >"$PHASES_DIRECTORY/phase-100010-outside-fixture.md"
+  printf 'Plan ready\n' >"$PHASES_DIRECTORY/index.md"
+  WORK_SOURCE_FLAGS=(--phases "$PHASES_DIRECTORY")
   outside_launches="$(grep -c 'launched phase' "$LOG" || true)"
   drive --self-test || true
   if grep -q "outside $REPO, so its phase files cannot be launched" "$LOG" \
@@ -173,7 +173,7 @@ selftest_case_recovery_sources() {
     echo "FAIL: a folder outside the checkout was allowed to launch"; fail=1
   fi
   rm -rf "$outside_root"
-  PHASES_DIR="$old_phases_dir"
+  PHASES_DIRECTORY="$old_phases_dir"
   WORK_SOURCE_FLAGS=("${old_work_source_flags[@]+"${old_work_source_flags[@]}"}")
 
   # Naming the default source explicitly has to work, not just be refused. Only
@@ -211,11 +211,11 @@ selftest_case_recovery_sources() {
   else
     echo "FAIL: --check reported a bogus work source as healthy (exit 0)"; fail=1
   fi
-  old_phases_dir="$PHASES_DIR"
+  old_phases_dir="$PHASES_DIRECTORY"
   WORK_SOURCE="$old_work_source"
   WORK_SOURCE_FLAGS=()
-  PHASES_DIR="$tmp/check-absent-phases"
-  WORK_SOURCE_FLAGS=(--phases "$PHASES_DIR")
+  PHASES_DIRECTORY="$tmp/check-absent-phases"
+  WORK_SOURCE_FLAGS=(--phases "$PHASES_DIRECTORY")
   check_rc=0
   check >/dev/null 2>&1 || check_rc=$?
   if [ "$check_rc" -ne 0 ]; then
@@ -223,7 +223,7 @@ selftest_case_recovery_sources() {
   else
     echo "FAIL: --check reported a missing phases folder as healthy (exit 0)"; fail=1
   fi
-  PHASES_DIR="$old_phases_dir"
+  PHASES_DIRECTORY="$old_phases_dir"
   WORK_SOURCE_FLAGS=("${old_work_source_flags[@]+"${old_work_source_flags[@]}"}")
   check_rc=0
   # The report is kept rather than discarded. `--check` is the report an operator

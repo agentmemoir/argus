@@ -107,7 +107,6 @@ def backlog(tmp_path: Path, exec_dir: Path) -> Path:
             {
                 "repo-root": str(root),
                 "pipeline": str(board / "flow.yaml"),
-                "phases-dir": str(board),
                 "number-input": "issue_number",
                 "file-input": "issue_file",
                 "driver": {

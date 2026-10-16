@@ -111,7 +111,7 @@ def _self_test_configuration() -> None:
                     _settings={
                         "repo-root": Path(tmp),
                         "pipeline": None,
-                        "phases-dir": Path(tmp) / "phases",
+                        "phases.directory": Path(tmp) / "phases",
                         "driver.include": ["phase-*.md"],
                         "driver.exclude": [],
                         "driver.runs": Path(tmp) / "runs",
@@ -157,7 +157,7 @@ def _self_test_configuration() -> None:
                 _settings={
                     "repo-root": repo,
                     "pipeline": None,
-                    "phases-dir": repo / "phases",
+                    "phases.directory": repo / "phases",
                     "driver.include": ["ignored-*.md"],
                     "driver.exclude": ["work-100462-skip.md"],
                     "driver.runs": repo / "runs",
@@ -193,7 +193,7 @@ def _self_test_group_query() -> None:
         settings = {
             "repo-root": repo,
             "pipeline": None,
-            "phases-dir": phases,
+            "phases.directory": phases,
             "driver.include": ["phase-*.md"],
             "driver.exclude": [],
             "driver.runs": repo / "runs",
