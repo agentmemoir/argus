@@ -11,5 +11,6 @@ target/
 !.github
 !.gitattributes
 
-# The example phases checkout is created by `make example-check`, not committed.
-examples/project/phases/
+# The example phases checkout's Git state is created by `make example-check`.
+# The sample work item is committed; only the generated Git state is ignored.
+examples/project/phases/.git/

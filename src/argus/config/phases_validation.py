@@ -21,9 +21,11 @@ def validate_phases(values: dict[str, object]) -> None:
     discovered as a write into a stranger's tree later. The check mirrors the
     board's own containment rule for ``board.issues-file``.
 
-    The repository itself must be a Git work tree: the folder is read from it
+    A repository that exists must be a Git work tree: the folder is read from it
     and the index is committed and pushed through it, so a plain directory named
-    as ``phases.repo`` is a setting mistake, refused here with its key named.
+    as ``phases.repo`` is a setting mistake, refused here with its key named. A
+    path that does not exist yet is allowed, because a checkout may be created
+    after the file is written, and the source reports a missing folder itself.
     """
     repo_value = values.get("phases.repo")
     directory_value = values.get("phases.directory")
@@ -31,7 +33,7 @@ def validate_phases(values: dict[str, object]) -> None:
         return
     repo = Path(cast("Path", repo_value)).resolve()
     git = cast("str", values.get("commands.git", "git"))
-    if not _is_work_tree(repo, git):
+    if repo.exists() and not _is_work_tree(repo, git):
         raise ConfigError("invalid value for key 'phases.repo': not a Git work tree")
     directory = cast("str", directory_value)
     if not directory.strip():

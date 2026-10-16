@@ -95,9 +95,9 @@ dry-run:
 #
 # The phases repository is a separate checkout, so this target builds one at
 # examples/project/phases: a Git directory with a remote of its own, holding the
-# example's work item. That folder is git-ignored and never committed. The last
-# step runs the code's own separation proof, so the example cannot ship a
-# phases destination that matches the public repo-root or the board.
+# example's committed work item. Only that generated Git state is git-ignored.
+# The last step runs the code's own separation proof, so the example cannot ship
+# a phases destination that matches the public repo-root or the board.
 example-check:
 	@mkdir -p examples/runs
 	@if [ ! -d examples/project/phases/.git ]; then \
@@ -105,8 +105,6 @@ example-check:
 		git init -q -b main examples/project/phases; \
 		git -C examples/project/phases remote add origin "$(CURDIR)/examples/runs/phases.git"; \
 	fi
-	@mkdir -p examples/project/phases/plans
-	@cp examples/project/plans/phase-000001-example.md examples/project/phases/plans/
 	@git -C examples/project/phases add -A
 	@git -C examples/project/phases rev-parse -q --verify HEAD >/dev/null 2>&1 \
 		|| git -C examples/project/phases -c user.email=argus@example.invalid \
