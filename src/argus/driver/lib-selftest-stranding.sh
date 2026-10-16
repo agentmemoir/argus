@@ -157,14 +157,29 @@ strand_expect_refused() {
     # flag named it. An outside repository holds the folder, so containment
     # passes and the driver's own locality guard — which compares against the
     # checkout it launches from — is what refuses.
+    #
+    # That repository is a real, syncable checkout rather than a bare `git init`,
+    # because the launch-time sync now proves the public, board and phases
+    # destinations are separate and refuses a checkout with no remote. A bare one
+    # would stop the tick at the sync, so a tick under the fault would never
+    # reach the guard below the reservation and the fault would go undetected.
+    # Cloning the fixture's own phases remote gives this checkout a
+    # distinct destination and an upstream branch, so the sync passes; the folder
+    # still sits outside the checkout, so the locality guard still refuses it
+    # when the guard is where it belongs.
     strand_outside_repo="$tmp/strand-outside-repo"
     strand_outside="$strand_outside_repo/strand-phases"
     strand_unclaimed=100099
+    git clone -q "$tmp/strand/phases.git" "$strand_outside_repo"
+    git -C "$strand_outside_repo" config user.email f@e.com
+    git -C "$strand_outside_repo" config user.name fixture
     mkdir -p "$strand_outside"
-    git init -q "$strand_outside_repo"
     printf '# %s. Outside Strand Fixture\n- [ ] Required approval is obtained.\n' \
       "$strand_unclaimed" >"$strand_outside/phase-$strand_unclaimed-outside-strand.md"
     printf 'Plan ready\n' >"$strand_outside/index.md"
+    git -C "$strand_outside_repo" add -A
+    git -C "$strand_outside_repo" commit -q -m "outside strand fixture"
+    git -C "$strand_outside_repo" push -q -u origin master
     strand_config="$ARGUS_CONFIG_FILE"
     strand_outside_config="$tmp/strand-outside-config.json"
     selftest_write_config "$strand_root" "$strand_outside_config" "$BOARD_DIR" \
