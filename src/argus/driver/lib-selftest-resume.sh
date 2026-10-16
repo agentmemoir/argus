@@ -337,7 +337,7 @@ selftest_case_group_resume() {
   # member naming a set the other does not is the malformed case the phases
   # reader refuses.
   wait_phase_window_gone
-  cat >"$REPO/$BOARD_DIR/plans/phase-100020-cache-warm.md" <<DOC
+  cat >"$REPO/phases-data/plans/phase-100020-cache-warm.md" <<DOC
 # 100020. Group member
 
 - [ ] Work to do.
@@ -346,8 +346,8 @@ selftest_case_group_resume() {
 
 \`together: 100020\`
 DOC
-  git -C "$REPO/$BOARD_DIR" add -A
-  git -C "$REPO/$BOARD_DIR" commit -q -m "phases: break the group declaration"
+  git -C "$REPO/phases-data" add -A
+  git -C "$REPO/phases-data" commit -q -m "phases: break the group declaration"
   launches="$(selftest_resume_launches)"
   printf '{"phase": "100030", "state": "blocked"}\n' >"$run_dir/run.json"
   selftest_resume_record 100030 "$rel" "$run_dir" blocked 1

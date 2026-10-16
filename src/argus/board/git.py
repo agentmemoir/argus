@@ -6,6 +6,7 @@ import os
 import re
 import subprocess
 import urllib.parse
+from collections.abc import Mapping
 from pathlib import Path
 
 from argus import conventions
@@ -114,21 +115,45 @@ def _canonical_remote_url(value: str | None) -> str:
     )
 
 
-def _remote_url_sets(
-    root: str | Path, private: str | Path
-) -> tuple[set[str], set[str], set[str], set[str]]:
-    public_fetch = {_canonical_remote_url(url) for url in _all_remote_urls(root)}
-    public_push = {
-        _canonical_remote_url(url) for url in _all_remote_urls(root, push=True)
-    }
-    private_fetch = {_canonical_remote_url(url) for url in _all_remote_urls(private)}
-    private_push = {
-        _canonical_remote_url(url) for url in _all_remote_urls(private, push=True)
-    }
-    return public_fetch, public_push, private_fetch, private_push
+def _url_sets(repo: str | Path) -> tuple[set[str], set[str]]:
+    """The canonical fetch and push destinations of every remote on ``repo``."""
+    fetch = {_canonical_remote_url(url) for url in _all_remote_urls(repo)}
+    push = {_canonical_remote_url(url) for url in _all_remote_urls(repo, push=True)}
+    return fetch, push
 
 
-def _assert_private_boundary(root: str | Path, private: str | Path) -> None:
+def _assert_separate_destinations(checkouts: Mapping[str, Path]) -> None:
+    """Refuse when two named checkouts share a Git push/fetch destination.
+
+    Separation is a property of the configured destinations, read from every
+    remote, not of the branches or the layout. Every checkout must carry both a
+    fetch and a push URL, or the proof is impossible and the check fails closed.
+    """
+    destinations = {role: _url_sets(path) for role, path in checkouts.items()}
+    for role, (fetch, push) in destinations.items():
+        if not fetch or not push:
+            raise CoordinationUnavailable(
+                f"cannot prove separate Git destinations for the {role} repository"
+            )
+    roles = sorted(destinations)
+    for index, left in enumerate(roles):
+        left_fetch, left_push = destinations[left]
+        for right in roles[index + 1 :]:
+            right_fetch, right_push = destinations[right]
+            if (
+                left_push & right_push
+                or left_push & right_fetch
+                or left_fetch & right_push
+            ):
+                raise CoordinationUnavailable(
+                    f"{left} and {right} repositories share a Git "
+                    "push/fetch destination"
+                )
+
+
+def _assert_private_boundary(
+    root: str | Path, private: str | Path, phases: str | Path | None = None
+) -> None:
     # Only a directory that is its own work-tree top level is the public
     # repository. `git rev-parse --is-inside-work-tree` is true for a plain
     # directory that merely sits inside an enclosing repository, so testing the
@@ -142,21 +167,10 @@ def _assert_private_boundary(root: str | Path, private: str | Path) -> None:
     rc_t, top, _ = _git(root, "rev-parse", "--show-toplevel")
     if rc_t != 0 or not top or Path(top).resolve() != resolved:
         return
-    public_fetch, public_push, private_fetch, private_push = _remote_url_sets(
-        root, private
-    )
-    if not public_fetch or not public_push or not private_fetch or not private_push:
-        raise CoordinationUnavailable(
-            "cannot prove separate public/private Git destinations"
-        )
-    if (
-        public_push & private_push
-        or public_push & private_fetch
-        or public_fetch & private_push
-    ):
-        raise CoordinationUnavailable(
-            "public and private repositories share a Git push/fetch destination"
-        )
+    checkouts = {"public": Path(root), "board": Path(private)}
+    if phases is not None:
+        checkouts["phases"] = Path(phases)
+    _assert_separate_destinations(checkouts)
 
 
 def _head(repo: str | Path) -> str | None:
@@ -166,6 +180,7 @@ def _head(repo: str | Path) -> str | None:
 
 __all__ = [
     "_assert_private_boundary",
+    "_assert_separate_destinations",
     "_git",
     "_head",
     "_is_git_repo",

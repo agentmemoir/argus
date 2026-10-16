@@ -47,8 +47,11 @@ selftest_fixture_root() {
   git -C "$base/pub.git" symbolic-ref HEAD refs/heads/master || return 1
   git init -q --bare "$base/priv.git" || return 1
   git -C "$base/priv.git" symbolic-ref HEAD refs/heads/master || return 1
+  git init -q --bare "$base/phases.git" || return 1
+  git -C "$base/phases.git" symbolic-ref HEAD refs/heads/master || return 1
   git clone -q "$base/pub.git" "$root" || return 1
   printf '%s/\n' "$BOARD_DIR" >>"$root/.git/info/exclude"
+  printf '%s/\n' "phases-data" >>"$root/.git/info/exclude"
   git -C "$root" config user.email f@e.com
   git -C "$root" config user.name fixture
   git -C "$root" checkout -q -b master
@@ -65,6 +68,18 @@ selftest_fixture_root() {
   git -C "$root/$BOARD_DIR" add -A
   git -C "$root/$BOARD_DIR" commit -q -m init
   git -C "$root/$BOARD_DIR" push -q -u origin master
+  # The phases checkout, a third repository so the phases destination differs
+  # from both the public and the board destinations, which the separation proof
+  # requires. Its working tree sits inside the public checkout like the board's.
+  mkdir -p "$root/phases-data"
+  git clone -q "$base/phases.git" "$root/phases-data" || return 1
+  git -C "$root/phases-data" config user.email f@e.com
+  git -C "$root/phases-data" config user.name fixture
+  git -C "$root/phases-data" checkout -q -b master
+  printf 'phases\n' >"$root/phases-data/p.md"
+  git -C "$root/phases-data" add -A
+  git -C "$root/phases-data" commit -q -m init
+  git -C "$root/phases-data" push -q -u origin master
   # The driver's own code, because the tmux helpers look for the idle script
   # beside the driver, and because the tools that select and claim work now
   # live beside it too: a root without them cannot open a phase window, and
@@ -80,7 +95,7 @@ selftest_fixture_root() {
   # the workflow folder, because the driver refuses a tick whose pipeline file
   # is missing rather than inventing one. A fixture that omitted it would have
   # tested the refusal instead of the launch.
-  mkdir -p "$root/$BOARD_DIR/plans" "$root/$BOARD_DIR/history/phase-100010" \
+  mkdir -p "$root/phases-data/plans" "$root/$BOARD_DIR/history/phase-100010" \
     "$root/$BOARD_DIR/argus/bin"
   cat >"$root/$BOARD_DIR/argus/bin/glide" <<'SH'
 #!/usr/bin/env bash
@@ -112,15 +127,18 @@ placeholders: {}
 Fixture stage.
 STAGE
   printf '# 100010. Fixture\n' \
-    >"$root/$BOARD_DIR/plans/phase-100010-fixture.md"
+    >"$root/phases-data/plans/phase-100010-fixture.md"
   printf '{"phase": "100010", "state": "blocked"}\n' \
     >"$root/$BOARD_DIR/history/phase-100010/run.json"
   # Commit only the fixture's own scaffolding. The phase's work above must stay
   # staged and uncommitted, which is the whole point of the stranding case: a
   # `git add -A` here would commit the review baseline and leave a clean index.
-  git -C "$root/$BOARD_DIR" add argus plans history flow.yaml fixture.md .gitignore
-  git -C "$root/$BOARD_DIR" commit -q -m "driver, phases and run state"
+  git -C "$root/$BOARD_DIR" add argus history flow.yaml fixture.md .gitignore
+  git -C "$root/$BOARD_DIR" commit -q -m "driver and run state"
   git -C "$root/$BOARD_DIR" push -q origin master
+  git -C "$root/phases-data" add plans
+  git -C "$root/phases-data" commit -q -m "phases: fixture"
+  git -C "$root/phases-data" push -q origin master
   # A real claim for this host, so a tick takes the real coordination path.
   # Stubbing coordination would skip the sync, which is the code under test.
   #
@@ -164,7 +182,7 @@ selftest_fixture_strand_on_published_branch() {
   # before it reaches the code under test. The reported stall had a next phase
   # waiting, and a case that cannot reproduce that is testing something else.
   printf '# 100011. Fixture, not done\n- [ ] Work to do.\n' \
-    >"$root/$BOARD_DIR/plans/phase-100011-fixture-next.md"
+    >"$root/phases-data/plans/phase-100011-fixture-next.md"
   git -C "$root" checkout -q -b "$branch"
   printf 'phase work on %s\n' "$branch" >"$root/phase.txt"
   git -C "$root" add phase.txt
@@ -197,10 +215,12 @@ selftest_fixture_strand_on_published_branch() {
   # all.
   printf '{"version": 1, "phase": "100010", "state": "published", "branch": "%s", "private_branch": "master", "integration_branch": "master"}\n' \
     "$branch" >"$root/$BOARD_DIR/history/phase-100010/publication.json"
-  git -C "$root/$BOARD_DIR" add history/phase-100010/publication.json \
-    plans/phase-100011-fixture-next.md
+  git -C "$root/$BOARD_DIR" add history/phase-100010/publication.json
   git -C "$root/$BOARD_DIR" commit -q -m "runs: record phase 100010 as published"
   git -C "$root/$BOARD_DIR" push -q origin master
+  git -C "$root/phases-data" add plans/phase-100011-fixture-next.md
+  git -C "$root/phases-data" commit -q -m "phases: add the stranding case's next phase"
+  git -C "$root/phases-data" push -q origin master
 }
 
 # Add the stranding case's extra state to a fixture the caller already built: a
@@ -246,7 +266,7 @@ selftest_fixture_stage_work() {
 #   $1  the root      (already built by selftest_fixture_root)
 selftest_fixture_group_phases() {
   local root="$1" plans member
-  plans="$root/$BOARD_DIR/plans"
+  plans="$root/phases-data/plans"
   rm -f "$plans/phase-100010-fixture.md"
   rm -rf "$root/$BOARD_DIR/history/phase-100010"
   for member in 100020-cache-warm 100030-cache-read; do
@@ -260,9 +280,9 @@ selftest_fixture_group_phases() {
 \`together: 100020, 100030\`
 DOC
   done
-  git -C "$root/$BOARD_DIR" add -A
-  git -C "$root/$BOARD_DIR" commit -q -m "phases: declare a two-member reservation group"
-  git -C "$root/$BOARD_DIR" push -q origin master
+  git -C "$root/phases-data" add -A
+  git -C "$root/phases-data" commit -q -m "phases: declare a two-member reservation group"
+  git -C "$root/phases-data" push -q origin master
 }
 
 # Write a complete configuration file for a fixture checkout.
@@ -293,7 +313,7 @@ doc = {
     "repo-root": str(root),
     "pipeline": str(root / board_dir / "flow.yaml"),
     "phases": {
-        "repo": str(root), "directory": str(board_dir / "plans"),
+        "repo": str(root / "phases-data"), "directory": "plans",
         "branch": "master", "remote": "origin",
     },
     "number-input": "phase_number",
