@@ -67,6 +67,7 @@ SCHEMA = (
     Field("board.issues-file", "str", "issues"),
     Field("board.branch", "str", "board"),
     Field("board.remote", "str", "board"),
+    Field("board.backup-branch", "str", "optional"),
     # Where run state is committed and confirmed: `repo` is the checkout that
     # holds the run directory, `remote` the remote to push and confirm against,
     # and `branch` the integration branch carrying the receipt. Optional as a
@@ -153,6 +154,7 @@ SHELL_VARS = {
     "board.issues-file": "BOARD_ISSUES_FILE",
     "board.branch": "BOARD_BRANCH",
     "board.remote": "BOARD_REMOTE",
+    "board.backup-branch": "BOARD_BACKUP_BRANCH",
     "runstate.repo": "RUNSTATE_REPO",
     "runstate.remote": "RUNSTATE_REMOTE",
     "runstate.branch": "RUNSTATE_BRANCH",

@@ -12,7 +12,6 @@ from argus.board.branch import (
     _remote_setting,
     _resolve_private_repo,
     _state_initialized,
-    ensure_board_branch,
 )
 from argus.board.core import (
     CoordinationUnavailable,
@@ -21,6 +20,7 @@ from argus.board.core import (
     _safe_detail,
 )
 from argus.board.git import _assert_private_boundary, _git
+from argus.board.seed import ensure_board_branch
 from argus.board.state import (
     _empty_state,
     _reservation_from_record,
@@ -61,10 +61,18 @@ class _StoreBase:
         it replaces was a read that created the branch as a side effect, which
         let inspecting the board publish to the remote.
 
+        A branch that already exists gets its backup ref if it has none, so a
+        board created before the backup existed gains one here rather than on
+        the next write. Reads never reach this.
+
         Returns True when this call created the branch.
         """
         return ensure_board_branch(
-            self.private, self.remote, self.branch, issues=self.issues
+            self.private,
+            self.remote,
+            self.branch,
+            issues=self.issues,
+            ensure_backup=True,
         )
 
     def read(self) -> tuple[dict[str, Any], str]:

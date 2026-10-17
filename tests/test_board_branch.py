@@ -18,6 +18,7 @@ from argus.board.state import _empty_state, _write_state_file, state_rel
 from argus.board.store import ReservationStore
 
 BRANCH = "fixture-board"
+BACKUP = f"{BRANCH}--argus-backup"
 STATE = "coordination/phases.json"
 ISSUES_STATE = "coordination/issues.json"
 
@@ -30,23 +31,27 @@ def git_exe() -> str:
 
 
 def _configure(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, git: str, board_repo: str
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    git: str,
+    board_repo: str,
+    *,
+    backup_branch: str | None = None,
 ) -> Path:
     project = tmp_path / "project"
     project.mkdir()
-    monkeypatch.setattr(
-        conventions,
-        "_settings",
-        {
-            "repo-root": project,
-            "board.repo": tmp_path / board_repo,
-            "board.branch": BRANCH,
-            "board.remote": "origin",
-            "board.file": STATE,
-            "board.issues-file": ISSUES_STATE,
-            "commands.git": git,
-        },
-    )
+    settings: dict[str, object] = {
+        "repo-root": project,
+        "board.repo": tmp_path / board_repo,
+        "board.branch": BRANCH,
+        "board.remote": "origin",
+        "board.file": STATE,
+        "board.issues-file": ISSUES_STATE,
+        "commands.git": git,
+    }
+    if backup_branch is not None:
+        settings["board.backup-branch"] = backup_branch
+    monkeypatch.setattr(conventions, "_settings", settings)
     return project
 
 
@@ -142,7 +147,7 @@ def test_a_lost_board_branch_is_reseeded_from_its_backup(
     assert store.migrate_board() is True
     record = store.reserve(100020, "server-01")
     # Every write advances the backup with the board it mirrors.
-    assert _ref_commit(remote, f"refs/heads/{BRANCH}-backup") == _ref_commit(
+    assert _ref_commit(remote, f"refs/heads/{BACKUP}") == _ref_commit(
         remote, f"refs/heads/{BRANCH}"
     )
     # Lose the board branch; the backup is now the only durable copy.
@@ -171,6 +176,78 @@ def test_recovery_prefers_the_backup_over_a_broken_integration_tip(
     assert store.migrate_board() is True
     state, _commit = store.read()
     assert "100021" in state["phases"]
+
+
+def test_a_remote_without_atomic_support_still_takes_a_board_write(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, git_exe: str
+) -> None:
+    project = _configure(tmp_path, monkeypatch, git_exe, "noatomic-client-1")
+    remote, _clients = _git_test_repo(
+        tmp_path, "noatomic", initial_state=_empty_state()
+    )
+    # A server that does not advertise atomic push refuses any --atomic push.
+    # The board write must not depend on it, so the branch still lands and the
+    # backup follows on its own.
+    assert _git(remote, "config", "receive.advertiseAtomic", "false")[0] == 0
+    store = ReservationStore(project)
+    assert store.migrate_board() is True
+    assert store.reserve(100030, "server-01")
+    assert _ref_commit(remote, f"refs/heads/{BACKUP}") == _ref_commit(
+        remote, f"refs/heads/{BRANCH}"
+    )
+
+
+def test_a_foreign_branch_at_the_backup_name_is_not_overwritten(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, git_exe: str
+) -> None:
+    project = _configure(tmp_path, monkeypatch, git_exe, "foreign-client-1")
+    remote, clients = _git_test_repo(tmp_path, "foreign")
+    store = ReservationStore(project)
+    assert store.migrate_board() is True
+    assert store.reserve(100031, "server-01")
+    # A real branch that happens to hold the backup name is not this board's
+    # backup. Force it over the remote ref, then make another board write and
+    # require the write to succeed and the foreign commit to stay untouched.
+    foreign = clients[0]
+    (foreign / "foreign.txt").write_text("not the board\n")
+    assert _git(foreign, "add", "-A")[0] == 0
+    assert _git(foreign, "commit", "-q", "-m", "foreign branch")[0] == 0
+    foreign_commit = _ref_commit(foreign, "HEAD")
+    assert (
+        _git(
+            foreign,
+            "push",
+            "--force",
+            "origin",
+            f"HEAD:refs/heads/{BACKUP}",
+        )[0]
+        == 0
+    )
+    assert _ref_commit(remote, f"refs/heads/{BACKUP}") == foreign_commit
+    record = store.reserve(100032, "server-01")
+    state, _commit = store.read()
+    assert state["phases"]["100032"]["reservation_id"] == record["reservation_id"]
+    assert _ref_commit(remote, f"refs/heads/{BACKUP}") == foreign_commit
+
+
+def test_a_configured_backup_branch_is_used(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, git_exe: str
+) -> None:
+    project = _configure(
+        tmp_path,
+        monkeypatch,
+        git_exe,
+        "custom-backup-client-1",
+        backup_branch="custom-backup",
+    )
+    remote, _clients = _git_test_repo(tmp_path, "custom-backup")
+    store = ReservationStore(project)
+    assert store.migrate_board() is True
+    assert store.reserve(100033, "server-01")
+    assert _ref_commit(remote, "refs/heads/custom-backup") == _ref_commit(
+        remote, f"refs/heads/{BRANCH}"
+    )
+    assert _ref_commit(remote, f"refs/heads/{BACKUP}") is None
 
 
 def test_cli_module_runs_and_reports_a_missing_command(tmp_path: Path) -> None:

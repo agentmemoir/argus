@@ -190,6 +190,21 @@ def _board_branch_checks(checks: list[dict[str, Any]], base: Path) -> None:
         f"origin/{store.branch}",
     )
 
+    backup_ref = f"origin/{store.branch}--argus-backup"
+    rc, state, _err = _git(private, "show", f"{backup_ref}:{state_rel().as_posix()}")
+    backed_up = False
+    if rc == 0:
+        backed_up = (
+            json.loads(state).get("phases", {}).get("100710", {}).get("reservation_id")
+            == record["reservation_id"]
+        )
+    _self_test_check(
+        checks,
+        "the backup ref holds the same reservation",
+        backed_up,
+        backup_ref,
+    )
+
     # A phase's own commit and a board commit are now siblings on two branches,
     # so neither can be rejected as non-fast-forward by the other. Both orders
     # are exercised, because the race only ever went one way.
