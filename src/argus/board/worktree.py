@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from argus.board.branch import (
+    _backup_branch,
     _fetch_branch_ref,
     _state_initialized,
     ensure_board_branch,
@@ -244,11 +245,16 @@ def _transaction(
             new_commit = _commit_state(checkout.path, message, issues=issues)
             if new_commit is None:
                 return mutation.value
+            # The board branch and its backup ref move together, atomically, so
+            # the backup is never behind the board it mirrors and a rejected
+            # board push cannot leave the backup on a state the board refused.
             rc, out, err = _git(
                 checkout.path,
                 "push",
+                "--atomic",
                 remote,
                 f"HEAD:refs/heads/{branch}",
+                f"+HEAD:refs/heads/{_backup_branch(branch)}",
                 timeout=FETCH_TIMEOUT_S,
             )
             # The final attempt's commit exists and the remote refused it, so its

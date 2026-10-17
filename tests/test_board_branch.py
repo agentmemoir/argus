@@ -56,6 +56,11 @@ def _remove_and_push(client: Path, relative: str) -> None:
     assert _git(client, "push", "-q", "origin", "HEAD:master")[0] == 0
 
 
+def _ref_commit(repo: Path, ref: str) -> str | None:
+    rc, out, _err = _git(repo, "rev-parse", "--verify", ref)
+    return out.strip() if rc == 0 else None
+
+
 def test_seeding_an_empty_board_still_works(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, git_exe: str
 ) -> None:
@@ -126,6 +131,46 @@ def test_a_removed_issue_file_refuses_the_issue_board(
     issues = ReservationStore(project, issues=True)
     with pytest.raises(CoordinationUnavailable, match="would read as broken"):
         issues.migrate_board()
+
+
+def test_a_lost_board_branch_is_reseeded_from_its_backup(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, git_exe: str
+) -> None:
+    project = _configure(tmp_path, monkeypatch, git_exe, "recover-client-1")
+    remote, _clients = _git_test_repo(tmp_path, "recover", initial_state=_empty_state())
+    store = ReservationStore(project)
+    assert store.migrate_board() is True
+    record = store.reserve(100020, "server-01")
+    # Every write advances the backup with the board it mirrors.
+    assert _ref_commit(remote, f"refs/heads/{BRANCH}-backup") == _ref_commit(
+        remote, f"refs/heads/{BRANCH}"
+    )
+    # Lose the board branch; the backup is now the only durable copy.
+    assert _git(remote, "update-ref", "-d", f"refs/heads/{BRANCH}")[0] == 0
+    assert _ref_commit(remote, f"refs/heads/{BRANCH}") is None
+    # The next migration restores the board from the backup, not from a clone.
+    assert store.migrate_board() is True
+    state, _commit = store.read()
+    assert state["phases"]["100020"]["reservation_id"] == record["reservation_id"]
+
+
+def test_recovery_prefers_the_backup_over_a_broken_integration_tip(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, git_exe: str
+) -> None:
+    project = _configure(tmp_path, monkeypatch, git_exe, "recover-broken-client-1")
+    remote, clients = _git_test_repo(
+        tmp_path, "recover-broken", initial_state=_empty_state()
+    )
+    store = ReservationStore(project)
+    assert store.migrate_board() is True
+    assert store.reserve(100021, "server-01")
+    # After the board moved, the state file leaves the integration tip. A
+    # reseed from that tip alone would refuse; the backup must save it.
+    _remove_and_push(clients[0], state_rel().as_posix())
+    assert _git(remote, "update-ref", "-d", f"refs/heads/{BRANCH}")[0] == 0
+    assert store.migrate_board() is True
+    state, _commit = store.read()
+    assert "100021" in state["phases"]
 
 
 def test_cli_module_runs_and_reports_a_missing_command(tmp_path: Path) -> None:

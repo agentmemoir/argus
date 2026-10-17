@@ -6,6 +6,21 @@ Publication commits run state in the checkout that holds the run directory, whic
 
 The board branch is never checked out. Reading the board does not create it; an explicit migration or the first write creates it from the remote integration branch. A board is shared: every machine that reserves work on it names the same `board.file` and `board.branch`.
 
+## Board Branch Backup And Recovery
+
+The board branch carries a second ref, its name with `-backup` appended: `claims` has `claims-backup`. Every board write advances the backup to the same commit as the board branch in one atomic push, so the backup is never behind the board it mirrors. The backup is an ordinary branch, so a restore needs no machine-local clone and no branch protection.
+
+A missing board branch is reseeded from the backup ref first, and only falls back to the remote integration branch when no backup exists. A deleted board branch therefore comes back with the state it last held on the next migration or write; the state file that left the integration tip is read from the backup, not the tip.
+
+Restore by hand, from any clone, with the board branch named `BOARD`:
+
+```sh
+git fetch origin refs/heads/BOARD-backup:refs/heads/BOARD-backup
+git push origin refs/heads/BOARD-backup:refs/heads/BOARD
+```
+
+Verify the restored board reads as initialized: run the board reader (`python -m argus.board.reservations show`) and confirm it prints the coordination state. A board whose state file was lost instead fails with `coordination state file was deleted from an initialized board`.
+
 ## Reservation Groups
 
 A phase document may declare a reservation group: several phases one owner runs as one unit. The whole group is claimed in one board write under one reservation id, its members run one per tick on one branch, and one pull request covers them all, while each member keeps its own receipt under its own run directory.

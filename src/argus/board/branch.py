@@ -120,6 +120,44 @@ def _board_branch_exists(private: str | Path, remote: str, branch: str) -> bool:
     return rc == 0
 
 
+def _backup_branch(branch: str) -> str:
+    """The ref that mirrors the board branch, so a lost board can be restored.
+
+    The board's only durable copy used to be the board branch itself, so
+    deleting that branch deleted the board. Every board write advances this
+    second ref, and a reseed reads it before it falls back to the integration
+    branch, whose tip no longer has to carry the state file.
+    """
+    return f"{branch}-backup"
+
+
+def _backup_source(private: str | Path, remote: str, branch: str) -> str | None:
+    """The backup ref's commit, or ``None`` when the remote has no backup yet."""
+    backup = _backup_branch(branch)
+    if not _board_branch_exists(private, remote, backup):
+        return None
+    remote_ref = f"refs/remotes/{remote}/{backup}"
+    rc, _out, err = _git(
+        private,
+        "fetch",
+        "--quiet",
+        remote,
+        f"+refs/heads/{backup}:{remote_ref}",
+        timeout=FETCH_TIMEOUT_S,
+    )
+    if rc != 0:
+        raise CoordinationUnavailable(
+            f"cannot fetch coordination backup {backup!r}: {_safe_detail(err)}"
+        )
+    rc, commit, err = _git(private, "rev-parse", "--verify", remote_ref)
+    if rc != 0 or not commit.strip():
+        raise CoordinationUnavailable(
+            f"cannot resolve coordination backup {backup!r}: "
+            f"{_safe_detail(err or commit)}"
+        )
+    return commit.strip()
+
+
 def ensure_board_branch(
     private: str | Path, remote: str, branch: str, *, issues: bool = False
 ) -> bool:
@@ -130,16 +168,25 @@ def ensure_board_branch(
     copies the whole tree at the integration branch's tip, so its history and
     every file at that tip come with it.
 
+    A missing branch is seeded from the backup ref (``_backup_branch``) first,
+    so a deleted board branch is restored with the state it last held and
+    without a machine-local clone. The integration branch is the fallback, and
+    only when no backup exists at all.
+
     The board no longer lives on the integration branch, so its state file may
     have been added there and then removed from the tip. The tip's tree then
     lacks the file while its history still has the add, and a branch seeded
     from it would read as broken: the reader sees the add and no file and fails
     closed with "coordination state file was deleted from an initialized
     board". That case is refused here, with a message that names the file and
-    the recovery, so an operator restores the board branch from a backup or
-    re-seeds from a commit that still has the file. A state file that never
-    appeared on the integration branch is the other case: the board is empty,
-    which is valid, and seeding proceeds.
+    the recovery, so an operator re-seeds from a commit that still has the
+    file. A state file that never appeared on the integration branch is the
+    other case: the board is empty, which is valid, and seeding proceeds.
+
+    The seed writes the board branch and its backup ref together, atomically,
+    so a created board is never without its backup. A lost seed race leaves the
+    other machine's branch in place and this call reports that it created
+    nothing.
 
     This is the only function here that writes to the remote outside a board
     transaction, and it is deliberately not reachable from a read. A read that
@@ -152,23 +199,32 @@ def ensure_board_branch(
     """
     if _board_branch_exists(private, remote, branch):
         return False
-    source = _integration_ref(private, remote)
+    backup_branch = _backup_branch(branch)
+    backup = _backup_source(private, remote, branch)
+    source = backup if backup is not None else _integration_ref(private, remote)
     relative = state_rel(issues=issues).as_posix()
     if (
         _state_initialized(private, source, issues=issues)
         and _git(private, "cat-file", "-e", f"{source}:{relative}")[0] != 0
     ):
+        origin = (
+            f"the coordination backup {backup_branch!r}"
+            if backup is not None
+            else "the integration branch tip"
+        )
         raise CoordinationUnavailable(
             f"cannot seed coordination branch {branch!r}: {relative!r} was "
-            f"removed from the integration branch tip, so a branch seeded from "
-            f"it would read as broken. Restore {branch!r} from a backup, or "
-            f"re-seed it from a commit that still has the state file."
+            f"removed from {origin}, so a branch seeded from it would read as "
+            f"broken. Restore {branch!r} from a commit that still has the "
+            f"state file."
         )
     rc, _out, err = _git(
         private,
         "push",
+        "--atomic",
         remote,
         f"{source}:refs/heads/{branch}",
+        f"{source}:refs/heads/{backup_branch}",
         timeout=FETCH_TIMEOUT_S,
     )
     if rc == 0:
@@ -242,6 +298,7 @@ def _state_initialized(private: str | Path, ref: str, *, issues: bool = False) -
 
 
 __all__ = [
+    "_backup_branch",
     "_branch_setting",
     "_fetch_branch_ref",
     "_integration_branch",
