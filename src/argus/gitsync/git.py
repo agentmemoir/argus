@@ -95,6 +95,29 @@ def git(
     return p.returncode, p.stdout.strip(), p.stderr.strip()
 
 
+def push_moved(porcelain: str, branch: str) -> bool:
+    """Whether a ``git push --porcelain`` moved ``branch``'s own remote ref.
+
+    Each status line is ``<flag>\\t<from>:<to>\\t<summary> (<reason>)``, and
+    ``=`` marks a ref that was up to date and did not need pushing. Only the
+    line whose destination is this branch answers: a push also carries
+    annotated tags when ``push.followTags`` is set, and a moving tag is not a
+    moved branch. A push that reported no line for the branch moved nothing
+    for it; plain lines such as ``To <remote>`` and ``Done`` carry no tab and
+    are not status lines.
+    """
+    wanted = f"refs/heads/{branch}"
+    for line in porcelain.splitlines():
+        flag, tab, rest = line.partition("\t")
+        if not tab:
+            continue
+        refs, _tab, _summary = rest.partition("\t")
+        _source, colon, target = refs.partition(":")
+        if colon and target == wanted and flag != "=":
+            return True
+    return False
+
+
 def is_git_repo(path: str | Path | None) -> bool:
     if path is None:
         return False

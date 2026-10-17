@@ -14,6 +14,7 @@ from argus.gitsync.git import (
     current_branch,
     git,
     integration_branch,
+    push_moved,
     resolve_upstream,
 )
 from argus.gitsync.group_review import _group_pull_request
@@ -213,12 +214,16 @@ def _load_phase_reservation(
 
 
 def _push_one(repo: str | Path) -> dict[str, Any]:
+    """Push the checkout's branch and report whether the ref moved."""
     branch, remote, _remote_branch, why = resolve_upstream(repo)
     if why:
         return blocked({"repo": str(repo)}, why)
     branch = cast("str", branch)
     remote = cast("str", remote)
-    rc, out, err = git(repo, "push", remote, branch)
+    # --porcelain reports the branch's own status line, including the line for
+    # a ref that was up to date, so the result names what this push did rather
+    # than that a push was attempted.
+    rc, out, err = git(repo, "push", "--porcelain", remote, branch)
     if rc != 0:
         return blocked(
             {"repo": str(repo)},
@@ -228,7 +233,7 @@ def _push_one(repo: str | Path) -> dict[str, Any]:
     return {
         "repo": str(repo),
         "ok": True,
-        "action": "pushed",
+        "action": "pushed" if push_moved(out, branch) else "nothing-to-push",
         "after": git(repo, "rev-parse", "HEAD")[1],
     }
 

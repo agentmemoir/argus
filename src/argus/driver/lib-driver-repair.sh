@@ -212,16 +212,17 @@ run_repair_session() {
     repair_verify_prepare "$id" "$base" "$nonce"
     if "$PYTHON" "$ARGUS/gitsync/main.py" "${ARGUS_CONFIG_ARGS[@]}" --root "$REPO" \
         --mode checkpoint >"$RUN_DIR/repair-$id-push.json" 2>&1; then
-      if [ "$(selection_value action <"$RUN_DIR/repair-$id-push.json")" = "nothing-to-push" ]; then
-        log "repair $id: the run pushed nothing to $branch"
-        repair_verify_clear "$id"
-        tmux_set_title "repair $id pushed nothing"
-      else
-        log "repair $id: pushed to $branch; the next tick reads the new checks"
-        tmux_set_title "repair $id checking the changed scope"
-        ARGUS_REPAIR_BASE="$base" repair_verify_run "$id"
-        tmux_set_title "repair $id done"
-      fi
+      case "$(selection_value action <"$RUN_DIR/repair-$id-push.json")" in
+        pushed|committed-and-pushed)
+          log "repair $id: pushed to $branch; the next tick reads the new checks"
+          tmux_set_title "repair $id checking the changed scope"
+          ARGUS_REPAIR_BASE="$base" repair_verify_run "$id"
+          tmux_set_title "repair $id done" ;;
+        *)
+          log "repair $id: the run pushed nothing to $branch"
+          repair_verify_clear "$id"
+          tmux_set_title "repair $id pushed nothing" ;;
+      esac
     else
       log "repair $id: could not push to $branch (see $RUN_DIR/repair-$id-push.json)"
       repair_verify_clear "$id"

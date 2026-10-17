@@ -66,10 +66,12 @@ def commit_issue_state(
             before_push()
         result = _push_one(private)
         if result["ok"]:
+            # The action names what the push did: a clean run whose push found
+            # the branch already up to date reports nothing-to-push, not a push.
             return dict(
                 info,
                 ok=True,
-                action="committed-and-pushed" if changed else "pushed",
+                action="committed-and-pushed" if changed else result["action"],
                 after=result["after"],
             )
         if attempt == 1:

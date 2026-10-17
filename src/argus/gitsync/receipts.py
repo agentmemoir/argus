@@ -18,10 +18,17 @@ from argus.conventions import (
 from argus.gitsync.git import git
 from argus.gitsync.paths import phases_folder
 
+# Both push outcomes leave the branch at the result's ``after``: a push that
+# moved the ref put that head on the branch, and one that had nothing to push
+# leaves the branch already carrying it. Reading only ``pushed`` here would
+# drop the head of an up-to-date push the moment the two outcomes were
+# separated.
+_PUSH_ACTIONS = ("pushed", "nothing-to-push")
+
 
 def _published_head(results: list[dict[str, Any]], repo: str | Path) -> Any:
     for result in results:
-        if result.get("repo") == str(repo) and result.get("action") == "pushed":
+        if result.get("repo") == str(repo) and result.get("action") in _PUSH_ACTIONS:
             return result.get("after")
     return None
 

@@ -126,7 +126,8 @@ def test_without_a_repair_pipeline_the_hook_does_nothing(tmp_path: Path) -> None
 
 
 def test_a_finished_run_pushes_and_never_halts(tmp_path: Path) -> None:
-    setup(tmp_path, {"ok": True})
+    # The repair pipeline commits on the branch; the checkpoint's push moves it.
+    setup(tmp_path, {"ok": True, "action": "pushed"})
     run(tmp_path, "run_repair_session 7-1 /t/task.md b")
     assert (tmp_path / "glide-args").read_text().split() == [
         "run",
@@ -138,7 +139,9 @@ def test_a_finished_run_pushes_and_never_halts(tmp_path: Path) -> None:
         "repair_task=/t/task.md",
     ]
     assert "--mode checkpoint" in read(tmp_path, "calls")[0]
-    assert "pushed to b" in " ".join(read(tmp_path, "log"))
+    log = " ".join(read(tmp_path, "log"))
+    assert "pushed to b" in log
+    assert "pushed nothing" not in log
     assert not (tmp_path / "halt").exists() and not (tmp_path / "pid").exists()
 
 
@@ -184,7 +187,7 @@ def commit(tmp_path: Path, name: str) -> str:
 
 
 def test_a_check_over_the_changed_scope_keeps_its_answer(tmp_path: Path) -> None:
-    setup(tmp_path, {"ok": True})
+    setup(tmp_path, {"ok": True, "action": "pushed"})
     base = commit(tmp_path, "before.txt")
     commit(tmp_path, "change.txt")
     run(
@@ -201,7 +204,7 @@ def test_a_check_over_the_changed_scope_keeps_its_answer(tmp_path: Path) -> None
 def test_the_check_reads_the_changed_paths_from_the_environment(
     tmp_path: Path,
 ) -> None:
-    setup(tmp_path, {"ok": True})
+    setup(tmp_path, {"ok": True, "action": "pushed"})
     base = commit(tmp_path, "before.txt")
     commit(tmp_path, "change.txt")
     run(
@@ -248,7 +251,7 @@ export PYTHON=push_probe
 def test_the_check_is_prepared_before_the_push_and_answered_after(
     tmp_path: Path,
 ) -> None:
-    setup(tmp_path, {"ok": True})
+    setup(tmp_path, {"ok": True, "action": "pushed"})
     base = commit(tmp_path, "before.txt")
     commit(tmp_path, "change.txt")
     run(
@@ -283,7 +286,7 @@ def test_a_push_that_carried_nothing_clears_the_prepared_check(
 
 
 def test_the_limiter_stopping_the_check_is_recorded(tmp_path: Path) -> None:
-    setup(tmp_path, {"ok": True})
+    setup(tmp_path, {"ok": True, "action": "pushed"})
     base = commit(tmp_path, "before.txt")
     commit(tmp_path, "change.txt")
     script = (
@@ -299,7 +302,7 @@ def test_the_limiter_stopping_the_check_is_recorded(tmp_path: Path) -> None:
 
 
 def test_a_missing_limiter_logs_and_runs_the_check_unbounded(tmp_path: Path) -> None:
-    setup(tmp_path, {"ok": True})
+    setup(tmp_path, {"ok": True, "action": "pushed"})
     base = commit(tmp_path, "before.txt")
     commit(tmp_path, "change.txt")
     script = (
@@ -316,7 +319,7 @@ def test_a_missing_limiter_logs_and_runs_the_check_unbounded(tmp_path: Path) -> 
 
 
 def test_gtimeout_is_used_when_timeout_is_absent(tmp_path: Path) -> None:
-    setup(tmp_path, {"ok": True})
+    setup(tmp_path, {"ok": True, "action": "pushed"})
     base = commit(tmp_path, "before.txt")
     commit(tmp_path, "change.txt")
     script = (
@@ -333,7 +336,7 @@ def test_gtimeout_is_used_when_timeout_is_absent(tmp_path: Path) -> None:
 
 
 def test_the_nonce_reaches_the_session(tmp_path: Path) -> None:
-    setup(tmp_path, {"ok": True})
+    setup(tmp_path, {"ok": True, "action": "pushed"})
     base = commit(tmp_path, "before.txt")
     commit(tmp_path, "change.txt")
     run(
