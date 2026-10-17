@@ -9,7 +9,7 @@ from typing import Any
 
 import pytest
 
-from argus.gitsync import gh_gate, repair
+from argus.gitsync import gh_gate, repair, repair_hold
 from argus.gitsync.repair import mode_repair
 
 PR_URL = "https://github.com/agentmemoir/clio/pull/201"
@@ -97,6 +97,9 @@ def repair_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
 
     monkeypatch.setattr(repair, "setting", fake_setting)
     monkeypatch.setattr(repair, "runs_dir", fake_runs_dir)
+    # The hold tally lives in its own module, so it reads the same two.
+    monkeypatch.setattr(repair_hold, "setting", fake_setting)
+    monkeypatch.setattr(repair_hold, "runs_dir", fake_runs_dir)
     monkeypatch.setattr(repair, "gh_pull_request_head", fake_head)
     monkeypatch.setattr(repair, "_phase_run_entries", fake_entries)
     monkeypatch.setattr(repair, "phase_receipt", fake_receipt)

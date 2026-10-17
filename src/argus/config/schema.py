@@ -95,6 +95,9 @@ SCHEMA = (
     Field("repair.pipeline", "path", "repair"),
     Field("repair.attempts", "int", "repair"),
     Field("repair.wait", "int", "repair"),
+    Field("repair.verify", "str", "optional"),
+    Field("repair.verify-timeout", "int", "optional"),
+    Field("repair.stale-after", "int", "optional"),
     Field("estimate.factors-file", "path", "optional"),
     Field("estimate.ideal-days", "str", "optional"),
 )
@@ -150,6 +153,9 @@ SHELL_VARS = {
     "repair.pipeline": "REPAIR_PIPELINE",
     "repair.attempts": "REPAIR_ATTEMPTS",
     "repair.wait": "REPAIR_WAIT",
+    "repair.verify": "REPAIR_VERIFY",
+    "repair.verify-timeout": "REPAIR_VERIFY_TIMEOUT",
+    "repair.stale-after": "REPAIR_STALE_AFTER",
     "estimate.factors-file": "ESTIMATE_FACTORS_FILE",
     "estimate.ideal-days": "ESTIMATE_IDEAL_DAYS",
 }
