@@ -8,7 +8,8 @@ from typing import Any
 
 from argus.conventions import runs_dir
 from argus.gitsync.git import current_branch, git
-from argus.gitsync.repair import failure_excerpt, mode_repair
+from argus.gitsync.repair import mode_repair
+from argus.gitsync.repair_task import failure_excerpt
 from argus.gitsync.selftest_fixture import (
     BOARD_REL,
     _configure_self_test,

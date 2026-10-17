@@ -36,7 +36,8 @@ repair_due() {
     REPAIR)
       log "$summary"
       repair_launch "$(selection_value id <"$plan")" "$(selection_value task <"$plan")" \
-        "$(selection_value branch <"$plan")" || return 1
+        "$(selection_value branch <"$plan")" "$(selection_value base <"$plan")" \
+        || return 1
       return 0 ;;
     HOLD)
       log_changed repair-hold "$summary"
@@ -58,13 +59,13 @@ repair_due() {
 
 # Open the phase window on one repair session.
 repair_launch() {
-  local id="$1" task="$2" branch="$3" launch quoted setting
+  local id="$1" task="$2" branch="$3" base="$4" launch quoted setting
   printf -v launch 'bash %q' "$SELF"
   for setting in "${ARGUS_CONFIG_ARGS[@]}"; do
     printf -v quoted ' %q' "$setting"
     launch="$launch$quoted"
   done
-  printf -v quoted ' --repair-session %q %q %q' "$id" "$task" "$branch"
+  printf -v quoted ' --repair-session %q %q %q %q' "$id" "$task" "$branch" "$base"
   launch="$launch$quoted"
   9>&- tmux_session_ensure \
     || { notify "repair $id failed to create tmux session '$SESSION'"; return 1; }
@@ -75,16 +76,56 @@ repair_launch() {
   log "launched repair $id in tmux '$SESSION' window 'phase'"
 }
 
+# Check the scope one repair changed, and keep its answer beside that round's task.
+#
+# The command is project content: it maps the changed paths to that project's
+# tests. The driver only bounds it, keeps its answer, and names a failure. The
+# paths go through the environment and never into the command line, because a
+# file name is text nothing here controls. No command, no changed path, or a base
+# git cannot read runs no check at all, and the next turn then counts the round
+# as it always did.
+repair_verify() {
+  local id="$1" base="$2" changed rc=0 count folder
+  [ -n "${REPAIR_VERIFY:-}" ] || return 0
+  if [ -z "$base" ]; then
+    log "repair $id: no commit to scope a changed-scope check against; no scope check"
+    return 0
+  fi
+  changed="$("$CMD_GIT" -C "$REPO" diff --name-only "$base" HEAD 2>/dev/null || true)"
+  if [ -z "$changed" ]; then
+    log "repair $id: the repair changed no path since $base; no scope check"
+    return 0
+  fi
+  count="$(printf '%s\n' "$changed" | wc -l | tr -d ' ')"
+  folder="$RUN_DIR/repair/$id"
+  mkdir -p "$folder"
+  printf '%s\n' "$changed" >"$folder/verify.paths"
+  printf '%s\n' "$REPAIR_VERIFY" >"$folder/verify.command"
+  local -a limiter=()
+  if [ "${REPAIR_VERIFY_TIMEOUT:-0}" -gt 0 ] && command -v timeout >/dev/null 2>&1; then
+    limiter=(timeout "$REPAIR_VERIFY_TIMEOUT")
+  fi
+  "${limiter[@]+"${limiter[@]}"}" env \
+    ARGUS_REPAIR_BASE="$base" ARGUS_REPAIR_CHANGED="$changed" \
+    bash -c "$REPAIR_VERIFY" >"$folder/verify.log" 2>&1 || rc=$?
+  printf '%s\n' "$rc" >"$folder/verify.rc"
+  if [ "$rc" -eq 0 ]; then
+    log "repair $id: the changed scope passes ($count path(s))"
+  else
+    log "repair $id: the changed scope fails (rc=$rc, $count path(s)); the next task names it"
+  fi
+}
+
 # The repair run, inside the phase window.
 #
 # It never writes the halt marker. A phase that fails stops the line because the
 # next phase would build on it; a repair that fails changes nothing the line
-# depends on, and the attempt was counted when the task was prepared, so the
-# limit ends the retries. The pipeline's agent commits on the branch; this pushes
-# whatever it left, without force, and a run that left nothing to push counts as
-# a failed attempt.
+# depends on, and the attempt is counted when the next turn reads the round's
+# own scope, so the limit ends the retries. The pipeline's agent commits on the
+# branch; this pushes whatever it left, without force, and a run that left
+# nothing to push counts as a failed attempt.
 run_repair_session() {
-  local id="$1" task="$2" branch="$3" rc=0 left
+  local id="$1" task="$2" branch="$3" base="${4:-}" rc=0 left
   mkdir -p "$RUN_DIR"
   trap 'rm -f "$PIDFILE"; exit 130' HUP INT TERM
   printf '%s\n' "$$" >"$PIDFILE"
@@ -100,6 +141,8 @@ run_repair_session() {
         tmux_set_title "repair $id pushed nothing"
       else
         log "repair $id: pushed to $branch; the next tick reads the new checks"
+        tmux_set_title "repair $id checking the changed scope"
+        repair_verify "$id" "$base"
         tmux_set_title "repair $id done"
       fi
     else

@@ -71,11 +71,12 @@ def test_a_repair_answer_launches_one_run_and_ends_the_tick(tmp_path: Path) -> N
             "id": "7-1",
             "task": "/t/task.md",
             "branch": "b",
+            "base": "abc123",
             "summary": "repair REPAIR: x",
         },
     )
     assert run(tmp_path, "repair_due") == 0
-    assert read(tmp_path, "launched") == ["7-1 /t/task.md b"]
+    assert read(tmp_path, "launched") == ["7-1 /t/task.md b abc123"]
     assert "--mode repair" in read(tmp_path, "calls")[0]
 
 
@@ -158,3 +159,70 @@ def test_a_run_that_pushed_nothing_is_not_read_as_a_push(tmp_path: Path) -> None
     log = " ".join(read(tmp_path, "log"))
     assert "the run pushed nothing to b" in log
     assert "pushed to b" not in log
+
+
+def commit(tmp_path: Path, name: str) -> str:
+    """Commit one file in the fixture checkout and return the commit's id."""
+    repo = tmp_path / "repo"
+    repo.mkdir(exist_ok=True)
+    if not (repo / ".git").exists():
+        subprocess.run(["git", "-C", str(repo), "init", "-q"], check=True)
+    (repo / name).write_text("x\n")
+    ident = ["-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false"]
+    subprocess.run(["git", "-C", str(repo), *ident, "add", name], check=True)
+    subprocess.run(
+        ["git", "-C", str(repo), *ident, "commit", "-q", "-m", name], check=True
+    )
+    rev = subprocess.run(
+        ["git", "-C", str(repo), "rev-parse", "HEAD"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return rev.stdout.strip()
+
+
+def test_a_check_over_the_changed_scope_keeps_its_answer(tmp_path: Path) -> None:
+    setup(tmp_path, {"ok": True})
+    base = commit(tmp_path, "before.txt")
+    commit(tmp_path, "change.txt")
+    run(
+        tmp_path,
+        f"export REPAIR_VERIFY=false\nrun_repair_session 7-1 /t/task.md b {base}",
+    )
+    folder = tmp_path / "state" / "repair" / "7-1"
+    assert (folder / "verify.rc").read_text().strip() == "1"
+    assert (folder / "verify.paths").read_text().split() == ["change.txt"]
+    assert (folder / "verify.command").read_text().strip() == "false"
+    assert "the changed scope fails" in " ".join(read(tmp_path, "log"))
+
+
+def test_the_check_reads_the_changed_paths_from_the_environment(
+    tmp_path: Path,
+) -> None:
+    setup(tmp_path, {"ok": True})
+    base = commit(tmp_path, "before.txt")
+    commit(tmp_path, "change.txt")
+    run(
+        tmp_path,
+        "export REPAIR_VERIFY='"
+        'printf "%s|%s\\n" "$ARGUS_REPAIR_BASE" "$ARGUS_REPAIR_CHANGED" >"$FAKE/seen"'
+        "'\n"
+        f"run_repair_session 7-1 /t/task.md b {base}",
+    )
+    assert (tmp_path / "seen").read_text().splitlines() == [f"{base}|change.txt"]
+    assert (tmp_path / "state" / "repair" / "7-1" / "verify.rc").exists()
+
+
+def test_no_command_or_no_change_runs_no_check(tmp_path: Path) -> None:
+    setup(tmp_path, {"ok": True})
+    base = commit(tmp_path, "before.txt")
+    run(tmp_path, f"run_repair_session 7-1 /t/task.md b {base}")
+    assert not (tmp_path / "state" / "repair" / "7-1" / "verify.rc").exists()
+
+    run(
+        tmp_path,
+        f"export REPAIR_VERIFY=true\nrun_repair_session 7-2 /t/task.md b {base}",
+    )
+    assert not (tmp_path / "state" / "repair" / "7-2" / "verify.rc").exists()
+    assert "the repair changed no path" in " ".join(read(tmp_path, "log"))
