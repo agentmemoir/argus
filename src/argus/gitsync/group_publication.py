@@ -25,7 +25,7 @@ from argus.gitsync.receipts import (
     pull_request_ref,
 )
 from argus.gitsync.review import open_predecessor
-from argus.gitsync.runstate import commit_leftover_run_state
+from argus.gitsync.runstate import commit_leftover_run_state, runstate_repo
 
 
 def _declared_group(root: str | Path, phase: int) -> dict[str, Any] | None:
@@ -82,16 +82,16 @@ def _write_publication_receipt(
     engine_written: Iterable[str] = (),
     pull_request: str | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
-    private = cast("Path", board_repo(root))
+    repo = cast("Path", runstate_repo(root, phase) or board_repo(root))
     run_dir = phase_run_dir(root, phase)
     if not run_dir.is_dir():
         raise ConfigError(f"phase run directory is missing: {run_dir}")
     public_commit = _published_head(results, root)
-    private_commit = _published_head(results, private)
+    private_commit = _published_head(results, repo)
     if not public_commit or not private_commit:
         raise ConfigError("publication did not produce both repository heads")
     public_branch = current_branch(root)
-    private_branch = current_branch(private)
+    private_branch = current_branch(repo)
     # One branch covers a whole group, so a member's receipt records the pull
     # request the group already has. That pull request is reused only while it
     # still covers the branch: once a member's pull request merges and the

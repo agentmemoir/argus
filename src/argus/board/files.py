@@ -54,7 +54,6 @@ def _receipt_commit(value: Any, field: str) -> str:
 def _validate_publication_receipt(
     path: str | Path,
     reservation: Any,
-    private_repo: str | Path,
     remote: str,
     _branch: str | None,
     *,
@@ -97,10 +96,24 @@ def _validate_publication_receipt(
     # The receipt is run state, published to the integration branch, so it is
     # confirmed against that branch. It used to be confirmed against the board
     # branch, which worked only while the two were the same ref.
-    published = _integration_branch(private_repo, remote)
-    ref, _commit = _fetch_branch_ref(private_repo, remote, published)
-    rel = expected.relative_to(Path(private_repo).resolve()).as_posix()
-    rc, raw, err = _git(private_repo, "show", f"{ref}:{rel}")
+    # The receipt is run state, so it is confirmed in the repository that holds
+    # the run directory, which need not be the board checkout. The repository
+    # is the working tree the run directory sits in.
+    rc_top, top, _top_err = _git(expected.parent, "rev-parse", "--show-toplevel")
+    if rc_top != 0 or not top:
+        raise CoordinationUnavailable(
+            "publication receipt is not inside a git working tree"
+        )
+    run_repo = Path(top).resolve()
+    try:
+        rel = expected.relative_to(run_repo).as_posix()
+    except ValueError as exc:
+        raise CoordinationUnavailable(
+            "publication receipt is outside the repository that holds the run state"
+        ) from exc
+    published = _integration_branch(run_repo, remote)
+    ref, _commit = _fetch_branch_ref(run_repo, remote, published)
+    rc, raw, err = _git(run_repo, "show", f"{ref}:{rel}")
     if rc != 0:
         raise CoordinationUnavailable(
             f"publication receipt is not present on the private remote's "

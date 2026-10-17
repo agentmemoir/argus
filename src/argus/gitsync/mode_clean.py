@@ -5,7 +5,6 @@
 from pathlib import Path
 from typing import Any, cast
 
-from argus.conventions import board_repo
 from argus.gitsync.git import (
     ConfigError,
     blocked,
@@ -18,7 +17,11 @@ from argus.gitsync.git import (
     summarize,
 )
 from argus.gitsync.modes import _run_phase_numbers
-from argus.gitsync.runstate import _commit_and_push_run_state, _phase_run_pathspec
+from argus.gitsync.runstate import (
+    _commit_and_push_run_state,
+    _phase_run_pathspec,
+    runstate_repo,
+)
 
 
 def mode_clean(root: str | Path, phase: int | str | None = None) -> dict[str, Any]:
@@ -48,7 +51,7 @@ def mode_clean(root: str | Path, phase: int | str | None = None) -> dict[str, An
     an earlier phase's commit.
     """
     root = Path(root).resolve()
-    private = board_repo(root)
+    private = runstate_repo(root)
     if private is None or not is_git_repo(private):
         return {
             "ok": True,

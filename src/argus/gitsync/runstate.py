@@ -14,6 +14,7 @@ from argus.gitsync.git import (
     blocked,
     dirty_paths,
     git,
+    git_toplevel,
     is_git_repo,
     is_run_state,
     resolve_upstream,
@@ -154,6 +155,23 @@ def _commit_and_push_run_state(
     )
 
 
+def runstate_repo(root: str | Path, phase: int | str | None = None) -> Path | None:
+    """The git working tree that owns the configured run state.
+
+    The reservation board and the run state may live in different repositories.
+    The run state's repository is the one that holds the run directory, which
+    ``driver.runs`` names through the pipeline; ``board.repo`` no longer has to
+    be that repository. A layout with no working tree for the run state falls
+    back to the board checkout, which is the only repository run state had
+    before the two could be separated.
+    """
+    try:
+        run_dir = runs_dir(root) if phase is None else phase_run_dir(root, int(phase))
+    except (TypeError, ValueError):
+        return board_repo(root)
+    return git_toplevel(run_dir) or board_repo(root)
+
+
 def _phase_run_pathspec(phase: int | str, root: str | Path | None = None) -> str:
     root = Path(root or Path.cwd()).resolve()
     try:
@@ -162,24 +180,26 @@ def _phase_run_pathspec(phase: int | str, root: str | Path | None = None) -> str
         raise ConfigError(f"invalid phase number: {phase!r}") from None
     if number < 0 or number > 999999:
         raise ConfigError(f"phase number out of range: {number}")
-    private = board_repo(root)
-    if private is None:
-        raise ConfigError("the reservation board repository is not configured")
     try:
         resolved = phase_run_dir(root, number).resolve()
     except ValueError as exc:
         # The run directory could not be computed at all, most often because the
         # phase file the pipeline names is gone. This is a different failure from
-        # a directory that lands outside the private checkout, and reporting it
-        # as one sent a reader looking at paths when the input was missing.
+        # a directory that is not in a checkout, and reporting it as one sent a
+        # reader looking at paths when the input was missing.
         raise ConfigError(
             f"cannot locate the run directory for phase {number}: {exc}"
         ) from exc
+    repo = git_toplevel(resolved)
+    if repo is None:
+        raise ConfigError(
+            f"phase {number} run directory is not inside a git working tree to publish"
+        )
     try:
-        return str(resolved.relative_to(private.resolve()))
+        return str(resolved.relative_to(repo))
     except ValueError as exc:
         raise ConfigError(
-            "phase run directory must be inside the private checkout to publish"
+            "phase run directory must be inside its run-state checkout to publish"
         ) from exc
 
 
@@ -193,16 +213,30 @@ def commit_leftover_run_state(
     concurrent phase's partial records cannot be swept into this publication.
     """
     root = Path(root).resolve()
-    private = cast("Path", board_repo(root))
-    pathspec = (
-        _phase_run_pathspec(phase, root)
-        if phase is not None
-        else str(runs_dir(root).relative_to(private))
-    )
+    repo = runstate_repo(root, phase)
+    if repo is None:
+        return {
+            "ok": True,
+            "mode": "start-clean",
+            "repos": [],
+            "pathspec": "runs",
+            "summary": "start-clean sync ok: no run-state checkout",
+        }
+    if phase is not None:
+        pathspec = _phase_run_pathspec(phase, root)
+    else:
+        try:
+            pathspec = str(runs_dir(root).resolve().relative_to(repo))
+        except ValueError:
+            pathspec = "runs"
     results: list[dict[str, Any]] = []
     # The nested private checkout is a separate repo by design; if a host
     # lacks the global ignore for it, do not mistake it for public dirt.
     pub_dirty = [p for p in dirty_paths(root) if not _is_private_path(root, p)]
+    # When the run state lives in the public checkout itself, its own paths are
+    # the change this helper is about to commit, not public dirt that blocks it.
+    if repo == root:
+        pub_dirty = [p for p in pub_dirty if not is_run_state(p, pathspec)]
     if pub_dirty:
         results.append(
             blocked(
@@ -212,8 +246,8 @@ def commit_leftover_run_state(
                 hint="commit or revert them, then rerun",
             )
         )
-    if is_git_repo(private):
-        paths = dirty_paths(private)
+    if is_git_repo(repo):
+        paths = dirty_paths(repo)
         if phase is None:
             outside = [p for p in paths if not is_run_state(p, pathspec)]
             inside = [p for p in paths if is_run_state(p, pathspec)]
@@ -222,7 +256,7 @@ def commit_leftover_run_state(
             # Unstaged files from another phase are deliberately left alone;
             # only staged paths outside this phase are dangerous because a
             # commit would carry them accidentally.
-            _, staged, _ = git(private, "diff", "--cached", "--name-only")
+            _, staged, _ = git(repo, "diff", "--cached", "--name-only")
             outside = [
                 p
                 for p in staged.splitlines()
@@ -232,7 +266,7 @@ def commit_leftover_run_state(
         if outside:
             results.append(
                 blocked(
-                    {"repo": str(private)},
+                    {"repo": str(repo)},
                     "private checkout has changes outside the current phase"
                     if phase is not None
                     else "private checkout has changes outside runs/",
@@ -241,11 +275,9 @@ def commit_leftover_run_state(
                 )
             )
         elif inside:
-            results.append(
-                _commit_and_push_run_state(private, message, pathspec=pathspec)
-            )
+            results.append(_commit_and_push_run_state(repo, message, pathspec=pathspec))
         else:
-            results.append({"repo": str(private), "ok": True, "action": "clean"})
+            results.append({"repo": str(repo), "ok": True, "action": "clean"})
     ok = all(r.get("ok") for r in results)
     return {
         "ok": ok,
@@ -263,4 +295,5 @@ __all__ = [
     "commit_leftover_run_state",
     "is_engine_written_run_artifact",
     "publish_dirt",
+    "runstate_repo",
 ]
