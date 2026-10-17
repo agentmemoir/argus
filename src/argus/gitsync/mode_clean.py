@@ -13,6 +13,7 @@ from argus.gitsync.git import (
     git,
     integration_branch,
     is_git_repo,
+    push_moved,
     resolve_upstream,
     summarize,
 )
@@ -112,21 +113,6 @@ def mode_clean(root: str | Path, phase: int | str | None = None) -> dict[str, An
     }
 
 
-def _push_moved(porcelain: str) -> bool:
-    """Whether a ``git push --porcelain`` moved a ref.
-
-    Each status line carries a one-character flag, a tab, ``<from>:<to>``, and
-    a summary; ``=`` marks a ref that was up to date and did not need pushing.
-    Plain lines such as ``To <remote>`` and ``Done`` carry no tab, so they are
-    not status lines.
-    """
-    for line in porcelain.splitlines():
-        flag, tab, _summary = line.partition("\t")
-        if tab and flag != "=":
-            return True
-    return False
-
-
 def mode_checkpoint(root: str | Path, paths: list[str] | None = None) -> dict[str, Any]:
     """Commit and push a checkout's work in progress on the branch it is on.
 
@@ -218,7 +204,7 @@ def mode_checkpoint(root: str | Path, paths: list[str] | None = None) -> dict[st
         return blocked(info, f"checkpoint push failed: {err or out}")
     if committed:
         action = "committed-and-pushed"
-    elif _push_moved(out):
+    elif push_moved(out, branch):
         action = "pushed"
     else:
         action = "nothing-to-push"
