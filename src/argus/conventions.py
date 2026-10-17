@@ -95,6 +95,17 @@ def board_repo(repo: str | Path | None = None) -> Path | None:
     return path.resolve()
 
 
+def runstate_repo(repo: str | Path | None = None) -> Path | None:
+    """The configured checkout that owns the run state, when one is named."""
+    path = setting("runstate.repo", None)
+    if path is None:
+        return None
+    path = Path(path)
+    if not path.is_absolute():
+        path = Path(repo or setting("repo-root")) / path
+    return path.resolve()
+
+
 def phases_repo(repo: str | Path | None = None) -> Path | None:
     """The configured checkout that owns the phases."""
     path = setting("phases.repo", None)

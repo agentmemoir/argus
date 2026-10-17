@@ -5,7 +5,6 @@
 from pathlib import Path
 from typing import Any, cast
 
-from argus.conventions import board_repo
 from argus.gitsync.git import (
     ConfigError,
     blocked,
@@ -18,7 +17,11 @@ from argus.gitsync.git import (
     summarize,
 )
 from argus.gitsync.modes import _run_phase_numbers
-from argus.gitsync.runstate import _commit_and_push_run_state, _phase_run_pathspec
+from argus.gitsync.runstate import (
+    _commit_and_push_run_state,
+    _phase_run_pathspec,
+    runstate_repo,
+)
 
 
 def mode_clean(root: str | Path, phase: int | str | None = None) -> dict[str, Any]:
@@ -48,21 +51,13 @@ def mode_clean(root: str | Path, phase: int | str | None = None) -> dict[str, An
     an earlier phase's commit.
     """
     root = Path(root).resolve()
-    private = board_repo(root)
-    if private is None or not is_git_repo(private):
-        return {
-            "ok": True,
-            "mode": "clean",
-            "repos": [],
-            "pathspec": "runs",
-            "summary": f"clean sync ok: no private checkout at {private}",
-        }
     if phase is None:
         # Only phases with leftover dirt are committed. A phase already clean
         # would make `git commit` report "no changes added to commit" while a
         # sibling phase is still dirty, which the helper reads as a failure.
-        dirty = set(dirty_paths(private))
-        numbers: list[int] = []
+        # Each phase is scoped to the checkout that holds its own run directory,
+        # so a run directory outside the configured run folder still lands.
+        planned: list[tuple[Path, int, str]] = []
         for number in _run_phase_numbers(root):
             try:
                 pathspec = _phase_run_pathspec(number, root)
@@ -73,10 +68,14 @@ def mode_clean(root: str | Path, phase: int | str | None = None) -> dict[str, An
                 # which is the only reason the sweep exists: the next phase's
                 # publish otherwise refuses on run state nobody landed.
                 continue
+            repo = runstate_repo(root, number)
+            if repo is None or not is_git_repo(repo):
+                continue
             prefix = pathspec + "/"
+            dirty = set(dirty_paths(repo))
             if any(p == pathspec or p.startswith(prefix) for p in dirty):
-                numbers.append(number)
-        if not numbers:
+                planned.append((repo, number, pathspec))
+        if not planned:
             return {
                 "ok": True,
                 "mode": "clean",
@@ -86,11 +85,11 @@ def mode_clean(root: str | Path, phase: int | str | None = None) -> dict[str, An
             }
         results = [
             _commit_and_push_run_state(
-                private,
+                repo,
                 f"runs: close out phase {number:06d} run state",
-                pathspec=_phase_run_pathspec(number, root),
+                pathspec=pathspec,
             )
-            for number in numbers
+            for repo, number, pathspec in planned
         ]
         ok = all(res.get("ok") for res in results)
         return {
@@ -100,9 +99,18 @@ def mode_clean(root: str | Path, phase: int | str | None = None) -> dict[str, An
             "pathspec": "runs",
             "summary": summarize(results, "clean"),
         }
+    repo = runstate_repo(root, phase)
+    if repo is None or not is_git_repo(repo):
+        return {
+            "ok": True,
+            "mode": "clean",
+            "repos": [],
+            "pathspec": "runs",
+            "summary": f"clean sync ok: no private checkout at {repo}",
+        }
     pathspec = _phase_run_pathspec(phase, root)
     res = _commit_and_push_run_state(
-        private, f"runs: close out phase {int(phase):06d} run state", pathspec=pathspec
+        repo, f"runs: close out phase {int(phase):06d} run state", pathspec=pathspec
     )
     return {
         "ok": bool(res.get("ok")),

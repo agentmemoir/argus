@@ -9,8 +9,7 @@ must not run on a stale or diverged base. This module fetches each checkout
 from its own configured upstream and brings it in line by fast-forward or a
 plain merge, stopping the line only when it cannot do so safely.
 
-The configured run directory must be inside the private checkout for
-publication, because phase receipts and run state are committed there.
+Publication commits phase receipts and run state in the checkout that holds the run directory, which need not be the board checkout.
 
 Two modes, because "local is ahead" means different things:
 

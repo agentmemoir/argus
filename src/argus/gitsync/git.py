@@ -125,6 +125,26 @@ def is_git_repo(path: str | Path | None) -> bool:
     return rc == 0 and out == "true"
 
 
+def git_toplevel(path: str | Path) -> Path | None:
+    """The git working tree that contains ``path``, or ``None``.
+
+    ``path`` may not exist yet: a phase run directory is named before it is
+    created, and the publish helper resolves it first. The search therefore
+    starts at the nearest existing ancestor. ``--show-toplevel`` reports the
+    innermost work tree, so a run directory inside a nested checkout maps to
+    that checkout rather than to its enclosing repository.
+    """
+    candidate = Path(path).resolve()
+    if candidate.is_file():
+        candidate = candidate.parent
+    while not candidate.exists() and candidate != candidate.parent:
+        candidate = candidate.parent
+    rc, out, _ = git(candidate, "rev-parse", "--show-toplevel")
+    if rc != 0 or not out:
+        return None
+    return Path(out).resolve()
+
+
 def resolve_upstream(
     repo: str | Path,
 ) -> tuple[str | None, str | None, str | None, str | None]:
@@ -310,4 +330,4 @@ def summarize(results: list[dict[str, Any]], mode: str) -> str:
     return f"{head}: " + "; ".join(parts)
 
 
-__all__ = ["_is_private_path"]
+__all__ = ["_is_private_path", "git_toplevel"]

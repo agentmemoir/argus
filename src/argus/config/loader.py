@@ -113,6 +113,12 @@ def _build(
     issues = (
         cast("dict[str, Any]", issue_value) if isinstance(issue_value, dict) else None
     )
+    runstate_value = raw.get("runstate")
+    runstate = (
+        cast("dict[str, Any]", runstate_value)
+        if isinstance(runstate_value, dict)
+        else None
+    )
     provider = overrides.get("driver")
     if provider is None:
         provider = _lookup(raw, "driver.provider")[1]
@@ -140,7 +146,9 @@ def _build(
     values: dict[str, object] = {}
     sources: dict[str, str] = {}
     for field in SCHEMA:
-        required = _is_required(field, board, notify, issues, repair, provider)
+        required = _is_required(
+            field, board, notify, issues, repair, runstate, provider
+        )
         if field.key in supplied:
             raw_value, source = supplied[field.key]
             _check_type(field, raw_value)
@@ -173,6 +181,7 @@ def _is_required(
     notify: dict[str, Any] | None,
     issues: dict[str, Any] | None,
     repair: dict[str, Any] | None,
+    runstate: dict[str, Any] | None,
     provider: object,
 ) -> bool:
     if field.required == "required":
@@ -187,6 +196,8 @@ def _is_required(
         return issues is not None and provider == "issues"
     if field.required == "repair":
         return repair is not None
+    if field.required == "runstate":
+        return runstate is not None
     return False
 
 

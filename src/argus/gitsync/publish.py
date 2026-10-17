@@ -21,7 +21,11 @@ from argus.gitsync.receipts import (
     phase_receipt,
     pull_request_ref,
 )
-from argus.gitsync.runstate import _commit_and_push_run_state, _phase_run_pathspec
+from argus.gitsync.runstate import (
+    _commit_and_push_run_state,
+    _phase_run_pathspec,
+    runstate_repo,
+)
 
 
 def _commit_phase_receipt(root: str | Path, phase: int | str) -> dict[str, Any]:
@@ -50,9 +54,14 @@ def _commit_phase_receipt(root: str | Path, phase: int | str) -> dict[str, Any]:
     itself fails the receipt is still dirty and nobody owns it, so
     ``mark_phase_published`` restores the previous bytes; see it for why.
     """
-    private = cast("Path", board_repo(root))
+    repo = runstate_repo(root, phase)
+    if repo is None:
+        return blocked(
+            {"repo": str(root)},
+            "no run-state checkout to commit the publication receipt to",
+        )
     return _commit_and_push_run_state(
-        private,
+        repo,
         f"pipeline: publish completion receipt for phase {int(phase):06d}",
         pathspec=_phase_run_pathspec(phase, root),
     )
@@ -95,7 +104,8 @@ def mark_phase_published(
     Returns a result dict; ok is the success flag.
     """
     root = Path(root).resolve()
-    private = cast("Path", board_repo(root))
+    repo = runstate_repo(root, phase) or board_repo(root)
+    private = cast("Path", repo)
     info: dict[str, Any] = {"repo": str(root), "phase": f"{int(phase):06d}"}
     receipt = phase_receipt(root, int(phase))
     if not receipt:

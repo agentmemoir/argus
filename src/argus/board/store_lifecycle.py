@@ -207,7 +207,6 @@ class _LifecycleOps(_StoreBase):
             receipt = _validate_publication_receipt(
                 evidence_path,
                 reservation,
-                self.private,
                 self.remote,
                 self.branch,
                 repo_root=self.root,

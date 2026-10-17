@@ -22,7 +22,11 @@ from argus.gitsync.group_publication import (
 )
 from argus.gitsync.group_review import _group_pending, update_group_pull_request
 from argus.gitsync.review import open_predecessor
-from argus.gitsync.runstate import commit_leftover_run_state, publish_dirt
+from argus.gitsync.runstate import (
+    commit_leftover_run_state,
+    publish_dirt,
+    runstate_repo,
+)
 from argus.gitsync.sync import mode_resync, sync_all
 
 
@@ -106,6 +110,7 @@ def publish_phase(
     engine_churn: list[str] = []
     try:
         private = cast("Path", board_repo(root))
+        run_repo = runstate_repo(root, phase)
         if commit_run_state:
             clean = commit_leftover_run_state(
                 root,
@@ -124,8 +129,12 @@ def publish_phase(
                 }
         if outcome is None:
             dirty = [p for p in dirty_paths(root) if not _is_private_path(root, p)]
-            if is_git_repo(private):
-                dirty += [str(private / p) for p in dirty_paths(private)]
+            # The run state may live in its own checkout, which is neither the
+            # public nor the board repository; its dirt is checked like the
+            # board checkout's.
+            for repo in dict.fromkeys((private, run_repo)):
+                if repo is not None and repo != root and is_git_repo(repo):
+                    dirty += [str(repo / p) for p in dirty_paths(repo)]
             # The engine that is publishing is the engine that rewrites the
             # heartbeat marker, so a clean-tree requirement tests a directory
             # that is still being written. The marker is already committed and
@@ -186,7 +195,10 @@ def publish_phase(
                     "summary": sync["summary"],
                 }
         if outcome is None:
-            for checkout in (root, private):
+            checkouts = [root, private]
+            if run_repo is not None and run_repo not in checkouts:
+                checkouts.append(run_repo)
+            for checkout in checkouts:
                 if not is_git_repo(checkout):
                     continue
                 store.assert_owner(reservation)

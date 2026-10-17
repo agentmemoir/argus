@@ -64,7 +64,7 @@
 
     // Where run state goes: session logs, the ledger, the receipts. Required.
     // It may sit outside the project. Run state is committed and pushed only
-    // when this folder is inside board.repo; here it is under /tmp, so nothing
+    // in the checkout that holds this folder; here it is under /tmp, so nothing
     // is written into the project.
     "runs": "/tmp/argus/history",
 
@@ -165,6 +165,16 @@
     "branch": "claims",
     "remote": "origin"
   },
+
+  // Where run state is committed and confirmed, when that checkout is not the
+  // one the run directory sits in. Optional as a whole: omit this object and
+  // Argus derives the checkout from "driver.runs" and resolves the remote on
+  // it. With the object, all three keys are required.
+  // "runstate": {
+  //   "repo": ".",
+  //   "remote": "origin",
+  //   "branch": "main"
+  // },
 
   // Notifications. Optional, and machine-local: these values belong to whoever
   // receives them, so this file must not be committed to a public tree.

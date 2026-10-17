@@ -2,7 +2,7 @@
 
 The pipeline names each phase run directory. The run directory holds `run.json`, `ledger.json`, the reservation token, and `publication.json`. There is no Argus run-directory flag; the pipeline's `run_dir` key owns the value.
 
-Publication commits run state in the configured board checkout, so a publishing pipeline puts its run directory there. A run directory outside that checkout is refused before staging. The configured run folder holds the driver log, lock, and halt marker.
+Publication commits run state in the checkout that holds the run directory, which the pipeline's run_dir names; the board checkout may be a different repository. A `runstate.repo` setting names that checkout explicitly. The configured run folder holds the driver log, lock, and halt marker.
 
 The board branch is never checked out. Reading the board does not create it; an explicit migration or the first write creates it from the remote integration branch. A board is shared: every machine that reserves work on it names the same `board.file` and `board.branch`.
 

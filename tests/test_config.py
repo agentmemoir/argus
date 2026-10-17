@@ -244,7 +244,7 @@ def test_sample_loads_with_every_schema_key():
         for field in cfgmod.SCHEMA:
             if (
                 field.key.startswith("issues.")
-                or field.required == "issues"
+                or field.required in ("issues", "runstate")
                 or field.key == "machine.settings-file"
             ):
                 continue
