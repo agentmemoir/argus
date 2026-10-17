@@ -163,7 +163,12 @@
     // with "board". Every machine that reserves a phase has to name the same
     // branch, because two branches are two boards.
     "branch": "claims",
-    "remote": "origin"
+    "remote": "origin",
+
+    // Names the backup ref that mirrors the board branch, so a deleted board
+    // branch can be restored. Optional; defaults to the board branch's name
+    // plus "--argus-backup".
+    "backup-branch": "claims--argus-backup"
   },
 
   // Where run state is committed and confirmed, when that checkout is not the

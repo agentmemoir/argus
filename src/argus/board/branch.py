@@ -1,6 +1,6 @@
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
 # SPDX-License-Identifier: Apache-2.0
-"""The board branch: settings, resolution, creation, and branch refs."""
+"""The board branch: settings, resolution, and branch refs."""
 
 import sys
 from pathlib import Path
@@ -120,68 +120,107 @@ def _board_branch_exists(private: str | Path, remote: str, branch: str) -> bool:
     return rc == 0
 
 
-def ensure_board_branch(
-    private: str | Path, remote: str, branch: str, *, issues: bool = False
-) -> bool:
-    """Create the board's branch from the integration branch's tip, once.
+def _backup_branch(branch: str) -> str:
+    """The ref that mirrors the board branch, so a lost board can be restored.
 
-    Without this the first transaction after the change fails closed on every
-    machine, because the branch the board moved to does not exist yet. Seeding
-    copies the whole tree at the integration branch's tip, so its history and
-    every file at that tip come with it.
-
-    The board no longer lives on the integration branch, so its state file may
-    have been added there and then removed from the tip. The tip's tree then
-    lacks the file while its history still has the add, and a branch seeded
-    from it would read as broken: the reader sees the add and no file and fails
-    closed with "coordination state file was deleted from an initialized
-    board". That case is refused here, with a message that names the file and
-    the recovery, so an operator restores the board branch from a backup or
-    re-seeds from a commit that still has the file. A state file that never
-    appeared on the integration branch is the other case: the board is empty,
-    which is valid, and seeding proceeds.
-
-    This is the only function here that writes to the remote outside a board
-    transaction, and it is deliberately not reachable from a read. A read that
-    could create the branch would let an inspection of the board publish to the
-    remote, which fails on a machine with read-only credentials and reports
-    itself as a fetch failure rather than as a permission problem.
-
-    Returns True when it created the branch. A machine that loses the race
-    finds the branch already there and does nothing, which is the same answer.
+    The board's only durable copy used to be the board branch itself, so
+    deleting that branch deleted the board. Every board write advances this
+    second ref, and a reseed reads it before it falls back to the integration
+    branch. A configured ``board.backup-branch`` names it; otherwise the board
+    branch's own name plus ``--argus-backup``. The doubled hyphen keeps the
+    name clear of a repository's ordinary branches.
     """
-    if _board_branch_exists(private, remote, branch):
-        return False
-    source = _integration_ref(private, remote)
-    relative = state_rel(issues=issues).as_posix()
-    if (
-        _state_initialized(private, source, issues=issues)
-        and _git(private, "cat-file", "-e", f"{source}:{relative}")[0] != 0
-    ):
-        raise CoordinationUnavailable(
-            f"cannot seed coordination branch {branch!r}: {relative!r} was "
-            f"removed from the integration branch tip, so a branch seeded from "
-            f"it would read as broken. Restore {branch!r} from a backup, or "
-            f"re-seed it from a commit that still has the state file."
-        )
+    configured = conventions.setting("board.backup-branch", None)
+    if configured:
+        return _validate_branch(configured)
+    return f"{branch}--argus-backup"
+
+
+def _backup_source(private: str | Path, remote: str, branch: str) -> str | None:
+    """The backup ref's commit, or ``None`` when the remote has no backup yet."""
+    backup = _backup_branch(branch)
+    if not _board_branch_exists(private, remote, backup):
+        return None
+    remote_ref = f"refs/remotes/{remote}/{backup}"
     rc, _out, err = _git(
         private,
-        "push",
+        "fetch",
+        "--quiet",
         remote,
-        f"{source}:refs/heads/{branch}",
+        f"+refs/heads/{backup}:{remote_ref}",
         timeout=FETCH_TIMEOUT_S,
     )
-    if rc == 0:
-        print(
-            f"coordination branch {branch!r} seeded from {source[:12]}", file=sys.stderr
+    if rc != 0:
+        raise CoordinationUnavailable(
+            f"cannot fetch coordination backup {backup!r}: {_safe_detail(err)}"
         )
-        return True
-    # Losing the seed race is success: the other machine made the branch.
-    if _board_branch_exists(private, remote, branch):
-        return False
-    raise CoordinationUnavailable(
-        f"cannot create coordination branch {branch!r} on {remote}: {_safe_detail(err)}"
+    rc, commit, err = _git(private, "rev-parse", "--verify", remote_ref)
+    if rc != 0 or not commit.strip():
+        raise CoordinationUnavailable(
+            f"cannot resolve coordination backup {backup!r}: "
+            f"{_safe_detail(err or commit)}"
+        )
+    return commit.strip()
+
+
+def _push_backup(private: str | Path, remote: str, branch: str, commit: str) -> None:
+    """Advance the board's backup ref, or report why it could not.
+
+    The board write has already succeeded, so a backup problem is reported to
+    stderr and never raised: a stale backup must not fail the write it was
+    meant to protect. The push is not forced, so a ref that exists but is not
+    this board's backup is left untouched rather than overwritten.
+    """
+    backup = _backup_branch(branch)
+    try:
+        rc, out, err = _git(
+            private,
+            "push",
+            remote,
+            f"{commit}:refs/heads/{backup}",
+            timeout=FETCH_TIMEOUT_S,
+        )
+    except CoordinationUnavailable as exc:
+        # A timeout or a missing git binary leaves ``_git`` by raising rather
+        # than by returning a non-zero code. The board write already succeeded,
+        # so the backup problem is reported here too and never propagates.
+        print(
+            f"coordination backup ref {backup!r} was not advanced: "
+            f"{_safe_detail(str(exc))}",
+            file=sys.stderr,
+        )
+        return
+    if rc != 0:
+        print(
+            f"coordination backup ref {backup!r} was not advanced: "
+            f"{_safe_detail(out or err)}",
+            file=sys.stderr,
+        )
+
+
+def _backfill_backup(private: str | Path, remote: str, branch: str) -> None:
+    """Give an existing board branch a backup ref if it has none yet.
+
+    A board created before the backup existed gains one on its next explicit
+    migration, rather than waiting for the next write.
+    """
+    backup = _backup_branch(branch)
+    if _board_branch_exists(private, remote, backup):
+        return
+    remote_ref = f"refs/remotes/{remote}/{branch}"
+    rc, _out, _err = _git(
+        private,
+        "fetch",
+        "--quiet",
+        remote,
+        f"+refs/heads/{branch}:{remote_ref}",
+        timeout=FETCH_TIMEOUT_S,
     )
+    if rc != 0:
+        return
+    rc, commit, _err = _git(private, "rev-parse", "--verify", remote_ref)
+    if rc == 0 and commit.strip():
+        _push_backup(private, remote, branch, commit.strip())
 
 
 def _fetch_branch_ref(private: str | Path, remote: str, branch: str) -> tuple[str, str]:
@@ -242,9 +281,15 @@ def _state_initialized(private: str | Path, ref: str, *, issues: bool = False) -
 
 
 __all__ = [
+    "_backfill_backup",
+    "_backup_branch",
+    "_backup_source",
+    "_board_branch_exists",
     "_branch_setting",
     "_fetch_branch_ref",
     "_integration_branch",
+    "_integration_ref",
+    "_push_backup",
     "_remote_setting",
     "_resolve_private_repo",
     "_state_initialized",

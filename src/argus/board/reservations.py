@@ -36,9 +36,6 @@ if not __package__:
     from argus import (
         _bootstrap as _bootstrap,  # noqa: F401 - register the source package
     )
-from argus.board.branch import (
-    ensure_board_branch,
-)
 from argus.board.cli import (
     main,
 )
@@ -82,6 +79,9 @@ from argus.board.files import (
 )
 from argus.board.git import (
     git_binary,
+)
+from argus.board.seed import (
+    ensure_board_branch,
 )
 from argus.board.selftest import (
     self_test,

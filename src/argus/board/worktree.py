@@ -13,8 +13,8 @@ from typing import Any
 
 from argus.board.branch import (
     _fetch_branch_ref,
+    _push_backup,
     _state_initialized,
-    ensure_board_branch,
 )
 from argus.board.core import (
     FETCH_TIMEOUT_S,
@@ -26,6 +26,7 @@ from argus.board.core import (
     _safe_detail,
 )
 from argus.board.git import _git, _head, _is_git_repo
+from argus.board.seed import ensure_board_branch
 from argus.board.state import (
     _read_state_file,
     _write_state_file,
@@ -251,6 +252,12 @@ def _transaction(
                 f"HEAD:refs/heads/{branch}",
                 timeout=FETCH_TIMEOUT_S,
             )
+            # The backup ref is advanced only after the board push succeeds, so
+            # a rejected board push cannot move the backup. The backup push is
+            # not forced and its failure is only a warning, so a foreign ref or
+            # a server without atomic support never blocks a board write.
+            if rc == 0:
+                _push_backup(checkout.path, remote, branch, new_commit)
             # The final attempt's commit exists and the remote refused it, so its
             # folder holds the only copy of a board state nobody else has. The
             # earlier attempts are not kept: each one holds an intermediate state

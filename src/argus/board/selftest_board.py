@@ -8,7 +8,7 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from argus.board.branch import _integration_branch
+from argus.board.branch import _backup_branch, _integration_branch
 from argus.board.core import SELF_TEST_BRANCH, CoordinationUnavailable
 from argus.board.git import _git, git_binary
 from argus.board.selftest_fixture import _git_test_repo, _self_test_check
@@ -188,6 +188,21 @@ def _board_branch_checks(checks: list[dict[str, Any]], base: Path) -> None:
         "the board's own branch holds the reservation",
         held,
         f"origin/{store.branch}",
+    )
+
+    backup_ref = f"origin/{_backup_branch(store.branch)}"
+    rc, state, _err = _git(private, "show", f"{backup_ref}:{state_rel().as_posix()}")
+    backed_up = False
+    if rc == 0:
+        backed_up = (
+            json.loads(state).get("phases", {}).get("100710", {}).get("reservation_id")
+            == record["reservation_id"]
+        )
+    _self_test_check(
+        checks,
+        "the backup ref holds the same reservation",
+        backed_up,
+        backup_ref,
     )
 
     # A phase's own commit and a board commit are now siblings on two branches,
