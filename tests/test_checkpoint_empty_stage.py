@@ -73,6 +73,22 @@ def test_staged_work_is_committed_and_pushed(tmp_path: Path) -> None:
     assert result["action"] == "committed-and-pushed"
 
 
+def test_a_branch_already_carrying_the_commit_is_reported_as_pushed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The repair pipeline commits on the branch before the checkpoint runs, so
+    # the stage is empty while the push still moves the branch.
+    pub = _phase_clone(tmp_path)
+    (pub / "fix.txt").write_text("the fix\n", encoding="utf-8")
+    assert mode_clean.git(pub, "add", "fix.txt")[0] == 0
+    assert mode_clean.git(pub, "commit", "-qm", "the repair's commit")[0] == 0
+    calls = _spy_git(monkeypatch, {"commit": (1, "", HOOK_REFUSAL)})
+    result = mode_checkpoint(pub)
+    assert result["ok"] is True
+    assert result["action"] == "pushed"
+    assert not [c for c in calls if c[:1] == ("commit",)]
+
+
 def test_an_unreadable_stage_is_refused(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -112,6 +112,21 @@ def mode_clean(root: str | Path, phase: int | str | None = None) -> dict[str, An
     }
 
 
+def _push_moved(porcelain: str) -> bool:
+    """Whether a ``git push --porcelain`` moved a ref.
+
+    Each status line carries a one-character flag, a tab, ``<from>:<to>``, and
+    a summary; ``=`` marks a ref that was up to date and did not need pushing.
+    Plain lines such as ``To <remote>`` and ``Done`` carry no tab, so they are
+    not status lines.
+    """
+    for line in porcelain.splitlines():
+        flag, tab, _summary = line.partition("\t")
+        if tab and flag != "=":
+            return True
+    return False
+
+
 def mode_checkpoint(root: str | Path, paths: list[str] | None = None) -> dict[str, Any]:
     """Commit and push a checkout's work in progress on the branch it is on.
 
@@ -121,7 +136,8 @@ def mode_checkpoint(root: str | Path, paths: list[str] | None = None) -> dict[st
     refused, because pushing unfinished product code onto the branch everyone
     pulls is the thing the phase branch exists to prevent. A checkout with
     nothing to commit is a no-op, not a failure, so an owner with nothing to push
-    still releases.
+    still releases; the action names what the push did, ``pushed`` when the
+    branch moved without a new commit and ``nothing-to-push`` when it did not.
 
     Returns a result dict; ok is the success flag.
     """
@@ -178,13 +194,14 @@ def mode_checkpoint(root: str | Path, paths: list[str] | None = None) -> dict[st
         return blocked(info, f"could not stage the checkout: {err or out}")
     # Ask git first. With nothing staged, the pre-commit hook refused the commit
     # with its own text, and git's "nothing to commit" never appeared. So an
-    # empty stage must not reach the commit, and it is named for what it is: a
-    # run that pushed nothing, which the repair shell reads as a failed attempt.
+    # empty stage must not reach the commit, and the push still runs: a repair
+    # commits before this checkpoint, so an empty stage can carry a commit the
+    # branch does not have yet, and the push is what says whether it moved.
     rc, out, err = git(root, "diff", "--cached", "--quiet")
     if rc not in (0, 1):
         return blocked(info, f"could not read the staged changes: {err or out}")
-    action = "nothing-to-push"
-    if rc == 1:
+    committed = rc == 1
+    if committed:
         rc, out, err = git(
             root,
             "commit",
@@ -194,9 +211,16 @@ def mode_checkpoint(root: str | Path, paths: list[str] | None = None) -> dict[st
         )
         if rc != 0:
             return blocked(info, f"checkpoint commit failed: {err or out}")
-        action = "committed-and-pushed"
-    rc, out, err = git(root, "push", remote, branch)
+    # --porcelain reports a ref that was already up to date as well, so the
+    # result names what the push did instead of what the stage held.
+    rc, out, err = git(root, "push", "--porcelain", remote, branch)
     if rc != 0:
         return blocked(info, f"checkpoint push failed: {err or out}")
+    if committed:
+        action = "committed-and-pushed"
+    elif _push_moved(out):
+        action = "pushed"
+    else:
+        action = "nothing-to-push"
     head = git(root, "rev-parse", "HEAD")[1]
     return dict(info, ok=True, action=action, branch=branch, head=head)

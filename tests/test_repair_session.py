@@ -124,7 +124,8 @@ def test_without_a_repair_pipeline_the_hook_does_nothing(tmp_path: Path) -> None
 
 
 def test_a_finished_run_pushes_and_never_halts(tmp_path: Path) -> None:
-    setup(tmp_path, {"ok": True})
+    # The repair pipeline commits on the branch; the checkpoint's push moves it.
+    setup(tmp_path, {"ok": True, "action": "pushed"})
     run(tmp_path, "run_repair_session 7-1 /t/task.md b")
     assert (tmp_path / "glide-args").read_text().split() == [
         "run",
@@ -136,7 +137,9 @@ def test_a_finished_run_pushes_and_never_halts(tmp_path: Path) -> None:
         "repair_task=/t/task.md",
     ]
     assert "--mode checkpoint" in read(tmp_path, "calls")[0]
-    assert "pushed to b" in " ".join(read(tmp_path, "log"))
+    log = " ".join(read(tmp_path, "log"))
+    assert "pushed to b" in log
+    assert "pushed nothing" not in log
     assert not (tmp_path / "halt").exists() and not (tmp_path / "pid").exists()
 
 
