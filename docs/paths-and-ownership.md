@@ -8,7 +8,7 @@ The board branch is never checked out. Reading the board does not create it; an 
 
 ## Board Branch Backup And Recovery
 
-The board branch carries a second ref, the board branch's name plus `--argus-backup` (`claims` has `claims--argus-backup`), or the name in `board.backup-branch`. Every board write advances the backup to the same commit as the board branch with a non-forced push, so the backup is never behind the board it mirrors and a real branch that happens to hold the backup name is never overwritten. A backup-ref push failure is reported on stderr but does not fail the board write. The backup is an ordinary branch, so a restore needs no machine-local clone and no branch protection.
+The board branch carries a second ref, the board branch's name plus `--argus-backup` (`claims` has `claims--argus-backup`), or the name in `board.backup-branch`. Each successful board write advances the backup ref toward the board branch's new commit with a non-forced push. Because the push is not forced, a ref that has moved on is rejected and reported, not overwritten. A backup-push failure, including a timeout, is reported on stderr and the board write still succeeds; the backup catches up on the next write. The backup is an ordinary branch, so a restore needs no machine-local clone and no branch protection.
 
 A missing board branch is reseeded from the backup ref first, and only falls back to the remote integration branch when no backup exists. A deleted board branch therefore comes back with the state it last held on the next migration or write; the state file that left the integration tip is read from the backup, not the tip. Deleting the board branch no longer resets the board: to reset it, delete the backup ref too.
 

@@ -250,6 +250,57 @@ def test_a_configured_backup_branch_is_used(
     assert _ref_commit(remote, f"refs/heads/{BACKUP}") is None
 
 
+def test_an_existing_board_branch_gains_a_backup_on_migration(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, git_exe: str
+) -> None:
+    project = _configure(tmp_path, monkeypatch, git_exe, "backfill-client-1")
+    remote, clients = _git_test_repo(tmp_path, "backfill", initial_state=_empty_state())
+    # A board branch created before the backup existed: present on the remote
+    # with its state file, and with no backup ref yet.
+    assert _git(clients[0], "push", "-q", "origin", f"HEAD:refs/heads/{BRANCH}")[0] == 0
+    assert _ref_commit(remote, f"refs/heads/{BRANCH}") is not None
+    assert _ref_commit(remote, f"refs/heads/{BACKUP}") is None
+    store = ReservationStore(project)
+    assert store.migrate_board() is False
+    assert _ref_commit(remote, f"refs/heads/{BACKUP}") == _ref_commit(
+        remote, f"refs/heads/{BRANCH}"
+    )
+
+
+def test_a_backup_push_timeout_still_takes_the_board_write(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    git_exe: str,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    project = _configure(tmp_path, monkeypatch, git_exe, "timeout-client-1")
+    _git_test_repo(tmp_path, "timeout", initial_state=_empty_state())
+    store = ReservationStore(project)
+    assert store.migrate_board() is True
+
+    # Every advance of the backup ref goes through ``_git``, which raises
+    # ``CoordinationUnavailable`` on a timeout rather than returning a failure
+    # code. The board write the backup mirrors has already succeeded, so the
+    # timeout must be reported, not raised.
+    def timeout_backup_push(
+        repo: str | Path, *args: str, timeout: int | None = None
+    ) -> tuple[int, str, str]:
+        if args[:1] == ("push",) and any(BACKUP in arg for arg in args):
+            raise CoordinationUnavailable("git push timed out after 180s")
+        if timeout is None:
+            return _git(repo, *args)
+        return _git(repo, *args, timeout=timeout)
+
+    # Patch where ``branch`` looks the name up, so only the backup push fails;
+    # every other git call still reaches the real runner.
+    monkeypatch.setattr("argus.board.branch._git", timeout_backup_push)
+    record = store.reserve(100040, "server-01")
+    assert record["reservation_id"]
+    state, _commit = store.read()
+    assert state["phases"]["100040"]["reservation_id"] == record["reservation_id"]
+    assert "coordination backup ref" in capsys.readouterr().err
+
+
 def test_cli_module_runs_and_reports_a_missing_command(tmp_path: Path) -> None:
     result = subprocess.run(
         [sys.executable, "-m", "argus.board.cli"],

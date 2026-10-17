@@ -172,13 +172,24 @@ def _push_backup(private: str | Path, remote: str, branch: str, commit: str) -> 
     this board's backup is left untouched rather than overwritten.
     """
     backup = _backup_branch(branch)
-    rc, out, err = _git(
-        private,
-        "push",
-        remote,
-        f"{commit}:refs/heads/{backup}",
-        timeout=FETCH_TIMEOUT_S,
-    )
+    try:
+        rc, out, err = _git(
+            private,
+            "push",
+            remote,
+            f"{commit}:refs/heads/{backup}",
+            timeout=FETCH_TIMEOUT_S,
+        )
+    except CoordinationUnavailable as exc:
+        # A timeout or a missing git binary leaves ``_git`` by raising rather
+        # than by returning a non-zero code. The board write already succeeded,
+        # so the backup problem is reported here too and never propagates.
+        print(
+            f"coordination backup ref {backup!r} was not advanced: "
+            f"{_safe_detail(str(exc))}",
+            file=sys.stderr,
+        )
+        return
     if rc != 0:
         print(
             f"coordination backup ref {backup!r} was not advanced: "
