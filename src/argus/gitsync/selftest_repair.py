@@ -127,8 +127,9 @@ def _repair_checks(base: Path) -> list[Result]:
     )
     results.append(
         (
-            "the attempt is counted when the task is made",
-            json.loads(_record(pub).read_text())["attempts"] == 1,
+            "a round is written at once and counted when the next turn reads its scope",
+            json.loads(_record(pub).read_text())["rounds"] == 1
+            and json.loads(_record(pub).read_text())["attempts"] == 0,
             _record(pub).read_text(),
         )
     )
@@ -142,22 +143,26 @@ def _repair_checks(base: Path) -> list[Result]:
     again, _ = _ask(pub, _routes("pass", "fail"))
     results.append(
         (
-            "a second red result prepares the second attempt",
-            again["state"] == "REPAIR" and again["id"] == "7-2",
+            "a second red result counts the first round and prepares the second",
+            again["state"] == "REPAIR"
+            and again["id"] == "7-2"
+            and json.loads(_record(pub).read_text())["attempts"] == 1,
             f"again={again}",
         )
     )
+    third, _ = _ask(pub, _routes("pass", "fail"))
     last, _ = _ask(pub, _routes("pass", "fail"))
     quiet, _ = _ask(pub, _routes("pass", "fail"))
     results.append(
         (
             "at the limit the pull request is given up once, and the line goes on",
-            last["state"] == "EXHAUSTED"
+            third["id"] == "7-3"
+            and last["state"] == "EXHAUSTED"
             and last["notify"] is True
             and quiet["state"] == "EXHAUSTED"
             and quiet["notify"] is False
-            and "7-3" not in str(_record(pub).parent.glob("*")),
-            f"last={last} quiet={quiet}",
+            and "7-4" not in str(_record(pub).parent.glob("*")),
+            f"third={third} last={last} quiet={quiet}",
         )
     )
     green, _ = _ask(pub, _routes("pass", "pass"))
