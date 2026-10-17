@@ -216,7 +216,7 @@ def _transaction(
     # branch. It is done once here rather than per attempt, because the first
     # attempt either finds the branch or creates it and no attempt after that
     # has anything left to decide.
-    ensure_board_branch(private, remote, branch)
+    ensure_board_branch(private, remote, branch, issues=issues)
     swept, reclaimed = sweep_stale_worktrees()
     if swept:
         # A leak then reads as a number on the tick that found it, rather than
