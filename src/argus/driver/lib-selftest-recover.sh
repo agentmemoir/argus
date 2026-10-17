@@ -87,18 +87,23 @@ PY
 # asked at all, and the caller must leave the fixture alone: removing it unlinks
 # the socket of a server that is still running, and that is the one way to make a
 # leaked monitor impossible to find.
+# TMUX and TMUX_PANE are dropped from every tmux command below. tmux prefers
+# the server named in `TMUX` over the socket directory it is pointed at with
+# `TMUX_TMPDIR`, so a sweep run from inside a terminal's tmux would list that
+# terminal's sessions and, at the kill-server below, end its server and every
+# session on it. Dropping the pair keeps each command on the socket it names.
 selftest_stop_run_sessions() {
   local tmux_bin="$1" socket="$2" pid="$3" listed="" session
   command -v "$tmux_bin" >/dev/null 2>&1 || return 1
-  listed="$(env TMUX_TMPDIR="$socket" "$tmux_bin" list-sessions -F '#{session_name}' 2>/dev/null)" || return 0
+  listed="$(env -u TMUX -u TMUX_PANE TMUX_TMPDIR="$socket" "$tmux_bin" list-sessions -F '#{session_name}' 2>/dev/null)" || return 0
   for session in $listed; do
     case "$session" in
       *-"$pid")
-        env TMUX_TMPDIR="$socket" "$tmux_bin" kill-session -t "$session" 2>/dev/null || true
+        env -u TMUX -u TMUX_PANE TMUX_TMPDIR="$socket" "$tmux_bin" kill-session -t "$session" 2>/dev/null || true
         ;;
     esac
   done
-  listed="$(env TMUX_TMPDIR="$socket" "$tmux_bin" list-sessions -F '#{session_name}' 2>/dev/null)" || return 0
+  listed="$(env -u TMUX -u TMUX_PANE TMUX_TMPDIR="$socket" "$tmux_bin" list-sessions -F '#{session_name}' 2>/dev/null)" || return 0
   for session in $listed; do
     case "$session" in
       *-"$pid") return 1 ;;
@@ -148,7 +153,7 @@ selftest_recover_leftovers() {
       # recorded fixture takes once its sessions are confirmed gone.
       case "$socket" in
         "$leftover"/*)
-          env TMUX_TMPDIR="$socket" "$tmux_bin" kill-server >/dev/null 2>&1 || true
+          env -u TMUX -u TMUX_PANE TMUX_TMPDIR="$socket" "$tmux_bin" kill-server >/dev/null 2>&1 || true
           ;;
       esac
       rm -rf "$leftover" 2>/dev/null || true

@@ -117,10 +117,13 @@ selftest_case_flow() {
     # reach it. Its remote is pointed at a path that is not there, and its .git
     # is left alone. Removing .git refuses one step earlier — the tick returns a
     # published phase's checkout to the integration branch before the sync gate,
-    # and it cannot do that without a repository — and on a host whose temporary
-    # directory is `noexec` the fixture lives inside this checkout, where a
-    # missing .git is worse: `git -C` walks up out of the fixture and syncs the
-    # real checkout instead of failing.
+    # and it cannot do that without a repository — and a missing .git was worse
+    # while the walk-up was open: on a host whose temporary directory is
+    # `noexec` the fixture lives inside this checkout, where `git -C` walked up
+    # out of the fixture and synced the real checkout instead of failing. The
+    # ceiling at the fixture root now refuses that walk (selftest_case_git_ceiling),
+    # and this case keeps the remote break for the refusal it asserts: the sync
+    # gate's, not git's.
     git -C "$coord_root" remote set-url origin "$tmp/coordination-failure-remote-gone.git"
     drive || true
     coord_sync_refused=0; coord_no_window=0
@@ -327,4 +330,110 @@ selftest_case_release() {
   RECOVER_OWN_CLAIM=0; export RECOVER_OWN_CLAIM
   DRIVER_STUB_SLEEP="$old_stub_sleep"; export DRIVER_STUB_SLEEP
   rm -f "$release_wait" "$release_ready" "$RELEASE" "$CLAIM" "$HALT"
+}
+
+selftest_case_git_ceiling() {
+  # A fixture that has lost its repository has to refuse, not resolve to a
+  # repository above the fixture tree. The tree is inside the checkout under
+  # test on a host whose temporary storage is `noexec`, so a walk-up reaches
+  # the checkout the tick is running against; the ceiling driver_self_test
+  # exports at the fixture root is what stops it.
+  #
+  # The case proves its own precondition instead of assuming the layout. The
+  # same path is asked again with the ceiling off, and only when that resolves
+  # upward is there something for a walk-up to reach: outside that layout the
+  # check would pass with or without the bound, so it says so instead of
+  # claiming one.
+  local ceiling_root="$tmp/git-ceiling-root" above ceiling_out session_ceiling probe_session
+  mkdir -p "$ceiling_root"
+  if ! above="$(env -u GIT_CEILING_DIRECTORIES git -C "$ceiling_root" rev-parse --show-toplevel 2>/dev/null)"; then
+    echo "skip: no repository encloses the fixture tree here, so the ceiling cannot bind (the CI layout, under the checkout, is the one it exists for)"
+    return 0
+  fi
+  if ceiling_out="$(git -C "$ceiling_root" rev-parse --is-inside-work-tree 2>&1)"; then
+    echo "FAIL: a fixture without its own repository resolved to $ceiling_out above the fixture tree at $above"; fail=1
+  else
+    echo "ok: a fixture without its own repository refuses git discovery (without the ceiling it resolved to $above)"
+  fi
+  # The tick runs inside tmux, and a pane takes its environment from the tmux
+  # server, not from this shell — while the session the driver uses may not
+  # exist yet when this case runs. So the probe starts a throwaway session from
+  # this environment and reads the server's global environment, which is what
+  # every pane inherits; it is killed again at once. The suite owns the server
+  # this may start (TMUX is dropped before any tmux command), so a value found
+  # here is the value a tick started by this suite would hand its panes.
+  probe_session="git-ceiling-tmux-probe-$$"
+  tmux new-session -d -s "$probe_session" 'sleep 5' 2>/dev/null || true
+  session_ceiling="$(tmux show-environment -g GIT_CEILING_DIRECTORIES 2>/dev/null || true)"
+  tmux kill-session -t "$probe_session" 2>/dev/null || true
+  if [ "$session_ceiling" = "GIT_CEILING_DIRECTORIES=$tmp" ]; then
+    echo "ok: a tmux server started from this environment carries the ceiling to its panes"
+  else
+    echo "FAIL: the tmux server does not carry the ceiling (got '${session_ceiling:-nothing}')"; fail=1
+  fi
+}
+
+selftest_case_lost_repo() {
+  # The ticket's own trigger, end to end: the fixture checkout's .git is gone
+  # and the real tick runs inside tmux. With the ceiling, no git command the
+  # tick makes can resolve the fixture root at all, so the launch is refused
+  # before a phase starts; without one, `git -C` walks up to the repository
+  # that holds the fixture tree, and the tick operates on that checkout
+  # instead of failing — the incident #116 records.
+  #
+  # The tick is the suite's own session, named by SESSION_NAME, so the checks
+  # below look at the session it really ran in. The repository a walk-up would
+  # reach is read with the ceiling off, before the tick, because that is the
+  # checkout the hazard moves and it has to be the same one afterwards.
+  local lost_root="$tmp/git-ceiling-lost-root" lost_config="$tmp/git-ceiling-lost-config.json"
+  local old_repo="$REPO" old_board_dir="$BOARD_DIR" old_wf="$WF" old_argus="$ARGUS"
+  local old_notifier="$NOTIFIER" old_run_dir="$RUN_DIR" old_lock="$LOCK" old_halt="$HALT"
+  local old_stall="$STALL" old_current="$CURRENT" old_pid="$PIDFILE"
+  local old_notify_broken="$NOTIFY_BROKEN" old_log="$LOG"
+  local lost_rc=0 outer_head="" outer_after="" lost_refused=0 lost_gate=0 lost_no_window=0
+  outer_head="$(env -u GIT_CEILING_DIRECTORIES git -C "$tmp" rev-parse HEAD 2>/dev/null || true)"
+  if [ -z "$outer_head" ]; then
+    echo "skip: no repository encloses the fixture tree here, so a walk-up had nothing to reach (the CI layout, under the checkout, is the one this exists for)"
+    return 0
+  fi
+  if ! selftest_fixture_root "$lost_root" "$tmp/git-ceiling-lost-base"; then
+    echo "FAIL: the lost-repository fixture could not be built, so the tick's refusal was not tested"
+    fail=1
+  else
+    REPO="$lost_root"
+    selftest_write_config "$lost_root" "$lost_config" "$BOARD_DIR"
+    load_fixture_config "$lost_config"
+    WORK_SOURCE_FLAGS=(--source phases)
+    ARGUS="$lost_root/$BOARD_DIR/argus"; NOTIFIER="$ARGUS/notify/notifications.py"
+    set_config_args
+    RUN_DIR="$WF/$DRIVER_STATE"
+    mkdir -p "$RUN_DIR"
+    LOCK="$RUN_DIR/driver.lock"; HALT="$RUN_DIR/halted"; STALL="$RUN_DIR/stalled"
+    CURRENT="$RUN_DIR/current"; PIDFILE="$RUN_DIR/pid"
+    NOTIFY_BROKEN="$RUN_DIR/notify-broken"; LOG="$RUN_DIR/driver.log"
+    rm -rf "$lost_root/.git"
+    drive || lost_rc=$?
+    # The refusal has to be the first git step's, and the absence of the later
+    # one matters as much: with the ceiling the fixture root cannot resolve at
+    # all, so tidy refuses to return the published checkout; without it the
+    # walk-up reaches the enclosing checkout, tidy finds no receipt there and
+    # leaves it alone, and the tick stops at the sync gate instead. Both stop a
+    # tick, so only the step tells the bound's refusal from the walk-up's.
+    grep -q "could not return a published phase's checkout to the integration branch" "$LOG" && lost_refused=1
+    grep -q "coordination checkout sync failed" "$LOG" && lost_gate=1
+    ! tmux_window_exists 2>/dev/null && lost_no_window=1
+    outer_after="$(env -u GIT_CEILING_DIRECTORIES git -C "$tmp" rev-parse HEAD 2>/dev/null || true)"
+    if [ "$lost_rc" -ne 0 ] && [ "$lost_refused" = 1 ] && [ "$lost_gate" = 0 ] \
+        && [ "$lost_no_window" = 1 ] && [ "$outer_after" = "$outer_head" ]; then
+      echo "ok: a fixture whose .git is gone refuses at the first git step and leaves the enclosing checkout untouched"
+    else
+      echo "FAIL: a lost-repository fixture did not refuse at the first git step (rc=$lost_rc refused=$lost_refused gate=$lost_gate no_window=$lost_no_window outer_unchanged=$([ "$outer_after" = "$outer_head" ] && echo yes || echo no))"; fail=1
+    fi
+  fi
+  REPO="$old_repo"; BOARD_DIR="$old_board_dir"; WF="$old_wf"
+  ARGUS="$old_argus"; NOTIFIER="$old_notifier"
+  load_fixture_config "$selftest_config"
+  RUN_DIR="$old_run_dir"; LOCK="$old_lock"; HALT="$old_halt"; STALL="$old_stall"
+  CURRENT="$old_current"; PIDFILE="$old_pid"; NOTIFY_BROKEN="$old_notify_broken"
+  LOG="$old_log"
 }

@@ -118,6 +118,12 @@ def _isolated_env(scratch: str, tmux: str) -> dict[str, str]:
     tmp.mkdir()
     env["TMPDIR"] = str(tmp)
     env["TMUX_TMPDIR"] = tmux
+    # A fixture under the scratch space that has lost its repository must
+    # refuse to resolve, not walk up into the checkout this harness runs from,
+    # which is where the scratch sits when the host's temporary storage is
+    # `noexec`. The driver self-test sets its own, deeper ceiling at its
+    # fixture root, next to the TMPDIR it exports for the same reason.
+    env["GIT_CEILING_DIRECTORIES"] = str(tmp)
     return env
 
 
