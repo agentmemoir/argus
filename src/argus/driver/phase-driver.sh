@@ -284,8 +284,8 @@ case "${1:-}" in
     run_session "$2" "$3"
     ;;
   --repair-session)
-    [ "$#" -eq 5 ] || { echo "usage: phase-driver.sh --repair-session <id> <task-file> <branch> <base>" >&2; exit 2; }
-    run_repair_session "$2" "$3" "$4" "$5"
+    [ "$#" -eq 6 ] || { echo "usage: phase-driver.sh --repair-session <id> <task-file> <branch> <base> <nonce>" >&2; exit 2; }
+    run_repair_session "$2" "$3" "$4" "$5" "$6"
     ;;
   --resume)
     shift

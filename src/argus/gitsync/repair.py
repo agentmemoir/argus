@@ -5,7 +5,6 @@
 import contextlib
 import json
 import time
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
 
@@ -16,6 +15,7 @@ from argus.gitsync.git import _is_private_path, current_branch, dirty_paths, git
 from argus.gitsync.group_gate import checks_verdict
 from argus.gitsync.merge import sync_one
 from argus.gitsync.receipts import _phase_run_entries, phase_receipt, pull_request_ref
+from argus.gitsync.repair_hold import waiting_hold
 from argus.gitsync.repair_scan import alert_report, checks_without_run, run_ids
 from argus.gitsync.repair_task import (
     alerts_section,
@@ -38,6 +38,7 @@ def _record(root: Path, number: int) -> tuple[Path, dict[str, Any]]:
         "notified": False,
         "head": "",
         "waiting_since": None,
+        "nonce": "",
     }
     with contextlib.suppress(OSError, ValueError):
         record.update(json.loads(path.read_text(encoding="utf-8")))
@@ -46,7 +47,8 @@ def _record(root: Path, number: int) -> tuple[Path, dict[str, Any]]:
     return path, record
 
 
-def _save(path: Path, record: dict[str, Any]) -> None:
+def save_record(path: Path, record: dict[str, Any]) -> None:
+    """Write a repair record as sorted JSON, so a read diff stays a diff."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(record, sort_keys=True) + "\n", encoding="utf-8")
 
@@ -97,72 +99,6 @@ def _blocked_reason(names: list[str], alerts_why: str) -> str:
     return "the failed run's log could not be read"
 
 
-# How many days of hold reasons the counter keeps. Enough to see a trend; small
-# enough that the file stays a few lines.
-_HOLD_DAYS_KEPT = 30
-
-
-def _count_hold(root: Path, reason: str, now: float) -> None:
-    """Add one to today's count for ``reason``, so reads that fail can be counted.
-
-    The repair log already prints each hold with its reason; this keeps a tally
-    under the driver's state so a day's reasons can be read without grepping.
-    """
-    path = runs_dir(root) / setting("driver.state") / "repair" / "holds.json"
-    day = datetime.fromtimestamp(now, UTC).date().isoformat()
-    counts: dict[str, dict[str, int]] = {}
-    with contextlib.suppress(OSError, ValueError):
-        loaded: object = json.loads(path.read_text(encoding="utf-8"))
-        if isinstance(loaded, dict):
-            for day_key, value in cast("dict[object, object]", loaded).items():
-                if not isinstance(value, dict):
-                    continue
-                counts[str(day_key)] = {
-                    str(reason_key): count
-                    for reason_key, count in cast("dict[object, object]", value).items()
-                    if isinstance(count, int)
-                }
-    today = counts.setdefault(day, {})
-    today[reason] = today.get(reason, 0) + 1
-    for old in sorted(counts)[:-_HOLD_DAYS_KEPT]:
-        del counts[old]
-    with contextlib.suppress(OSError):
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(counts, sort_keys=True) + "\n", encoding="utf-8")
-
-
-def _waiting_hold(
-    root: Path,
-    path: Path,
-    record: dict[str, Any],
-    head: str | None,
-    now: float,
-    detail: str,
-) -> dict[str, Any] | None:
-    """A HOLD naming ``detail`` until ``repair.wait`` runs out, or ``None``.
-
-    ``head`` is the pull request head the wait is keyed to; a new head restarts
-    the wait. ``None`` means the head could not be read, so the wait already
-    running is kept rather than restarted on every failing read.
-    """
-    wait = setting("repair.wait")
-    since = record["waiting_since"]
-    if since is None or (head is not None and record["head"] != head):
-        since = now
-        record["waiting_since"] = since
-        if head is not None:
-            record["head"] = head
-        _save(path, record)
-    waited = int(now - since)
-    if wait <= 0 or waited >= wait:
-        return None
-    _count_hold(root, detail, now)
-    return {
-        "state": "HOLD",
-        "summary": f"repair HOLD: {detail} (waited {waited}s of {wait}s)",
-    }
-
-
 def _spend_previous(
     path: Path, number: int, record: dict[str, Any], expired: bool = False
 ) -> dict[str, Any]:
@@ -179,13 +115,13 @@ def _spend_previous(
     if record["attempts"] >= record["rounds"]:
         return {}
     folder = path.parent / f"{number}-{record['rounds']}"
-    status, rc = verify_report(folder)
+    status, rc = verify_report(folder, record["nonce"])
     if status == "running" and not expired:
         return {"running": True}
     if status == "fail":
         return {"regression": verify_failure(folder, rc)}
     record["attempts"] += 1
-    _save(path, record)
+    save_record(path, record)
     return {}
 
 
@@ -213,7 +149,7 @@ def _consider(
     head = gh_pull_request_head(ref["number"], ref["owner"], ref["repo"], ref["host"])
     if head.value is None:
         # A failed head read must not read as "no change": hold and name it.
-        return _waiting_hold(
+        return waiting_hold(
             root,
             path,
             record,
@@ -240,10 +176,10 @@ def _consider(
             if rows
             else f"could not read the checks on {url} ({checks.why})"
         )
-        return _waiting_hold(root, path, record, state_head, now, detail)
+        return waiting_hold(root, path, record, state_head, now, detail)
     settled = _spend_previous(path, ref["number"], record)
     if settled.get("running"):
-        hold = _waiting_hold(
+        hold = waiting_hold(
             root,
             path,
             record,
@@ -266,7 +202,7 @@ def _consider(
     if record["attempts"] >= limit or record["rounds"] >= 2 * limit:
         first = not record["notified"]
         record["notified"] = True
-        _save(path, record)
+        save_record(path, record)
         return {
             "state": "EXHAUSTED",
             "notify": first,
@@ -282,25 +218,27 @@ def _consider(
         reason = _blocked_reason(without_run, alerts_why)
         return {"state": "BLOCKED", "summary": f"repair BLOCKED on {url}: {reason}"}
     round_number = record["rounds"] + 1
+    nonce = f"{round_number}-{int(now)}"
     folder = path.parent / f"{ref['number']}-{round_number}"
     folder.mkdir(parents=True, exist_ok=True)
     task = folder / "task.md"
     task.write_text(
-        task_header(url, branch, round_number, limit, names)
+        task_header(url, branch, record["attempts"] + 1, limit, names, round_number)
         + (regression[1] if regression else "")
         + (log_section(folder, log) if log is not None else "")
         + (alerts_section(folder, alerts) if alerts is not None else ""),
         encoding="utf-8",
     )
-    record.update(rounds=round_number, head=state_head, waiting_since=None)
+    record.update(rounds=round_number, head=state_head, waiting_since=None, nonce=nonce)
     record["base"] = record["base"] or state_head
-    _save(path, record)
+    save_record(path, record)
     return {
         "state": "REPAIR",
         "id": f"{ref['number']}-{round_number}",
         "task": str(task),
         "branch": branch,
         "base": record["base"],
+        "nonce": nonce,
         "attempt": round_number,
         "attempts": limit,
         "summary": (

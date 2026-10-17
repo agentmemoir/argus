@@ -37,6 +37,7 @@ repair_due() {
       log "$summary"
       repair_launch "$(selection_value id <"$plan")" "$(selection_value task <"$plan")" \
         "$(selection_value branch <"$plan")" "$(selection_value base <"$plan")" \
+        "$(selection_value nonce <"$plan")" \
         || return 1
       return 0 ;;
     HOLD)
@@ -59,13 +60,14 @@ repair_due() {
 
 # Open the phase window on one repair session.
 repair_launch() {
-  local id="$1" task="$2" branch="$3" base="$4" launch quoted setting
+  local id="$1" task="$2" branch="$3" base="$4" nonce="$5" launch quoted setting
   printf -v launch 'bash %q' "$SELF"
   for setting in "${ARGUS_CONFIG_ARGS[@]}"; do
     printf -v quoted ' %q' "$setting"
     launch="$launch$quoted"
   done
-  printf -v quoted ' --repair-session %q %q %q %q' "$id" "$task" "$branch" "$base"
+  printf -v quoted ' --repair-session %q %q %q %q %q' \
+    "$id" "$task" "$branch" "$base" "$nonce"
   launch="$launch$quoted"
   9>&- tmux_session_ensure \
     || { notify "repair $id failed to create tmux session '$SESSION'"; return 1; }
@@ -76,16 +78,22 @@ repair_launch() {
   log "launched repair $id in tmux '$SESSION' window 'phase'"
 }
 
-# Check the scope one repair changed, and keep its answer beside that round's task.
+# The changed-scope check of one repair round.
 #
 # The command is project content: it maps the changed paths to that project's
 # tests. The driver only bounds it, keeps its answer, and names a failure. The
 # paths go through the environment and never into the command line, because a
 # file name is text nothing here controls. No command, no changed path, or a base
-# git cannot read runs no check at all, and the next turn then counts the round
-# as it always did.
-repair_verify() {
-  local id="$1" base="$2" changed rc=0 count folder
+# git cannot read prepares nothing, and the next turn then counts the round as it
+# always did.
+#
+# Preparing and running are two steps because the answer must belong to the round
+# that started it: the files are written before the push and the answer after it,
+# and verify.id carries the round's nonce so a later round cannot read it.
+
+# Write this round's check beside its task, before the push.
+repair_verify_prepare() {
+  local id="$1" base="$2" nonce="$3" changed folder
   [ -n "${REPAIR_VERIFY:-}" ] || return 0
   if [ -z "$base" ]; then
     log "repair $id: no commit to scope a changed-scope check against; no scope check"
@@ -96,24 +104,52 @@ repair_verify() {
     log "repair $id: the repair changed no path since $base; no scope check"
     return 0
   fi
-  count="$(printf '%s\n' "$changed" | wc -l | tr -d ' ')"
   folder="$RUN_DIR/repair/$id"
   mkdir -p "$folder"
+  printf '%s\n' "$nonce" >"$folder/verify.id"
   printf '%s\n' "$changed" >"$folder/verify.paths"
   printf '%s\n' "$REPAIR_VERIFY" >"$folder/verify.command"
+}
+
+# Run the prepared check over the prepared paths, and keep its answer.
+#
+# The base comes from the caller's ARGUS_REPAIR_BASE, because it is passed on to
+# the command and is not one of the three files of the round. A check the
+# limiter stopped answers 124, or 137 when it was killed.
+repair_verify_run() {
+  local id="$1" base="${ARGUS_REPAIR_BASE:-}" folder command changed rc=0 count
   local -a limiter=()
+  folder="$RUN_DIR/repair/$id"
+  [ -f "$folder/verify.command" ] || return 0
+  command="$(cat "$folder/verify.command")"
+  changed="$(cat "$folder/verify.paths" 2>/dev/null || true)"
+  count="$(printf '%s\n' "$changed" | wc -l | tr -d ' ')"
   if [ "${REPAIR_VERIFY_TIMEOUT:-0}" -gt 0 ] && command -v timeout >/dev/null 2>&1; then
-    limiter=(timeout "$REPAIR_VERIFY_TIMEOUT")
+    limiter=(timeout "${REPAIR_VERIFY_TIMEOUT:-0}")
+  elif [ "${REPAIR_VERIFY_TIMEOUT:-0}" -gt 0 ] && command -v gtimeout >/dev/null 2>&1; then
+    limiter=(gtimeout "${REPAIR_VERIFY_TIMEOUT:-0}")
+  elif [ "${REPAIR_VERIFY_TIMEOUT:-0}" -gt 0 ]; then
+    log "repair $id: neither timeout nor gtimeout is on PATH; the scope check runs unbounded"
   fi
   "${limiter[@]+"${limiter[@]}"}" env \
     ARGUS_REPAIR_BASE="$base" ARGUS_REPAIR_CHANGED="$changed" \
-    bash -c "$REPAIR_VERIFY" >"$folder/verify.log" 2>&1 || rc=$?
+    bash -c "$command" >"$folder/verify.log" 2>&1 || rc=$?
   printf '%s\n' "$rc" >"$folder/verify.rc"
   if [ "$rc" -eq 0 ]; then
     log "repair $id: the changed scope passes ($count path(s))"
   else
     log "repair $id: the changed scope fails (rc=$rc, $count path(s)); the next task names it"
   fi
+}
+
+# Forget this round's check, so the round is counted as it was before the check
+# existed: a push that carried nothing, or failed, has no answer to wait for.
+repair_verify_clear() {
+  local id="$1" folder="$RUN_DIR/repair/$1"
+  [ -f "$folder/verify.id" ] || return 0
+  rm -f "$folder/verify.id" "$folder/verify.paths" "$folder/verify.command" \
+    "$folder/verify.log" "$folder/verify.rc"
+  log "repair $id: cleared the prepared scope check; the round is counted as before"
 }
 
 # The repair run, inside the phase window.
@@ -125,7 +161,7 @@ repair_verify() {
 # branch; this pushes whatever it left, without force, and a run that left
 # nothing to push counts as a failed attempt.
 run_repair_session() {
-  local id="$1" task="$2" branch="$3" base="${4:-}" rc=0 left
+  local id="$1" task="$2" branch="$3" base="${4:-}" nonce="${5:-}" rc=0 left
   mkdir -p "$RUN_DIR"
   trap 'rm -f "$PIDFILE"; exit 130' HUP INT TERM
   printf '%s\n' "$$" >"$PIDFILE"
@@ -134,19 +170,22 @@ run_repair_session() {
   "$CMD_GLIDE" run --pipeline "$REPAIR_PIPELINE" \
     --input "repair_id=$id" --input "repair_task=$task" || rc=$?
   if [ "$rc" -eq 0 ]; then
+    repair_verify_prepare "$id" "$base" "$nonce"
     if "$PYTHON" "$ARGUS/gitsync/main.py" "${ARGUS_CONFIG_ARGS[@]}" --root "$REPO" \
         --mode checkpoint >"$RUN_DIR/repair-$id-push.json" 2>&1; then
       if [ "$(selection_value action <"$RUN_DIR/repair-$id-push.json")" = "nothing-to-push" ]; then
         log "repair $id: the run pushed nothing to $branch"
+        repair_verify_clear "$id"
         tmux_set_title "repair $id pushed nothing"
       else
         log "repair $id: pushed to $branch; the next tick reads the new checks"
         tmux_set_title "repair $id checking the changed scope"
-        repair_verify "$id" "$base"
+        ARGUS_REPAIR_BASE="$base" repair_verify_run "$id"
         tmux_set_title "repair $id done"
       fi
     else
       log "repair $id: could not push to $branch (see $RUN_DIR/repair-$id-push.json)"
+      repair_verify_clear "$id"
       tmux_set_title "repair $id not pushed"
     fi
   else
