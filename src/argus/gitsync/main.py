@@ -106,7 +106,7 @@ from argus.gitsync.pr_signal_reply import mode_signal_reply
 from argus.gitsync.pr_signals import mode_signals
 from argus.gitsync.publish_phase import publish_phase
 from argus.gitsync.repair import mode_repair
-from argus.gitsync.selftest import self_test
+from argus.gitsync.selftest import self_test_group
 from argus.gitsync.sync import mode_resync, sync_all
 
 
@@ -191,7 +191,13 @@ def main() -> int:
     ap.add_argument("--reservation-id", default=None)
     ap.add_argument("--generation", type=int, default=None)
     ap.add_argument(
-        "--self-test", action="store_true", help="run stubbed-remote checks and exit"
+        "--self-test",
+        nargs="?",
+        const="",
+        default=None,
+        metavar="GROUP",
+        help="run stubbed-remote checks and exit; no value runs every group, "
+        "and a group name runs that group alone: repair",
     )
     ap.add_argument(
         "--phases", default=None, help="phase phases file name, for --mode branch"
@@ -215,8 +221,8 @@ def main() -> int:
         "receipt for --mode publish",
     )
     args = ap.parse_args()
-    if args.self_test:
-        return self_test()
+    if args.self_test is not None:
+        return self_test_group(args.self_test)
     try:
         conventions.configure_from_args(args)
         args.root = str(conventions.setting("repo-root"))

@@ -75,7 +75,46 @@ repair_launch() {
   9>&- tmux_phase_window_open "$launch" "$RUN_DIR/session-repair-$id.log" \
     || { notify "repair $id failed to launch in tmux"; return 1; }
   tmux_phase_window_select
+  # The session's own clock starts here, so a later tick can name one that
+  # outlived its wall time. A round with no leftover from an older session
+  # starts clean: both files belong to this launch alone.
+  rm -f "$RUN_DIR/repair-$id.start" "$RUN_DIR/repair-$id.stale"
+  date +%s >"$RUN_DIR/repair-$id.start"
   log "launched repair $id in tmux '$SESSION' window 'phase'"
+}
+
+# Name a repair session that outlived its wall time.
+#
+# A repair session runs in the phase window, and every tick skips while that
+# window is alive, so a check that never ends would stop the line with nothing
+# said. This says it: one log line and one notice per session, from whichever
+# tick finds the session past `repair.stale-after`. It only reports. A slow
+# check and a hung one look the same from here, and killing the session would
+# end the attempt on a guess, so nothing is killed.
+#
+# Returns 0 when a session was reported, 1 when there is nothing to say.
+repair_stale() {
+  [ "${REPAIR_STALE_AFTER:-0}" -gt 0 ] || return 1
+  local start id begun age rc=1 line
+  for start in "$RUN_DIR"/repair-*.start; do
+    [ -f "$start" ] || continue
+    id="$(basename "$start" .start)"
+    id="${id#repair-}"
+    begun="$(cat "$start" 2>/dev/null || true)"
+    # A record that is not a number times no session, and arithmetic on it would
+    # end the tick that reads it: skip it.
+    case "$begun" in '' | *[!0-9]*) continue ;; esac
+    age=$(( $(date +%s) - begun ))
+    [ "$age" -ge "$REPAIR_STALE_AFTER" ] || continue
+    rc=0
+    line="has run ${age}s, at or past its limit of ${REPAIR_STALE_AFTER}s"
+    log_changed repair-stale "repair $id $line"
+    if [ ! -f "$RUN_DIR/repair-$id.stale" ]; then
+      : >"$RUN_DIR/repair-$id.stale"
+      notify "Repair $id $line. It may be hung and it never ends; check the phase window."
+    fi
+  done
+  return "$rc"
 }
 
 # The changed-scope check of one repair round.
@@ -163,7 +202,7 @@ repair_verify_clear() {
 run_repair_session() {
   local id="$1" task="$2" branch="$3" base="${4:-}" nonce="${5:-}" rc=0 left
   mkdir -p "$RUN_DIR"
-  trap 'rm -f "$PIDFILE"; exit 130' HUP INT TERM
+  trap 'rm -f "$PIDFILE" "$RUN_DIR/repair-$id.start"; exit 130' HUP INT TERM
   printf '%s\n' "$$" >"$PIDFILE"
   cd "$REPO"
   tmux_set_title "repair $id running"
@@ -196,6 +235,6 @@ run_repair_session() {
   if [ "$rc" -ne 0 ] && [ -n "$left" ]; then
     notify "Repair $id ended with rc=$rc and left uncommitted edits in the checkout on $branch. Read them before the line goes on."
   fi
-  rm -f "$PIDFILE"
+  rm -f "$PIDFILE" "$RUN_DIR/repair-$id.start"
   exit 0
 }

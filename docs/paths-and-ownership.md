@@ -46,6 +46,8 @@ Each pull request gets `repair.attempts` counted attempts, and no more than twic
 
 A run that ends without a repair and leaves uncommitted edits sends a notice, and the next repair does not switch branches over those edits. `--mode repair` prints the plan the tick acts on, and its records live in the state folder's `repair/` folder, which is untracked.
 
+A repair session runs in the phase window, and every tick skips while that window is alive, so a session that never ends would stop the line with nothing said. The launch writes `repair-<id>.start` in the state folder and the session removes it when it ends, on the normal path and on a hangup or a signal. With `repair.stale-after` above 0, a tick that finds the window alive and that record at least that many seconds old logs one line naming the id, the age and the limit, and sends one notice per session, guarded by `repair-<id>.stale`. The watch reports only: it kills nothing, because a slow check and a hung one look the same from there.
+
 ## Issue Work
 
 An issue machine keeps its claims in `board.issues-file`, a second file on the same board branch. A phase claim and an issue claim never share a record, even for the same number.
