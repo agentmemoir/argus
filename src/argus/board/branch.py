@@ -120,15 +120,26 @@ def _board_branch_exists(private: str | Path, remote: str, branch: str) -> bool:
     return rc == 0
 
 
-def ensure_board_branch(private: str | Path, remote: str, branch: str) -> bool:
-    """Create the board's branch from the integration branch, once.
+def ensure_board_branch(
+    private: str | Path, remote: str, branch: str, *, issues: bool = False
+) -> bool:
+    """Create the board's branch from the integration branch's tip, once.
 
     Without this the first transaction after the change fails closed on every
     machine, because the branch the board moved to does not exist yet. Seeding
-    copies the whole tree at the integration branch's tip, so the existing
-    The configured board file comes with it and no live reservation is lost.
-    The file stays on the integration branch afterwards as a historical record;
-    nothing reads it there.
+    copies the whole tree at the integration branch's tip, so its history and
+    every file at that tip come with it.
+
+    The board no longer lives on the integration branch, so its state file may
+    have been added there and then removed from the tip. The tip's tree then
+    lacks the file while its history still has the add, and a branch seeded
+    from it would read as broken: the reader sees the add and no file and fails
+    closed with "coordination state file was deleted from an initialized
+    board". That case is refused here, with a message that names the file and
+    the recovery, so an operator restores the board branch from a backup or
+    re-seeds from a commit that still has the file. A state file that never
+    appeared on the integration branch is the other case: the board is empty,
+    which is valid, and seeding proceeds.
 
     This is the only function here that writes to the remote outside a board
     transaction, and it is deliberately not reachable from a read. A read that
@@ -142,6 +153,17 @@ def ensure_board_branch(private: str | Path, remote: str, branch: str) -> bool:
     if _board_branch_exists(private, remote, branch):
         return False
     source = _integration_ref(private, remote)
+    relative = state_rel(issues=issues).as_posix()
+    if (
+        _state_initialized(private, source, issues=issues)
+        and _git(private, "cat-file", "-e", f"{source}:{relative}")[0] != 0
+    ):
+        raise CoordinationUnavailable(
+            f"cannot seed coordination branch {branch!r}: {relative!r} was "
+            f"removed from the integration branch tip, so a branch seeded from "
+            f"it would read as broken. Restore {branch!r} from a backup, or "
+            f"re-seed it from a commit that still has the state file."
+        )
     rc, _out, err = _git(
         private,
         "push",

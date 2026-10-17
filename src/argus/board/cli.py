@@ -266,3 +266,7 @@ def main(argv: list[str] | None = None) -> int:
     except (ConfigError, CoordinationUnavailable, CoordinationError) as exc:
         _print_json({"state": "COORDINATION_UNAVAILABLE", "error": str(exc)})
         return 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
