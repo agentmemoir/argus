@@ -261,6 +261,10 @@ def _check_value(field: Field, value: object, required: bool) -> None:
         raise ConfigError("invalid value for key 'repair.attempts': must be at least 1")
     if field.key == "repair.wait" and cast("int", value) < 0:
         raise ConfigError("invalid value for key 'repair.wait': must not be negative")
+    if field.key == "repair.verify-timeout" and cast("int", value) < 0:
+        raise ConfigError(
+            "invalid value for key 'repair.verify-timeout': must not be negative"
+        )
     if field.key == "driver.state" and "/" in cast("str", value):
         raise ConfigError(
             "invalid value for key 'driver.state': must be a folder name, not a path"

@@ -4,6 +4,8 @@ Notable changes to this project are documented here. The format follows [Keep a 
 
 ## [Unreleased]
 
+- A repair round now checks the scope it changed before the next attempt is counted. The `repair` object takes two optional keys: `repair.verify` is a command run from `repo-root` after a repair pushes, given that repair's changed paths in `ARGUS_REPAIR_CHANGED` and the commit it started from in `ARGUS_REPAIR_BASE`, and `repair.verify-timeout` bounds how long it may run. A round whose own scope fails does not spend an attempt, the driver logs it as a self-introduced regression, the next task carries that failure, and the number of rounds is capped at twice `repair.attempts` so a repair that keeps regressing still ends in `EXHAUSTED`.
+
 - The repair step reads a pull request's code-scanning alerts when a failing check has no workflow run to open. A code-scanning check's link is a scan result, so `gh run view` can read no log for it, and the repair used to stop there with `BLOCKED`. The alerts are now a second kind of evidence: the task carries them in their own section, the whole list is kept beside the task, a long list is cut where the cut can be seen, the read is pinned to the pull request's head, and a read that fails is named for itself instead of reading as an empty alert list.
 
 - The README is now a landing page that links into `docs/` instead of restating it, and the `docs/` set names every configuration key, the package-root program files, and every run mode, including `--merge-check-only` and `abandon`.
