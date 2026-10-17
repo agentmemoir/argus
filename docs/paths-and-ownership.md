@@ -42,7 +42,7 @@ This covers both moments a red result matters. After a group's last member publi
 
 Checks that are still running, or not reported yet, hold the tick for up to `repair.wait` seconds, because a result for a head that has been replaced is never seen again. A `wait` of 0 never holds.
 
-Each pull request gets `repair.attempts` runs, and the count starts again when its checks pass. When the count is used up, the driver logs it, sends one notice, and goes on with its normal work: a pull request that cannot be repaired does not stop the line. A repair run never writes the halt marker.
+Each pull request gets `repair.attempts` counted attempts, and no more than twice that many rounds when a round's own check fails, and the count starts again when its checks pass. When the count is used up, the driver logs it, sends one notice, and goes on with its normal work: a pull request that cannot be repaired does not stop the line. A repair run never writes the halt marker.
 
 A run that ends without a repair and leaves uncommitted edits sends a notice, and the next repair does not switch branches over those edits. `--mode repair` prints the plan the tick acts on, and its records live in the state folder's `repair/` folder, which is untracked.
 
