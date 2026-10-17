@@ -125,6 +125,7 @@ check() {
   if [ -n "${REPAIR_PIPELINE:-}" ]; then
     if [ -r "$REPAIR_PIPELINE" ]; then
       echo "repair: $REPAIR_PIPELINE ($REPAIR_ATTEMPTS attempt(s) per pull request, waits up to ${REPAIR_WAIT}s for checks)"
+      echo "repair check: ${REPAIR_VERIFY:-(none)} (timeout ${REPAIR_VERIFY_TIMEOUT:-0}s)"
     else
       echo "repair: $REPAIR_PIPELINE MISSING OR UNREADABLE, a repair run would fail"
       warned=1

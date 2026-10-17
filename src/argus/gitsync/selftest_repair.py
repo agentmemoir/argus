@@ -8,7 +8,8 @@ from typing import Any
 
 from argus.conventions import runs_dir
 from argus.gitsync.git import current_branch, git
-from argus.gitsync.repair import failure_excerpt, mode_repair
+from argus.gitsync.repair import mode_repair
+from argus.gitsync.repair_task import failure_excerpt
 from argus.gitsync.selftest_fixture import (
     BOARD_REL,
     _configure_self_test,
@@ -126,8 +127,9 @@ def _repair_checks(base: Path) -> list[Result]:
     )
     results.append(
         (
-            "the attempt is counted when the task is made",
-            json.loads(_record(pub).read_text())["attempts"] == 1,
+            "a round is written at once and counted when the next turn reads its scope",
+            json.loads(_record(pub).read_text())["rounds"] == 1
+            and json.loads(_record(pub).read_text())["attempts"] == 0,
             _record(pub).read_text(),
         )
     )
@@ -141,22 +143,24 @@ def _repair_checks(base: Path) -> list[Result]:
     again, _ = _ask(pub, _routes("pass", "fail"))
     results.append(
         (
-            "a second red result prepares the second attempt",
-            again["state"] == "REPAIR" and again["id"] == "7-2",
+            "a second red result counts the first round and prepares the second",
+            again["state"] == "REPAIR"
+            and again["id"] == "7-2"
+            and json.loads(_record(pub).read_text())["attempts"] == 1,
             f"again={again}",
         )
     )
-    last, _ = _ask(pub, _routes("pass", "fail"))
+    third, _ = _ask(pub, _routes("pass", "fail"))
     quiet, _ = _ask(pub, _routes("pass", "fail"))
     results.append(
         (
             "at the limit the pull request is given up once, and the line goes on",
-            last["state"] == "EXHAUSTED"
-            and last["notify"] is True
+            third["state"] == "EXHAUSTED"
+            and third["notify"] is True
             and quiet["state"] == "EXHAUSTED"
             and quiet["notify"] is False
             and "7-3" not in str(_record(pub).parent.glob("*")),
-            f"last={last} quiet={quiet}",
+            f"third={third} quiet={quiet}",
         )
     )
     green, _ = _ask(pub, _routes("pass", "pass"))

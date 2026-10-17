@@ -71,11 +71,13 @@ def test_a_repair_answer_launches_one_run_and_ends_the_tick(tmp_path: Path) -> N
             "id": "7-1",
             "task": "/t/task.md",
             "branch": "b",
+            "base": "abc123",
+            "nonce": "7-1-1",
             "summary": "repair REPAIR: x",
         },
     )
     assert run(tmp_path, "repair_due") == 0
-    assert read(tmp_path, "launched") == ["7-1 /t/task.md b"]
+    assert read(tmp_path, "launched") == ["7-1 /t/task.md b abc123 7-1-1"]
     assert "--mode repair" in read(tmp_path, "calls")[0]
 
 
@@ -158,3 +160,185 @@ def test_a_run_that_pushed_nothing_is_not_read_as_a_push(tmp_path: Path) -> None
     log = " ".join(read(tmp_path, "log"))
     assert "the run pushed nothing to b" in log
     assert "pushed to b" not in log
+
+
+def commit(tmp_path: Path, name: str) -> str:
+    """Commit one file in the fixture checkout and return the commit's id."""
+    repo = tmp_path / "repo"
+    repo.mkdir(exist_ok=True)
+    if not (repo / ".git").exists():
+        subprocess.run(["git", "-C", str(repo), "init", "-q"], check=True)
+    (repo / name).write_text("x\n")
+    ident = ["-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false"]
+    subprocess.run(["git", "-C", str(repo), *ident, "add", name], check=True)
+    subprocess.run(
+        ["git", "-C", str(repo), *ident, "commit", "-q", "-m", name], check=True
+    )
+    rev = subprocess.run(
+        ["git", "-C", str(repo), "rev-parse", "HEAD"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return rev.stdout.strip()
+
+
+def test_a_check_over_the_changed_scope_keeps_its_answer(tmp_path: Path) -> None:
+    setup(tmp_path, {"ok": True})
+    base = commit(tmp_path, "before.txt")
+    commit(tmp_path, "change.txt")
+    run(
+        tmp_path,
+        f"export REPAIR_VERIFY=false\nrun_repair_session 7-1 /t/task.md b {base}",
+    )
+    folder = tmp_path / "state" / "repair" / "7-1"
+    assert (folder / "verify.rc").read_text().strip() == "1"
+    assert (folder / "verify.paths").read_text().split() == ["change.txt"]
+    assert (folder / "verify.command").read_text().strip() == "false"
+    assert "the changed scope fails" in " ".join(read(tmp_path, "log"))
+
+
+def test_the_check_reads_the_changed_paths_from_the_environment(
+    tmp_path: Path,
+) -> None:
+    setup(tmp_path, {"ok": True})
+    base = commit(tmp_path, "before.txt")
+    commit(tmp_path, "change.txt")
+    run(
+        tmp_path,
+        "export REPAIR_VERIFY='"
+        'printf "%s|%s\\n" "$ARGUS_REPAIR_BASE" "$ARGUS_REPAIR_CHANGED" >"$FAKE/seen"'
+        "'\n"
+        f"run_repair_session 7-1 /t/task.md b {base}",
+    )
+    assert (tmp_path / "seen").read_text().splitlines() == [f"{base}|change.txt"]
+    assert (tmp_path / "state" / "repair" / "7-1" / "verify.rc").exists()
+
+
+def test_no_command_or_no_change_runs_no_check(tmp_path: Path) -> None:
+    setup(tmp_path, {"ok": True})
+    base = commit(tmp_path, "before.txt")
+    run(tmp_path, f"run_repair_session 7-1 /t/task.md b {base}")
+    assert not (tmp_path / "state" / "repair" / "7-1" / "verify.rc").exists()
+
+    run(
+        tmp_path,
+        f"export REPAIR_VERIFY=true\nrun_repair_session 7-2 /t/task.md b {base}",
+    )
+    assert not (tmp_path / "state" / "repair" / "7-2" / "verify.rc").exists()
+    assert "the repair changed no path" in " ".join(read(tmp_path, "log"))
+
+
+# A repair round prepares its check before the push and answers it after.
+#
+# The push is the Python step, so the stand-in below reads the round's folder at
+# the moment the push runs: it is a shell function, because `$PYTHON` is called
+# by name and nothing here may run from temporary storage.
+PUSH_PROBE = """\
+push_probe() {
+  case " $* " in
+    *" --mode checkpoint "*) ls "$RUN_DIR/repair/7-1" >"$FAKE/before-push" ;;
+  esac
+  python3 "$@"
+}
+export PYTHON=push_probe
+"""
+
+
+def test_the_check_is_prepared_before_the_push_and_answered_after(
+    tmp_path: Path,
+) -> None:
+    setup(tmp_path, {"ok": True})
+    base = commit(tmp_path, "before.txt")
+    commit(tmp_path, "change.txt")
+    run(
+        tmp_path,
+        f"export REPAIR_VERIFY=true\n{PUSH_PROBE}"
+        f"run_repair_session 7-1 /t/task.md b {base} nonce123",
+    )
+    folder = tmp_path / "state" / "repair" / "7-1"
+    assert read(tmp_path, "before-push") == [
+        "verify.command",
+        "verify.id",
+        "verify.paths",
+    ]
+    assert (folder / "verify.id").read_text().strip() == "nonce123"
+    assert (folder / "verify.rc").read_text().strip() == "0"
+
+
+def test_a_push_that_carried_nothing_clears_the_prepared_check(
+    tmp_path: Path,
+) -> None:
+    setup(tmp_path, {"ok": True, "action": "nothing-to-push"})
+    base = commit(tmp_path, "before.txt")
+    commit(tmp_path, "change.txt")
+    run(
+        tmp_path,
+        f"export REPAIR_VERIFY=true\nrun_repair_session 7-1 /t/task.md b {base} n1",
+    )
+    folder = tmp_path / "state" / "repair" / "7-1"
+    left = ["verify.id", "verify.paths", "verify.command", "verify.log", "verify.rc"]
+    assert not [name for name in left if (folder / name).exists()]
+    assert "cleared the prepared scope check" in " ".join(read(tmp_path, "log"))
+
+
+def test_the_limiter_stopping_the_check_is_recorded(tmp_path: Path) -> None:
+    setup(tmp_path, {"ok": True})
+    base = commit(tmp_path, "before.txt")
+    commit(tmp_path, "change.txt")
+    script = (
+        'command() { case "${1:-}" in -v) [ "${2:-}" = timeout ] ;; '
+        '*) builtin command "$@" ;; esac; }\n'
+        "timeout() { return 124; }\n"
+        "export REPAIR_VERIFY=true REPAIR_VERIFY_TIMEOUT=30\n"
+        f"run_repair_session 7-1 /t/task.md b {base} n1\n"
+    )
+    run(tmp_path, script)
+    folder = tmp_path / "state" / "repair" / "7-1"
+    assert (folder / "verify.rc").read_text().strip() == "124"
+
+
+def test_a_missing_limiter_logs_and_runs_the_check_unbounded(tmp_path: Path) -> None:
+    setup(tmp_path, {"ok": True})
+    base = commit(tmp_path, "before.txt")
+    commit(tmp_path, "change.txt")
+    script = (
+        "command() { return 1; }\n"
+        "export REPAIR_VERIFY=true REPAIR_VERIFY_TIMEOUT=30\n"
+        "export REPAIR_VERIFY='echo ran >\"$FAKE/ran\"'\n"
+        f"run_repair_session 7-1 /t/task.md b {base} n1\n"
+    )
+    run(tmp_path, script)
+    folder = tmp_path / "state" / "repair" / "7-1"
+    assert (tmp_path / "ran").exists()
+    assert (folder / "verify.rc").read_text().strip() == "0"
+    assert "runs unbounded" in " ".join(read(tmp_path, "log"))
+
+
+def test_gtimeout_is_used_when_timeout_is_absent(tmp_path: Path) -> None:
+    setup(tmp_path, {"ok": True})
+    base = commit(tmp_path, "before.txt")
+    commit(tmp_path, "change.txt")
+    script = (
+        'command() { case "${1:-}" in -v) [ "${2:-}" = gtimeout ] ;; '
+        '*) builtin command "$@" ;; esac; }\n'
+        'gtimeout() { echo "$1" >"$FAKE/limit"; shift; "$@"; }\n'
+        "export REPAIR_VERIFY=true REPAIR_VERIFY_TIMEOUT=45\n"
+        "export REPAIR_VERIFY='echo ran >\"$FAKE/ran\"'\n"
+        f"run_repair_session 7-1 /t/task.md b {base} n1\n"
+    )
+    run(tmp_path, script)
+    assert (tmp_path / "limit").read_text().strip() == "45"
+    assert (tmp_path / "ran").exists()
+
+
+def test_the_nonce_reaches_the_session(tmp_path: Path) -> None:
+    setup(tmp_path, {"ok": True})
+    base = commit(tmp_path, "before.txt")
+    commit(tmp_path, "change.txt")
+    run(
+        tmp_path,
+        f"export REPAIR_VERIFY=true\nrun_repair_session 7-1 t b {base} nonce123",
+    )
+    folder = tmp_path / "state" / "repair" / "7-1"
+    assert (folder / "verify.id").read_text().strip() == "nonce123"

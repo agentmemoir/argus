@@ -94,6 +94,11 @@ _drive() {
   if tmux_busy; then
     claim_renew
     check_stall
+    # A repair session runs in the phase window, so it is alive exactly while
+    # this branch is taken and no other tick state moves. Name one that outlived
+    # its wall time here: the call reports only, and it may not change what this
+    # tick selects or whether it ends.
+    repair_stale || true
     log "${work_kind:-phase} window is running; skip"
     return 0
   fi

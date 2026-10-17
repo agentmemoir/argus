@@ -218,6 +218,24 @@ def test_repair_object_needs_all_three_keys_and_sane_values():
             expect_error(lambda p=path: cfgmod.load(str(p)), f"repair.{key}")
 
 
+def test_repair_verify_is_optional_and_its_timeout_is_never_negative():
+    with tempfile.TemporaryDirectory() as tmp:
+        whole = {"pipeline": "repair.yaml", "attempts": 1, "wait": 0}
+        document = copy.deepcopy(BASE)
+        document["repair"] = {**whole, "verify": "make scope", "verify-timeout": 0}
+        config = cfgmod.load(str(write(tmp, json.dumps(document))))
+        check(config.get("repair.verify") == "make scope", config.get("repair.verify"))
+        check(
+            config.get("repair.verify-timeout") == 0,
+            config.get("repair.verify-timeout"),
+        )
+
+        for bad in (-1, -60):
+            document["repair"] = {**whole, "verify-timeout": bad}
+            path = write(tmp, json.dumps(document))
+            expect_error(lambda p=path: cfgmod.load(str(p)), "repair.verify-timeout")
+
+
 def test_sample_loads_with_every_schema_key():
     with tempfile.TemporaryDirectory() as tmp:
         path = sample_in(tmp)
@@ -291,6 +309,10 @@ TESTS = (
     ("phases folder inside repo", test_phases_folder_must_stay_inside_the_phases_repo),
     ("phases repo work tree", test_phases_repo_must_be_a_git_work_tree),
     ("repair object", test_repair_object_needs_all_three_keys_and_sane_values),
+    (
+        "repair verify keys",
+        test_repair_verify_is_optional_and_its_timeout_is_never_negative,
+    ),
     ("sample", test_sample_loads_with_every_schema_key),
     ("shell format", test_config_cli.test_shell_format),
     (

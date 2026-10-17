@@ -73,7 +73,7 @@ jobs:
       - name: Temporary-storage rule and affected checks
         run: |
           make noexecscan
-          uv run pytest -q tests/test_exec_tempdir.py tests/test_issue_tick.py tests/test_notify_target.py tests/test_issue_driver.py tests/test_prose_lint.py tests/test_ci_only_targets.py
+          uv run pytest -q tests/test_exec_tempdir.py tests/test_issue_tick.py tests/test_notify_target.py tests/test_issue_driver.py tests/test_prose_lint.py tests/test_ci_only_targets.py tests/test_repair_regression.py tests/test_repair_watchdog.py tests/test_selftest_groups.py
           uv run python -m argus.board.reservations --self-test
           uv run python -m argus.issues.selftest
           uv run python -m argus.select.group --self-test

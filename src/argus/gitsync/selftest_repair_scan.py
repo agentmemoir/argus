@@ -82,8 +82,9 @@ def _repair_scan_checks(base: Path) -> list[Result]:
     )
     results.append(
         (
-            "the alert evidence is kept beside the task and the attempt is counted",
-            json.loads(_record(pub).read_text())["attempts"] == 1,
+            "the alert evidence is kept beside the task, which the next turn counts",
+            json.loads(_record(pub).read_text())["rounds"] == 1
+            and json.loads(_record(pub).read_text())["attempts"] == 0,
             _record(pub).read_text(),
         )
     )
