@@ -63,7 +63,9 @@ class _StoreBase:
 
         Returns True when this call created the branch.
         """
-        return ensure_board_branch(self.private, self.remote, self.branch)
+        return ensure_board_branch(
+            self.private, self.remote, self.branch, issues=self.issues
+        )
 
     def read(self) -> tuple[dict[str, Any], str]:
         ref, commit = _fetch_branch_ref(self.private, self.remote, self.branch)
