@@ -164,23 +164,29 @@ def _waiting_hold(
 
 
 def _spend_previous(
-    path: Path, number: int, record: dict[str, Any]
-) -> tuple[str, str] | None:
+    path: Path, number: int, record: dict[str, Any], expired: bool = False
+) -> dict[str, Any]:
     """Count the round that already ran, unless its own scope failed.
 
     A round's own check decides whether it spends an attempt, so the budget stays
-    open for the failure that round was meant to clear. Returns the line naming a
-    regression and the task section for it, or ``None``.
+    open for the failure that round was meant to clear. The answer names a
+    regression with the task section for it, or says that the check of that round
+    is still running, so a check that outlives the CI result is never read as a
+    pass. ``expired`` comes from a caller whose wait for that check ran out: the
+    missing answer then reads as no check, which counts the round and leaves the
+    pull request able to end.
     """
     if record["attempts"] >= record["rounds"]:
-        return None
+        return {}
     folder = path.parent / f"{number}-{record['rounds']}"
-    report = verify_report(folder)
-    if report is None or report[0]:
-        record["attempts"] += 1
-        _save(path, record)
-        return None
-    return verify_failure(folder, report[1])
+    status, rc = verify_report(folder)
+    if status == "running" and not expired:
+        return {"running": True}
+    if status == "fail":
+        return {"regression": verify_failure(folder, rc)}
+    record["attempts"] += 1
+    _save(path, record)
+    return {}
 
 
 def _exhausted_summary(
@@ -235,7 +241,23 @@ def _consider(
             else f"could not read the checks on {url} ({checks.why})"
         )
         return _waiting_hold(root, path, record, state_head, now, detail)
-    regression = _spend_previous(path, ref["number"], record)
+    settled = _spend_previous(path, ref["number"], record)
+    if settled.get("running"):
+        hold = _waiting_hold(
+            root,
+            path,
+            record,
+            state_head,
+            now,
+            f"the changed-scope check of round {record['rounds']} has not finished",
+        )
+        if hold is not None:
+            return hold
+        # The wait ran out with the check still running, so the round is read as
+        # having no answer: counting it keeps a check that never ends from
+        # holding the pull request open forever.
+        settled = _spend_previous(path, ref["number"], record, expired=True)
+    regression = cast("tuple[str, str] | None", settled.get("regression"))
     limit = setting("repair.attempts")
     # A round is counted only when the next turn reads its own scope as passing,
     # so a self-introduced regression does not spend the budget meant for the

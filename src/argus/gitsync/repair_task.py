@@ -93,18 +93,18 @@ def task_header(
     )
 
 
-def verify_report(folder: Path) -> tuple[bool, int] | None:
-    """What the round in ``folder`` said about the scope it changed, or ``None``.
+def verify_report(folder: Path) -> tuple[str, int]:
+    """What the round in ``folder`` said about the scope it changed.
 
-    ``None`` means no check ran, which is what a round with no configured command,
-    no changed path, or a base git could not read leaves behind. Such a round is
-    counted as it was before the check existed.
+    The answer is ``pass``, ``fail``, ``none`` when no check ran, or ``running``
+    when the driver had started one and its exit code is not there yet. A round
+    with ``none`` is counted as it was before the check existed.
     """
     try:
         rc = int((folder / "verify.rc").read_text(encoding="utf-8").strip())
     except (OSError, ValueError):
-        return None
-    return rc == 0, rc
+        return ("running" if (folder / "verify.paths").is_file() else "none"), 0
+    return ("pass" if rc == 0 else "fail"), rc
 
 
 def verify_failure(folder: Path, rc: int) -> tuple[str, str]:

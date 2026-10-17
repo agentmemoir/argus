@@ -24,11 +24,11 @@ RECEIPT: dict[str, Any] = {
 @pytest.fixture
 def env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> dict[str, Any]:
     """One published pull request whose head moves on each push, and a repair limit."""
-    state: dict[str, Any] = {"head": "head-0", "limit": 3}
+    state: dict[str, Any] = {"head": "head-0", "limit": 3, "wait": 0}
 
     def fake_setting(key: str, default: Any = None) -> Any:
         return {
-            "repair.wait": 0,
+            "repair.wait": state["wait"],
             "repair.attempts": state["limit"],
             "driver.state": ".driver",
             "driver.merge-check-max": 5,
@@ -160,6 +160,32 @@ def test_repeated_regressions_end_at_the_round_cap(
     assert found["state"] == "EXHAUSTED" and found["notify"] is True
     assert "0 of 3 attempt(s) and 6 round(s)" in str(found["summary"])
     assert "self-introduced regression" in str(found["summary"])
+
+
+def test_a_check_still_running_holds_the_next_round(
+    tmp_path: Path, env: dict[str, Any]
+) -> None:
+    assert mode_repair(tmp_path)["id"] == "201-1"
+    folder = round_folder(tmp_path, 1)
+    (folder / "verify.paths").write_text("crates/x/src/lib.rs\n", encoding="utf-8")
+    env["wait"] = 1800
+    found = next_round(tmp_path, env)
+    assert found["state"] == "HOLD"
+    assert "has not finished" in str(found["summary"])
+    assert record(tmp_path)["attempts"] == 0
+    assert record(tmp_path)["rounds"] == 1
+
+
+def test_a_check_that_never_answers_is_counted_after_the_wait(
+    tmp_path: Path, env: dict[str, Any]
+) -> None:
+    assert mode_repair(tmp_path)["id"] == "201-1"
+    folder = round_folder(tmp_path, 1)
+    (folder / "verify.paths").write_text("crates/x/src/lib.rs\n", encoding="utf-8")
+    found = next_round(tmp_path, env)
+    assert found["state"] == "REPAIR" and found["id"] == "201-2"
+    assert record(tmp_path)["attempts"] == 1
+    assert "regression" not in str(found["summary"])
 
 
 @pytest.mark.usefixtures("env")

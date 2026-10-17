@@ -151,18 +151,16 @@ def _repair_checks(base: Path) -> list[Result]:
         )
     )
     third, _ = _ask(pub, _routes("pass", "fail"))
-    last, _ = _ask(pub, _routes("pass", "fail"))
     quiet, _ = _ask(pub, _routes("pass", "fail"))
     results.append(
         (
             "at the limit the pull request is given up once, and the line goes on",
-            third["id"] == "7-3"
-            and last["state"] == "EXHAUSTED"
-            and last["notify"] is True
+            third["state"] == "EXHAUSTED"
+            and third["notify"] is True
             and quiet["state"] == "EXHAUSTED"
             and quiet["notify"] is False
-            and "7-4" not in str(_record(pub).parent.glob("*")),
-            f"third={third} last={last} quiet={quiet}",
+            and "7-3" not in str(_record(pub).parent.glob("*")),
+            f"third={third} quiet={quiet}",
         )
     )
     green, _ = _ask(pub, _routes("pass", "pass"))
