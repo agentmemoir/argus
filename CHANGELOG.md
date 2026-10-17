@@ -4,6 +4,8 @@ Notable changes to this project are documented here. The format follows [Keep a 
 
 ## [Unreleased]
 
+- The driver self-test bounds git discovery at its fixture tree, so a fixture that has lost its own repository refuses instead of walking up into the checkout under test. On a host whose temporary storage is `noexec` the fixture tree lives inside that checkout, and the walk could sync the real checkout instead of failing. The fault harness bounds its scratch space the same way, and the `git_ceiling` case asserts the refusal. ([#116](https://github.com/agentmemoir/argus/issues/116))
+
 - The repair step reads a pull request's code-scanning alerts when a failing check has no workflow run to open. A code-scanning check's link is a scan result, so `gh run view` can read no log for it, and the repair used to stop there with `BLOCKED`. The alerts are now a second kind of evidence: the task carries them in their own section, the whole list is kept beside the task, a long list is cut where the cut can be seen, the read is pinned to the pull request's head, and a read that fails is named for itself instead of reading as an empty alert list.
 
 - The README is now a landing page that links into `docs/` instead of restating it, and the `docs/` set names every configuration key, the package-root program files, and every run mode, including `--merge-check-only` and `abandon`.

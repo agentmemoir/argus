@@ -117,10 +117,13 @@ selftest_case_flow() {
     # reach it. Its remote is pointed at a path that is not there, and its .git
     # is left alone. Removing .git refuses one step earlier — the tick returns a
     # published phase's checkout to the integration branch before the sync gate,
-    # and it cannot do that without a repository — and on a host whose temporary
-    # directory is `noexec` the fixture lives inside this checkout, where a
-    # missing .git is worse: `git -C` walks up out of the fixture and syncs the
-    # real checkout instead of failing.
+    # and it cannot do that without a repository — and a missing .git was worse
+    # while the walk-up was open: on a host whose temporary directory is
+    # `noexec` the fixture lives inside this checkout, where `git -C` walked up
+    # out of the fixture and synced the real checkout instead of failing. The
+    # ceiling at the fixture root now refuses that walk (selftest_case_git_ceiling),
+    # and this case keeps the remote break for the refusal it asserts: the sync
+    # gate's, not git's.
     git -C "$coord_root" remote set-url origin "$tmp/coordination-failure-remote-gone.git"
     drive || true
     coord_sync_refused=0; coord_no_window=0
@@ -327,4 +330,21 @@ selftest_case_release() {
   RECOVER_OWN_CLAIM=0; export RECOVER_OWN_CLAIM
   DRIVER_STUB_SLEEP="$old_stub_sleep"; export DRIVER_STUB_SLEEP
   rm -f "$release_wait" "$release_ready" "$RELEASE" "$CLAIM" "$HALT"
+}
+
+selftest_case_git_ceiling() {
+  # A fixture that has lost its repository has to refuse, not resolve to a
+  # repository above the fixture tree. The tree is inside the checkout under
+  # test on a host whose temporary storage is `noexec`, so a walk-up reaches
+  # the checkout the tick is running against; the ceiling driver_self_test
+  # exports at the fixture root is what stops it. This directory is the
+  # smallest fixture with no repository of its own, on the one level that
+  # makes the walk-up reach the checkout when the ceiling is missing.
+  local ceiling_root="$tmp/git-ceiling-root" ceiling_out
+  mkdir -p "$ceiling_root"
+  if ceiling_out="$(git -C "$ceiling_root" rev-parse --is-inside-work-tree 2>&1)"; then
+    echo "FAIL: a fixture without its own repository resolved to $ceiling_out above the fixture tree"; fail=1
+  else
+    echo "ok: a fixture without its own repository refuses git discovery"
+  fi
 }

@@ -129,6 +129,14 @@ driver_self_test() {
   # the trap on its first line and leave the session behind again.
   SELFTEST_TMP="$tmp"
   export TMPDIR="$tmp"
+  # A fixture under this tree must not resolve to a repository above it. The
+  # tree lives inside the checkout under test when the host's temporary storage
+  # is `noexec` and the build tree is the last candidate, and `git -C` on a
+  # fixture that has lost its own .git would walk up and find that checkout.
+  # The ceiling is the fixture root, not each fixture: git always checks the
+  # directory it starts in, so a ceiling equal to the starting point does not
+  # apply to it. selftest_case_git_ceiling asserts the refusal.
+  export GIT_CEILING_DIRECTORIES="$tmp"
   # A caller may name the socket base, and the fault harness hands each run a
   # short one. A tmux socket path is capped (103 bytes usable on macOS, 107 on
   # Linux) while the fixture directory is not, so a deep fixture root must not
@@ -358,6 +366,9 @@ PROBE
 
   selftest_run_case launch
   selftest_run_case locks_stall
+  # Before the cases that run git inside a fixture: the bound that keeps a
+  # fixture without its own repository from reaching the checkout under test.
+  selftest_run_case git_ceiling
   selftest_run_case flow
   selftest_run_case release
   selftest_run_case unavailable
