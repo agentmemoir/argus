@@ -98,6 +98,20 @@ def test_issue_cleanup_sweep_finds_seven_digit_issue_runs(
     assert git(publication.private, "status", "--porcelain")[1] == ""
 
 
+def test_issue_clean_reports_what_its_push_did(publication: Publication) -> None:
+    publication.claim(1234567)
+    assert mode_issue_clean(publication.root, 1234567)["ok"]
+    # Nothing is left to commit and the branch is already pushed: the action
+    # names the push's own result, not that a push was attempted.
+    second = mode_issue_clean(publication.root, 1234567)
+    assert second["ok"], second
+    assert second["repos"][0]["action"] == "nothing-to-push"
+    assert (
+        git(publication.private_remote, "rev-parse", "refs/heads/main")[1]
+        == git(publication.private, "rev-parse", "HEAD")[1]
+    )
+
+
 def test_issue_cleanup_refuses_unrelated_staged_data(publication: Publication) -> None:
     publication.claim(1234567)
     other = publication.private / "other.txt"
@@ -148,7 +162,8 @@ def test_lost_owner_blocks_public_code_push(
         result = saved(argv, **kwargs)
         if (
             argv[:3] == ["git", "-C", str(publication.private)]
-            and argv[3:6] == ["push", "origin", "main"]
+            and argv[3] == "push"
+            and argv[-2:] == ["origin", "main"]
             and not lost
         ):
             lost = True
