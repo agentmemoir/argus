@@ -20,7 +20,8 @@ class Field(NamedTuple):
 #   "phases"   - required only when the work source is the phase source;
 #   "notify"   - required only when the `notify` object is present;
 #   "issues"   - required only when the `issues` object is present;
-#   "repair"   - required only when the `repair` object is present.
+#   "repair"   - required only when the `repair` object is present;
+#   "runstate" - required only when the `runstate` object is present.
 SCHEMA = (
     Field("repo-root", "path", "required"),
     Field("pipeline", "path", "required"),
@@ -66,6 +67,13 @@ SCHEMA = (
     Field("board.issues-file", "str", "issues"),
     Field("board.branch", "str", "board"),
     Field("board.remote", "str", "board"),
+    # Where run state is committed and confirmed: `repo` is the checkout that
+    # holds the run directory, `remote` the remote to push and confirm against,
+    # and `branch` the integration branch carrying the receipt. Optional as a
+    # whole; without it Argus derives the checkout from `driver.runs`.
+    Field("runstate.repo", "path", "runstate"),
+    Field("runstate.remote", "str", "runstate"),
+    Field("runstate.branch", "str", "runstate"),
     Field("notify.profile", "str", "notify"),
     Field("notify.channel", "str", "notify"),
     Field("notify.disabled", "bool", "notify"),
@@ -145,6 +153,9 @@ SHELL_VARS = {
     "board.issues-file": "BOARD_ISSUES_FILE",
     "board.branch": "BOARD_BRANCH",
     "board.remote": "BOARD_REMOTE",
+    "runstate.repo": "RUNSTATE_REPO",
+    "runstate.remote": "RUNSTATE_REMOTE",
+    "runstate.branch": "RUNSTATE_BRANCH",
     "notify.profile": "HERMES_PROFILE_NAME",
     "notify.channel": "DISCORD_CHANNEL",
     "notify.disabled": "NOTIFY_DISABLED",
@@ -198,6 +209,7 @@ _OBJECT_KEYS = (
     "tmux",
     "board",
     "phases",
+    "runstate",
     "notify",
     "issues",
     "repair",

@@ -19,6 +19,7 @@ from argus.gitsync.git import (
     summarize,
 )
 from argus.gitsync.merge import _fast_forward, _merge, sync_one
+from argus.gitsync.runstate import runstate_repo
 
 
 def resync_integration(repo: str | Path, base: str | None = None) -> dict[str, Any]:
@@ -178,7 +179,8 @@ def _shared_destination(checkouts: dict[str, Path]) -> str | None:
 
 
 def sync_all(root: str | Path, mode: str, branch: str | None = None) -> dict[str, Any]:
-    """Sync the public checkout, the board, and the phases checkout, if present.
+    """Sync the public checkout, the board, the phases, and the run state, if
+    present.
 
     ``branch`` is the branch the public checkout must be on, and it reaches that
     checkout alone: the board and the phases are read on their own branches, so
@@ -195,6 +197,13 @@ def sync_all(root: str | Path, mode: str, branch: str | None = None) -> dict[str
     phases = phases_repo(root)
     if phases is not None and phases not in checkouts.values() and is_git_repo(phases):
         checkouts["phases"] = phases
+    runstate = runstate_repo(root)
+    if (
+        runstate is not None
+        and runstate not in checkouts.values()
+        and is_git_repo(runstate)
+    ):
+        checkouts["runstate"] = runstate
     if len(checkouts) > 1:
         reason = _shared_destination(checkouts)
         if reason is not None:
@@ -221,7 +230,7 @@ def sync_all(root: str | Path, mode: str, branch: str | None = None) -> dict[str
 
 
 def mode_resync(root: str | Path) -> dict[str, Any]:
-    """Merge the integration branch into both checkouts' current branches."""
+    """Merge the integration branch into every checkout's current branch."""
     root = Path(root).resolve()
     # The public checkout is the one that can be on a phase branch. The private
     # one is always on the integration branch and reports itself as a no-op,
@@ -234,6 +243,9 @@ def mode_resync(root: str | Path) -> dict[str, Any]:
     phases = phases_repo(root)
     if phases is not None and phases not in targets and is_git_repo(phases):
         targets.append(phases)
+    runstate = runstate_repo(root)
+    if runstate is not None and runstate not in targets and is_git_repo(runstate):
+        targets.append(runstate)
     repos = [resync_integration(r) for r in targets]
     ok = all(r["ok"] for r in repos)
     return {

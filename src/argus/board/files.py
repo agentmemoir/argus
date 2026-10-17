@@ -55,17 +55,28 @@ def _runstate_remote(repo: str | Path, remote: str) -> str:
     """The remote on the run-state checkout to confirm the receipt against.
 
     The board and the run state may be different repositories, and each names
-    its own remote. When the run-state checkout does not define the configured
-    board remote, its own first remote is used, so a board-only remote name
-    cannot stop the confirmation.
+    its own remote. A configured ``runstate.remote`` is used as-is. Otherwise the
+    configured board remote is used when the run-state checkout defines it, a
+    single remote is used when it is the only choice, and several remotes
+    without a match are refused rather than guessed.
     """
+    configured = conventions.setting("runstate.remote", None)
+    if configured:
+        return str(configured)
     rc, names, _ = _git(repo, "remote")
     if rc != 0:
         return remote
-    configured = [name for name in names.splitlines() if name.strip()]
-    if remote in configured:
+    remotes = [name for name in names.splitlines() if name.strip()]
+    if remote in remotes:
         return remote
-    return configured[0] if configured else remote
+    if len(remotes) == 1:
+        return remotes[0]
+    if not remotes:
+        return remote
+    raise CoordinationUnavailable(
+        f"run-state checkout does not define remote {remote!r} and has "
+        f"{len(remotes)} remotes; set runstate.remote"
+    )
 
 
 def _validate_publication_receipt(
@@ -110,18 +121,22 @@ def _validate_publication_receipt(
         _receipt_commit(data.get(field), field)
     if not isinstance(data.get("published_at"), str) or not data["published_at"]:
         raise CoordinationError("publication receipt has no publication time")
-    # The receipt is run state, published to the integration branch, so it is
-    # confirmed against that branch. It used to be confirmed against the board
-    # branch, which worked only while the two were the same ref.
     # The receipt is run state, so it is confirmed in the repository that holds
     # the run directory, which need not be the board checkout. The repository
-    # is the working tree the run directory sits in.
-    rc_top, top, _top_err = _git(expected.parent, "rev-parse", "--show-toplevel")
-    if rc_top != 0 or not top:
-        raise CoordinationUnavailable(
-            "publication receipt is not inside a git working tree"
-        )
-    run_repo = Path(top).resolve()
+    # is the working tree the run directory sits in, or the checkout a
+    # `runstate.repo` setting names.
+    configured_repo = conventions.runstate_repo(
+        repo_root or conventions.setting("repo-root")
+    )
+    if configured_repo is not None:
+        run_repo = configured_repo
+    else:
+        rc_top, top, _top_err = _git(expected.parent, "rev-parse", "--show-toplevel")
+        if rc_top != 0 or not top:
+            raise CoordinationUnavailable(
+                "publication receipt is not inside a git working tree"
+            )
+        run_repo = Path(top).resolve()
     try:
         rel = expected.relative_to(run_repo).as_posix()
     except ValueError as exc:
@@ -129,7 +144,12 @@ def _validate_publication_receipt(
             "publication receipt is outside the repository that holds the run state"
         ) from exc
     run_remote = _runstate_remote(run_repo, remote)
-    published = _integration_branch(run_repo, run_remote)
+    configured_branch = conventions.setting("runstate.branch", None)
+    published = (
+        str(configured_branch)
+        if configured_branch
+        else _integration_branch(run_repo, run_remote)
+    )
     ref, _commit = _fetch_branch_ref(run_repo, run_remote, published)
     rc, raw, err = _git(run_repo, "show", f"{ref}:{rel}")
     if rc != 0:

@@ -12,7 +12,7 @@ a bare ``ValueError`` instead of a coordination error.
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
@@ -27,6 +27,8 @@ from argus.gitsync.runstate import runstate_repo
 from argus.gitsync.selftest_fixture import _configure_self_test, _init_remote
 
 PHASE = 100760
+THIRD_PHASE = 100762
+RESUME_PHASE = 100763
 
 
 def _published_receipt(receipt: dict[str, Any]) -> dict[str, Any]:
@@ -92,3 +94,103 @@ def test_completion_confirms_receipt_in_the_decoupled_run_state_repo(
     assert record["completion_receipt"]["private_commit"] == (
         local["private_commit"].lower()
     )
+
+
+def test_publication_uses_a_third_run_state_repository(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(conventions, "_settings", {})
+    conventions.configure({"commands.git": "git"})
+    _workflow_remote, workflow = _init_remote(tmp_path, "workflow")
+    _board_remote, board = _init_remote(tmp_path, "board")
+    _runstate_remote, runstate = _init_remote(tmp_path, "runstate")
+    _configure_self_test(workflow, board, runs=runstate / "runs")
+    conventions.override(
+        {
+            "runstate.repo": runstate,
+            "runstate.remote": "origin",
+            "runstate.branch": "main",
+        }
+    )
+
+    # The board, the workflow checkout, and the run state are three different
+    # repositories; ``runstate.repo`` names the third.
+    assert len({workflow, board, runstate}) == 3
+    assert board_repo(workflow) == board
+    assert runstate_repo(workflow, THIRD_PHASE) == runstate
+
+    store = ReservationStore(workflow)
+    reservation = store.reserve(THIRD_PHASE, "server-01")
+    run_dir = runstate / "runs" / f"phase-{THIRD_PHASE:06d}"
+    run_dir.mkdir(parents=True)
+    save_reservation_file(run_dir / "reservation.json", reservation)
+    (run_dir / "run.json").write_text('{"state":"completed"}\n')
+
+    published = publish_phase(workflow, THIRD_PHASE)
+    assert published.get("ok"), published
+    assert published.get("state") == "AWAITING_REVIEW", published
+    pushes = [
+        entry
+        for entry in cast("list[dict[str, Any]]", published["repos"])
+        if entry.get("repo") == str(runstate)
+    ]
+    assert len(pushes) == 1, published["repos"]
+    assert pushes[0]["ok"] is True, pushes
+    receipt_path = Path(published["receipt"]["path"])
+    assert receipt_path == run_dir / PUBLICATION_NAME
+
+    # Completion confirms the published receipt in the run-state repository's
+    # integration branch, not the board's.
+    local = _published_receipt(json.loads(receipt_path.read_text()))
+    receipt_path.write_text(json.dumps(local, indent=2) + "\n")
+    assert git(runstate, "add", "-A")[0] == 0
+    assert git(runstate, "commit", "-q", "-m", "published receipt")[0] == 0
+    assert git(runstate, "push", "-q", "origin", "main")[0] == 0
+    done = store.set_status(reservation, "completed", evidence_path=receipt_path)
+    assert done.get("status") == "completed", done
+
+
+def test_publication_resumes_after_a_transient_run_state_push_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(conventions, "_settings", {})
+    conventions.configure({"commands.git": "git"})
+    _workflow_remote, workflow = _init_remote(tmp_path, "workflow")
+    _board_remote, board = _init_remote(tmp_path, "board")
+    runstate_remote, runstate = _init_remote(tmp_path, "runstate")
+    _configure_self_test(workflow, board, runs=runstate / "runs")
+    conventions.override(
+        {
+            "runstate.repo": runstate,
+            "runstate.remote": "origin",
+            "runstate.branch": "main",
+        }
+    )
+
+    store = ReservationStore(workflow)
+    reservation = store.reserve(RESUME_PHASE, "server-01")
+    run_dir = runstate / "runs" / f"phase-{RESUME_PHASE:06d}"
+    run_dir.mkdir(parents=True)
+    save_reservation_file(run_dir / "reservation.json", reservation)
+    (run_dir / "run.json").write_text('{"state":"completed"}\n')
+
+    # Point the run-state remote at a path that does not exist, so its push
+    # fails once, deterministically and without a sleep.
+    missing = tmp_path / "gone.git"
+    assert git(runstate, "remote", "set-url", "origin", str(missing))[0] == 0
+    blocked = publish_phase(workflow, RESUME_PHASE)
+    assert blocked.get("ok") is False, blocked
+    assert blocked.get("state") == "BLOCKED", blocked
+    assert not (run_dir / PUBLICATION_NAME).exists()
+
+    # The failed push left the run state committed locally, so the checkout is
+    # clean and usable. Restoring the remote lets the same publication finish.
+    assert git(runstate, "status", "--porcelain")[1] == ""
+    assert git(runstate, "remote", "set-url", "origin", str(runstate_remote))[0] == 0
+    published = publish_phase(workflow, RESUME_PHASE)
+    assert published.get("ok"), published
+    assert published.get("state") == "AWAITING_REVIEW", published
+
+    rel = (run_dir / PUBLICATION_NAME).resolve().relative_to(runstate).as_posix()
+    receipt_commits = git(runstate, "log", "--oneline", "--", rel)[1].splitlines()
+    assert len(receipt_commits) == 1, receipt_commits

@@ -7,7 +7,14 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import Any, cast
 
-from argus.conventions import board_repo, phase_run_dir, runs_dir
+from argus.conventions import (
+    board_repo,
+    phase_run_dir,
+    runs_dir,
+)
+from argus.conventions import (
+    runstate_repo as configured_runstate_repo,
+)
 from argus.gitsync.git import (
     ConfigError,
     _is_private_path,
@@ -159,12 +166,16 @@ def runstate_repo(root: str | Path, phase: int | str | None = None) -> Path | No
     """The git working tree that owns the configured run state.
 
     The reservation board and the run state may live in different repositories.
-    The run state's repository is the one that holds the run directory, which
-    ``driver.runs`` names through the pipeline; ``board.repo`` no longer has to
-    be that repository. A layout with no working tree for the run state falls
-    back to the board checkout, which is the only repository run state had
-    before the two could be separated.
+    A ``runstate.repo`` setting names the checkout directly. Otherwise it is the
+    working tree that holds the run directory, which ``driver.runs`` names
+    through the pipeline; ``board.repo`` no longer has to be that repository. A
+    layout with no working tree for the run state falls back to the board
+    checkout, which is the only repository run state had before the two could be
+    separated.
     """
+    configured = configured_runstate_repo(root)
+    if configured is not None:
+        return configured
     try:
         run_dir = runs_dir(root) if phase is None else phase_run_dir(root, int(phase))
     except (TypeError, ValueError):
@@ -190,7 +201,7 @@ def _phase_run_pathspec(phase: int | str, root: str | Path | None = None) -> str
         raise ConfigError(
             f"cannot locate the run directory for phase {number}: {exc}"
         ) from exc
-    repo = git_toplevel(resolved)
+    repo = runstate_repo(root, number)
     if repo is None:
         raise ConfigError(
             f"phase {number} run directory is not inside a git working tree to publish"
@@ -214,13 +225,25 @@ def commit_leftover_run_state(
     """
     root = Path(root).resolve()
     repo = runstate_repo(root, phase)
-    if repo is None:
+    if repo is None or not is_git_repo(repo):
+        # Run state must land in a git checkout. Treating an unresolvable or
+        # non-repository checkout as an empty run reported success while the
+        # state stayed dirty, which the next phase's publish refused on.
+        blockers = [
+            blocked(
+                {"repo": str(root)},
+                "no run-state checkout for the configured run state"
+                if repo is None
+                else f"the run-state checkout is not a git working tree: {repo}",
+                hint="set runstate.repo or place driver.runs inside a git checkout",
+            )
+        ]
         return {
-            "ok": True,
+            "ok": False,
             "mode": "start-clean",
-            "repos": [],
+            "repos": blockers,
             "pathspec": "runs",
-            "summary": "start-clean sync ok: no run-state checkout",
+            "summary": summarize(blockers, "start-clean"),
         }
     if phase is not None:
         pathspec = _phase_run_pathspec(phase, root)

@@ -166,6 +166,16 @@
     "remote": "origin"
   },
 
+  // Where run state is committed and confirmed, when that checkout is not the
+  // one the run directory sits in. Optional as a whole: omit this object and
+  // Argus derives the checkout from "driver.runs" and resolves the remote on
+  // it. With the object, all three keys are required.
+  // "runstate": {
+  //   "repo": ".",
+  //   "remote": "origin",
+  //   "branch": "main"
+  // },
+
   // Notifications. Optional, and machine-local: these values belong to whoever
   // receives them, so this file must not be committed to a public tree.
   "notify": {
