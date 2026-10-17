@@ -89,6 +89,14 @@ selftest_run_case() {
 
 driver_self_test() {
   local fail=0 tmp selftest_wf
+  # This suite runs tmux commands, and tmux prefers the server named in `TMUX`
+  # over the socket directory it is pointed at with `TMUX_TMPDIR`. Started from
+  # inside a terminal's tmux — a common way to run it — every command below
+  # would talk to that terminal's server, and the leftover sweep's kill-server
+  # would end it, taking every session on it down. The suite owns its server
+  # instead: `TMUX_TMPDIR` is the only socket base any of it uses, and the
+  # sweep drops the pair from its own environment as well.
+  unset TMUX TMUX_PANE
   # Refuse a name that matches no case: a case skipped by a typo would
   # otherwise read as a pass.
   if [ -n "${SELFTEST_CASES:-}" ]; then
@@ -369,6 +377,7 @@ PROBE
   # Before the cases that run git inside a fixture: the bound that keeps a
   # fixture without its own repository from reaching the checkout under test.
   selftest_run_case git_ceiling
+  selftest_run_case lost_repo
   selftest_run_case flow
   selftest_run_case release
   selftest_run_case unavailable
