@@ -212,7 +212,13 @@
     "verify": "",
 
     // Seconds "verify" may run before it is stopped and read as a failure, applied with "timeout", or with "gtimeout" where "timeout" is not on PATH; with neither, it runs unbounded and the driver logs one line to say so. 0 means no limit. Optional.
-    "verify-timeout": 1800
+    "verify-timeout": 1800,
+
+    // Seconds a repair session may run before a tick names it as possibly hung.
+    // The launch records the time the session started and the session removes
+    // that record when it ends, so a session past this limit gets one log line
+    // and one notice, and nothing is killed. 0 means no watch. Optional.
+    "stale-after": 3600
   },
 
   // Estimate factor. Optional; both keys switch it on. After a phase finishes
