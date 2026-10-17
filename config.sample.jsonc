@@ -64,7 +64,7 @@
 
     // Where run state goes: session logs, the ledger, the receipts. Required.
     // It may sit outside the project. Run state is committed and pushed only
-    // when this folder is inside board.repo; here it is under /tmp, so nothing
+    // in the checkout that holds this folder; here it is under /tmp, so nothing
     // is written into the project.
     "runs": "/tmp/argus/history",
 

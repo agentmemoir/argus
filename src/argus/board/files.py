@@ -51,6 +51,23 @@ def _receipt_commit(value: Any, field: str) -> str:
     return value.lower()
 
 
+def _runstate_remote(repo: str | Path, remote: str) -> str:
+    """The remote on the run-state checkout to confirm the receipt against.
+
+    The board and the run state may be different repositories, and each names
+    its own remote. When the run-state checkout does not define the configured
+    board remote, its own first remote is used, so a board-only remote name
+    cannot stop the confirmation.
+    """
+    rc, names, _ = _git(repo, "remote")
+    if rc != 0:
+        return remote
+    configured = [name for name in names.splitlines() if name.strip()]
+    if remote in configured:
+        return remote
+    return configured[0] if configured else remote
+
+
 def _validate_publication_receipt(
     path: str | Path,
     reservation: Any,
@@ -111,8 +128,9 @@ def _validate_publication_receipt(
         raise CoordinationUnavailable(
             "publication receipt is outside the repository that holds the run state"
         ) from exc
-    published = _integration_branch(run_repo, remote)
-    ref, _commit = _fetch_branch_ref(run_repo, remote, published)
+    run_remote = _runstate_remote(run_repo, remote)
+    published = _integration_branch(run_repo, run_remote)
+    ref, _commit = _fetch_branch_ref(run_repo, run_remote, published)
     rc, raw, err = _git(run_repo, "show", f"{ref}:{rel}")
     if rc != 0:
         raise CoordinationUnavailable(
