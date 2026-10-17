@@ -202,7 +202,23 @@
     // published to finish before it starts other work, because a result for a
     // head that has been replaced is never seen again. 0 never waits. Required
     // with "repair".
-    "wait": 1800
+    "wait": 1800,
+
+    // A command that checks the scope a repair changed, run from "repo-root"
+    // after the repair pushes and before the next attempt is counted. The
+    // changed paths arrive in ARGUS_REPAIR_CHANGED, one per line, and the commit
+    // the repair started from in ARGUS_REPAIR_BASE; exit 0 means the changed
+    // scope passes. Optional. An empty string runs no check.
+    "verify": "",
+
+    // Seconds "verify" may run before it is stopped and read as a failure, applied with "timeout", or with "gtimeout" where "timeout" is not on PATH; with neither, it runs unbounded and the driver logs one line to say so. 0 means no limit. Optional.
+    "verify-timeout": 1800,
+
+    // Seconds a repair session may run before a tick names it as possibly hung.
+    // The launch records the time the session started and the session removes
+    // that record when it ends, so a session past this limit gets one log line
+    // and one notice, and nothing is killed. 0 means no watch. Optional.
+    "stale-after": 3600
   },
 
   // Estimate factor. Optional; both keys switch it on. After a phase finishes

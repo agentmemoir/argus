@@ -130,6 +130,7 @@ ARGUS_CONFIG_VARS=(
   TMUX_REFRESH BOARD_REPO BOARD_FILE BOARD_BRANCH BOARD_REMOTE
   HERMES_PROFILE_NAME DISCORD_CHANNEL NOTIFY_DISABLED DISCORD_FALLBACK_CHANNEL
   HEARTBEAT_URL REPAIR_PIPELINE REPAIR_ATTEMPTS REPAIR_WAIT
+  REPAIR_VERIFY REPAIR_VERIFY_TIMEOUT REPAIR_STALE_AFTER
 )
 
 # Argus's own shell helpers, sourced from beside this file. The folder is
@@ -283,8 +284,8 @@ case "${1:-}" in
     run_session "$2" "$3"
     ;;
   --repair-session)
-    [ "$#" -eq 4 ] || { echo "usage: phase-driver.sh --repair-session <id> <task-file> <branch>" >&2; exit 2; }
-    run_repair_session "$2" "$3" "$4"
+    [ "$#" -eq 6 ] || { echo "usage: phase-driver.sh --repair-session <id> <task-file> <branch> <base> <nonce>" >&2; exit 2; }
+    run_repair_session "$2" "$3" "$4" "$5" "$6"
     ;;
   --resume)
     shift
