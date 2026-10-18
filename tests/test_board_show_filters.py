@@ -222,3 +222,76 @@ def test_show_rejects_an_empty_identifier(
     assert main(["show", flag, value]) == 2
     printed = json.loads(capsys.readouterr().out)
     assert printed["error"] == f"{flag} must not be empty"
+
+
+# Text that a shell, a path lookup, or a line splitter would treat as more than
+# an id. Each one is only ever compared to a recorded value, so each one has to
+# come back as an id the board does not hold.
+_HOSTILE_IDS: dict[str, str] = {
+    "command-substitution": "$(id)",
+    "backtick": "`id`",
+    "shell-separator": "machine-a; rm -rf /",
+    "pipe": "machine-a | tee /tmp/stolen",
+    "path-traversal": "../../state.json",
+    "absolute-path": "/etc/passwd",
+    "newline": "machine-a\nmachine-b",
+    "very-long": "a" * 4096,
+}
+
+
+@pytest.mark.usefixtures("live_lock")
+@pytest.mark.parametrize("hostile", list(_HOSTILE_IDS.values()), ids=list(_HOSTILE_IDS))
+def test_show_treats_a_hostile_machine_id_as_an_opaque_id(
+    capsys: pytest.CaptureFixture[str], hostile: str
+) -> None:
+    """A hostile machine id names no machine, and the board read is untouched.
+
+    The unfiltered read holds three phases and a live publication lock, so an
+    empty narrowed view means the text matched nothing rather than that the
+    board lost its records. The second unfiltered read proves the filter
+    narrowed what one read returned and saved nothing back.
+    """
+    whole = _show(capsys)
+    assert sorted(whole["phases"]) == ["100001", "100002", "100003"]
+    state = _show(capsys, "--machine-id", hostile)
+    assert state["phases"] == {}
+    assert "publication" not in state
+    assert state["version"] == whole["version"]
+    assert _show(capsys) == whole
+
+
+@pytest.mark.usefixtures("live_lock")
+@pytest.mark.parametrize("hostile", list(_HOSTILE_IDS.values()), ids=list(_HOSTILE_IDS))
+def test_show_treats_a_hostile_reservation_id_as_an_opaque_id(
+    capsys: pytest.CaptureFixture[str], hostile: str
+) -> None:
+    """A hostile reservation id names no phase, and the board read is untouched.
+
+    ``--reservation-id`` narrows the phase records only, so the live
+    publication lock of machine-a has to survive the filter. The second
+    unfiltered read proves nothing was written back.
+    """
+    whole = _show(capsys)
+    assert sorted(whole["phases"]) == ["100001", "100002", "100003"]
+    state = _show(capsys, "--reservation-id", hostile)
+    assert state["phases"] == {}
+    assert state["publication"]["machine_id"] == "machine-a"
+    assert state["version"] == whole["version"]
+    assert _show(capsys) == whole
+
+
+@pytest.mark.usefixtures("live_lock")
+def test_show_refuses_a_blank_reservation_id_before_it_reads_the_board(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A newline and a tab are blank too, and the refusal writes nothing.
+
+    The refusal names the flag, never the supplied text, so the value cannot
+    reach the printed view. Reading the whole board after it proves the error
+    path left the board as it was.
+    """
+    whole = _show(capsys)
+    assert main(["show", "--reservation-id", " \n\t "]) == 2
+    printed = json.loads(capsys.readouterr().out)
+    assert printed["error"] == "--reservation-id must not be empty"
+    assert _show(capsys) == whole
