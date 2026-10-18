@@ -49,6 +49,10 @@ HALT_LOG_REASON=""
 # so the caller keeps its own answer. The reason is one line and capped,
 # because it reaches the halt record and the driver log.
 #
+# The helper is called once and answers both fields, so the bounded window is
+# read once per halt instead of once per field. It prints one `state=` line and
+# one `error=` line, already folded onto one line each.
+#
 # The log is appended to on every launch, so a payload before `<offset>`, the
 # log's length when this launch opened it, belongs to an earlier run and is
 # never adopted. An offset that is unset or not a number proves nothing, so the
@@ -65,11 +69,21 @@ halt_state_from_session() {   # <file> <offset>
   local helper="${BASH_SOURCE[0]%/*}"
   [ "$helper" != "${BASH_SOURCE[0]}" ] || helper="."
   helper="$helper/session_state.py"
-  HALT_LOG_STATE="$("$PYTHON" "$helper" "$1" state "$offset" 2>/dev/null || true)"
-  [ -n "$HALT_LOG_STATE" ] || return 0
-  HALT_LOG_STATE="$(cap_length "$(flatten_one_line "$HALT_LOG_STATE")" 500)"
-  HALT_LOG_REASON="$("$PYTHON" "$helper" "$1" error "$offset" 2>/dev/null || true)"
-  HALT_LOG_REASON="$(cap_length "$(flatten_one_line "$HALT_LOG_REASON")" 500)"
+  local out line
+  out="$("$PYTHON" "$helper" "$1" "$offset" 2>/dev/null || true)"
+  while IFS= read -r line; do
+    case "$line" in
+      state=*) HALT_LOG_STATE="${line#state=}" ;;
+      error=*) HALT_LOG_REASON="${line#error=}" ;;
+    esac
+  done <<<"$out"
+  # An empty state proves nothing, so the reason is dropped with it.
+  if [ -z "$HALT_LOG_STATE" ]; then
+    HALT_LOG_REASON=""
+    return 0
+  fi
+  HALT_LOG_STATE="$(cap_length "$HALT_LOG_STATE" 500)"
+  HALT_LOG_REASON="$(cap_length "$HALT_LOG_REASON" 500)"
 }
 
 # Write the halt record beside the marker.

@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """A halt names the state and reason glide left in the session log."""
 
+import importlib.util
 import json
 import os
 import subprocess
@@ -9,6 +10,18 @@ import sys
 from pathlib import Path
 
 DRIVER = Path(__file__).resolve().parents[1] / "src/argus/driver"
+
+
+def load_helper():
+    """The helper module, so a test can call its read path directly."""
+    spec = importlib.util.spec_from_file_location(
+        "session_state", DRIVER / "session_state.py"
+    )
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
 
 #: A session log as glide writes it: the plan text, then one JSON object.
 SESSION_LOG = (
@@ -196,7 +209,7 @@ def test_helper_prints_nothing_it_cannot_read(tmp_path: Path) -> None:
         path = tmp_path / f"{name}.log"
         path.write_text(text, encoding="utf-8")
         result = subprocess.run(
-            [sys.executable, str(helper), str(path), "state"],
+            [sys.executable, str(helper), str(path)],
             capture_output=True,
             text=True,
             encoding="utf-8",
@@ -206,7 +219,7 @@ def test_helper_prints_nothing_it_cannot_read(tmp_path: Path) -> None:
         assert result.returncode != 0, name
         assert result.stdout == "", name
     absent = subprocess.run(
-        [sys.executable, str(helper), str(tmp_path / "absent.log"), "state"],
+        [sys.executable, str(helper), str(tmp_path / "absent.log")],
         capture_output=True,
         text=True,
         encoding="utf-8",
@@ -215,6 +228,47 @@ def test_helper_prints_nothing_it_cannot_read(tmp_path: Path) -> None:
     )
     assert absent.returncode != 0
     assert absent.stdout == ""
+
+
+def test_one_invocation_yields_state_and_error(tmp_path: Path) -> None:
+    path = tmp_path / "session.log"
+    path.write_text(SESSION_LOG, encoding="utf-8")
+    result = subprocess.run(
+        [sys.executable, str(DRIVER / "session_state.py"), str(path), "0"],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        timeout=20,
+        check=False,
+    )
+    assert result.returncode == 0
+    lines = result.stdout.splitlines()
+    assert lines[0] == "state=config_error"
+    assert lines[1].startswith("error=hook pre_run failed (exit 1):")
+    assert len(lines) == 2
+
+
+def test_reads_no_more_than_the_window(tmp_path: Path) -> None:
+    module = load_helper()
+    path = tmp_path / "big.log"
+    # A log far larger than the window, whose payload is the real last object.
+    with path.open("wb") as handle:
+        handle.write(b"plan: filler stage\n")
+        handle.write(b"x" * (4 * module.WINDOW_BYTES))
+        handle.write(b"\n" + SESSION_LOG.encode("utf-8"))
+    size = path.stat().st_size
+    read = module.read_window(path, 0)
+    assert len(read) <= module.WINDOW_BYTES
+    assert len(read) < size
+    # The offset case reads from the offset, not the whole file.
+    offset = size - len(SESSION_LOG.encode("utf-8"))
+    assert len(module.read_window(path, offset)) <= module.WINDOW_BYTES
+    assert module.trailing_object(read.decode("utf-8")) == {
+        "state": "config_error",
+        "error": "hook pre_run failed (exit 1):\nmissing {repo} key at line 0 of 1",
+        "hook_point": "pre_run",
+        "hook_exit": 1,
+    }
 
 
 def test_valid_run_json_is_not_overridden_by_the_session_log(tmp_path: Path) -> None:
