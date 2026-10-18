@@ -75,6 +75,13 @@ PY
 _drive() {
   cd "$REPO"
 
+  # Every tick owns its launch mode. Without this reset a resume in an earlier
+  # tick of the same shell leaves the flag set, and the next ordinary launch
+  # tells its child it is continuing a run. On a host with `flock` the tick runs
+  # in the caller's shell, so the flag survives between ticks; the portable lock
+  # path runs in a subshell and hid the leak.
+  RESUME_MODE=0
+
   _DRIVE_RC=""
   if [ "$DRY_RUN" = 1 ]; then
     _drive_dry_run
