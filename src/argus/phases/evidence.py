@@ -133,9 +133,9 @@ def needs_decision(repo: str | Path, number: int) -> str | None:
     """
     # The residue is checked first: the operator's own action, or a failed job,
     # must not be hidden by a run state the selector would otherwise offer.
-    for check, value in ((run_abandoned, "abandoned"), (run_failed, "failed")):
+    for check, reason in ((run_abandoned, "abandoned"), (run_failed, "failed")):
         if check(repo, number):
-            return value
+            return reason
     rj = run_dir(repo, number) / "run.json"
     try:
         state = json.loads(rj.read_text())
