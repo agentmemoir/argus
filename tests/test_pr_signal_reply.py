@@ -156,7 +156,7 @@ def test_refuses_reply_text_longer_than_the_cap(
     assert posts == []
 
 
-def test_refuses_reply_text_that_looks_like_a_credential(
+def test_redacts_reply_text_that_looks_like_a_credential(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     record(tmp_path, {"10": comment(10)})
@@ -169,9 +169,9 @@ def test_refuses_reply_text_that_looks_like_a_credential(
         text=f"token {fake_token}",
         fetch=fresh({"10": comment(10)}),
     )
-    assert out["state"] == "REFUSED"
-    assert "credential" in out["reasons"][0]
-    assert posts == []
+    assert out["state"] == "POSTED"
+    assert fake_token not in posts[0][-1]
+    assert posts[0][-1] == f"body=token {pr_signal_reply.REDACTION}"
 
 
 def test_a_repeat_of_a_posted_reply_is_skipped_from_the_writes_log(

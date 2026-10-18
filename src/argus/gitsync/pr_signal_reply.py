@@ -34,6 +34,7 @@ SECRET_PATTERN = re.compile(
     r"gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|AKIA[0-9A-Z]{16}"
     r"|sk-[A-Za-z0-9]{20,}|-----BEGIN [A-Z ]*PRIVATE KEY-----"
 )
+REDACTION = "[redacted]"
 
 
 def _refused(reason: str) -> dict[str, Any]:
@@ -104,12 +105,19 @@ def _host_reply_refusal(text: str) -> str:
     return ""
 
 
+def _redact(text: str) -> str:
+    """Replace every secret-looking span with the fixed redaction marker.
+
+    The scan never refuses outbound text: a hit is sanitized so the reply can
+    still go out, and the substitution is deterministic, so it cannot fail.
+    """
+    return SECRET_PATTERN.sub(REDACTION, text)
+
+
 def _text_reason(text: str) -> str:
     """Why a reply text may not be posted, or an empty string."""
     if len(text) > MAX_REPLY_CHARS:
         return f"reply is longer than {MAX_REPLY_CHARS} characters; nothing was posted"
-    if SECRET_PATTERN.search(text):
-        return "reply contains text that looks like a credential; nothing was posted"
     return ""
 
 
@@ -155,6 +163,10 @@ def reply_to_comment(
         return _refused("give exactly one of a reply text or a reaction")
     if reaction is not None and reaction not in REACTIONS:
         return _refused(f"reaction must be one of {sorted(REACTIONS)}")
+    if text is not None:
+        # The outbound secret scan sanitizes rather than refuses: the reply goes
+        # out with each secret-looking span replaced, so a hit never stops the run.
+        text = _redact(text)
     text_refusal = _text_reason(text) if text is not None else ""
     if text_refusal:
         return _refused(text_refusal)
