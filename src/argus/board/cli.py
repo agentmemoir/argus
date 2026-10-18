@@ -57,9 +57,12 @@ def _narrow_state(
 ) -> dict[str, Any]:
     """Return the board view already read, narrowed to the asked-for records.
 
-    The filters narrow what one read returned; they never start another read,
-    so the output keeps the board's shape. An id the board does not hold is
-    simply absent from the narrowed view, not an error.
+    ``--reservation-id`` narrows the phase records only. ``--machine-id``
+    narrows every record that names a machine, so a live publication lock
+    held by another machine goes too. The filters narrow what one read
+    returned; they never start another read, so the output keeps the board's
+    shape. An id the board does not hold is simply absent from the narrowed
+    view, not an error.
     """
     if reservation_ids is None and machine_id is None:
         return state
@@ -70,7 +73,15 @@ def _narrow_state(
         if (wanted is None or record.get("reservation_id") in wanted)
         and (machine_id is None or record.get("machine_id") == machine_id)
     }
-    return {**state, "phases": phases}
+    narrowed = {**state, "phases": phases}
+    lock = state.get("publication")
+    if (
+        machine_id is not None
+        and lock is not None
+        and lock.get("machine_id") != machine_id
+    ):
+        del narrowed["publication"]
+    return narrowed
 
 
 def _add_token_args(parser: argparse.ArgumentParser) -> None:
@@ -162,9 +173,12 @@ def main(argv: list[str] | None = None) -> int:
         "--reservation-id",
         dest="reservation_id",
         action="append",
-        help="show only this reservation; repeat for more than one",
+        help="show only this reservation's phase record; repeat for more than one",
     )
-    show.add_argument("--machine-id", help="show only records this machine holds")
+    show.add_argument(
+        "--machine-id",
+        help="show only the phase records and publication lock this machine holds",
+    )
     sub.add_parser("self-test", help="run hermetic two-client checks")
     parser.add_argument(
         "--self-test",
