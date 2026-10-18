@@ -286,3 +286,39 @@ resume_stage() {   # <run_dir>
   "$PYTHON" -c 'import json,sys;print(json.load(open(sys.argv[1])).get("current",""))' \
     "$file" 2>/dev/null || true
 }
+
+# Clear the halt and stall markers, and the halt record when the phase it names
+# never started.
+#
+# A halt before the phase started leaves a record and no run state, so `--resume`
+# refuses it and the queue cannot move. That is the only case this removes the
+# record for. A phase with `run.json` or `resume.json` is resumable, so its
+# record stays: removing it would silently lose the halt. A malformed record is
+# kept and named, because no reader can tell which case it is.
+#
+# Nothing under the run directory is removed.
+clear_halt_cmd() {
+  if [ -f "$HALT" ]; then
+    rm -f "$HALT"
+    printf 'removed %s\n' "$HALT"
+  fi
+  if [ -f "$STALL" ]; then
+    rm -f "$STALL"
+    printf 'removed %s\n' "$STALL"
+  fi
+  if [ ! -f "$HALT_RECORD" ]; then
+    printf 'no halt record at %s\n' "$HALT_RECORD"
+    return 0
+  fi
+  if ! halt_record_read "$HALT_RECORD"; then
+    printf 'kept %s: the record is malformed; fix or remove it by hand\n' "$HALT_RECORD"
+    return 0
+  fi
+  if [ -f "$HALT_REC_RUN_DIR/run.json" ] || [ -f "$HALT_REC_RUN_DIR/resume.json" ]; then
+    printf 'kept %s: phase %s has a run result or resume state in %s\n' \
+      "$HALT_RECORD" "$HALT_REC_PHASE" "$HALT_REC_RUN_DIR"
+    return 0
+  fi
+  rm -f "$HALT_RECORD"
+  printf 'removed %s (phase %s never started)\n' "$HALT_RECORD" "$HALT_REC_PHASE"
+}

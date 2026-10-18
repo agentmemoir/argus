@@ -397,6 +397,7 @@ PROBE
   # directory, so nothing after them would see the state the other cases expect.
   selftest_run_case resume
   selftest_run_case abandon
+  selftest_run_case clear_halt
 
 
   tmux kill-session -t "$SESSION" 2>/dev/null || true
