@@ -148,14 +148,12 @@ _drive() {
 
 
   # The fence is empty until a path fills it in. Every branch that reaches the
-  # launch must set both, because `set -u` makes a missing one fatal and an
-  # empty one silently drops the child's ownership fence. Declared above the
-  # resume branch because a resume fills them too, through `_drive_resume`.
+  # launch must set both, because `set -u` makes a missing one fatal and an empty
+  # one silently drops the child's ownership fence; a resume fills them too.
   local out rc=0 number rel reservation_id="" reservation_generation=""
   local selection selection_rc=0 selection_state unknown_state
 
-  # A cleared marker with a record beside it is a resume. `_drive_resume` does
-  # the whole resume, including the launch.
+  # A cleared marker with a record beside it is a resume; `_drive_resume` runs it.
   if [ ! -f "$HALT" ] && [ -f "$HALT_RECORD" ]; then
     RESUME_FROM_TICK=1
     _drive_resume
