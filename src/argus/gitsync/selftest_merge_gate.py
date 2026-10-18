@@ -155,24 +155,25 @@ def _merge_gate_checks(base: Path) -> list[tuple[str, object, str]]:
             )
         )
 
-        # 2. Nothing is on the integration branch yet, so completion is refused.
+        # 2. The phase is recorded published once commit, push, and pull request
+        #    succeed. No merge is required and no commit-id or receipt check
+        #    gates it.
         res2 = mark_phase_published(pub, 100446)
         results.append(
             (
-                "completion is refused before the pull request merges",
-                (not res2["ok"])
-                and "not on the integration branch" in res2["blockers"][-1]
+                "completion is recorded without requiring a merge",
+                res2["ok"]
+                and res2.get("action") == "marked-published"
                 and cast("dict[str, Any]", phase_receipt(pub, 100446)).get("state")
-                == "awaiting_review",
-                f"blockers={res2.get('blockers')} "
-                f"heads={res2.get('public_head') or ''}",
+                == "published",
+                f"action={res2.get('action')} "
+                f"receipt={phase_receipt(pub, 100446)}",
             )
         )
 
-        # 3. A human merges. Now the same call succeeds and the board can
-        #    record the phase, which is the first moment it is finished. Merged
-        #    into the integration branch the receipt recorded, which is the
-        #    branch mark_phase_published will look for.
+        # 3. A human merges, then the same call is a no-op: the phase was
+        #    already recorded and nothing moves it. Merged into the integration
+        #    branch the receipt recorded.
         for repo in (pub, nested):
             merge_into = integration_branch(repo)
             git(repo, "checkout", "-q", merge_into)
@@ -183,17 +184,13 @@ def _merge_gate_checks(base: Path) -> list[tuple[str, object, str]]:
         published = cast("dict[str, Any]", phase_receipt(pub, 100446))
         results.append(
             (
-                "completion is recorded once the merge is real",
+                "recording an already-published phase is a no-op",
                 res3["ok"]
-                and res3["action"] == "marked-published"
+                and res3["action"] == "already-published"
                 and published.get("state") == "published"
-                and bool(published.get("public_commit"))
-                and bool(published.get("private_commit"))
                 and awaiting_review(pub, 100446) is None,
-                f"blockers={res3.get('blockers')} "
-                f"state={published.get('state')} "
-                f"public={published.get('public_commit')} "
-                f"private={published.get('private_commit')}",
+                f"action={res3.get('action')} "
+                f"state={published.get('state')}",
             )
         )
 

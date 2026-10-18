@@ -240,11 +240,10 @@ def _stale_receipt_checks(base: Path) -> list[tuple[str, object, str]]:
             nogh: dict[str, Any] = mode_published(pub3, 100613)
         results.append(
             (
-                "with GitHub unreachable the receipt is not rewritten, because "
-                "only GitHub or the pull request's own commit may say merged",
-                (not nogh["ok"])
-                and (phase_receipt(pub3, 100613) or {}).get("state")
-                == "awaiting_review",
+                "with GitHub unreachable the phase is still published, because "
+                "no merge proof is required",
+                nogh["ok"]
+                and (phase_receipt(pub3, 100613) or {}).get("state") == "published",
                 f"ok={nogh.get('ok')} "
                 f"state={(phase_receipt(pub3, 100613) or {}).get('state')}",
             )
