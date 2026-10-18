@@ -300,8 +300,12 @@ def main(argv: list[str] | None = None) -> int:
                     raise CoordinationError("--reservation-id must not be empty")
             result = _narrow_state(
                 result,
-                reservation_ids=reservation_ids,
-                machine_id=machine_id,
+                reservation_ids=(
+                    None
+                    if reservation_ids is None
+                    else [asked.strip() for asked in reservation_ids]
+                ),
+                machine_id=None if machine_id is None else machine_id.strip(),
             )
         _print_json(
             {"state": "OK", "reservation": result}

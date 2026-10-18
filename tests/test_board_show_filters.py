@@ -130,6 +130,25 @@ def test_show_machine_filter_that_matches_nothing_prints_no_records(
     assert state["phases"] == {}
 
 
+@pytest.mark.usefixtures("show_board")
+@pytest.mark.parametrize(
+    ("flag", "expected"),
+    [("--machine-id", ["100001", "100002"]), ("--reservation-id", ["100002"])],
+)
+def test_show_ignores_padding_around_an_identifier(
+    show_board: dict[str, dict[str, Any]],
+    capsys: pytest.CaptureFixture[str],
+    flag: str,
+    expected: list[str],
+) -> None:
+    """A stray shell space must not read as a machine that holds nothing."""
+    asked = (
+        "machine-a" if flag == "--machine-id" else show_board["a2"]["reservation_id"]
+    )
+    state = _show(capsys, flag, f"  {asked}  ")
+    assert sorted(state["phases"]) == expected
+
+
 @pytest.mark.parametrize(
     ("reservation", "expected"),
     [("a1", ["100001"]), ("b1", [])],
