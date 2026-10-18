@@ -14,7 +14,6 @@ from argus.gitsync.git import (
     is_git_repo,
     summarize,
 )
-from argus.gitsync.group_gate import release_group_pull_request
 from argus.gitsync.group_publication import (
     _load_phase_reservation,
     _push_one,
@@ -200,12 +199,7 @@ def publish_phase(
             outcome["receipt"] = receipt
             # The group's own answer, for the caller: the shared pull request
             # that covers these members, which members have not published yet,
-            # and whether this publication was the group's last. The gate sits
-            # beside it, in the one place that knows the group is finished: it
-            # merges the fix pull requests waiting on the group branch and takes
-            # the shared pull request out of draft once, when its checks are
-            # green. Checks that are red or still running hold it, and the
-            # driver's next ticks retry, so a publish never has to wait for CI.
+            # and whether this publication was the group's last.
             group: list[Any] = receipt.get("group") or []
             members = [str(member) for member in group]
             if members:
@@ -226,18 +220,6 @@ def publish_phase(
                             f"may show an open checkbox or a missing comment; "
                             f"read the pull request body before merging."
                         )
-                try:
-                    gate = release_group_pull_request(
-                        root,
-                        phase,
-                        members,
-                        receipt.get("pull_request"),
-                        receipt.get("branch"),
-                    )
-                except Exception as exc:  # noqa: BLE001 - the gate never undoes a publish
-                    gate = {"state": "HELD", "reasons": [f"group gate failed: {exc}"]}
-                if gate is not None:
-                    outcome["group_gate"] = gate
             outcome["repos"] = results
             outcome["summary"] = summarize(
                 [

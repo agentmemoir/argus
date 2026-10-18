@@ -136,7 +136,6 @@ def main() -> int:
             "clean",
             "checkpoint",
             "open-pr",
-            "peek-ci",
             "ready",
             "gate",
             "repair",
@@ -256,7 +255,7 @@ def main() -> int:
             if args.phase is None:
                 raise ConfigError("--phase is required with --mode published")
             out = mode_published(args.root, args.phase)
-        elif args.mode in {"open-pr", "peek-ci", "ready"}:
+        elif args.mode in {"open-pr", "ready"}:
             if args.phase is None:
                 raise ConfigError("--phase is required for this mode")
             out = (

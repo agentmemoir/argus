@@ -286,10 +286,6 @@ case "${1:-}" in
     [ "$#" -eq 3 ] || { echo "usage: phase-driver.sh --session <N> <phase-file>" >&2; exit 2; }
     run_session "$2" "$3"
     ;;
-  --repair-session)
-    [ "$#" -eq 6 ] || { echo "usage: phase-driver.sh --repair-session <id> <task-file> <branch> <base> <nonce>" >&2; exit 2; }
-    run_repair_session "$2" "$3" "$4" "$5" "$6"
-    ;;
   --resume)
     shift
     [ "$#" -le 1 ] || { echo "usage: phase-driver.sh --resume [NUMBER]" >&2; exit 2; }

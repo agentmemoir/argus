@@ -101,11 +101,6 @@ _drive() {
   if tmux_busy; then
     claim_renew
     check_stall
-    # A repair session runs in the phase window, so it is alive exactly while
-    # this branch is taken and no other tick state moves. Name one that outlived
-    # its wall time here: the call reports only, and it may not change what this
-    # tick selects or whether it ends.
-    repair_stale || true
     log "${work_kind:-phase} window is running; skip"
     return 0
   fi
@@ -159,20 +154,12 @@ _drive() {
   local out rc=0 number rel reservation_id="" reservation_generation=""
   local selection selection_rc=0 selection_state unknown_state
 
-  # A cleared marker with a record beside it is a resume, and it wins over a due
-  # repair: the operator cleared the halt on purpose, and a repair can wait one
-  # tick. `_drive_resume` does the whole resume, including the launch.
+  # A cleared marker with a record beside it is a resume. `_drive_resume` does
+  # the whole resume, including the launch.
   if [ ! -f "$HALT" ] && [ -f "$HALT_RECORD" ]; then
     RESUME_FROM_TICK=1
     _drive_resume
     return $?
-  fi
-
-  # A pull request this machine published whose checks finished red gets one
-  # repair run before any new work, and one whose checks are still running holds
-  # the tick. Nothing has been claimed yet, so ending here costs nothing.
-  if repair_due; then
-    return 0
   fi
 
   # Everything that can refuse a launch because of how this machine is

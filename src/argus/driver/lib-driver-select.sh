@@ -242,10 +242,6 @@ confirm_pending_reviews() {
         if [ "$MERGE_CHECK_HEALTH" = "UNAVAILABLE (gh could not be asked)" ]; then
           log_changed degraded "  the squash-merge check is DEGRADED: a squash-merged phase will keep waiting until gh works again"
         fi
-        # Still waiting for its pull request to merge: the one moment the group's
-        # fix pull requests and its ready transition are due.
-        gate_group_pull_request "$phase" "$pr"
-        watch_signals_pull_request "$phase"
         ;;
     esac
     rc=0
