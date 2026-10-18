@@ -150,8 +150,8 @@ def _group_publication_check(base: Path) -> tuple[bool, str]:
             return False, f"the first member claimed to be the group's last: {first}"
         if first.get("group_pending") != ["100030"]:
             return False, f"the first member did not name the member to come: {first}"
-        if first.get("group_gate", {}).get("state") != "WAITING":
-            return False, f"the first member did not wait for the group: {first}"
+        # The publish step no longer runs the group gate, so `group_gate` is
+        # absent; `group_pending` above is what says the group is not finished.
         # No pull request is passed for the second member. One branch can carry
         # one pull request, so the group's own record is the only answer, and the
         # member that finishes the group marks it ready once the checks pass. gh
