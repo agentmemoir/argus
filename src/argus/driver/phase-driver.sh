@@ -149,7 +149,7 @@ NOTIFIER="$ARGUS/notify/notifications.py"
 for helper in \
   phase-tmux.sh lib-stat.sh \
   lib-driver-config.sh lib-driver-log.sh lib-driver-notify.sh \
-  lib-driver-run.sh lib-driver-select.sh lib-driver-check.sh \
+  lib-driver-run.sh lib-driver-job.sh lib-driver-select.sh lib-driver-check.sh \
   lib-driver-drive.sh lib-driver-dryrun.sh lib-driver-select-flow.sh lib-driver-repair.sh \
   lib-driver-select-stub.sh lib-driver-select-real.sh lib-driver-maintenance.sh lib-driver-launch.sh \
   lib-driver-halt-record.sh lib-driver-ledger.sh lib-driver-fence.sh \
@@ -182,6 +182,8 @@ done
 # Run state: sessions, stall checks, escalation, and the phase run directory.
 # shellcheck disable=SC1091
 . "$ARGUS_DIR/lib-driver-run.sh"
+# One job: retry a failed run, and record a failure that outlasts the retries.
+. "$ARGUS_DIR/lib-driver-job.sh"
 # The estimate factor update a finished phase makes.
 . "$ARGUS_DIR/lib-driver-estimate.sh"
 # The work selector, reservation results, and the merge check.

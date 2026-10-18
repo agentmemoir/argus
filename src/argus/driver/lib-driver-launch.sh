@@ -16,6 +16,10 @@ _drive_launch() {
   [ -z "${DRIVER_STUB_SLEEP:-}" ] || envs="$envs DRIVER_STUB_SLEEP='$DRIVER_STUB_SLEEP'"
   [ -z "${DRIVER_STUB_WAIT_FILE:-}" ] || envs="$envs DRIVER_STUB_WAIT_FILE='$DRIVER_STUB_WAIT_FILE'"
   [ -z "${DRIVER_STUB_READY_FILE:-}" ] || envs="$envs DRIVER_STUB_READY_FILE='$DRIVER_STUB_READY_FILE'"
+  # The child retries a failed job; it reads the count from its own environment,
+  # and a pane takes the tmux server's environment rather than this shell's, so
+  # the value travels with the launch like the stub hooks do.
+  [ -z "${ARGUS_JOB_RETRIES:-}" ] || envs="$envs ARGUS_JOB_RETRIES='$ARGUS_JOB_RETRIES'"
   [ -z "$reservation_id" ] || envs="$envs CLIO_RESERVATION_ID='$reservation_id'"
   [ -z "$reservation_generation" ] || envs="$envs CLIO_RESERVATION_GENERATION='$reservation_generation'"
   # A resume tells the child not to archive the run it is continuing; the child

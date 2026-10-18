@@ -20,7 +20,7 @@ from typing import Any, cast
 
 from argus import conventions
 from argus.conventions import phase_run_dir
-from argus.phases.runstate import run_abandoned, run_unfinished
+from argus.phases.runstate import run_abandoned, run_failed, run_unfinished
 from argus.select.policy import is_runnable_phase
 from argus.select.work_source import WorkSourceError
 
@@ -129,12 +129,13 @@ def needs_decision(repo: str | Path, number: int) -> str | None:
 
     Returns:
         The terminal run state when it is one the selector must not offer,
-        ``"abandoned"`` when a person has parked the phase, otherwise ``None``.
+        ``"abandoned"`` or ``"failed"`` for a residue, otherwise ``None``.
     """
-    # The residue is checked first: it is the operator's own action, and it must
-    # not be hidden by a run state the selector would otherwise offer.
-    if run_abandoned(repo, number):
-        return "abandoned"
+    # The residue is checked first: the operator's own action, or a failed job,
+    # must not be hidden by a run state the selector would otherwise offer.
+    for check, value in ((run_abandoned, "abandoned"), (run_failed, "failed")):
+        if check(repo, number):
+            return value
     rj = run_dir(repo, number) / "run.json"
     try:
         state = json.loads(rj.read_text())
