@@ -201,11 +201,33 @@ handle_escalation() {
 }
 
 run_session() {
-  local number="$1" rel="$2" rc=0 state started_at estimate_run=""
+  local number="$1" rel="$2" rc=0 state started_at estimate_run="" halt_reason=""
+  local state_source="rc"
   started_at="$(date +%s)"
   CUR_PHASE="$number"
   CUR_PHASE_FILE="$rel"
   mkdir -p "$RUN_DIR"
+  # The session log is opened for append and grows across launches. Record its
+  # length here, before glide can write anything, so a halt reads only what this
+  # launch added and can never adopt an earlier run's payload. The size is read
+  # through Python because `stat` and `wc` are not commands the installed-command
+  # test provides. A log that does not exist yet cannot hold an earlier payload,
+  # so its length is genuinely 0. Any other failed read leaves the offset EMPTY,
+  # which is not zero: zero is a valid offset meaning "read the whole file", so
+  # it would adopt an earlier launch's payload. An empty offset proves nothing
+  # and the halt answers `unknown` from `rc`, exactly as it does for an unset or
+  # non-numeric offset.
+  local session_log="$RUN_DIR/session-$number.log" session_log_offset=""
+  session_log_offset="$("$PYTHON" -c 'import os,sys
+try:
+    print(os.path.getsize(sys.argv[1]))
+except FileNotFoundError:
+    print(0)
+except OSError:
+    raise SystemExit(1)' "$session_log" 2>/dev/null || true)"
+  case "$session_log_offset" in
+    ''|*[!0-9]*) session_log_offset="" ;;
+  esac
   trap 'on_stop 129' HUP
   trap 'on_stop 130' INT
   trap 'on_stop 143' TERM
@@ -328,17 +350,35 @@ run_session() {
     3)   : ;;
     130) tmux_set_title "HALTED ${work_kind:-phase} $number (interrupted)"
          notify_phase "$rel" interrupted "the process received an interrupt signal" ;;
-    *)   printf '%s %s rc=%s state=%s at %s\n' \
-           "${work_kind:-phase}" "$number" "$rc" "${state:-unknown}" "$(ts)" >"$HALT"
+    *)   # glide can exit before writing run.json, as a configuration error
+          # does. Only when there is genuinely no run result may the session log
+          # stand in for it. A run.json that exists but does not parse is a
+          # damaged result, not a missing one: `phase_state` returns empty for
+          # both, so the file is tested here by name. A damaged result keeps the
+          # empty state, the `unknown` marker, and the resume gate's refusal.
+          local run_dir
+          run_dir="$(phase_run_dir "$number" "$rel")"
+          if [ ! -f "$run_dir/run.json" ]; then
+            halt_state_from_session "$session_log" "$session_log_offset"
+            if [ -n "$HALT_LOG_STATE" ]; then
+              state="$HALT_LOG_STATE"
+              halt_reason="$HALT_LOG_REASON"
+              state_source="session-log"
+            fi
+          fi
+          printf '%s %s rc=%s state=%s at %s\n' \
+            "${work_kind:-phase}" "$number" "$rc" "${state:-unknown}" "$(ts)" >"$HALT"
           # The record is written beside the marker, and only here: an operator
           # stop or a signal leaves a run the board claim recovers, and a record
           # would make the resume gate refuse it.
           # The record keeps the raw state, which may be empty: the resume gate
           # tells an absent run.json (the interrupted class) from a present but
           # damaged one, and an `unknown` placeholder would hide that difference.
-          halt_record_write "$number" "$rel" "$(phase_run_dir "$number" "$rel")" \
-            "$state" "$rc" rc
-          log "halt-start: phase $number rc=$rc state=${state:-unknown} source=rc; marker written"
+          # A state read from the session log stands in for the missing run.json,
+          # because it is what glide recorded the run ended as.
+          halt_record_write "$number" "$rel" "$run_dir" \
+            "$state" "$rc" "$state_source" "$halt_reason"
+          log "halt-start: phase $number rc=$rc state=${state:-unknown} source=$state_source; marker written"
           # The title is set before the window closes, so the halt survives the
           # phase window going away and the idle display taking over.
           tmux_set_title "HALTED ${work_kind:-phase} $number (rc=$rc)"
