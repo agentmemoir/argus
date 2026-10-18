@@ -127,6 +127,40 @@ def test_payload_from_an_earlier_launch_keeps_unknown(tmp_path: Path) -> None:
     assert halt_state(tmp_path)["state"] == ""
 
 
+def test_failed_size_read_does_not_adopt_an_earlier_payload(tmp_path: Path) -> None:
+    (tmp_path / "run").mkdir()
+    (tmp_path / "run/session-100010.log").write_text(SESSION_LOG, encoding="utf-8")
+    # The size read runs through PYTHON, so a wrapper that fails only that -c
+    # script models a stat that cannot be read while the helper still works.
+    wrapper = tmp_path / "fake-python"
+    wrapper.write_text(
+        "#!/usr/bin/env bash\n"
+        'if [ "$1" = "-c" ]; then\n'
+        '  case "$2" in\n'
+        "    *getsize*) exit 1 ;;\n"
+        "  esac\n"
+        "fi\n"
+        'exec "$TEST_PYTHON" "$@"\n',
+        encoding="utf-8",
+    )
+    wrapper.chmod(0o755)
+    run_with_payload(tmp_path, None, setup='PYTHON="$TEST_ROOT/fake-python"\n')
+    marker = (tmp_path / "run/halted").read_text(encoding="utf-8")
+    events = (tmp_path / "run/events").read_text(encoding="utf-8")
+    record = halt_state(tmp_path)
+    assert "state=unknown" in marker
+    assert "state=unknown source=rc" in events
+    assert record["state"] == ""
+    assert record["source"] == "rc"
+    gate = shell(
+        tmp_path,
+        'rc=0; reason="$(resume_gate_reason "" "$RUN_DIR")" || rc=$?\n'
+        'printf "%s\\nrc=%s\\n" "$reason" "$rc"\n',
+    )
+    assert "no resume.json" in gate
+    assert gate.rstrip().endswith("rc=1")
+
+
 def test_damaged_run_json_is_not_read_from_the_session_log(tmp_path: Path) -> None:
     (tmp_path / "run").mkdir()
     (tmp_path / "run/run.json").write_text('{"state": ', encoding="utf-8")

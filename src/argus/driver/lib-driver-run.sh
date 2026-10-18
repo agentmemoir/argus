@@ -211,16 +211,22 @@ run_session() {
   # length here, before glide can write anything, so a halt reads only what this
   # launch added and can never adopt an earlier run's payload. The size is read
   # through Python because `stat` and `wc` are not commands the installed-command
-  # test provides; a read that fails falls back to 0, which the halt then treats
-  # as proof of nothing and answers `unknown`.
-  local session_log="$RUN_DIR/session-$number.log" session_log_offset=0
+  # test provides. A log that does not exist yet cannot hold an earlier payload,
+  # so its length is genuinely 0. Any other failed read leaves the offset EMPTY,
+  # which is not zero: zero is a valid offset meaning "read the whole file", so
+  # it would adopt an earlier launch's payload. An empty offset proves nothing
+  # and the halt answers `unknown` from `rc`, exactly as it does for an unset or
+  # non-numeric offset.
+  local session_log="$RUN_DIR/session-$number.log" session_log_offset=""
   session_log_offset="$("$PYTHON" -c 'import os,sys
 try:
     print(os.path.getsize(sys.argv[1]))
+except FileNotFoundError:
+    print(0)
 except OSError:
-    print(0)' "$session_log" 2>/dev/null || true)"
+    raise SystemExit(1)' "$session_log" 2>/dev/null || true)"
   case "$session_log_offset" in
-    ''|*[!0-9]*) session_log_offset=0 ;;
+    ''|*[!0-9]*) session_log_offset="" ;;
   esac
   trap 'on_stop 129' HUP
   trap 'on_stop 130' INT
