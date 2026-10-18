@@ -39,6 +39,30 @@ RESUME_STAGE=""
 # Set when a refusal must not notify again, because the caller already did.
 RESUME_REFUSE_QUIET=0
 
+# Set by halt_state_from_session, so `set -u` holds on the paths that never
+# read a session log.
+HALT_LOG_STATE=""
+HALT_LOG_REASON=""
+
+# The state and error glide left at the end of a session log, when it exited
+# before writing run.json. Both stay empty when the log or the payload is
+# unusable, so the caller keeps its own answer. The reason is one line and
+# capped, because it reaches the halt record and the driver log.
+halt_state_from_session() {   # <file>
+  HALT_LOG_STATE=""
+  HALT_LOG_REASON=""
+  # No `dirname`: the installed-command test runs the driver with a PATH that
+  # holds only the commands the configuration declares, and `dirname` is not one.
+  local helper="${BASH_SOURCE[0]%/*}"
+  [ "$helper" != "${BASH_SOURCE[0]}" ] || helper="."
+  helper="$helper/session_state.py"
+  HALT_LOG_STATE="$("$PYTHON" "$helper" "$1" state 2>/dev/null || true)"
+  [ -n "$HALT_LOG_STATE" ] || return 0
+  HALT_LOG_STATE="$(cap_length "$(flatten_one_line "$HALT_LOG_STATE")" 500)"
+  HALT_LOG_REASON="$("$PYTHON" "$helper" "$1" error 2>/dev/null || true)"
+  HALT_LOG_REASON="$(cap_length "$(flatten_one_line "$HALT_LOG_REASON")" 500)"
+}
+
 # Write the halt record beside the marker.
 #
 # The record is a single slot: a later halt overwrites it, last halt wins. It is

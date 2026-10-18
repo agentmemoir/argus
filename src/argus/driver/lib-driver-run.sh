@@ -201,7 +201,7 @@ handle_escalation() {
 }
 
 run_session() {
-  local number="$1" rel="$2" rc=0 state started_at estimate_run=""
+  local number="$1" rel="$2" rc=0 state started_at estimate_run="" halt_reason=""
   started_at="$(date +%s)"
   CUR_PHASE="$number"
   CUR_PHASE_FILE="$rel"
@@ -328,16 +328,26 @@ run_session() {
     3)   : ;;
     130) tmux_set_title "HALTED ${work_kind:-phase} $number (interrupted)"
          notify_phase "$rel" interrupted "the process received an interrupt signal" ;;
-    *)   printf '%s %s rc=%s state=%s at %s\n' \
-           "${work_kind:-phase}" "$number" "$rc" "${state:-unknown}" "$(ts)" >"$HALT"
+    *)   # glide can exit before writing run.json, as a configuration error
+          # does. The state and reason it left in the session log stand in for
+          # it, and an empty state keeps today's `unknown` answer.
+          if [ -z "$state" ]; then
+            halt_state_from_session "$RUN_DIR/session-$number.log"
+            state="$HALT_LOG_STATE"
+            halt_reason="$HALT_LOG_REASON"
+          fi
+          printf '%s %s rc=%s state=%s at %s\n' \
+            "${work_kind:-phase}" "$number" "$rc" "${state:-unknown}" "$(ts)" >"$HALT"
           # The record is written beside the marker, and only here: an operator
           # stop or a signal leaves a run the board claim recovers, and a record
           # would make the resume gate refuse it.
           # The record keeps the raw state, which may be empty: the resume gate
           # tells an absent run.json (the interrupted class) from a present but
           # damaged one, and an `unknown` placeholder would hide that difference.
+          # A state read from the session log stands in for the missing run.json,
+          # because it is what glide recorded the run ended as.
           halt_record_write "$number" "$rel" "$(phase_run_dir "$number" "$rel")" \
-            "$state" "$rc" rc
+            "$state" "$rc" rc "$halt_reason"
           log "halt-start: phase $number rc=$rc state=${state:-unknown} source=rc; marker written"
           # The title is set before the window closes, so the halt survives the
           # phase window going away and the idle display taking over.
