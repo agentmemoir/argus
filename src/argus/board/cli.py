@@ -3,6 +3,8 @@
 """The command line: arguments, dispatch, and the JSON result."""
 
 import argparse
+from collections.abc import Sequence
+from typing import Any
 
 from argus import conventions
 from argus.board.core import (
@@ -45,6 +47,30 @@ def _add_reservation_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--machine-id", required=True)
     parser.add_argument("--reservation-id", required=True)
     parser.add_argument("--generation", required=True, type=int)
+
+
+def _narrow_state(
+    state: dict[str, Any],
+    *,
+    reservation_ids: Sequence[str] | None = None,
+    machine_id: str | None = None,
+) -> dict[str, Any]:
+    """Return the board view already read, narrowed to the asked-for records.
+
+    The filters narrow what one read returned; they never start another read,
+    so the output keeps the board's shape. An id the board does not hold is
+    simply absent from the narrowed view, not an error.
+    """
+    if reservation_ids is None and machine_id is None:
+        return state
+    wanted = None if reservation_ids is None else set(reservation_ids)
+    phases = {
+        key: record
+        for key, record in state["phases"].items()
+        if (wanted is None or record.get("reservation_id") in wanted)
+        and (machine_id is None or record.get("machine_id") == machine_id)
+    }
+    return {**state, "phases": phases}
 
 
 def _add_token_args(parser: argparse.ArgumentParser) -> None:
@@ -132,6 +158,13 @@ def main(argv: list[str] | None = None) -> int:
 
     show = sub.add_parser("show", help="fetch and print the coordination state")
     _add_store_args(show)
+    show.add_argument(
+        "--reservation-id",
+        dest="reservation_id",
+        action="append",
+        help="show only this reservation; repeat for more than one",
+    )
+    show.add_argument("--machine-id", help="show only records this machine holds")
     sub.add_parser("self-test", help="run hermetic two-client checks")
     parser.add_argument(
         "--self-test",
@@ -243,6 +276,12 @@ def main(argv: list[str] | None = None) -> int:
             result = store.expire_stale()
         else:
             result, _commit = store.read()
+        if args.command == "show":
+            result = _narrow_state(
+                result,
+                reservation_ids=args.reservation_id,
+                machine_id=args.machine_id,
+            )
         _print_json(
             {"state": "OK", "reservation": result}
             if args.command not in {"show"}
