@@ -173,7 +173,7 @@ def main(argv: list[str] | None = None) -> int:
         "--reservation-id",
         dest="reservation_id",
         action="append",
-        help="show only this reservation's phase record; repeat for more than one",
+        help="show only this reservation's phase record; repeat for more than one; the publication lock is not narrowed by this flag",
     )
     show.add_argument(
         "--machine-id",
