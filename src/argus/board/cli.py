@@ -59,10 +59,11 @@ def _narrow_state(
 
     ``--reservation-id`` narrows the phase records only. ``--machine-id``
     narrows every record that names a machine, so a live publication lock
-    held by another machine goes too. The filters narrow what one read
-    returned; they never start another read, so the output keeps the board's
-    shape. An id the board does not hold is simply absent from the narrowed
-    view, not an error.
+    held by another machine goes too and the ``publication`` key is dropped.
+    The filters narrow what one read returned; they never start another read,
+    so the output keeps the board's shape except for that dropped key. An id
+    the board does not hold is simply absent from the narrowed view, not an
+    error.
     """
     if reservation_ids is None and machine_id is None:
         return state
