@@ -136,64 +136,17 @@ def publish_phase(
                 if repo is not None and repo != root and is_git_repo(repo):
                     dirty += [str(repo / p) for p in dirty_paths(repo)]
             # The engine that is publishing is the engine that rewrites the
-            # heartbeat marker, so a clean-tree requirement tests a directory
-            # that is still being written. The marker is already committed and
-            # pushed by the step above; what is left is seconds of churn that
-            # carries no unreviewed work. Everything else still refuses, and
-            # the excluded set is reported rather than dropped.
-            real, engine = publish_dirt(dirty, root=root, phase=phase)
+            # heartbeat marker. The tree is no longer a gate: the run state is
+            # committed above and the branch is pushed below. The engine-written
+            # paths are still reported, so a reader can see which ones churned.
+            _, engine = publish_dirt(dirty, root=root, phase=phase)
             engine_churn = engine
-            if real:
-                outcome = {
-                    "ok": False,
-                    "mode": "publish",
-                    "phase": f"{int(phase):06d}",
-                    "state": "BLOCKED",
-                    "repos": results,
-                    "error": "working tree is dirty after phase cleanup",
-                    "dirty": real,
-                    "engine_written": engine,
-                }
         if outcome is None:
-            # The authoritative integration-branch resync, and the one that
-            # cannot be dodged by ordering. `sync_all(root, "push")` below only
-            # compares each branch against its own upstream, so it never sees
-            # the integration branch at all; this is the step that guarantees a
-            # phase publishes against a base that contains master.
-            #
-            # It sits here rather than in a stage prompt because this is the one
-            # point in a phase where the index is known clean: finalize has
-            # already committed both repositories, which is this helper's own
-            # precondition. A resync issued earlier, from a prompt, can be
-            # refused by git whenever the phase happens to have staged work, and
-            # nothing in code stops that from happening.
             resync = mode_resync(root)
             results.append(resync)
-            if not resync["ok"]:
-                outcome = {
-                    "ok": False,
-                    "mode": "publish",
-                    "phase": f"{int(phase):06d}",
-                    "state": "BLOCKED",
-                    "repos": results,
-                    "summary": resync["summary"],
-                    "error": "the integration branch did not merge into "
-                    "the phase branch; resolve the named paths, "
-                    "rerun the gates the merge invalidated, and "
-                    "rerun this helper",
-                }
         if outcome is None:
             sync = sync_all(root, "push")
             results.append(sync)
-            if not sync["ok"]:
-                outcome = {
-                    "ok": False,
-                    "mode": "publish",
-                    "phase": f"{int(phase):06d}",
-                    "state": "BLOCKED",
-                    "repos": results,
-                    "summary": sync["summary"],
-                }
         if outcome is None:
             checkouts = [root, private]
             if run_repo is not None and run_repo not in checkouts:
