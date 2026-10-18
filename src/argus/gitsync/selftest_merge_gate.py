@@ -166,8 +166,7 @@ def _merge_gate_checks(base: Path) -> list[tuple[str, object, str]]:
                 and res2.get("action") == "marked-published"
                 and cast("dict[str, Any]", phase_receipt(pub, 100446)).get("state")
                 == "published",
-                f"action={res2.get('action')} "
-                f"receipt={phase_receipt(pub, 100446)}",
+                f"action={res2.get('action')} receipt={phase_receipt(pub, 100446)}",
             )
         )
 
@@ -189,8 +188,7 @@ def _merge_gate_checks(base: Path) -> list[tuple[str, object, str]]:
                 and res3["action"] == "already-published"
                 and published.get("state") == "published"
                 and awaiting_review(pub, 100446) is None,
-                f"action={res3.get('action')} "
-                f"state={published.get('state')}",
+                f"action={res3.get('action')} state={published.get('state')}",
             )
         )
 
