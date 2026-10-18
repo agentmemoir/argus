@@ -11,6 +11,7 @@ import pytest
 
 from argus import conventions
 from argus.board.cli import main
+from argus.board.git import _git
 from argus.board.selftest_fixture import _git_test_repo
 from argus.board.store import ReservationStore
 
@@ -295,3 +296,40 @@ def test_show_refuses_a_blank_reservation_id_before_it_reads_the_board(
     printed = json.loads(capsys.readouterr().out)
     assert printed["error"] == "--reservation-id must not be empty"
     assert _show(capsys) == whole
+
+
+@pytest.mark.usefixtures("live_lock")
+def test_show_refuses_a_blank_machine_id_before_it_reads_the_board(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A newline and a tab are blank too, and the refusal writes nothing.
+
+    The refusal names the flag, never the supplied text, so the value cannot
+    reach the printed view. Reading the whole board after it proves the error
+    path left the board as it was.
+    """
+    whole = _show(capsys)
+    assert main(["show", "--machine-id", " \n\t "]) == 2
+    printed = json.loads(capsys.readouterr().out)
+    assert printed["error"] == "--machine-id must not be empty"
+    assert _show(capsys) == whole
+
+
+@pytest.mark.usefixtures("show_board")
+def test_show_reports_a_failed_board_read_instead_of_an_empty_board(
+    show_store: ReservationStore,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A read that fails is an error, never a board that looks empty.
+
+    The healthy read holds three phases. Once the board branch is gone the same
+    command has to report ``COORDINATION_UNAVAILABLE`` with exit 2 and no phase
+    map, so a broken read cannot be mistaken for a machine holding nothing.
+    """
+    whole = _show(capsys)
+    assert sorted(whole["phases"]) == ["100001", "100002", "100003"]
+    _git(show_store.private, "push", show_store.remote, "--delete", show_store.branch)
+    assert main(["show"]) == 2
+    printed = json.loads(capsys.readouterr().out)
+    assert printed["state"] == "COORDINATION_UNAVAILABLE"
+    assert "phases" not in printed
