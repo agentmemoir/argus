@@ -85,6 +85,17 @@ def mark_phase_published(
             action="already-published",
             hint="this phase is already recorded as published",
         )
+    if not receipt.get("public_head") and not receipt.get("missing_heads"):
+        # A receipt with no pushed head and no recorded missing head is not a
+        # publish receipt: `_write_publication_receipt` always records one or the
+        # other. Leave it for a later tick; there is nothing to mark.
+        return dict(
+            info,
+            ok=False,
+            action="no-publish-evidence",
+            blockers=["the receipt records no pushed head; nothing to mark"],
+            hint="the phase keeps waiting until its publish records a head",
+        )
     path = phase_run_dir(root, int(phase)) / "publication.json"
     data = dict(receipt)
     data["state"] = "published"
