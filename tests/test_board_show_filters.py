@@ -175,3 +175,21 @@ def test_show_reservation_filter_leaves_the_publication_lock_alone(
     state = _show(capsys, "--reservation-id", show_board["b1"]["reservation_id"])
     assert sorted(state["phases"]) == ["100003"]
     assert state["publication"]["machine_id"] == "machine-a"
+
+
+@pytest.mark.usefixtures("show_store")
+@pytest.mark.parametrize(
+    ("flag", "value"),
+    [
+        ("--machine-id", ""),
+        ("--machine-id", "   "),
+        ("--reservation-id", ""),
+        ("--reservation-id", "   "),
+    ],
+)
+def test_show_rejects_an_empty_identifier(
+    capsys: pytest.CaptureFixture[str], flag: str, value: str
+) -> None:
+    assert main(["show", flag, value]) == 2
+    printed = json.loads(capsys.readouterr().out)
+    assert printed["error"] == f"{flag} must not be empty"

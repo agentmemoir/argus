@@ -4,7 +4,7 @@
 
 import argparse
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, cast
 
 from argus import conventions
 from argus.board.core import (
@@ -291,10 +291,17 @@ def main(argv: list[str] | None = None) -> int:
         else:
             result, _commit = store.read()
         if args.command == "show":
+            machine_id = cast("str | None", args.machine_id)
+            reservation_ids = cast("list[str] | None", args.reservation_id)
+            if machine_id is not None and not machine_id.strip():
+                raise CoordinationError("--machine-id must not be empty")
+            for asked in reservation_ids or []:
+                if not asked.strip():
+                    raise CoordinationError("--reservation-id must not be empty")
             result = _narrow_state(
                 result,
-                reservation_ids=args.reservation_id,
-                machine_id=args.machine_id,
+                reservation_ids=reservation_ids,
+                machine_id=machine_id,
             )
         _print_json(
             {"state": "OK", "reservation": result}
