@@ -12,7 +12,6 @@ from pathlib import Path
 from entrypoint_fixture import (
     CONFIG_ENV_NAMES,
     checkout,
-    normalized,
     require,
     run,
     write_config,
@@ -265,11 +264,14 @@ sys.exit(2)
         selections.append(selection)
     require(selections[0] == selections[1], "entrypoint selection differs", selections)
 
-    observations: list[tuple[str, list[str]]] = []
+    residue_file = board / "artifacts/item-100010/failed.json"
+    observations: list[dict[str, object]] = []
     for command in commands:
         state = runs / "state"
         if state.exists():
             shutil.rmtree(state)
+        # Each session leaves its own record; drop the previous one first.
+        residue_file.unlink(missing_ok=True)
         result = run(
             [
                 *command,
@@ -282,15 +284,21 @@ sys.exit(2)
             base,
             env,
         )
-        require(result.returncode == 2, "entrypoint session changed", result.stderr)
-        halt = state / "halted"
-        require(halt.is_file(), "entrypoint halt marker differs", result.stderr)
-        marker = halt.read_text().split(" at ", 1)[0]
-        require("rc=2 state=blocked" in marker, "pipeline run path was ignored", marker)
-        log = normalized((state / "driver.log").read_text())
-        messages = log.split("notify (disabled): ")[1:]
-        require(len(messages) == 2, "entrypoint notification changed", log)
-        observations.append((marker, messages))
+        # Slice 1 retries a failed job, records the failure, and continues: the
+        # session exits 0 and writes no halt marker.
+        require(result.returncode == 0, "entrypoint session changed", result.stderr)
+        require(residue_file.is_file(), "entrypoint session changed", result.stderr)
+        residue = json.loads(residue_file.read_text())
+        require(
+            residue.get("phase") == "100010"
+            and residue.get("state") == "blocked"
+            and residue.get("rc") == 2,
+            "the failed job was not recorded",
+            residue,
+        )
+        # The wall-clock stamp differs between runs; compare the rest.
+        residue.pop("failed_at", None)
+        observations.append(residue)
         inputs = json.loads(Path(env["GLIDE_CAPTURE"]).read_text())
         require(
             "ticket=100010" in inputs
@@ -300,7 +308,7 @@ sys.exit(2)
         )
     require(
         observations[0] == observations[1],
-        "entrypoint halt or notification differs",
+        "entrypoint failure record differs",
         observations,
     )
 
@@ -309,11 +317,6 @@ sys.exit(2)
     renamed = item.with_name("work-100010-first.md")
     item.rename(renamed)
     shutil.rmtree(board / "artifacts")
-    # Both halt files: the marker and the record beside it. A tick resumes the
-    # phase the record names, so clearing only the marker no longer leaves a
-    # clean state for the dry run below.
-    (runs / "state/halted").unlink()
-    (runs / "state/halted.json").unlink(missing_ok=True)
     result = run(
         ["argus", "--config", str(config), "--phase-glob", "work-*.md", "--dry-run"],
         base,
