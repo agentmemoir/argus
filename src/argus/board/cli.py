@@ -3,6 +3,8 @@
 """The command line: arguments, dispatch, and the JSON result."""
 
 import argparse
+from collections.abc import Sequence
+from typing import Any, cast
 
 from argus import conventions
 from argus.board.core import (
@@ -45,6 +47,59 @@ def _add_reservation_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--machine-id", required=True)
     parser.add_argument("--reservation-id", required=True)
     parser.add_argument("--generation", required=True, type=int)
+
+
+def _show_filters(args: argparse.Namespace) -> tuple[str | None, list[str] | None]:
+    """Return the stripped show filters, refusing an empty one before the read."""
+    machine_id = cast("str | None", args.machine_id)
+    reservation_ids = cast("list[str] | None", args.reservation_id)
+    if machine_id is not None and not machine_id.strip():
+        raise CoordinationError("--machine-id must not be empty")
+    for asked in reservation_ids or []:
+        if not asked.strip():
+            raise CoordinationError("--reservation-id must not be empty")
+    stripped = (
+        None
+        if reservation_ids is None
+        else [asked.strip() for asked in reservation_ids]
+    )
+    return (None if machine_id is None else machine_id.strip(), stripped)
+
+
+def _narrow_state(
+    state: dict[str, Any],
+    *,
+    reservation_ids: Sequence[str] | None = None,
+    machine_id: str | None = None,
+) -> dict[str, Any]:
+    """Return the board view already read, narrowed to the asked-for records.
+
+    ``--reservation-id`` narrows the phase records only. ``--machine-id``
+    narrows every record that names a machine, so a live publication lock
+    held by another machine goes too and the ``publication`` key is dropped.
+    The filters narrow what one read returned; they never start another read,
+    so the output keeps the board's shape except for that dropped key. An id
+    the board does not hold is simply absent from the narrowed view, not an
+    error.
+    """
+    if reservation_ids is None and machine_id is None:
+        return state
+    wanted = None if reservation_ids is None else set(reservation_ids)
+    phases = {
+        key: record
+        for key, record in state["phases"].items()
+        if (wanted is None or record.get("reservation_id") in wanted)
+        and (machine_id is None or record.get("machine_id") == machine_id)
+    }
+    narrowed = {**state, "phases": phases}
+    lock = state.get("publication")
+    if (
+        machine_id is not None
+        and lock is not None
+        and lock.get("machine_id") != machine_id
+    ):
+        del narrowed["publication"]
+    return narrowed
 
 
 def _add_token_args(parser: argparse.ArgumentParser) -> None:
@@ -132,6 +187,16 @@ def main(argv: list[str] | None = None) -> int:
 
     show = sub.add_parser("show", help="fetch and print the coordination state")
     _add_store_args(show)
+    show.add_argument(
+        "--reservation-id",
+        dest="reservation_id",
+        action="append",
+        help="show only this reservation's phase record; repeat for more than one; the publication lock is not narrowed by this flag",
+    )
+    show.add_argument(
+        "--machine-id",
+        help="show only the phase records and publication lock this machine holds",
+    )
     sub.add_parser("self-test", help="run hermetic two-client checks")
     parser.add_argument(
         "--self-test",
@@ -148,6 +213,10 @@ def main(argv: list[str] | None = None) -> int:
     try:
         conventions.configure_from_args(args)
         store = _cli_store(args)
+        machine_id: str | None = None
+        reservation_ids: list[str] | None = None
+        if args.command == "show":
+            machine_id, reservation_ids = _show_filters(args)
         if args.command == "reserve":
             result = store.reserve(
                 args.phase, args.machine_id, run_id=args.run_id, status=args.status
@@ -243,6 +312,10 @@ def main(argv: list[str] | None = None) -> int:
             result = store.expire_stale()
         else:
             result, _commit = store.read()
+        if args.command == "show":
+            result = _narrow_state(
+                result, reservation_ids=reservation_ids, machine_id=machine_id
+            )
         _print_json(
             {"state": "OK", "reservation": result}
             if args.command not in {"show"}
