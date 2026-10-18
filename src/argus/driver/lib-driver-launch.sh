@@ -11,7 +11,6 @@ _drive_launch() {
   # driver loads the same configuration file, named on its own command line.
   envs="$envs CLIO_TMUX_SESSION='$SESSION' CLIO_PHASE_NUMBER='$number'"
   [ -z "${DISABLE_NOTIFY:-}" ] || envs="$envs DISABLE_NOTIFY='$DISABLE_NOTIFY'"
-  [ -z "${DISABLE_DISCORD:-}" ] || envs="$envs DISABLE_DISCORD='$DISABLE_DISCORD'"
   [ -z "${DRIVER_STUB_RC:-}" ] || envs="$envs DRIVER_STUB_RC='$DRIVER_STUB_RC'"
   [ -z "${DRIVER_STUB_SLEEP:-}" ] || envs="$envs DRIVER_STUB_SLEEP='$DRIVER_STUB_SLEEP'"
   [ -z "${DRIVER_STUB_WAIT_FILE:-}" ] || envs="$envs DRIVER_STUB_WAIT_FILE='$DRIVER_STUB_WAIT_FILE'"

@@ -198,17 +198,11 @@ def main(argv: list[str] | None = None) -> int:
         help="show only the phase records and publication lock this machine holds",
     )
     sub.add_parser("self-test", help="run hermetic two-client checks")
-    parser.add_argument(
-        "--self-test",
-        dest="legacy_self_test",
-        action="store_true",
-        help=argparse.SUPPRESS,
-    )
 
     args = parser.parse_args(argv)
-    if not args.command and not args.legacy_self_test:
+    if not args.command:
         parser.error("a command is required")
-    if args.legacy_self_test or args.command == "self-test":
+    if args.command == "self-test":
         return self_test()
     try:
         conventions.configure_from_args(args)

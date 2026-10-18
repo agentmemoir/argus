@@ -101,7 +101,7 @@ PROBE
   # Once per outage, not once per tick, and once again after the line recovers.
   # The marker directory is the compare-and-swap and the re-arm is what clears
   # it, so this counts the notification the stubbed notifier logged rather than
-  # sending anything: DISABLE_NOTIFY and DISABLE_DISCORD are set for the whole of
+  # sending anything: DISABLE_NOTIFY is set for the whole of
   # this function, which is how every other case here keeps the channel quiet.
   outage_pattern='notify (disabled): The coordination board cannot be reached'
   # The marker is cleared again first, because the tick above left one and this

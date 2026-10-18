@@ -89,7 +89,7 @@ notify() {
     log "notify (disabled): $msg"
     return 0
   fi
-  if [ -n "${DISABLE_NOTIFY:-}" ] || [ -n "${DISABLE_DISCORD:-}" ]; then
+  if [ -n "${DISABLE_NOTIFY:-}" ]; then
     log "notify (disabled): $msg"
     return 0
   fi

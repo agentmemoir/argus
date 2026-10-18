@@ -64,7 +64,6 @@
 #
 # Local test hooks (never set these in cron):
 #   DISABLE_NOTIFY=1      log notifications instead of sending them
-#   DISABLE_DISCORD=1     alias for disabling Discord sends (same effect today)
 #   DRIVER_STUB_RC=<n>    skip glide; pretend it exited with rc <n>
 #   DRIVER_STUB_SLEEP=<s> how long the stub "works" (default 2)
 #   DRIVER_RUN_DIR=<dir>  isolate runtime state (used by --self-test)
