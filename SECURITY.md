@@ -43,3 +43,5 @@ Read this file before any refactor, new feature, or change to input handling, Gi
 5. The pull request signal modes never merge, force-push, or edit a pull request body.
 6. Keep trust decisions in `issues.*` configuration, not in code. Host policy enters through hooks.
 7. Add a test for each new refusal path, and for hostile text in each new input.
+
+The recorded review of the `show` filter inputs (`--reservation-id` and `--machine-id`) is in [`docs/security-review-show-filters.md`](docs/security-review-show-filters.md).
