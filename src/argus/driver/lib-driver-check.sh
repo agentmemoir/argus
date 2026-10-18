@@ -177,6 +177,6 @@ check() {
     echo "tmux session '$SESSION': not created yet (created on the next launch)"
   fi
   "$PYTHON" "$ARGUS/select/next_phase.py" --self-test || warned=1
-  "$PYTHON" "$ARGUS/board/reservations.py" --self-test || warned=1
+  "$PYTHON" "$ARGUS/board/reservations.py" self-test || warned=1
   return "$warned"
 }

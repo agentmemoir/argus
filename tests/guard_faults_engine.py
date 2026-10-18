@@ -158,7 +158,7 @@ def run_selftest(
         else [
             sys.executable,
             str(package / "board/reservations.py"),
-            "--self-test",
+            "self-test",
         ]
         if check == "phase_reservations"
         else [sys.executable, str(package / "select/next_phase.py"), "--self-test"]
