@@ -49,6 +49,23 @@ def _add_reservation_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--generation", required=True, type=int)
 
 
+def _show_filters(args: argparse.Namespace) -> tuple[str | None, list[str] | None]:
+    """Return the stripped show filters, refusing an empty one before the read."""
+    machine_id = cast("str | None", args.machine_id)
+    reservation_ids = cast("list[str] | None", args.reservation_id)
+    if machine_id is not None and not machine_id.strip():
+        raise CoordinationError("--machine-id must not be empty")
+    for asked in reservation_ids or []:
+        if not asked.strip():
+            raise CoordinationError("--reservation-id must not be empty")
+    stripped = (
+        None
+        if reservation_ids is None
+        else [asked.strip() for asked in reservation_ids]
+    )
+    return (None if machine_id is None else machine_id.strip(), stripped)
+
+
 def _narrow_state(
     state: dict[str, Any],
     *,
@@ -196,6 +213,10 @@ def main(argv: list[str] | None = None) -> int:
     try:
         conventions.configure_from_args(args)
         store = _cli_store(args)
+        machine_id: str | None = None
+        reservation_ids: list[str] | None = None
+        if args.command == "show":
+            machine_id, reservation_ids = _show_filters(args)
         if args.command == "reserve":
             result = store.reserve(
                 args.phase, args.machine_id, run_id=args.run_id, status=args.status
@@ -292,21 +313,8 @@ def main(argv: list[str] | None = None) -> int:
         else:
             result, _commit = store.read()
         if args.command == "show":
-            machine_id = cast("str | None", args.machine_id)
-            reservation_ids = cast("list[str] | None", args.reservation_id)
-            if machine_id is not None and not machine_id.strip():
-                raise CoordinationError("--machine-id must not be empty")
-            for asked in reservation_ids or []:
-                if not asked.strip():
-                    raise CoordinationError("--reservation-id must not be empty")
             result = _narrow_state(
-                result,
-                reservation_ids=(
-                    None
-                    if reservation_ids is None
-                    else [asked.strip() for asked in reservation_ids]
-                ),
-                machine_id=None if machine_id is None else machine_id.strip(),
+                result, reservation_ids=reservation_ids, machine_id=machine_id
             )
         _print_json(
             {"state": "OK", "reservation": result}
