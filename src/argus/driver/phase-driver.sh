@@ -92,6 +92,7 @@ while [ "$#" -gt 0 ]; do
       echo 'usage: argus [--config FILE] [--driver phase] [--repo-root PATH] [--phases-directory PATH] [--phase-glob GLOB] [--dry-run|--check|--merge-check-only|--self-test|--stop|--release]'
       echo '       argus --session NUMBER PHASE_FILE'
       echo '       argus --resume [NUMBER]'
+      echo '       argus --clear-halt'
       echo '       argus abandon NUMBER [--reason TEXT]'
       echo 'A tick reads one configuration file: --config FILE, or ./config.json when it is there.'
       echo 'The file names every value the tick uses, including the pipeline and the board checkout;'
@@ -157,7 +158,7 @@ for helper in \
   lib-selftest-unavailable.sh lib-selftest-reasons.sh lib-selftest-recovery.sh \
   lib-selftest-merge.sh lib-selftest-stranding.sh lib-selftest-group.sh \
   lib-selftest-resume.sh lib-selftest-resume-guards.sh \
-  lib-selftest-abandon.sh \
+  lib-selftest-abandon.sh lib-selftest-clear-halt.sh \
   lib-selftest-fixture.sh selftest-support.sh; do
   if [ ! -r "$ARGUS_DIR/$helper" ]; then
     printf 'argus: cannot read %s: this driver is broken, not misconfigured\n' \
@@ -248,6 +249,7 @@ done
 . "$ARGUS_DIR/lib-selftest-resume-guards.sh"
 # shellcheck disable=SC1091
 . "$ARGUS_DIR/lib-selftest-abandon.sh"
+. "$ARGUS_DIR/lib-selftest-clear-halt.sh"
 
 argus_init "${1:-}"
 
@@ -297,6 +299,7 @@ case "${1:-}" in
     shift
     abandon_cmd "$@"
     ;;
+  --clear-halt) clear_halt_cmd ;;
   --check)     check ;;
   --merge-check-only) drive --merge-check-only ;;
   --self-test) driver_self_test ;;

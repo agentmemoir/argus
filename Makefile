@@ -16,7 +16,7 @@ LINE_LIMIT := 350
 # migration ends. It is empty now: the last file was split.
 LINE_EXEMPT :=
 
-.PHONY: install sync lint fmt fmt-check typecheck typecheck-strict lines prose quick check dry-run example-check \
+.PHONY: install sync lint fmt fmt-check typecheck typecheck-strict lines prose quick check dry-run clear-halt example-check \
         self-test identifiers leakscan noexecscan guard-faults wheel install-check
 install:
 	install -d "$(DESTDIR)$(BINDIR)"
@@ -85,6 +85,14 @@ check:
 
 dry-run:
 	bin/argus --config "$(CONFIG)" --dry-run
+
+# Remove the halt and stall markers. The halt record beside them goes too, but
+# only when the phase it names never started, which is the case `--resume`
+# refuses by design: no run.json and no resume.json in the run directory. A
+# resumable phase keeps its record, so a halt cannot be lost silently. Every
+# removal is printed.
+clear-halt:
+	bin/argus --config "$(CONFIG)" --clear-halt
 
 # The example must load and pass the readiness report on any machine. A real
 # project names its own Glide command; `examples/check-bin` puts a stand-in

@@ -30,6 +30,7 @@ Pass one mode flag:
 - `--self-test` — the driver's own test. It needs no configuration file and starts no agent.
 - `--stop` — halt the live run.
 - `--release` — stop the live run and give its reservation group back.
+- `--clear-halt` — remove the halt and stall markers, and the halt record when the phase it names never started.
 - `abandon NUMBER [--reason TEXT]` — park a phase that will not resume. It writes the residue the selector reads to skip and report the phase, releases the board group, and keeps the run directory.
 - `--session <NUMBER> <PHASE_FILE>` — run one phase inside tmux.
 
@@ -40,6 +41,8 @@ With no mode flag, a tick runs once.
 `--stop` writes a halt marker and holds the recorded claim for an explicit `--resume [NUMBER]` or `--release`. Clearing the halt marker alone leaves that hold in place, until the claim's own heartbeat window passes: the hold is not renewed, so a tick drops it once the claim has expired and the machine no longer owns the work.
 
 A resume keeps the halt marker, so it starts one phase while later ticks stay halted. `--release` clears the hold whether or not the board write lands.
+
+`--clear-halt` (`make clear-halt`) removes the halt and stall markers. The halt record beside them, `halted.json`, is removed with them only when the phase it names never started: its run directory holds neither `run.json` nor `resume.json`. That phase cannot resume, so clearing it is the only way forward, and the next tick starts it. When either file is present the record stays and the line stays halted, because a resumable run must not lose its halt; a record that cannot be read is kept too. The command prints each path it removed. It removes no run directory, log, or reservation.
 
 Stop and resume can overlap. A resume accepts a matching stop hold just before it opens the phase window. A stop that reaches this point first may be accepted by that explicit resume.
 
