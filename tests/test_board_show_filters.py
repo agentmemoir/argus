@@ -126,8 +126,18 @@ def test_show_narrows_to_the_records_one_machine_holds(
 def test_show_machine_filter_that_matches_nothing_prints_no_records(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
+    """An empty answer from the filter still has to be a board view.
+
+    The unfiltered read proves the board holds records, and the version key
+    proves the narrowed view keeps the board's shape, so an empty phase map
+    reads as this machine holding nothing rather than as a view that lost
+    the board.
+    """
+    whole = _show(capsys)
     state = _show(capsys, "--machine-id", "machine-c")
+    assert sorted(whole["phases"]) == ["100001", "100002", "100003"]
     assert state["phases"] == {}
+    assert state["version"] == whole["version"]
 
 
 @pytest.mark.usefixtures("show_board")
