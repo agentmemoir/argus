@@ -64,15 +64,42 @@ def halt_state(tmp_path: Path) -> dict[str, object]:
     return json.loads((tmp_path / "run/halted.json").read_text(encoding="utf-8"))
 
 
+def run_with_payload(tmp_path: Path, payload: str | None, setup: str = "") -> str:
+    """Run the halt branch, then let it read what this launch appended.
+
+    The driver records the log's length at start, so the append is ordered
+    after that point rather than timed: the stub waits for a file, and the
+    file is created only after the append. `payload` of None models the path
+    where glide never starts and appends nothing.
+    """
+    append = (
+        ""
+        if payload is None
+        else "cat >>\"$RUN_DIR/session-100010.log\" <<'PAYLOAD'\n"
+        + payload
+        + "PAYLOAD\n"
+    )
+    body = (
+        setup
+        + 'DRIVER_STUB_WAIT_FILE="$RUN_DIR/go"\n'
+        + "( run_session 100010 phase.md ) &\n"
+        + "pid=$!\n"
+        + 'while [ ! -f "$PIDFILE" ]; do sleep 0.01; done\n'
+        + append
+        + ': >"$RUN_DIR/go"\n'
+        + 'wait "$pid" || true\n'
+    )
+    return shell(tmp_path, body)
+
+
 def test_session_log_payload_names_the_halt(tmp_path: Path) -> None:
     (tmp_path / "run").mkdir()
-    (tmp_path / "run/session-100010.log").write_text(SESSION_LOG, encoding="utf-8")
-    shell(tmp_path, "( run_session 100010 phase.md ) || true\n")
+    run_with_payload(tmp_path, SESSION_LOG)
     marker = (tmp_path / "run/halted").read_text(encoding="utf-8")
     events = (tmp_path / "run/events").read_text(encoding="utf-8")
     record = halt_state(tmp_path)
     assert "state=config_error" in marker
-    assert "state=config_error source=rc" in events
+    assert "state=config_error source=session-log" in events
     assert record["state"] == "config_error"
     reason = record["reason"]
     assert isinstance(reason, str)
@@ -83,13 +110,42 @@ def test_session_log_payload_names_the_halt(tmp_path: Path) -> None:
 
 def test_missing_payload_keeps_unknown(tmp_path: Path) -> None:
     (tmp_path / "run").mkdir()
-    (tmp_path / "run/session-100010.log").write_text(
-        "plan: fixture stage\nno result here\n", encoding="utf-8"
-    )
-    shell(tmp_path, "( run_session 100010 phase.md ) || true\n")
+    run_with_payload(tmp_path, "plan: fixture stage\nno result here\n")
     marker = (tmp_path / "run/halted").read_text(encoding="utf-8")
     assert "state=unknown" in marker
     assert halt_state(tmp_path)["state"] == ""
+
+
+def test_payload_from_an_earlier_launch_keeps_unknown(tmp_path: Path) -> None:
+    (tmp_path / "run").mkdir()
+    (tmp_path / "run/session-100010.log").write_text(SESSION_LOG, encoding="utf-8")
+    run_with_payload(tmp_path, None)
+    marker = (tmp_path / "run/halted").read_text(encoding="utf-8")
+    events = (tmp_path / "run/events").read_text(encoding="utf-8")
+    assert "state=unknown" in marker
+    assert "state=unknown source=rc" in events
+    assert halt_state(tmp_path)["state"] == ""
+
+
+def test_damaged_run_json_is_not_read_from_the_session_log(tmp_path: Path) -> None:
+    (tmp_path / "run").mkdir()
+    (tmp_path / "run/run.json").write_text('{"state": ', encoding="utf-8")
+    run_with_payload(
+        tmp_path, '{"state": "blocked", "error": "recovered from the log"}\n'
+    )
+    marker = (tmp_path / "run/halted").read_text(encoding="utf-8")
+    events = (tmp_path / "run/events").read_text(encoding="utf-8")
+    record = halt_state(tmp_path)
+    assert "state=unknown" in marker
+    assert "state=unknown source=rc" in events
+    assert record["state"] == ""
+    gate = shell(
+        tmp_path,
+        'rc=0; reason="$(resume_gate_reason "" "$RUN_DIR")" || rc=$?\n'
+        'printf "%s\\nrc=%s\\n" "$reason" "$rc"\n',
+    )
+    assert "unreadable or damaged" in gate
+    assert gate.rstrip().endswith("rc=1")
 
 
 def test_helper_prints_nothing_it_cannot_read(tmp_path: Path) -> None:

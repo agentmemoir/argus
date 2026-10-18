@@ -44,22 +44,31 @@ RESUME_REFUSE_QUIET=0
 HALT_LOG_STATE=""
 HALT_LOG_REASON=""
 
-# The state and error glide left at the end of a session log, when it exited
-# before writing run.json. Both stay empty when the log or the payload is
-# unusable, so the caller keeps its own answer. The reason is one line and
-# capped, because it reaches the halt record and the driver log.
-halt_state_from_session() {   # <file>
+# The state and error glide left at the end of a session log, when there is no
+# run result to read. Both stay empty when the log or the payload is unusable,
+# so the caller keeps its own answer. The reason is one line and capped,
+# because it reaches the halt record and the driver log.
+#
+# The log is appended to on every launch, so a payload before `<offset>`, the
+# log's length when this launch opened it, belongs to an earlier run and is
+# never adopted. An offset that is unset or not a number proves nothing, so the
+# answer stays empty: `unknown` is safer than another run's state.
+halt_state_from_session() {   # <file> <offset>
   HALT_LOG_STATE=""
   HALT_LOG_REASON=""
+  local offset="${2:-}"
+  case "$offset" in
+    ''|*[!0-9]*) return 0 ;;
+  esac
   # No `dirname`: the installed-command test runs the driver with a PATH that
   # holds only the commands the configuration declares, and `dirname` is not one.
   local helper="${BASH_SOURCE[0]%/*}"
   [ "$helper" != "${BASH_SOURCE[0]}" ] || helper="."
   helper="$helper/session_state.py"
-  HALT_LOG_STATE="$("$PYTHON" "$helper" "$1" state 2>/dev/null || true)"
+  HALT_LOG_STATE="$("$PYTHON" "$helper" "$1" state "$offset" 2>/dev/null || true)"
   [ -n "$HALT_LOG_STATE" ] || return 0
   HALT_LOG_STATE="$(cap_length "$(flatten_one_line "$HALT_LOG_STATE")" 500)"
-  HALT_LOG_REASON="$("$PYTHON" "$helper" "$1" error 2>/dev/null || true)"
+  HALT_LOG_REASON="$("$PYTHON" "$helper" "$1" error "$offset" 2>/dev/null || true)"
   HALT_LOG_REASON="$(cap_length "$(flatten_one_line "$HALT_LOG_REASON")" 500)"
 }
 
