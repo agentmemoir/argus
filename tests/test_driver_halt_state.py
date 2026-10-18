@@ -127,12 +127,14 @@ def test_payload_from_an_earlier_launch_keeps_unknown(tmp_path: Path) -> None:
     assert halt_state(tmp_path)["state"] == ""
 
 
-def test_failed_size_read_does_not_adopt_an_earlier_payload(tmp_path: Path) -> None:
+def test_failed_size_read_does_not_adopt_an_earlier_payload(
+    tmp_path: Path, exec_dir: Path
+) -> None:
     (tmp_path / "run").mkdir()
     (tmp_path / "run/session-100010.log").write_text(SESSION_LOG, encoding="utf-8")
     # The size read runs through PYTHON, so a wrapper that fails only that -c
     # script models a stat that cannot be read while the helper still works.
-    wrapper = tmp_path / "fake-python"
+    wrapper = exec_dir / "fake-python"
     wrapper.write_text(
         "#!/usr/bin/env bash\n"
         'if [ "$1" = "-c" ]; then\n'
@@ -144,7 +146,7 @@ def test_failed_size_read_does_not_adopt_an_earlier_payload(tmp_path: Path) -> N
         encoding="utf-8",
     )
     wrapper.chmod(0o755)
-    run_with_payload(tmp_path, None, setup='PYTHON="$TEST_ROOT/fake-python"\n')
+    run_with_payload(tmp_path, None, setup=f'PYTHON="{wrapper}"\n')
     marker = (tmp_path / "run/halted").read_text(encoding="utf-8")
     events = (tmp_path / "run/events").read_text(encoding="utf-8")
     record = halt_state(tmp_path)
