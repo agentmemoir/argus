@@ -15,6 +15,7 @@ from argus.board.branch import (
 )
 from argus.board.core import (
     CoordinationUnavailable,
+    _issue_key,
     _phase_key,
     _safe_detail,
 )
@@ -35,16 +36,22 @@ class _StoreBase:
         private_repo: str | Path | None = None,
         branch: str | None = None,
         remote: str | None = None,
+        *,
+        issues: bool = False,
     ) -> None:
-        self.kind = "phase"
-        self._key = _phase_key
+        self.issues = issues
+        self.kind = "issue" if issues else "phase"
+        self._key = _issue_key if issues else _phase_key
         self.root, self.private = _resolve_private_repo(repo_root, private_repo)
         self.branch = _branch_setting(branch)
         self.remote = _remote_setting(remote)
         _assert_private_boundary(self.root, self.private)
+        if issues:
+            # Refuse a missing, unsafe or shared issue file before any board read.
+            state_rel(issues=True)
 
     def _reservation(self, record: dict[str, Any], key: str) -> dict[str, Any]:
-        return _reservation_from_record({**record, "_phase": key})
+        return _reservation_from_record({**record, "_phase": key}, issues=self.issues)
 
     def migrate_board(self) -> bool:
         """Create the board's branch if the remote does not have it yet.
@@ -64,17 +71,18 @@ class _StoreBase:
             self.private,
             self.remote,
             self.branch,
+            issues=self.issues,
             ensure_backup=True,
         )
 
     def read(self) -> tuple[dict[str, Any], str]:
         ref, commit = _fetch_branch_ref(self.private, self.remote, self.branch)
-        initialized = _state_initialized(self.private, ref)
+        initialized = _state_initialized(self.private, ref, issues=self.issues)
         exists_rc, _, _ = _git(
             self.private,
             "cat-file",
             "-e",
-            f"{ref}:{state_rel().as_posix()}",
+            f"{ref}:{state_rel(issues=self.issues).as_posix()}",
         )
         if exists_rc != 0:
             if initialized:
@@ -84,7 +92,9 @@ class _StoreBase:
             # A board may be initialized before its first claim. The commit
             # must exist, but an absent state file is an empty state.
             return _empty_state(), commit
-        rc, raw, err = _git(self.private, "show", f"{ref}:{state_rel().as_posix()}")
+        rc, raw, err = _git(
+            self.private, "show", f"{ref}:{state_rel(issues=self.issues).as_posix()}"
+        )
         if rc != 0:
             raise CoordinationUnavailable(
                 f"cannot read coordination state: {_safe_detail(err or raw)}"
@@ -95,7 +105,7 @@ class _StoreBase:
             raise CoordinationUnavailable(
                 f"coordination state does not parse: {exc}"
             ) from exc
-        return _validate_state(state), commit
+        return _validate_state(state, issues=self.issues), commit
 
 
 __all__ = ["_StoreBase"]

@@ -27,6 +27,7 @@ PY
 
 reconcile_pending_reviews() {
   PENDING_PUBLISHED=0
+  [ "${WORK_SOURCE:-phases}" != issues ] || return 0
   local pending
   if [ -n "${DRIVER_STUB_COORDINATION:-}" ]; then
     # The self-test has no real receipts, board or network.

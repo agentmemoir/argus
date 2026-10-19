@@ -48,6 +48,7 @@ class _ClaimOps(_StoreBase):
                 revisions,
                 status,
                 number,
+                issues=self.issues,
             )
             return _Mutation(True, self._reservation(record, key))
 
@@ -86,6 +87,7 @@ class _ClaimOps(_StoreBase):
             self.branch,
             mutate,
             f"{self.kind} coordination: reserve {key} for {machine_id}",
+            issues=self.issues,
         )
 
     def register_running(

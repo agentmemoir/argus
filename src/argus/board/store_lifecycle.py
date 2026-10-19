@@ -22,7 +22,7 @@ from argus.board.core import (
     _validate_status,
 )
 from argus.board.files import _validate_publication_receipt
-from argus.board.state import _owner_matches
+from argus.board.state import _owner_matches, _receipt_of
 from argus.board.store_base import _StoreBase
 from argus.board.worktree import _transaction
 
@@ -74,7 +74,16 @@ class _LifecycleOps(_StoreBase):
                     raise ReservationFenced(f"{self.kind} {key} reservation expired")
                 if record.get("status") in TERMINAL_STATUSES:
                     continue
-                del state["phases"][key]
+                reason = (
+                    _receipt_of(record).get("state_reason") if self.issues else None
+                )
+                if reason == "writeback_pending":
+                    continue
+                if reason == "remedy_escalated":
+                    record["status"] = EXPIRED_STATUS
+                    record.pop("cooldown_until", None)
+                else:
+                    del state["phases"][key]
                 released.append(key)
             return _Mutation(bool(released), released)
 
@@ -85,6 +94,7 @@ class _LifecycleOps(_StoreBase):
             mutate,
             f"{self.kind} coordination: release group "
             f"[{reservation_id}] for {machine_id} at {moment}",
+            issues=self.issues,
         )
 
     def renew_group(
@@ -148,6 +158,7 @@ class _LifecycleOps(_StoreBase):
             self.branch,
             mutate,
             f"{self.kind} coordination: renew group [{reservation_id}] for {machine_id}",
+            issues=self.issues,
         )
 
     def _owned_mutation(
@@ -186,6 +197,8 @@ class _LifecycleOps(_StoreBase):
                 "an acceptance reason is only valid for accepted status"
             )
         receipt: dict[str, Any] | None = None
+        if next_status == "completed" and self.issues:
+            raise CoordinationError("issue completion is read from GitHub")
         if next_status == "completed":
             if evidence_path is None:
                 raise CoordinationError(
@@ -243,6 +256,7 @@ class _LifecycleOps(_StoreBase):
             self.branch,
             mutate,
             f"{self.kind} coordination: renew {reservation[self.kind]}",
+            issues=self.issues,
         )
 
     def set_status(
@@ -265,6 +279,7 @@ class _LifecycleOps(_StoreBase):
             self.branch,
             mutate,
             f"{self.kind} coordination: {status} {reservation[self.kind]}",
+            issues=self.issues,
         )
 
     def assert_owner(self, reservation: Any) -> dict[str, Any]:
@@ -284,6 +299,8 @@ class _LifecycleOps(_StoreBase):
             raise ReservationFenced(
                 f"{self.kind} {key} is no longer owned by this reservation"
             )
+        if self.issues and record.get("status") == EXPIRED_STATUS:
+            raise ReservationFenced(f"issue {key} reservation expired")
         if record.get("status") in TERMINAL_STATUSES:
             return dict(record)
         return dict(record)

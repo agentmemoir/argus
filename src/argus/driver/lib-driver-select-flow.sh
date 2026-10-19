@@ -40,6 +40,7 @@ _drive_choose_selection() {
       rm -f "$RUN_DIR/coordination-outage-first-seen"
     fi
     bind_selection_kind "$selection"
+    report_issue_selection "$selection"
     report_needs_decision "$selection"
     case "$selection_state" in
       RESERVED)
@@ -47,7 +48,7 @@ _drive_choose_selection() {
         rel="$(printf '%s' "$selection" | selection_value path)"
         reservation_id="$(printf '%s' "$selection" | selection_value reservation_id)"
         reservation_generation="$(printf '%s' "$selection" | selection_value generation)"
-        group_take_selection "$selection"
+        if [ "$work_kind" = issue ]; then group_take_selection ""; else group_take_selection "$selection"; fi
         if group_active; then
           # The board claimed the whole group under one reservation id, and this
           # tick runs the member the selection names. Its own phases file is
@@ -69,7 +70,11 @@ _drive_choose_selection() {
         # the group on this refusal too, so a tick that is continuing a group —
         # or taking one over from a dead owner — knows the array and the branch
         # without having claimed anything itself.
-        group_take_selection "$selection"
+        if [ "$work_kind" = issue ]; then group_take_selection ""; else group_take_selection "$selection"; fi
+        if [ "$work_kind" = issue ] && [ "$wait_status" = writeback_pending ]; then
+          log "issue $wait_phase report is still pending; claim kept, no launch"
+          { _DRIVE_RC=0; return 0; }
+        fi
         if [ "$RECOVER_OWN_CLAIM" = 1 ] \
             && [ "$wait_owner" = "$PHASE_MACHINE_ID" ] \
             && [ "$wait_phase" != "" ]; then

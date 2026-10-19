@@ -59,7 +59,7 @@ def display_title(title: str) -> str:
     )
 
 
-def phase_label(phase_file: str | Path) -> str:
+def phase_label(phase_file: str | Path, *, kind: str = "phase") -> str:
     """Return the user-facing phase label."""
     number, title, _ = parse_phase_file(phase_file)
-    return f"Phase {number} ({display_title(title)})"
+    return f"{kind.capitalize()} {number} ({display_title(title)})"

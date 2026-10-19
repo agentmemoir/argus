@@ -94,6 +94,7 @@ if not __package__:
 from argus import conventions
 from argus.config.loader import ConfigError as ArgusConfigError
 from argus.gitsync.git import ConfigError, summarize
+from argus.gitsync.issue_modes import issue_mode
 from argus.gitsync.merge import sync_one
 from argus.gitsync.mode_branch import mode_branch
 from argus.gitsync.mode_clean import mode_checkpoint, mode_clean
@@ -112,6 +113,7 @@ def main() -> int:
         help="repo root; syncs it and the configured private checkout",
     )
     ap.add_argument("--config")
+    ap.add_argument("--kind", choices=["phase", "issue"], default="phase")
     ap.add_argument("--driver", dest="config_driver")
     ap.add_argument("--phases-directory", dest="config_phases_directory")
     ap.add_argument("--phase-glob", dest="config_phase_glob", action="append")
@@ -191,7 +193,10 @@ def main() -> int:
     try:
         conventions.configure_from_args(args)
         args.root = str(conventions.setting("repo-root"))
-        if args.mode == "branch":
+        issue_result = issue_mode(args) if args.kind == "issue" else None
+        if issue_result is not None:
+            out = issue_result
+        elif args.mode == "branch":
             if args.phase is None or not args.phases:
                 raise ConfigError(
                     "--phase and --phases are required with --mode branch"

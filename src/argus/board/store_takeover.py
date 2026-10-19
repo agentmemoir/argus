@@ -19,6 +19,7 @@ from argus.board.core import (
     _validate_reservation_id,
 )
 from argus.board.records import _publication_lock_stale
+from argus.board.state import _receipt_of
 from argus.board.store_base import _StoreBase
 from argus.board.worktree import _base_revisions, _transaction
 
@@ -117,6 +118,15 @@ class _TakeoverOps(_StoreBase):
                 raise ReservationConflict(
                     number, old, "completed reservations cannot be taken over"
                 )
+            receipt = _receipt_of(old)
+            if (
+                self.issues
+                and receipt.get("state_reason") == "remedy_escalated"
+                and receipt.get("cleared") is not True
+            ):
+                raise ReservationConflict(
+                    number, old, "remedy escalation needs clearance", kind=self.kind
+                )
             result = None
             for member in members:
                 record = state["phases"].get(member)
@@ -156,6 +166,8 @@ class _TakeoverOps(_StoreBase):
                     ),
                     "base_revisions": revisions,
                 }
+                if self.issues and "completion_receipt" in record:
+                    new["completion_receipt"] = record["completion_receipt"]
                 state["phases"][member] = new
                 if member == key:
                     result = self._reservation(new, key)
@@ -172,6 +184,7 @@ class _TakeoverOps(_StoreBase):
             mutate,
             f"{self.kind} coordination: explicit takeover "
             f"[{','.join(members)}] by {machine_id}",
+            issues=self.issues,
         )
 
 

@@ -306,6 +306,13 @@ except OSError:
     fi
   fi
   state="$(phase_state "$number" "$rel")"
+  if [ "${work_kind:-phase}" = issue ] && [ "$state" = writeback_pending ]; then
+    gitsync_clean "$number"
+    tmux_set_title "issue $number report pending"
+    log "issue $number report is pending; claim kept for the next tick"
+    rm -f "$CURRENT" "$PIDFILE"
+    exit 0
+  fi
   if [ "$state" = "remedy_escalated" ]; then
     # The remedy approver used every round and findings are still open. That is
     # a budget fact, not a verdict: record the residue, release the claim, and
@@ -326,9 +333,10 @@ except OSError:
     3)   : ;;
     130) tmux_set_title "HALTED ${work_kind:-phase} $number (interrupted)"
          notify_phase "$rel" interrupted "the process received an interrupt signal" ;;
-    *)   if [ "$job_failed" = 1 ]; then
-           # Record the job as failed so the selector skips the phase, and let
-           # the line continue to the next job. No halt marker is written.
+    *)   if [ "$job_failed" = 1 ] || [ "${work_kind:-phase}" = issue ]; then
+           # Record the failure so the operator can see it, keep the claim, and
+           # let the line continue. The claim resumes through its own expiry
+           # windows plus the cooldown.
            failure_residue_write "$number" "$rel" "$state" "$rc" "$(job_retries)"
            log "job-failed: ${work_kind:-phase} $number rc=$rc state=${state:-unknown}; retries exhausted, recorded as failed; continuing"
            tmux_set_title "${work_kind:-phase} $number failed"
@@ -409,6 +417,10 @@ check_stall() {
   if [ "$age" -gt "$STALE_AFTER_SEC" ]; then
     printf 'stalled: %s %s no agent output for %ss at %s\n' \
       "${work_kind:-phase}" "$n" "$age" "$(ts)" >"$STALL"
+    if [ "${work_kind:-phase}" = issue ]; then
+      notify "Issue $n looks stalled. There has been no agent output for $STALE_AFTER_SEC seconds. Inspect the run at $phase_dir."
+      return 0
+    fi
     phase_file="$("$PYTHON" - "$ARGUS" "$REPO" "$n" "${ARGUS_CONFIG_ARGS[@]}" <<'PY'
 import sys
 from pathlib import Path

@@ -26,6 +26,12 @@ _drive_launch() {
   # the launch.
   [ "${RESUME_MODE:-0}" != 1 ] || envs="$envs CLIO_RESUME='1'"
   local self_quoted number_quoted rel_quoted config_arg="" quoted setting
+  if [ "${work_kind:-phase}" = issue ]; then
+    printf -v quoted '%q' "$ARGUS_CONFIG_FILE"
+    envs="$envs ARGUS_CONFIG_FILE=$quoted"
+    printf -v quoted '%q' "$ISSUES_REPO"
+    envs="$envs ARGUS_ISSUES_REPO=$quoted ARGUS_WORK_KIND=issue"
+  fi
   printf -v self_quoted '%q' "$SELF"
   printf -v number_quoted '%q' "$number"
   printf -v rel_quoted '%q' "$rel"

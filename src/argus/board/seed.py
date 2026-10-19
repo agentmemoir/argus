@@ -28,6 +28,7 @@ def ensure_board_branch(
     remote: str,
     branch: str,
     *,
+    issues: bool = False,
     ensure_backup: bool = False,
 ) -> bool:
     """Create the board's branch from the integration branch's tip, once.
@@ -74,9 +75,9 @@ def ensure_board_branch(
     backup_branch = _backup_branch(branch)
     backup = _backup_source(private, remote, branch)
     source = backup if backup is not None else _integration_ref(private, remote)
-    relative = state_rel().as_posix()
+    relative = state_rel(issues=issues).as_posix()
     if (
-        _state_initialized(private, source)
+        _state_initialized(private, source, issues=issues)
         and _git(private, "cat-file", "-e", f"{source}:{relative}")[0] != 0
     ):
         origin = (

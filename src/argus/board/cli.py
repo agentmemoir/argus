@@ -14,6 +14,7 @@ from argus.board.core import (
     CoordinationUnavailable,
     ReservationConflict,
     ReservationFenced,
+    _issue_key,
     _phase_key,
     _print_json,
 )
@@ -23,16 +24,22 @@ from argus.board.store import ReservationStore
 from argus.config.loader import ConfigError
 
 
-def _cli_store() -> ReservationStore:
-    return ReservationStore(conventions.setting("repo-root"))
+def _cli_store(args: argparse.Namespace) -> ReservationStore:
+    return ReservationStore(conventions.setting("repo-root"), issues=args.issues)
 
 
-def _add_store_args(parser: argparse.ArgumentParser) -> None:
+def _add_store_args(parser: argparse.ArgumentParser, *, issues: bool = True) -> None:
     parser.add_argument("--config")
     parser.add_argument("--repo-root", dest="config_repo_root")
     parser.add_argument("--phases-directory", dest="config_phases_directory")
     parser.add_argument("--phase-glob", dest="config_phase_glob", action="append")
     parser.add_argument("--driver", dest="config_driver")
+    if issues:
+        parser.add_argument(
+            "--issues", action="store_true", help="use issue reservations"
+        )
+    else:
+        parser.set_defaults(issues=False)
 
 
 def _add_reservation_args(parser: argparse.ArgumentParser) -> None:
@@ -152,7 +159,7 @@ def main(argv: list[str] | None = None) -> int:
     release = sub.add_parser(
         "release-publication", help="explicitly release a stale publication lock"
     )
-    _add_store_args(release)
+    _add_store_args(release, issues=False)
     _add_reservation_args(release)
     release.add_argument("--confirm", action="store_true")
 
@@ -196,7 +203,7 @@ def main(argv: list[str] | None = None) -> int:
         return self_test()
     try:
         conventions.configure_from_args(args)
-        store = _cli_store()
+        store = _cli_store(args)
         machine_id: str | None = None
         reservation_ids: list[str] | None = None
         if args.command == "show":
@@ -211,7 +218,11 @@ def main(argv: list[str] | None = None) -> int:
             "set-status",
         }:
             reservation = {
-                "phase": _phase_key(args.phase)[0],
+                "issue" if args.issues else "phase": (
+                    _issue_key(args.phase)[1]
+                    if args.issues
+                    else _phase_key(args.phase)[0]
+                ),
                 "machine_id": args.machine_id,
                 "reservation_id": args.reservation_id,
                 "generation": args.generation,
@@ -239,6 +250,7 @@ def main(argv: list[str] | None = None) -> int:
                 reservation_file(
                     conventions.setting("repo-root"),
                     args.phase,
+                    kind="issue" if args.issues else "phase",
                 ),
                 result,
             )
@@ -250,6 +262,7 @@ def main(argv: list[str] | None = None) -> int:
                 reservation_file(
                     conventions.setting("repo-root"),
                     args.phase,
+                    kind="issue" if args.issues else "phase",
                 ),
                 result,
             )
@@ -301,7 +314,7 @@ def main(argv: list[str] | None = None) -> int:
         _print_json(
             {
                 "state": "WAIT_FOR_CLAIM",
-                "phase": exc.phase,
+                "issue" if args.issues else "phase": exc.phase,
                 "owner": exc.record.get("machine_id"),
                 "status": exc.record.get("status"),
                 "error": str(exc),

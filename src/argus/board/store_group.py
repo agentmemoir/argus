@@ -55,6 +55,8 @@ class _GroupOps(_StoreBase):
 
         Returns one reservation dict per member, in the order given.
         """
+        if self.issues:
+            raise CoordinationError("issue reservations are claimed one at a time")
         keys: list[str] = []
         for phase in phases:
             key, _number = self._key(phase)
@@ -107,6 +109,7 @@ class _GroupOps(_StoreBase):
             self.branch,
             mutate,
             f"{self.kind} coordination: reserve group [{','.join(keys)}] for {machine_id}",
+            issues=self.issues,
         )
 
     def expire_stale(self, now: _datetime.datetime | str | None = None) -> Any:
@@ -123,7 +126,7 @@ class _GroupOps(_StoreBase):
         moment = _as_moment(now) or _datetime.datetime.now(_datetime.UTC)
 
         def mutate(state: dict[str, Any]) -> _Mutation:
-            expired = _expire_records(state, moment)
+            expired = _expire_records(state, moment, issues=self.issues)
             return _Mutation(bool(expired), expired)
 
         return _transaction(
@@ -132,6 +135,7 @@ class _GroupOps(_StoreBase):
             self.branch,
             mutate,
             f"{self.kind} coordination: expire stale claims",
+            issues=self.issues,
         )
 
 

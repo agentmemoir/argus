@@ -2,18 +2,25 @@
 # SPDX-License-Identifier: Apache-2.0
 """Read, clean, resolve, and validate one configuration file."""
 
+import copy
 from pathlib import Path
 from typing import Any, cast
 
 from argus.config.document import read_document
 from argus.config.document import strip_comments as strip_comments
 from argus.config.errors import ConfigError
+from argus.config.issue_validation import (
+    validate_issues,
+    validate_presence,
+    validate_trust,
+)
 from argus.config.overlay import apply_overlay
 from argus.config.phases_validation import validate_phases
 from argus.config.schema import (
     _OBJECT_KEYS,
     _OVERRIDES,
     _REPORT_KEY,
+    ISSUES_DEFAULTS,
     SCHEMA,
     Field,
 )
@@ -80,11 +87,8 @@ def _build(
                 "'phases.directory' to the folder holding the work-item files, "
                 "and 'phases.repo', 'phases.branch', 'phases.remote' with it"
             )
-    for removed in ("issues", "repair"):
-        if removed in raw:
-            raise ConfigError(
-                f"key '{removed}' was removed: Argus runs the phase source only"
-            )
+    if "repair" in raw:
+        raise ConfigError("key 'repair' was removed: Argus runs the phase source only")
     for name in _OBJECT_KEYS:
         if name in raw and raw[name] is not None and not isinstance(raw[name], dict):
             raise ConfigError(f"invalid type for key '{name}': expected object")
@@ -101,7 +105,10 @@ def _build(
     notify = (
         cast("dict[str, Any]", notify_value) if isinstance(notify_value, dict) else None
     )
-
+    issue_value = raw.get("issues")
+    issues = (
+        cast("dict[str, Any]", issue_value) if isinstance(issue_value, dict) else None
+    )
     runstate_value = raw.get("runstate")
     runstate = (
         cast("dict[str, Any]", runstate_value)
@@ -111,16 +118,16 @@ def _build(
     provider = overrides.get("driver")
     if provider is None:
         provider = _lookup(raw, "driver.provider")[1]
-    if provider not in ("phase", "phases", None):
-        raise ConfigError(
-            "invalid value for key 'driver.provider': known drivers: phase, phases"
-        )
+    validate_presence(provider, issues, board)
 
     supplied: dict[str, tuple[object, str]] = {}
     for field in SCHEMA:
         found, value = _lookup(raw, field.key)
         if found and value is not None:
             supplied[field.key] = (value, "overlay" if field.key in origins else "file")
+    if provider == "issues":
+        for key, default in ISSUES_DEFAULTS.items():
+            supplied.setdefault(key, (copy.deepcopy(default), "default"))
 
     for flag, value in overrides.items():
         if value is None:
@@ -135,7 +142,7 @@ def _build(
     values: dict[str, object] = {}
     sources: dict[str, str] = {}
     for field in SCHEMA:
-        required = _is_required(field, board, notify, runstate, provider)
+        required = _is_required(field, board, notify, issues, runstate, provider)
         if field.key in supplied:
             raw_value, source = supplied[field.key]
             _check_type(field, raw_value)
@@ -149,6 +156,10 @@ def _build(
             sources[key] = source
         elif required:
             raise ConfigError(f"missing required key '{field.key}'")
+    if issues is not None:
+        validate_trust(issues)
+    if provider == "issues":
+        validate_issues(values)
     # The folder grows from the phases repository, so it is always confined to
     # it, whether the file or a flag named it. A flag that reached outside the
     # checkout would read a stranger's tree and write the index into it, and the
@@ -162,6 +173,7 @@ def _is_required(
     field: Field,
     board: dict[str, Any] | None,
     notify: dict[str, Any] | None,
+    issues: dict[str, Any] | None,
     runstate: dict[str, Any] | None,
     provider: object,
 ) -> bool:
@@ -173,6 +185,8 @@ def _is_required(
         return provider in (None, "phase", "phases")
     if field.required == "notify":
         return notify is not None
+    if field.required == "issues":
+        return issues is not None and provider == "issues"
     if field.required == "runstate":
         return runstate is not None
     return False

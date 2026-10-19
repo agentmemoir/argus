@@ -54,7 +54,7 @@ _drive_resume_branch() {   # <number> <rel>
   if [ -n "${DRIVER_STUB_COORDINATION:-}" ]; then
     return 0
   fi
-  if ! group_take_declared "$number"; then
+  if [ "${work_kind:-phase}" != issue ] && ! group_take_declared "$number"; then
     RESUME_REFUSAL="the reservation group of phase $number could not be read (${GROUP_ERROR:-no reason reported}); fix the group declaration, or abandon the phase"
     return 1
   fi
