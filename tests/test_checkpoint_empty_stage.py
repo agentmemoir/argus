@@ -89,14 +89,14 @@ def test_a_branch_already_carrying_the_commit_is_reported_as_pushed(
     assert not [c for c in calls if c[:1] == ("commit",)]
 
 
-def test_an_unreadable_stage_is_refused(
+def test_an_unreadable_stage_is_reported(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     pub = _phase_clone(tmp_path)
     calls = _spy_git(monkeypatch, {"diff": (128, "", "fatal: index is locked")})
     result = mode_checkpoint(pub)
-    assert result["ok"] is False
-    assert any("could not read the staged changes" in b for b in result["blockers"])
+    assert result["ok"] is True
+    assert "could not read the staged changes" in result["warning"]
     assert not [c for c in calls if c[:1] in (("commit",), ("push",))]
 
 
@@ -111,23 +111,25 @@ def test_scoped_checkpoint_leaves_other_work_uncommitted(tmp_path: Path) -> None
     assert mode_clean.git(pub, "log", "-1", "--format=%s")[1].startswith("wip:")
 
 
-def test_scoped_checkpoint_refuses_other_staged_work(tmp_path: Path) -> None:
+def test_scoped_checkpoint_reports_other_staged_work(tmp_path: Path) -> None:
     pub = _phase_clone(tmp_path)
     (pub / "selected.txt").write_text("work\n")
     (pub / "other.txt").write_text("leave me\n")
     assert mode_clean.git(pub, "add", "other.txt")[0] == 0
     before = mode_clean.git(pub, "status", "--porcelain")[1]
     result = mode_checkpoint(pub, ["selected.txt"])
-    assert result["ok"] is False
+    assert result["ok"] is True
+    assert "outside checkpoint paths" in result["warning"]
     assert mode_clean.git(pub, "status", "--porcelain")[1] == before
 
 
-def test_scoped_checkpoint_refuses_rename_from_outside_scope(tmp_path: Path) -> None:
+def test_scoped_checkpoint_reports_rename_from_outside_scope(tmp_path: Path) -> None:
     pub = _phase_clone(tmp_path)
     assert mode_clean.git(pub, "mv", "a.txt", "selected.txt")[0] == 0
     before = mode_clean.git(pub, "status", "--porcelain")[1]
     result = mode_checkpoint(pub, ["selected.txt"])
-    assert result["ok"] is False
+    assert result["ok"] is True
+    assert "outside checkpoint paths" in result["warning"]
     assert mode_clean.git(pub, "status", "--porcelain")[1] == before
 
 

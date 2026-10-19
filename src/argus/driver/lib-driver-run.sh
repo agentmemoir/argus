@@ -79,7 +79,6 @@ claim_read_fields() {   # <file>
 #
 # The names come from the configuration and the pipeline declaration, not from
 # this script, so a pipeline that renames its inputs still gets what it declared.
-# The resume path builds its auto-pin command from the same words.
 glide_input_args() {   # <number> <rel>
   "$PYTHON" - "$ARGUS" "$REPO" "$1" "$2" "${ARGUS_CONFIG_ARGS[@]}" <<'PY'
 import json, sys

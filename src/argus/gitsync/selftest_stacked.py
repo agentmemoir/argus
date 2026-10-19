@@ -80,14 +80,14 @@ def _sequencing_integration_checks(
     results.append(
         (
             "a resync conflict is left in place with the paths named",
-            (not clash["ok"])
+            clash["ok"]
             and clash.get("conflicted") == ["clash.txt"]
             and (work / ".git" / "MERGE_HEAD").exists()
             and "<<<<<<<" in (work / "clash.txt").read_text()
-            and "git commit" in (clash.get("hint") or ""),
+            and "git commit" in (clash.get("warning") or ""),
             f"action={clash.get('action')} "
             f"conflicted={clash.get('conflicted')} "
-            f"blockers={clash.get('blockers')}",
+            f"warning={clash.get('warning')}",
         )
     )
     # The agent is expected to finish it; assert the recipe the finalize

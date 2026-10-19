@@ -112,14 +112,14 @@ def test_issue_clean_reports_what_its_push_did(publication: Publication) -> None
     )
 
 
-def test_issue_cleanup_refuses_unrelated_staged_data(publication: Publication) -> None:
+def test_issue_cleanup_reports_unrelated_staged_data(publication: Publication) -> None:
     publication.claim(1234567)
     other = publication.private / "other.txt"
     other.write_text("other\n", encoding="utf-8")
     assert git(publication.private, "add", "other.txt")[0] == 0
     before = git(publication.private, "rev-parse", "HEAD")[1]
     result = mode_issue_clean(publication.root, 1234567)
-    assert not result["ok"]
+    assert result["ok"]
     assert result["repos"][0]["staged"] == ["other.txt"]
     assert git(publication.private, "rev-parse", "HEAD")[1] == before
 
@@ -198,7 +198,7 @@ def test_issue_checkpoint_excludes_private_data_without_an_ignore_rule(
     assert task.read_text() == "FROZEN_TASK_SENTINEL\n"
 
 
-def test_issue_cleanup_refuses_a_mismatched_private_upstream(
+def test_issue_cleanup_reports_a_mismatched_private_upstream(
     publication: Publication,
 ) -> None:
     publication.claim(1234567)
@@ -208,7 +208,7 @@ def test_issue_cleanup_refuses_a_mismatched_private_upstream(
         == 0
     )
     result = mode_issue_clean(publication.root, 1234567)
-    assert not result["ok"]
+    assert result["ok"]
     assert git(publication.private, "rev-parse", "HEAD")[1] == before
 
 

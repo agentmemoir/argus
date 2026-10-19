@@ -56,7 +56,13 @@ def commit_issue_state(
         if rc != 0:
             return degraded(info, f"could not stage issue state: {err or out}")
         rc, out, err = git(
-            private, "commit", "-q", "-m", f"runs: close out issue {number} run state"
+            private,
+            "commit",
+            "-q",
+            "-m",
+            f"runs: close out issue {number} run state",
+            "--",
+            *scopes,
         )
         if rc != 0:
             return degraded(info, f"could not commit issue state: {err or out}")

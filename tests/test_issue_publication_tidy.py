@@ -12,12 +12,13 @@ from test_issue_publication_fixture import (
 )
 
 
-def test_issue_tidy_refuses_dirty_work(publication: Publication) -> None:
+def test_issue_tidy_reports_dirty_work(publication: Publication) -> None:
     _token, task = publication.claim(1234567)
     branch = mode_issue_branch(publication.root, 1234567, task)["branch"]
     (publication.root / "uncommitted.txt").write_text("keep me\n", encoding="utf-8")
     result = mode_issue_tidy(publication.root)
-    assert not result["ok"]
+    assert result["ok"]
+    assert "uncommitted changes" in result["repos"][0]["warning"]
     assert current_branch(publication.root) == branch
     assert (publication.root / "uncommitted.txt").read_text() == "keep me\n"
 

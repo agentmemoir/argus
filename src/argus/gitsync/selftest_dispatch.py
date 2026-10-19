@@ -124,11 +124,13 @@ def _tidy_and_dispatch_checks(base: Path) -> list[tuple[str, object, str]]:
         refusal = mode_branch(pub2, 100458, "phase-100458-dispatch-after.md")
         results.append(
             (
-                "the branch dispatch refuses when the predecessor's branch is gone, "
-                "rather than falling back to the integration branch",
-                (not refusal["ok"])
-                and "does not exist in this checkout"
-                in (refusal["repos"][0].get("blockers") or [""])[0]
+                "the branch dispatch reports a gone predecessor and uses the "
+                "phase's own branch",
+                refusal.get("ok")
+                and any(
+                    "does not exist" in str(warning)
+                    for warning in refusal.get("warnings", [])
+                )
                 and git(pub2, "rev-parse", "--verify", f"refs/heads/{first}")[0] != 0
                 and git(
                     pub2,
@@ -136,9 +138,8 @@ def _tidy_and_dispatch_checks(base: Path) -> list[tuple[str, object, str]]:
                     "--verify",
                     f"refs/heads/{phase_branch_for(100458, 'phase-100458-dispatch-after.md')}",
                 )[0]
-                != 0,
-                f"ok={refusal.get('ok')} "
-                f"blockers={refusal.get('repos', [{}])[0].get('blockers')}",
+                == 0,
+                f"ok={refusal.get('ok')} warnings={refusal.get('warnings')}",
             )
         )
 

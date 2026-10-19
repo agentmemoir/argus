@@ -105,17 +105,18 @@ def _branch_pair_checks(base: Path) -> list[tuple[str, object, str]]:
         )
     )
 
-    # A refusal must say where the checkout was too, because a refusal is the
-    # case where the operator reads this receipt to find out what to undo.
+    # A step that does not happen must say where the checkout was too, because
+    # the operator reads this receipt to find out what to undo.
     git(nested, "checkout", "-q", "-b", "someones-unfinished-work")
     stuck = branch_phase_checkouts(pub, branch)
     stuck_private = {Path(r["repo"]).resolve(): r for r in stuck}[nested.resolve()]
     git(nested, "checkout", "-q", INTEGRATION_BRANCH)
     results.append(
         (
-            "a refused checkout still reports the branch it is stuck on",
-            (not stuck_private["ok"])
-            and stuck_private.get("after_branch") == "someones-unfinished-work",
+            "a reported checkout still reports the branch it was left on",
+            stuck_private["ok"]
+            and stuck_private.get("after_branch") == "someones-unfinished-work"
+            and "not 'main'" in str(stuck_private.get("warning")),
             f"ok={stuck_private.get('ok')} "
             f"after_branch={stuck_private.get('after_branch')}",
         )
@@ -276,15 +277,15 @@ def _merge_gate_checks(base: Path) -> list[tuple[str, object, str]]:
         # stage the removal and leave the tree just as dirty for the next check.
         (pub / "uncommitted.txt").unlink()
 
-        # 8. A missing integration branch stops rather than moving nowhere.
+        # 8. A missing integration branch is reported and the checkout stays.
         res8 = return_to_integration(pub, base="no-such-base")
         results.append(
             (
-                "a missing integration branch refuses to switch to",
-                (not res8["ok"])
-                and "does not exist" in res8["blockers"][-1]
+                "a missing integration branch is reported and the checkout stays",
+                res8["ok"]
+                and "does not exist" in res8["warning"]
                 and current_branch(pub) == "main",
-                f"branch={current_branch(pub)} blockers={res8.get('blockers')}",
+                f"branch={current_branch(pub)} warning={res8.get('warning')}",
             )
         )
     finally:

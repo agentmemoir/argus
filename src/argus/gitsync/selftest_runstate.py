@@ -47,8 +47,8 @@ def _runstate_checks(base: Path, checks: list[dict[str, Any]]) -> None:
         res["summary"],
     )
 
-    # 10b. a dirty file outside runs/ blocks the start cleanup so a
-    # half-finished edit is never auto-published.
+    # 10b. a dirty file outside runs/ is reported by the start cleanup and the
+    # phase-scoped commit keeps it out of the publish.
     d = base / "runstate-outside"
     d.mkdir()
     _, pub = _init_remote(d, "pub")
@@ -65,8 +65,9 @@ def _runstate_checks(base: Path, checks: list[dict[str, Any]]) -> None:
     res = commit_leftover_run_state(pub, "pipeline: test")
     _check(
         checks,
-        "sync: start refuses dirty files outside runs/",
-        (not res["ok"]) and "outside runs/" in res["summary"],
+        "sync: start reports dirty files outside runs/ and continues",
+        res["ok"]
+        and any("outside runs/" in str(r.get("warning", "")) for r in res["repos"]),
         res["summary"],
     )
 

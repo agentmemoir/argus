@@ -295,19 +295,28 @@ def commit_leftover_run_state(
             ]
             inside = [p for p in paths if p == pathspec or p.startswith(prefix)]
         if outside:
-            # The commit is scoped to the phase pathspec, so a foreign staged
-            # path cannot ride it. Report it and keep going.
-            results.append(
-                degraded(
-                    {"repo": str(repo)},
-                    "private checkout has changes outside the current phase; "
-                    "they stay staged and are reported, the next tick retries"
-                    if phase is not None
-                    else "private checkout has changes outside runs/; they stay "
-                    "staged and are reported, the next tick retries",
-                    dirty=outside,
+            if phase is not None:
+                # Narrow lost-work stop: staged changes outside the phase are
+                # never carried, and this publication waits until they are moved.
+                results.append(
+                    blocked(
+                        {"repo": str(repo)},
+                        "private checkout has changes outside the current phase",
+                        dirty=outside,
+                        hint="commit or move them before publishing this phase",
+                    )
                 )
-            )
+            else:
+                # The sweep is scoped per phase, so a foreign staged path cannot
+                # ride it. Report it and keep going.
+                results.append(
+                    degraded(
+                        {"repo": str(repo)},
+                        "private checkout has changes outside runs/; they stay "
+                        "staged and are reported, the next tick retries",
+                        dirty=outside,
+                    )
+                )
         if inside:
             results.append(_commit_and_push_run_state(repo, message, pathspec=pathspec))
         elif not outside:

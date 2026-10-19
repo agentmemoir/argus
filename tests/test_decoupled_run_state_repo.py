@@ -180,7 +180,7 @@ def test_publication_resumes_after_a_transient_run_state_push_failure(
     assert git(runstate, "remote", "set-url", "origin", str(missing))[0] == 0
     blocked = publish_phase(workflow, RESUME_PHASE)
     assert blocked.get("ok") is False, blocked
-    assert blocked.get("state") == "BLOCKED", blocked
+    assert blocked.get("state") == "RETRY", blocked
     assert not (run_dir / PUBLICATION_NAME).exists()
 
     # The failed push left the run state committed locally, so the checkout is
