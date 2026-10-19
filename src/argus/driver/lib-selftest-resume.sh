@@ -192,11 +192,6 @@ selftest_case_resume() {
   DRIVER_STUB_BOARD_FENCE="$old_fence"
   DRIVER_STUB_COORDINATION="$old_coordination"
   export DRIVER_STUB_SLEEP DRIVER_STUB_BOARD_FENCE DRIVER_STUB_COORDINATION
-  DRIVER_STUB_SLEEP="$old_sleep"
-  DRIVER_STUB_BOARD_FENCE="$old_fence"
-  DRIVER_STUB_COORDINATION="$old_coordination"
-  if [ -n "$old_repin" ]; then DRIVER_STUB_REPIN="$old_repin"; else unset DRIVER_STUB_REPIN; fi
-  export DRIVER_STUB_SLEEP DRIVER_STUB_BOARD_FENCE DRIVER_STUB_COORDINATION
 }
 
 selftest_case_group_resume() {

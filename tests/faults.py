@@ -278,33 +278,6 @@ FAULTS = (
             "verdict": "driver self-test:",
             "expect": "a blocked record did not resume and consume its record",
         },
-        {
-            "name": "resume-archives-the-run-it-continues",
-            "breaks": "a resume restarts the run with --fresh, throwing away the stage "
-            "state the resume exists to keep",
-            "file": "src/argus/driver/lib-driver-run.sh",
-            "find": '      if [ "${CLIO_RESUME:-}" = 1 ]; then\n',
-            "replace": '      if [ "${CLIO_RESUME:-}" = 0 ]; then\n',
-            "check": "driver",
-            "cases": "resume",
-            "verdict": "driver self-test:",
-            "expect": "a resume restarted the run with --fresh",
-        },
-        {
-            "name": "resume-accepts-an-unsettled-auto-pin",
-            "breaks": "the resume trusts a repin that did not settle every pin on "
-            "HEAD, so the run continues with pins that no longer describe the tree",
-            "file": "src/argus/driver/lib-driver-ledger.sh",
-            "find": '    if [ "$pin" != "$head" ]; then\n'
-            '      RESUME_REFUSAL="the ledger auto-pin did not settle every pin on HEAD"\n'
-            "      return 1\n"
-            "    fi\n",
-            "replace": "    :  # FAULT: an unsettled pin is accepted\n",
-            "check": "driver",
-            "cases": "resume",
-            "verdict": "driver self-test:",
-            "expect": "an unsettled auto-pin did not refuse",
-        },
     )
     + RESUME_FAULTS
     + ISSUE_FAULTS
