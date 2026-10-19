@@ -45,11 +45,24 @@ job_retry() {   # <command> [args...]
 # refused. Reads run_session's locals (number, rel, glide_inputs) through bash's
 # dynamic scope.
 glide_run_once() {
-  local prior_state="" fresh_args=()
-  prior_state="$(terminal_state_of_file "$(phase_run_dir "$number" "$rel")/run.json")"
+  local prior_state="" fresh_args=() run_dir map_file driver_map
+  run_dir="$(phase_run_dir "$number" "$rel")"
+  prior_state="$(terminal_state_of_file "$run_dir/run.json")"
   if [ "${CLIO_RESUME:-}" != 1 ] && [ -n "$prior_state" ]; then
     fresh_args+=(--fresh)
     log "${work_kind:-phase} $number run is terminal ($prior_state); restarting it with --fresh"
+    # The restart archives the run directory. glide keeps an owner-edited
+    # harnesses.json across it and fills only the missing fields (plan 0010,
+    # C4/B8); the map is owner-edited when it differs from the snapshot glide
+    # last wrote. This line is written before glide runs, so it can only
+    # claim the detection, never a keep glide has not done yet; no sidecar,
+    # or an equal pair, is no evidence of an edit, and no argus code chooses
+    # a harness.
+    map_file="$run_dir/harnesses.json"
+    driver_map="$run_dir/harnesses.driver.json"
+    if [ -f "$map_file" ] && [ -f "$driver_map" ] && ! cmp -s "$map_file" "$driver_map"; then
+      log "${work_kind:-phase} $number owner-edited $map_file detected before the --fresh restart; glide keeps and fills only the missing fields"
+    fi
   fi
   "$CMD_GLIDE" run --pipeline "$PIPELINE" \
     "${fresh_args[@]+"${fresh_args[@]}"}" "${glide_inputs[@]}"
