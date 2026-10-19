@@ -20,7 +20,6 @@ class Field(NamedTuple):
 #   "phases"   - required only when the work source is the phase source;
 #   "notify"   - required only when the `notify` object is present;
 #   "issues"   - required only when the `issues` object is present;
-#   "repair"   - required only when the `repair` object is present;
 #   "runstate" - required only when the `runstate` object is present.
 SCHEMA = (
     Field("repo-root", "path", "required"),
@@ -53,7 +52,6 @@ SCHEMA = (
     Field("commands.python", "str", "required"),
     Field("commands.hermes", "str", "required"),
     Field("commands.gh", "str", "required"),
-    Field("commands.reply-check", "str", "optional"),
     Field("tmux.session", "str", "required"),
     Field("tmux.width", "int", "required"),
     Field("tmux.height", "int", "required"),
@@ -97,16 +95,8 @@ SCHEMA = (
     Field("issues.max-comments", "int", "optional"),
     Field("issues.max-text-bytes", "int", "optional"),
     Field("issues.list-limit", "int", "optional"),
-    Field("issues.pr-check-max", "int", "optional"),
     Field("issues.timeout", "int", "optional"),
     Field("issues.claim-attempts", "int", "optional"),
-    Field("issues.announce", "bool", "optional"),
-    Field("repair.pipeline", "path", "repair"),
-    Field("repair.attempts", "int", "repair"),
-    Field("repair.wait", "int", "repair"),
-    Field("repair.verify", "str", "optional"),
-    Field("repair.verify-timeout", "int", "optional"),
-    Field("repair.stale-after", "int", "optional"),
     Field("estimate.factors-file", "path", "optional"),
     Field("estimate.ideal-days", "str", "optional"),
 )
@@ -141,7 +131,6 @@ SHELL_VARS = {
     "commands.python": "CMD_PYTHON",
     "commands.hermes": "CMD_HERMES",
     "commands.gh": "CMD_GH",
-    "commands.reply-check": "CMD_REPLY_CHECK",
     "tmux.session": "SESSION_NAME",
     "tmux.width": "TMUX_WIDTH",
     "tmux.height": "TMUX_HEIGHT",
@@ -163,12 +152,6 @@ SHELL_VARS = {
     "notify.disabled": "NOTIFY_DISABLED",
     "notify.fallback": "DISCORD_FALLBACK_CHANNEL",
     "notify.heartbeat": "HEARTBEAT_URL",
-    "repair.pipeline": "REPAIR_PIPELINE",
-    "repair.attempts": "REPAIR_ATTEMPTS",
-    "repair.wait": "REPAIR_WAIT",
-    "repair.verify": "REPAIR_VERIFY",
-    "repair.verify-timeout": "REPAIR_VERIFY_TIMEOUT",
-    "repair.stale-after": "REPAIR_STALE_AFTER",
     "estimate.factors-file": "ESTIMATE_FACTORS_FILE",
     "estimate.ideal-days": "ESTIMATE_IDEAL_DAYS",
 }
@@ -189,10 +172,8 @@ ISSUES_DEFAULTS: dict[str, object] = {
     "issues.max-comments": 50,
     "issues.max-text-bytes": 60000,
     "issues.list-limit": 200,
-    "issues.pr-check-max": 5,
     "issues.timeout": 30,
     "issues.claim-attempts": 3,
-    "issues.announce": True,
 }
 
 # The four flag overrides: flag name -> (dotted key, wrap scalar in a list).
@@ -214,7 +195,6 @@ _OBJECT_KEYS = (
     "runstate",
     "notify",
     "issues",
-    "repair",
     "estimate",
 )
 

@@ -2,7 +2,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """Combined filters, task-file framing, trust settings, and pinned gh argv."""
 
-import json
 from collections import Counter
 from collections.abc import Iterator
 from pathlib import Path
@@ -13,7 +12,6 @@ import pytest
 from argus import conventions
 from argus.issues.client import IssueClient
 from argus.issues.filter import eligible
-from argus.issues.lifecycle import announce
 from argus.issues.source import IssuesSource
 from argus.issues.trust import Trust
 from issues_fixture import (
@@ -74,10 +72,7 @@ def test_each_filter_counts_once_and_the_survivor_wins(configured: Configured) -
             issue(100005, blockedBy={"nodes": [{"state": "OPEN"}], "totalCount": 1}),
             issue(100006, isPullRequest=True),
             issue(100007),
-            issue(100008, closedByPullRequestsReferences=[{"number": 200008}]),
-            issue(100009, closedByPullRequestsReferences=[{"number": 200009}]),
         ],
-        pr_states={"200008": "OPEN", "200009": "MERGED"},
     )
     board.records = {
         "100007": {
@@ -96,9 +91,7 @@ def test_each_filter_counts_once_and_the_survivor_wins(configured: Configured) -
         "unknown_difficulty": 0,
         "blocked": 1,
         "claimed": 1,
-        "finished": 2,
-        "merged_but_open": 1,
-        "watching": 1,
+        "failed": 0,
         "escalated": 0,
         "missing_labels.type": 1,
         "type_ambiguous": 0,
@@ -175,30 +168,8 @@ def test_winner_view_argv_is_pinned(configured: Configured) -> None:
             "example/project",
             "--json",
             "number,title,body,labels,author,createdAt,updatedAt,comments,"
-            "closedByPullRequestsReferences,blockedBy,state",
+            "blockedBy,state",
         ]
-    ]
-
-
-def test_announce_posts_fixed_text_through_a_body_file(configured: Configured) -> None:
-    repo, _, _ = configured
-    conventions.override({"issues.announce": True})
-    announce(IssueClient(), 100001, "worker-one", "released")
-    calls = [c["argv"] for c in argv(repo)]
-    assert len(calls) == 1
-    *fixed, body_file = calls[0]
-    assert fixed == [
-        "issue",
-        "comment",
-        "100001",
-        "--repo",
-        "example/project",
-        "--body-file",
-    ]
-    assert Path(body_file).name == "notice.md"
-    posted = json.loads((repo / "github.json").read_text())["pages"][0]
-    assert [c["body"] for c in posted] == [
-        "Argus machine worker-one released this issue back to the queue.\n"
     ]
 
 

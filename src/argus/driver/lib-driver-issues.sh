@@ -25,7 +25,7 @@ issue_preflight() {
   fi
   if [ -z "${BOARD_REPO:-}" ] || [ -z "${BOARD_FILE:-}" ] \
       || [ -z "${BOARD_ISSUES_FILE:-}" ]; then
-    PREFLIGHT_REASON="issue work requires board.file and board.issues-file"
+    PREFLIGHT_REASON="issue work requires board.repo, board.file, and board.issues-file"
     return 1
   fi
   local reason
@@ -73,21 +73,5 @@ for reason, count in sorted(result.get("skipped", {}).items()):
         print(f"issues skipped: {reason}={count}")
 if result.get("truncated"):
     print("issue candidates were capped at {}; raise issues.list-limit to see more".format(result.get("list_limit", "?")))
-if result.get("assignment_error"):
-    print("issue assignment failed; the board claim is held and work can start")
 ' 2>/dev/null)
-  if [ -n "$(printf '%s' "$1" | selection_value assignment_error)" ]; then
-    notify "Issue assignment failed. The board claim is held; the run will start."
-  fi
-}
-
-issue_announce() {
-  [ "${WORK_SOURCE:-phases}" = issues ] || return 0
-  [ "${ISSUES_ANNOUNCE:-1}" = 1 ] || return 0
-  [ -n "$1" ] || return 0
-  "$PYTHON" "$ARGUS/issues/lifecycle.py" announce \
-    "${ARGUS_CONFIG_ARGS[@]}" --issue "$1" --event "$2" \
-    >"$RUN_DIR/issue-notice-$1.json" 2>&1 \
-    || log "issue $1: could not post the $2 notice; see $RUN_DIR/issue-notice-$1.json"
-  return 0
 }

@@ -123,13 +123,10 @@ def main(argv: list[str] | None = None) -> int:
         ("renew", "renew an owned reservation"),
         ("assert-owner", "verify the three-part fence"),
         ("set-status", "change an owned reservation"),
-        ("clear-escalation", "clear a released issue escalation using its fence token"),
     ):
         command = sub.add_parser(name, help=help_text)
         _add_store_args(command)
         _add_reservation_args(command)
-        if name == "clear-escalation":
-            command.add_argument("--confirm", action="store_true")
         if name == "set-status":
             command.add_argument("--status", required=True, choices=sorted(STATUSES))
             command.add_argument(
@@ -198,17 +195,11 @@ def main(argv: list[str] | None = None) -> int:
         help="show only the phase records and publication lock this machine holds",
     )
     sub.add_parser("self-test", help="run hermetic two-client checks")
-    parser.add_argument(
-        "--self-test",
-        dest="legacy_self_test",
-        action="store_true",
-        help=argparse.SUPPRESS,
-    )
 
     args = parser.parse_args(argv)
-    if not args.command and not args.legacy_self_test:
+    if not args.command:
         parser.error("a command is required")
-    if args.legacy_self_test or args.command == "self-test":
+    if args.command == "self-test":
         return self_test()
     try:
         conventions.configure_from_args(args)
@@ -225,7 +216,6 @@ def main(argv: list[str] | None = None) -> int:
             "renew",
             "assert-owner",
             "set-status",
-            "clear-escalation",
         }:
             reservation = {
                 "issue" if args.issues else "phase": (
@@ -241,8 +231,6 @@ def main(argv: list[str] | None = None) -> int:
                 result = store.renew(reservation)
             elif args.command == "assert-owner":
                 result = store.assert_owner(reservation)
-            elif args.command == "clear-escalation":
-                result = store.clear_issue_escalation(reservation, confirm=args.confirm)
             else:
                 result = store.set_status(
                     reservation,

@@ -14,7 +14,6 @@ from argus.gitsync.git import (
     is_git_repo,
     summarize,
 )
-from argus.gitsync.group_gate import release_group_pull_request
 from argus.gitsync.group_publication import (
     _load_phase_reservation,
     _push_one,
@@ -45,10 +44,11 @@ def publish_phase(
 
     The caller must commit the phase's product changes first, on the phase's own
     branch. This helper commits only leftover files in that phase's run
-    directory, syncs both checkouts fail-closed, and pushes. It never stages an
-    unrelated phase, never uses a force push, and never merges: a phase's
-    commits reach the integration branch only when a human merges the pull
-    request this run's receipt points at.
+    directory, syncs both checkouts, and pushes. A failed sync is reported, not
+    gated: the dirty-tree check is gone, and the push is what publishes. It never
+    stages an unrelated phase, never uses a force push, and never merges: a
+    phase's commits reach the integration branch only when a human merges the
+    pull request this run's receipt points at.
     """
     root = Path(root).resolve()
     try:
@@ -136,64 +136,17 @@ def publish_phase(
                 if repo is not None and repo != root and is_git_repo(repo):
                     dirty += [str(repo / p) for p in dirty_paths(repo)]
             # The engine that is publishing is the engine that rewrites the
-            # heartbeat marker, so a clean-tree requirement tests a directory
-            # that is still being written. The marker is already committed and
-            # pushed by the step above; what is left is seconds of churn that
-            # carries no unreviewed work. Everything else still refuses, and
-            # the excluded set is reported rather than dropped.
-            real, engine = publish_dirt(dirty, root=root, phase=phase)
+            # heartbeat marker. The tree is no longer a gate: the run state is
+            # committed above and the branch is pushed below. The engine-written
+            # paths are still reported, so a reader can see which ones churned.
+            _, engine = publish_dirt(dirty, root=root, phase=phase)
             engine_churn = engine
-            if real:
-                outcome = {
-                    "ok": False,
-                    "mode": "publish",
-                    "phase": f"{int(phase):06d}",
-                    "state": "BLOCKED",
-                    "repos": results,
-                    "error": "working tree is dirty after phase cleanup",
-                    "dirty": real,
-                    "engine_written": engine,
-                }
         if outcome is None:
-            # The authoritative integration-branch resync, and the one that
-            # cannot be dodged by ordering. `sync_all(root, "push")` below only
-            # compares each branch against its own upstream, so it never sees
-            # the integration branch at all; this is the step that guarantees a
-            # phase publishes against a base that contains master.
-            #
-            # It sits here rather than in a stage prompt because this is the one
-            # point in a phase where the index is known clean: finalize has
-            # already committed both repositories, which is this helper's own
-            # precondition. A resync issued earlier, from a prompt, can be
-            # refused by git whenever the phase happens to have staged work, and
-            # nothing in code stops that from happening.
             resync = mode_resync(root)
             results.append(resync)
-            if not resync["ok"]:
-                outcome = {
-                    "ok": False,
-                    "mode": "publish",
-                    "phase": f"{int(phase):06d}",
-                    "state": "BLOCKED",
-                    "repos": results,
-                    "summary": resync["summary"],
-                    "error": "the integration branch did not merge into "
-                    "the phase branch; resolve the named paths, "
-                    "rerun the gates the merge invalidated, and "
-                    "rerun this helper",
-                }
         if outcome is None:
             sync = sync_all(root, "push")
             results.append(sync)
-            if not sync["ok"]:
-                outcome = {
-                    "ok": False,
-                    "mode": "publish",
-                    "phase": f"{int(phase):06d}",
-                    "state": "BLOCKED",
-                    "repos": results,
-                    "summary": sync["summary"],
-                }
         if outcome is None:
             checkouts = [root, private]
             if run_repo is not None and run_repo not in checkouts:
@@ -247,12 +200,7 @@ def publish_phase(
             outcome["receipt"] = receipt
             # The group's own answer, for the caller: the shared pull request
             # that covers these members, which members have not published yet,
-            # and whether this publication was the group's last. The gate sits
-            # beside it, in the one place that knows the group is finished: it
-            # merges the fix pull requests waiting on the group branch and takes
-            # the shared pull request out of draft once, when its checks are
-            # green. Checks that are red or still running hold it, and the
-            # driver's next ticks retry, so a publish never has to wait for CI.
+            # and whether this publication was the group's last.
             group: list[Any] = receipt.get("group") or []
             members = [str(member) for member in group]
             if members:
@@ -273,18 +221,6 @@ def publish_phase(
                             f"may show an open checkbox or a missing comment; "
                             f"read the pull request body before merging."
                         )
-                try:
-                    gate = release_group_pull_request(
-                        root,
-                        phase,
-                        members,
-                        receipt.get("pull_request"),
-                        receipt.get("branch"),
-                    )
-                except Exception as exc:  # noqa: BLE001 - the gate never undoes a publish
-                    gate = {"state": "HELD", "reasons": [f"group gate failed: {exc}"]}
-                if gate is not None:
-                    outcome["group_gate"] = gate
             outcome["repos"] = results
             outcome["summary"] = summarize(
                 [

@@ -215,79 +215,50 @@ def _sequencing_merge_checks(
     git(nested, "merge", "-q", "--no-edit", branch_a)
     git(nested, "push", "-q", "origin", private_integration)
 
-    # The negative first: without GitHub the squash is not recognised, which
-    # is the pre-existing behaviour and the reason the check exists.
-    with _StubGH(_gh_says("OPEN")):
-        blocked_open = mark_phase_published(pub, 100451)
-    results.append(
-        (
-            "a squash merge with GitHub reporting OPEN stays blocked",
-            (not blocked_open["ok"])
-            and cast("dict[str, Any]", phase_receipt(pub, 100451)).get("state")
-            == "awaiting_review"
-            and "not merged" in (blocked_open.get("blockers") or [""])[-1],
-            f"blockers={blocked_open.get('blockers')}",
-        )
-    )
-    with _StubGH({"returncode": 4}):
-        blocked_unknown = mark_phase_published(pub, 100451)
-    results.append(
-        (
-            "a squash merge with GitHub unreachable stays blocked rather than "
-            "being assumed merged",
-            (not blocked_unknown["ok"])
-            and cast("dict[str, Any]", phase_receipt(pub, 100451)).get("state")
-            == "awaiting_review"
-            and "could not be asked" in ((blocked_unknown.get("blockers") or [""])[-1]),
-            f"blockers={blocked_unknown.get('blockers')}",
-        )
-    )
-    with _StubGH(_gh_says("MERGED")):
-        marked = mark_phase_published(pub, 100451)
+    # The phase is recorded published once its commit, push, and pull request
+    # succeeded. No merge is required and no commit-id or receipt check gates it.
+    marked = mark_phase_published(pub, 100451)
     published = cast("dict[str, Any]", phase_receipt(pub, 100451))
     results.append(
         (
-            "a squash merge is recorded once GitHub reports the pull request "
-            "merged, and the receipt says which proof covered which checkout",
+            "a phase is recorded published without requiring a merge",
             marked["ok"]
-            and marked.get("confirmed_by")
-            == {"public": "github", "private": "commit-id"}
+            and marked.get("action") == "marked-published"
             and published.get("state") == "published"
             and published.get("merge_confirmed_by")
-            == {"public": "github", "private": "commit-id"},
-            f"ok={marked.get('ok')} by={marked.get('confirmed_by')} "
+            == {"public": "recorded", "private": "recorded"},
+            f"ok={marked.get('ok')} action={marked.get('action')} "
             f"receipt={published.get('merge_confirmed_by')}",
         )
     )
+    again = mark_phase_published(pub, 100451)
+    results.append(
+        (
+            "recording the same phase again is a no-op",
+            again["ok"] and again.get("action") == "already-published",
+            f"action={again.get('action')}",
+        )
+    )
 
-    # --- Item 1 fallback: a merge performed outside GitHub. ---
-    pub2, nested2, _run2 = _publish_fixture(base, "squash-offsite", 100452)
+    # --- The same result when GitHub cannot be asked. ---
+    pub2, _nested2, _run2 = _publish_fixture(base, "squash-offsite", 100452)
     branch_b = "feature/merge-detect-offsite"
     ensure_phase_branch(pub2, branch_b, base="main")
     (pub2 / "part.txt").write_text("work\n")
     git(pub2, "add", "part.txt")
     git(pub2, "commit", "-q", "-m", "phase 100452")
     publish_phase(pub2, 100452)
-    for repo in (pub2, nested2):
-        merge_into = integration_branch(repo)
-        git(repo, "checkout", "-q", merge_into)
-        git(repo, "merge", "-q", "--no-edit", branch_b)
-        git(repo, "push", "-q", "origin", merge_into)
-    # gh is down, so only the commit-id test can answer. A merge commit
-    # keeps the commit, so this must still succeed.
     with _StubGH({"returncode": 1}):
         offsite = mark_phase_published(pub2, 100452)
     offsite_receipt = cast("dict[str, Any]", phase_receipt(pub2, 100452))
     results.append(
         (
-            "a merge commit is still recognised when GitHub cannot be asked",
+            "a phase publishes the same way when GitHub cannot be asked",
             offsite["ok"]
-            and offsite.get("confirmed_by")
-            == {"public": "commit-id", "private": "commit-id"}
-            and offsite_receipt.get("merge_confirmed_by")
-            == {"public": "commit-id", "private": "commit-id"},
-            f"ok={offsite.get('ok')} by={offsite.get('confirmed_by')} "
-            f"receipt={offsite_receipt.get('merge_confirmed_by')}",
+            and offsite.get("action") == "marked-published"
+            and offsite_receipt.get("state") == "published",
+            f"ok={offsite.get('ok')} action={offsite.get('action')} "
+            f"state={offsite_receipt.get('state')}",
         )
     )
 

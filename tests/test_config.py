@@ -192,50 +192,6 @@ def test_phases_repo_must_be_a_git_work_tree():
         expect_error(lambda: cfgmod.load(str(path)), "phases.repo")
 
 
-def test_repair_object_needs_all_three_keys_and_sane_values():
-    with tempfile.TemporaryDirectory() as tmp:
-        whole = {"pipeline": "repair.yaml", "attempts": 3, "wait": 0}
-        document = copy.deepcopy(BASE)
-        document["repair"] = whole
-        config = cfgmod.load(str(write(tmp, json.dumps(document))))
-        check(config.get("repair.attempts") == 3, config.get("repair.attempts"))
-        check(config.get("repair.wait") == 0, config.get("repair.wait"))
-        check(str(config.get("repair.pipeline")).endswith("repair.yaml"), "path")
-
-        absent = cfgmod.load(str(write(tmp, json.dumps(BASE))))
-        check(absent.get("repair.attempts") is None, "repair is off by default")
-
-        for key in whole:
-            document = copy.deepcopy(BASE)
-            document["repair"] = {k: v for k, v in whole.items() if k != key}
-            path = write(tmp, json.dumps(document))
-            expect_error(lambda p=path: cfgmod.load(str(p)), f"repair.{key}")
-
-        for key, value in (("attempts", 0), ("wait", -1)):
-            document = copy.deepcopy(BASE)
-            document["repair"] = {**whole, key: value}
-            path = write(tmp, json.dumps(document))
-            expect_error(lambda p=path: cfgmod.load(str(p)), f"repair.{key}")
-
-
-def test_repair_verify_is_optional_and_its_timeout_is_never_negative():
-    with tempfile.TemporaryDirectory() as tmp:
-        whole = {"pipeline": "repair.yaml", "attempts": 1, "wait": 0}
-        document = copy.deepcopy(BASE)
-        document["repair"] = {**whole, "verify": "make scope", "verify-timeout": 0}
-        config = cfgmod.load(str(write(tmp, json.dumps(document))))
-        check(config.get("repair.verify") == "make scope", config.get("repair.verify"))
-        check(
-            config.get("repair.verify-timeout") == 0,
-            config.get("repair.verify-timeout"),
-        )
-
-        for bad in (-1, -60):
-            document["repair"] = {**whole, "verify-timeout": bad}
-            path = write(tmp, json.dumps(document))
-            expect_error(lambda p=path: cfgmod.load(str(p)), "repair.verify-timeout")
-
-
 def test_sample_loads_with_every_schema_key():
     with tempfile.TemporaryDirectory() as tmp:
         path = sample_in(tmp)
@@ -308,11 +264,6 @@ TESTS = (
     ("phases object required", test_phase_source_without_a_phases_object_is_refused),
     ("phases folder inside repo", test_phases_folder_must_stay_inside_the_phases_repo),
     ("phases repo work tree", test_phases_repo_must_be_a_git_work_tree),
-    ("repair object", test_repair_object_needs_all_three_keys_and_sane_values),
-    (
-        "repair verify keys",
-        test_repair_verify_is_optional_and_its_timeout_is_never_negative,
-    ),
     ("sample", test_sample_loads_with_every_schema_key),
     ("shell format", test_config_cli.test_shell_format),
     (

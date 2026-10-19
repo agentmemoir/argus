@@ -185,6 +185,16 @@ def format_notification(
             f"The line continues; this {kind} is skipped until a person decides. "
             f"For the open findings, run:\n\n```\ncat {run_dir / 'remedy-escalated.json'}\n```"
         )
+    if event == "failed":
+        # The job exhausted its retries; the residue records it and the line
+        # continues. The notice names the record a person has to read.
+        run_dir = (run_json or default_run_json(phase_file)).parent
+        code = f" with exit code {exit_code}" if exit_code is not None else ""
+        return (
+            f"{label} failed after its retries{code}. "
+            f"The line continues; this phase is skipped until a person decides. "
+            f"For the residue, run:\n\n```\ncat {run_dir / 'failed.json'}\n```"
+        )
     if event == "stalled":
         quiet = "under a minute" if quiet_minutes < 1 else f"{quiet_minutes} minutes"
         return (
@@ -211,6 +221,7 @@ def build_parser() -> argparse.ArgumentParser:
             "stopped-signal",
             "stalled",
             "escalated",
+            "failed",
         ],
     )
     parser.add_argument("--reason")

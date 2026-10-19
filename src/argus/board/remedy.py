@@ -106,9 +106,7 @@ def _open_findings(signal: str | None) -> list[str]:
     return found
 
 
-def record_escalation(
-    phase_dir: Path, phase: str | None = None, *, issues: bool = False
-) -> dict[str, Any]:
+def record_escalation(phase_dir: Path, phase: str | None = None) -> dict[str, Any]:
     """Write the durable escalation record and return it.
 
     Args:
@@ -121,15 +119,10 @@ def record_escalation(
     phase_dir = Path(phase_dir)
     run_json = phase_dir / "run.json"
     signal = last_approver_signal(run_json)
-    kind = "issue" if issues else "phase"
-    key = phase or phase_dir.name.removeprefix(f"{kind}-")
+    key = phase or phase_dir.name.removeprefix("phase-")
     record: dict[str, Any] = {
         "version": 1,
-        kind: int(key)
-        if issues
-        else f"{int(key):06d}"
-        if str(key).isdigit()
-        else str(key),
+        "phase": f"{int(key):06d}" if str(key).isdigit() else str(key),
         "state": "remedy_escalated",
         "via": "exhausted",
         "approver_signal": signal,
@@ -137,9 +130,7 @@ def record_escalation(
         "approver_logs": approver_logs(phase_dir),
         "run_dir": str(phase_dir),
         "record": str(phase_dir / RECORD_NAME),
-        "resume": "Clear the issue board escalation receipt before retrying."
-        if issues
-        else RESUME,
+        "resume": RESUME,
     }
     (phase_dir / RECORD_NAME).write_text(
         json.dumps(record, indent=2, sort_keys=True) + "\n"
@@ -147,9 +138,7 @@ def record_escalation(
     return record
 
 
-def release_claim(
-    repo_root: Path, reservation: dict[str, Any], *, issues: bool = False
-) -> Any:
+def release_claim(repo_root: Path, reservation: dict[str, Any]) -> Any:
     """Mark the phase's board record rejected, so the claim is not retained.
 
     Returns the store's result. Raises whatever the store raises; the caller
@@ -158,12 +147,7 @@ def release_claim(
     """
     from argus.board.reservations import ReservationStore
 
-    store = ReservationStore(Path(repo_root), issues=issues)
-    if issues:
-        store.set_issue_receipt(
-            reservation, {"state_reason": "remedy_escalated", "cleared": False}
-        )
-        return store.release_group(reservation)
+    store = ReservationStore(Path(repo_root))
     return store.set_status(reservation, "rejected")
 
 
@@ -171,9 +155,7 @@ def _reservation_from_args(args: argparse.Namespace) -> dict[str, Any] | None:
     if not (args.machine_id and args.reservation_id and args.generation is not None):
         return None
     return {
-        "issue" if args.issues else "phase": int(args.phase)
-        if args.issues
-        else str(args.phase),
+        "phase": str(args.phase),
         "machine_id": args.machine_id,
         "reservation_id": args.reservation_id,
         "generation": int(args.generation),
@@ -185,14 +167,14 @@ def run(args: argparse.Namespace) -> int:
     if not phase_dir.is_dir():
         print(json.dumps({"ok": False, "error": f"no run directory: {phase_dir}"}))
         return 1
-    record = record_escalation(phase_dir, args.phase, issues=args.issues)
+    record = record_escalation(phase_dir, args.phase)
     released = "skipped"
     reason = ""
     reservation = _reservation_from_args(args)
     if reservation is not None:
         try:
-            release_claim(Path(args.repo_root), reservation, issues=args.issues)
-            released = "released" if args.issues else "rejected"
+            release_claim(Path(args.repo_root), reservation)
+            released = "rejected"
         except Exception as exc:  # noqa: BLE001 - a release failure is reported
             released = "failed"
             reason = (
@@ -212,7 +194,6 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run-dir", help="the phase run directory")
     parser.add_argument("--phase", default=None)
-    parser.add_argument("--issues", action="store_true")
     parser.add_argument("--repo-root", dest="config_repo_root")
     parser.add_argument("--config")
     parser.add_argument("--phases-directory", dest="config_phases_directory")

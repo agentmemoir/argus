@@ -4,6 +4,16 @@ Notable changes to this project are documented here. The format follows [Keep a 
 
 ## [Unreleased]
 
+- A failed glide job is retried with capped full jitter and, when the retries run out, recorded as `failed.json` beside the run directory; the selector skips that phase and the line continues to the next job instead of halting until a person clears it. The retry count is `ARGUS_JOB_RETRIES`, 3 retries (4 attempts) by default. ([#156](https://github.com/agentmemoir/argus/pull/156))
+
+- The publication path no longer blocks on git history, merge-base, tree, commit-id, or receipt gates, and a tick no longer runs the GitHub group gate, the repair loop, or the pull-request lifecycle reads; commit, push, and opening the pull request stay. ([#156](https://github.com/agentmemoir/argus/pull/156))
+
+- The outbound secret scan now replaces each secret-looking span in a reply with `[redacted]` and posts the reply, instead of refusing it. ([#156](https://github.com/agentmemoir/argus/pull/156))
+
+- Removed with no shim: the board `--self-test` flag (the `self-test` subcommand is the only spelling), the `DISABLE_DISCORD` environment alias (use `DISABLE_NOTIFY`), the `roadmap-dir` and `phases-dir` top-level config keys (use the `phases` object; both are refused by name), the `--repair-session` flag, and the gitsync `peek-ci` mode. The `issues.announce` and `issues.pr-check-max` config keys and the `watching` key in the issue selection output go with the removed halt and pull-request reads. ([#156](https://github.com/agentmemoir/argus/pull/156))
+
+- GitHub issue work is restored: `driver.provider: issues` selects from a backlog and claims on the shared board, with the failure halt marker, the `--add-assignee` announce, and the closure read stripped, so only Argus's own reservation, running job, or state stops the run and a published issue returns `AWAITING_REVIEW`. A failed issue job now advances the line to another issue while its claim waits to resume through the claim windows. The outbound secret scan returns on the reply path, where it redacts rather than refuses. ([#156](https://github.com/agentmemoir/argus/pull/156))
+
 - `--clear-halt` (`make clear-halt`) removes the halt and stall markers, and the halt record `halted.json` with them only when the phase it names has neither `run.json` nor `resume.json`, so a halt that came before the phase ever started can be cleared instead of needing a hand `rm`; a resumable phase keeps its record and the command says why, and a record that cannot be read is kept too. The command prints each path it removed and removes no run directory, log, or reservation.
 
 - A halt names the state and the reason glide left behind when there is no run result to read. Only when `run.json` is absent does the driver read the trailing JSON object from `session-<phase>.log`, and only from the part this launch appended, so a payload from an earlier launch cannot stand in for it; the object's `state` goes into the halt marker, the driver log line, and the halt record, and its `error` goes in the record's reason, flattened to one line and length-capped. A damaged or unreadable `run.json`, or a log with no payload from this launch, keeps the previous `state=unknown` answer and the resume gate's refusal, and the exit-code handling is unchanged. ([#136](https://github.com/agentmemoir/argus/issues/136))

@@ -2,13 +2,9 @@
 # SPDX-License-Identifier: Apache-2.0
 """Issue namespaces share Git transactions without sharing phase records."""
 
-import copy
 import datetime as dt
-import json
-import os
 import shutil
 import subprocess
-import sys
 from pathlib import Path
 from typing import Any
 
@@ -32,7 +28,6 @@ from argus.board.git import _git
 from argus.board.selftest_fixture import _git_test_repo
 from argus.board.state import _validate_state, state_rel
 from argus.board.store import ReservationStore
-from config_fixture import BASE, write
 
 
 @pytest.fixture
@@ -272,74 +267,15 @@ def test_deleted_issue_state_is_not_read_as_empty(
         issues.read()
 
 
-def test_cli_clears_only_a_confirmed_escalation_with_its_fence(
+def test_writeback_receipt_survives_a_released_issue(
     board: tuple[ReservationStore, ReservationStore, ReservationStore],
 ) -> None:
     _phases, issues, _rival = board
-    document = copy.deepcopy(BASE)
-    document["repo-root"] = str(issues.root)
-    document["board"] = {
-        "repo": str(issues.private),
-        "branch": issues.branch,
-        "remote": issues.remote,
-        "file": "coordination/phases.json",
-        "issues-file": "coordination/issues.json",
-    }
-    config = write(issues.root.parent, json.dumps(document))
-
-    def invoke(
-        token: dict[str, Any], *, confirm: bool = True
-    ) -> subprocess.CompletedProcess[str]:
-        args = [
-            sys.executable,
-            "-m",
-            "argus.board.reservations",
-            "clear-escalation",
-            "--config",
-            str(config),
-            "--issues",
-            "--phase",
-            str(token["issue"]),
-            "--machine-id",
-            token["machine_id"],
-            "--reservation-id",
-            token["reservation_id"],
-            "--generation",
-            str(token["generation"]),
-        ]
-        if confirm:
-            args.append("--confirm")
-        return subprocess.run(
-            args,
-            cwd=issues.root,
-            env=dict(os.environ),
-            stdin=subprocess.DEVNULL,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            timeout=30,
-            check=False,
-        )
-
-    token = issues.reserve(42, "machine-1")
+    token = issues.reserve(43, "machine-1")
     issues.set_issue_receipt(
-        token, {"state_reason": "remedy_escalated", "cleared": False}
+        token, {"state_reason": "writeback_pending", "body": "Review is ready."}
     )
     issues.release_group(token)
-    assert invoke(token, confirm=False).returncode == 2
-    assert invoke({**token, "generation": token["generation"] + 1}).returncode == 4
-    cleared = invoke(token)
-    assert cleared.returncode == 0, cleared.stdout + cleared.stderr
-    assert (
-        json.loads(cleared.stdout)["reservation"]["completion_receipt"]["cleared"]
-        is True
-    )
-    pending = issues.reserve(43, "machine-1")
-    issues.set_issue_receipt(
-        pending, {"state_reason": "writeback_pending", "body": "Review is ready."}
-    )
-    refused = invoke(pending)
-    assert refused.returncode == 2
     assert (
         issues.read()[0]["phases"]["000043"]["completion_receipt"]["state_reason"]
         == "writeback_pending"

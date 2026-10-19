@@ -159,7 +159,6 @@ def backlog(tmp_path: Path, exec_dir: Path) -> Path:
                     "difficulty-order": ["difficulty:easy"],
                     "preference": "newest",
                     "task-dir": str(board / "tasks"),
-                    "announce": False,
                 },
             }
         ),
@@ -222,15 +221,8 @@ def test_issue_tick_claims_one_issue_and_launches_only_the_stub(
     task = next((board / "tasks").glob("issue-100001-*.md"))
     assert "<<<UNTRUSTED-DATA-BEGIN id=issue-100001-body" in task.read_text("utf-8")
     calls = [call["argv"] for call in argv(backlog)]
-    assert [
-        "issue",
-        "edit",
-        "100001",
-        "--repo",
-        "example/project",
-        "--add-assignee",
-        "@me",
-    ] in calls
+    # The board record is the claim; Argus makes no GitHub write for it.
+    assert not any(call[:2] == ["issue", "edit"] for call in calls)
     assert not any(call["remote_in_env"] for call in argv(backlog))
 
 

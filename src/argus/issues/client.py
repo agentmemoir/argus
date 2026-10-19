@@ -1,6 +1,6 @@
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
 # SPDX-License-Identifier: Apache-2.0
-"""Structured GitHub reads and fixed assignment writes via gh argv."""
+"""Structured GitHub reads via gh argv."""
 
 import hashlib
 import re
@@ -14,7 +14,9 @@ from argus.issues.transport import IssuesUnavailable, run
 REPO_RE = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+\Z")
 TOKEN_RE = re.compile(r"[A-Za-z0-9_.:@/\[\]-]+\Z")
 SEARCH_FIELDS = "number,title,labels,author,authorAssociation,createdAt,updatedAt,isPullRequest,assignees,url,state,commentsCount"
-VIEW_FIELDS = "number,title,body,labels,author,createdAt,updatedAt,comments,closedByPullRequestsReferences,blockedBy,state"
+VIEW_FIELDS = (
+    "number,title,body,labels,author,createdAt,updatedAt,comments,blockedBy,state"
+)
 
 
 def issue_number(value: Any) -> int:
@@ -132,7 +134,6 @@ class IssueClient:
         objects(value.get("comments"), "issue comments")
         objects(value.get("labels"), "issue labels")
         author = mapping(value.get("author"), "issue author")
-        objects(value.get("closedByPullRequestsReferences"), "linked pull requests")
         blockers = mapping(value.get("blockedBy"), "issue dependencies")
         nodes = objects(blockers.get("nodes"), "issue dependencies")
         total = blockers.get("totalCount")
@@ -176,31 +177,6 @@ class IssueClient:
                 )
         return comments
 
-    def pr_state(self, reference: dict[str, Any]) -> str:
-        number = issue_number(reference.get("number"))
-        repository = mapping(reference.get("repository", {}), "pull request repository")
-        repo = repository.get("nameWithOwner")
-        if not repo and repository.get("name"):
-            owner = mapping(repository.get("owner", {}), "pull request owner")
-            if not isinstance(owner.get("login"), str):
-                raise IssuesUnavailable("invalid_response", "pull request owner")
-            repo = f"{owner['login']}/{repository['name']}"
-        # A missing repository can only mean the configured repository.
-        repo = repo or self.repo
-        if not isinstance(repo, str) or not REPO_RE.fullmatch(repo):
-            raise IssuesUnavailable("invalid_response", "pull request repository")
-        value = mapping(
-            self.call(["pr", "view", str(number), "--repo", repo, "--json", "state"]),
-            "pull request state",
-        )
-        if value.get("state") not in {
-            "OPEN",
-            "CLOSED",
-            "MERGED",
-        }:
-            raise IssuesUnavailable("invalid_response", "pull request state")
-        return str(value["state"])
-
     def team_members(self, team: str) -> list[str]:
         if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", team):
             raise IssuesUnavailable("configuration", "CODEOWNERS team")
@@ -218,20 +194,6 @@ class IssueClient:
         if any(not isinstance(m, str) or not TOKEN_RE.fullmatch(m) for m in members):
             raise IssuesUnavailable("invalid_response", "team logins")
         return [str(member) for member in members]
-
-    def assign(self, number: int) -> None:
-        self.call(
-            [
-                "issue",
-                "edit",
-                str(issue_number(number)),
-                "--repo",
-                self.repo,
-                "--add-assignee",
-                "@me",
-            ],
-            parse=False,
-        )
 
     def comment(
         self,

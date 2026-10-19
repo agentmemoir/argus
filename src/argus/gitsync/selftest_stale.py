@@ -153,13 +153,8 @@ def _stale_receipt_checks(base: Path) -> list[tuple[str, object, str]]:
                 f"blockers={[b for r in done.get('repos', []) for b in r.get('blockers', [])]}",
             )
         )
-        results.append(
-            (
-                "GitHub was asked about the pull request named only in the URL",
-                any("980" in " ".join(str(a) for a in call) for call in gh.calls),
-                f"calls={gh.calls}",
-            )
-        )
+        # The merge check no longer asks GitHub: slice 5 removed that read, so a
+        # phase is recorded published from its own receipt, not from a merge.
 
         # The point of the whole exercise: the next phase is no longer stacked
         # on a branch whose content is already on the integration branch.
@@ -240,11 +235,10 @@ def _stale_receipt_checks(base: Path) -> list[tuple[str, object, str]]:
             nogh: dict[str, Any] = mode_published(pub3, 100613)
         results.append(
             (
-                "with GitHub unreachable the receipt is not rewritten, because "
-                "only GitHub or the pull request's own commit may say merged",
-                (not nogh["ok"])
-                and (phase_receipt(pub3, 100613) or {}).get("state")
-                == "awaiting_review",
+                "with GitHub unreachable the phase is still published, because "
+                "no merge proof is required",
+                nogh["ok"]
+                and (phase_receipt(pub3, 100613) or {}).get("state") == "published",
                 f"ok={nogh.get('ok')} "
                 f"state={(phase_receipt(pub3, 100613) or {}).get('state')}",
             )

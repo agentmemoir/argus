@@ -87,7 +87,8 @@ def _build(
                 "'phases.directory' to the folder holding the work-item files, "
                 "and 'phases.repo', 'phases.branch', 'phases.remote' with it"
             )
-
+    if "repair" in raw:
+        raise ConfigError("key 'repair' was removed: Argus runs no repair loop")
     for name in _OBJECT_KEYS:
         if name in raw and raw[name] is not None and not isinstance(raw[name], dict):
             raise ConfigError(f"invalid type for key '{name}': expected object")
@@ -103,11 +104,6 @@ def _build(
     notify_value = raw.get("notify")
     notify = (
         cast("dict[str, Any]", notify_value) if isinstance(notify_value, dict) else None
-    )
-
-    repair_value = raw.get("repair")
-    repair = (
-        cast("dict[str, Any]", repair_value) if isinstance(repair_value, dict) else None
     )
     issue_value = raw.get("issues")
     issues = (
@@ -146,9 +142,7 @@ def _build(
     values: dict[str, object] = {}
     sources: dict[str, str] = {}
     for field in SCHEMA:
-        required = _is_required(
-            field, board, notify, issues, repair, runstate, provider
-        )
+        required = _is_required(field, board, notify, issues, runstate, provider)
         if field.key in supplied:
             raw_value, source = supplied[field.key]
             _check_type(field, raw_value)
@@ -180,7 +174,6 @@ def _is_required(
     board: dict[str, Any] | None,
     notify: dict[str, Any] | None,
     issues: dict[str, Any] | None,
-    repair: dict[str, Any] | None,
     runstate: dict[str, Any] | None,
     provider: object,
 ) -> bool:
@@ -194,8 +187,6 @@ def _is_required(
         return notify is not None
     if field.required == "issues":
         return issues is not None and provider == "issues"
-    if field.required == "repair":
-        return repair is not None
     if field.required == "runstate":
         return runstate is not None
     return False
@@ -268,18 +259,6 @@ def _check_value(field: Field, value: object, required: bool) -> None:
         )
     if required and field.type in ("str", "path") and value == "":
         raise ConfigError(f"missing required key '{field.key}'")
-    if field.key == "repair.attempts" and cast("int", value) < 1:
-        raise ConfigError("invalid value for key 'repair.attempts': must be at least 1")
-    if field.key == "repair.wait" and cast("int", value) < 0:
-        raise ConfigError("invalid value for key 'repair.wait': must not be negative")
-    if field.key == "repair.verify-timeout" and cast("int", value) < 0:
-        raise ConfigError(
-            "invalid value for key 'repair.verify-timeout': must not be negative"
-        )
-    if field.key == "repair.stale-after" and cast("int", value) < 0:
-        raise ConfigError(
-            "invalid value for key 'repair.stale-after': must not be negative"
-        )
     if field.key == "driver.state" and "/" in cast("str", value):
         raise ConfigError(
             "invalid value for key 'driver.state': must be a folder name, not a path"

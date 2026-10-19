@@ -93,21 +93,5 @@ class _IssueOps(_StoreBase):
             issues=True,
         )
 
-    def clear_issue_escalation(
-        self, reservation: dict[str, Any], *, confirm: bool = False
-    ) -> dict[str, Any]:
-        """Clear an escalation only with explicit confirmation and its fence token."""
-        if not self.issues or not confirm:
-            raise CoordinationError(
-                "clearing an issue escalation requires --issues and --confirm"
-            )
-        key, _number = self._key(reservation.get("issue"))
-        state, _commit = self.read()
-        record = state["phases"].get(key)
-        receipt = _receipt_of(record) if record else {}
-        if receipt.get("state_reason") != "remedy_escalated":
-            raise CoordinationError("issue has no escalation receipt to clear")
-        return self.set_issue_receipt(reservation, {**receipt, "cleared": True})
-
 
 __all__ = ["_IssueOps"]

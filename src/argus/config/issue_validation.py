@@ -112,7 +112,6 @@ def validate_issues(values: dict[str, object]) -> None:
         "max-comments",
         "max-text-bytes",
         "list-limit",
-        "pr-check-max",
         "timeout",
         "claim-attempts",
     ):

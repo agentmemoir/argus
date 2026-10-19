@@ -20,6 +20,7 @@ BLOCKED = "blocked"
 RESULT_FILENAME = "run.json"
 RESUME_FILENAME = "resume.json"
 ABANDONED_FILENAME = "abandoned.json"
+FAILED_FILENAME = "failed.json"
 
 
 def _run_dir(
@@ -95,6 +96,26 @@ def run_abandoned(
     if directory is None:
         return False
     residue = _read_json(directory / ABANDONED_FILENAME)
+    if residue is None or residue.get("version") != 1:
+        return False
+    return residue.get("phase") == str(number)
+
+
+def run_failed(
+    repo: str | Path, number: int, phase_file: str | Path | None = None
+) -> bool:
+    """Whether this phase ended in a job failure the driver recorded.
+
+    The driver writes ``failed.json`` when a job fails after its retries. The
+    selector reads it the way it reads an abandonment residue: the phase is not
+    offered again, so the line continues to the next job. The run directory is
+    left alone for the evidence. A residue that is not version 1, or names
+    another phase, is not this phase's.
+    """
+    directory = _run_dir(repo, number, phase_file)
+    if directory is None:
+        return False
+    residue = _read_json(directory / FAILED_FILENAME)
     if residue is None or residue.get("version") != 1:
         return False
     return residue.get("phase") == str(number)

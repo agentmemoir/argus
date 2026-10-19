@@ -54,6 +54,10 @@ An idle halted or manually stopped line does not renew its claim. The claim can 
 
 A later resume must renew the old fence or take a fresh reservation. It refuses when another owner holds the work.
 
+## Failed jobs
+
+A glide job that fails is retried with capped exponential backoff and full jitter, then recorded as `failed.json` beside the phase's run directory; the selector skips that phase, so the line continues to the next job instead of halting. `ARGUS_JOB_RETRIES` sets the retry count, 3 by default, so a job is tried 4 times. A failure that exhausts its retries sends a `failed` notification naming the residue.
+
 ## The Configuration File
 
 `--config` names the file. Without the flag, Argus uses `config.json` in the current folder when it is there. `--self-test` reads no file.

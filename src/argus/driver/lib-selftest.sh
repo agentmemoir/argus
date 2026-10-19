@@ -353,13 +353,12 @@ PROBE
   # so later checks still run when the publication guard is deliberately broken.
   set_config_args
   DISABLE_NOTIFY=1
-  DISABLE_DISCORD=1
   DRIVER_STUB_RC=0
   # Long enough that the phase window is still open for the checks below. The
   # phase now lives in a window that closes on exit, so a 1s stub could finish
   # before the first assertion ran.
   DRIVER_STUB_SLEEP=6
-  export SESSION_NAME DRIVER_RUN_DIR DISABLE_NOTIFY DISABLE_DISCORD DRIVER_STUB_RC DRIVER_STUB_SLEEP
+  export SESSION_NAME DRIVER_RUN_DIR DISABLE_NOTIFY DRIVER_STUB_RC DRIVER_STUB_SLEEP
   RUN_DIR="$DRIVER_RUN_DIR"
   LOCK="$RUN_DIR/driver.lock"; HALT="$RUN_DIR/halted"
   HALT_RECORD="$RUN_DIR/halted.json"
@@ -398,6 +397,9 @@ PROBE
   selftest_run_case resume
   selftest_run_case abandon
   selftest_run_case clear_halt
+  # The failure-residue case writes its own run directory, so it runs after the
+  # cases that share the fixture's phase state.
+  selftest_run_case job_failure
 
 
   tmux kill-session -t "$SESSION" 2>/dev/null || true

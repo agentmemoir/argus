@@ -126,28 +126,6 @@ def test_closed_dependencies_and_many_labels_do_not_block(
     assert result["state"] == "AVAILABLE" and result["skipped"]["blocked"] == 0
 
 
-def test_open_and_merged_prs_are_finished_and_lookup_count_is_bounded(
-    configured: Configured,
-) -> None:
-    repo, _, _ = configured
-    fixture_update(
-        repo,
-        rows=[
-            issue(100001, closedByPullRequestsReferences=[{"number": 200001}]),
-            issue(100002, closedByPullRequestsReferences=[{"number": 200002}]),
-            issue(100003, closedByPullRequestsReferences=[{"number": 200003}]),
-        ],
-        pr_states={"200001": "MERGED", "200002": "OPEN"},
-    )
-    conventions.override({"issues.pr-check-max": 2})
-    result = IssuesSource(repo).select(reserve=False)
-    assert result["state"] == "NO_PHASE"
-    assert result["skipped"]["merged_but_open"] == 1
-    assert result["skipped"]["watching"] == 2
-    assert len([call for call in argv(repo) if call["argv"][:2] == ["pr", "view"]]) == 2
-    assert "awaiting_review" not in result and "phase" not in result
-
-
 def test_lost_claim_race_tries_the_next_issue(configured: Configured) -> None:
     repo, _, board = configured
     fixture_update(repo, rows=[issue(100001), issue(100002)])
@@ -196,6 +174,32 @@ def test_escalation_skips_until_clear_and_truncation_is_visible(
     assert result["truncated"] is True
     board.records["100001"]["completion_receipt"]["cleared"] = True
     assert IssuesSource(repo).select(reserve=False)["state"] == "AVAILABLE"
+
+
+def test_failed_issue_claim_is_skipped_for_the_next_issue(
+    configured: Configured,
+) -> None:
+    repo, _, board = configured
+    fixture_update(repo, rows=[issue(100001), issue(100002)])
+    board.records = {
+        "100001": {
+            "issue": "100001",
+            "machine_id": "worker-one",
+            "status": "claimed",
+            "reservation_id": "rsv-fixture",
+            "generation": 1,
+            "run_id": "issue-100001",
+        }
+    }
+    run_dir = repo / "runs" / "phase-100001"
+    run_dir.mkdir(parents=True)
+    (run_dir / "failed.json").write_text(
+        json.dumps({"version": 1, "phase": "100001"}), encoding="utf-8"
+    )
+    result = IssuesSource(repo).select(reserve=False)
+    assert result["state"] == "AVAILABLE" and result["issue"] == "100002"
+    assert result["skipped"]["failed"] == 1
+    assert "100001" in board.records
 
 
 def test_pending_validated_writeback_retries_before_search(
@@ -295,31 +299,12 @@ def test_every_cli_path_types_remote_failure(
     assert "Traceback" not in captured.err
 
 
-def test_assignment_failure_keeps_claim_and_launches(
-    configured: Configured, capsys: pytest.CaptureFixture[str]
-) -> None:
+def test_claim_keeps_the_board_record_only(configured: Configured) -> None:
     repo, _, board = configured
-    fixture_update(repo, mode="edit-failure")
     result = IssuesSource(repo).select()
     assert (
         result["state"] == "RESERVED" and board.records["100001"]["status"] == "claimed"
     )
-    assert "assignment failed" in capsys.readouterr().err
-    # The fake prints "permission denied": no token, rate, or network marker.
-    assert result["assignment_error"] == "command_failed"
-
-
-def test_closed_owned_issue_releases_without_comment(configured: Configured) -> None:
-    repo, _, board = configured
-    board.records = {
-        "100001": {
-            "status": "claimed",
-            "machine_id": "worker-one",
-            "reservation_id": "rsv-fixture",
-            "generation": 1,
-        }
-    }
-    fixture_update(repo, rows=[issue(state="CLOSED")])
-    result = IssuesSource(repo).select()
-    assert result["state"] == "NO_PHASE" and board.released == ["100001"]
+    # The board record is the only claim artifact: no GitHub write is made.
+    assert not any(call["argv"][:2] == ["issue", "edit"] for call in argv(repo))
     assert not any(call["argv"][:2] == ["issue", "comment"] for call in argv(repo))

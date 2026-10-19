@@ -28,7 +28,7 @@ Argus reads text it does not control: issue text and comments, pull request revi
 - Trust comes from the `issues.*` settings only: `trusted-authors`, `trusted-apps`, `trusted-associations`, `codeowners-file`, and `comment-trust`. Their defaults are in `src/argus/config/schema.py`.
 - A bot is trusted only through `trusted-apps`; an author association never admits a bot.
 - A pull request comment's text is kept only for a trusted author. With `issues.untrusted-comments` set to `data-only`, untrusted text is shown as data and marked untrusted. The default, `ignore`, shows none.
-- A reply an agent posts is public. Argus refuses a reply longer than 4000 characters, a reply that looks like a credential, and any reply to a comment whose author is not trusted. Trust is checked again from a fresh read when the reply is posted.
+- A reply an agent posts is public. Argus refuses a reply longer than 4000 characters and any reply to a comment whose author is not trusted. The outbound secret scan replaces each secret-looking span with `[redacted]` and never refuses the reply. Trust is checked again from a fresh read when the reply is posted.
 
 Host reply checks: a host may set `commands.reply-check` to a command that reads a draft reply on stdin and exits non-zero to refuse it; the engine runs it before posting.
 

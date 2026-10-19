@@ -29,8 +29,13 @@ ARGUS = Path(__file__).resolve().parents[1]
 #: Every git command that reads this hook fails.
 FAILING_HOOK = "#!/bin/sh\nexit 1\n"
 
-#: The two self-tests the readiness report runs, by the entry point it runs.
-SELF_TESTS = ("select/next_phase.py", "board/reservations.py")
+#: The two self-tests the readiness report runs, by the entry point and the
+#: argument the report passes: `--self-test` for the selector, and the
+#: `self-test` subcommand for the board tool, which has no such flag.
+SELF_TESTS = (
+    ("select/next_phase.py", "--self-test"),
+    ("board/reservations.py", "self-test"),
+)
 
 
 def _hostile_global_config(exec_dir: Path) -> Path:
@@ -51,9 +56,9 @@ def _hostile_global_config(exec_dir: Path) -> Path:
     return config
 
 
-@pytest.mark.parametrize("entry", SELF_TESTS)
+@pytest.mark.parametrize("entry, self_test_arg", SELF_TESTS)
 def test_readiness_self_test_ignores_the_host_global_git_config(
-    entry: str, exec_dir: Path, tmp_path: Path
+    entry: str, self_test_arg: str, exec_dir: Path, tmp_path: Path
 ) -> None:
     """Each self-test must pass on a machine whose global git hooks fail.
 
@@ -70,7 +75,7 @@ def test_readiness_self_test_ignores_the_host_global_git_config(
         TMPDIR=str(scratch),
     )
     result = subprocess.run(
-        [sys.executable, str(ARGUS / "src/argus" / entry), "--self-test"],
+        [sys.executable, str(ARGUS / "src/argus" / entry), self_test_arg],
         cwd=ARGUS,
         env=env,
         capture_output=True,

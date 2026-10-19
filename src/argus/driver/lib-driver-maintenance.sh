@@ -27,7 +27,6 @@ PY
 
 reconcile_pending_reviews() {
   PENDING_PUBLISHED=0
-  PENDING_READY=0
   [ "${WORK_SOURCE:-phases}" != issues ] || return 0
   local pending
   if [ -n "${DRIVER_STUB_COORDINATION:-}" ]; then

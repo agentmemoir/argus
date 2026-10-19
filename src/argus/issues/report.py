@@ -22,7 +22,6 @@ class _Reports:
     client: IssueClient
     preference: str
     skipped: Counter[str]
-    watching: list[dict[str, Any]]
     rows: list[dict[str, Any]] | None
     truncated: bool
     groups: dict[str, Any]
@@ -55,7 +54,6 @@ class _Reports:
             "skipped": dict(self.skipped),
             "preference": self.preference,
             "sort": "best-match" if self.preference == "search" else "created",
-            "watching": list(self.watching),
             "candidates": [
                 {"issue": str(r["number"]), "ordering_key": r["ordering_key"]}
                 for r in self.rows or []

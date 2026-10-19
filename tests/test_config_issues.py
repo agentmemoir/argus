@@ -33,10 +33,8 @@ def test_issue_schema_matches_complete_key_set() -> None:
         "max-comments",
         "max-text-bytes",
         "list-limit",
-        "pr-check-max",
         "timeout",
         "claim-attempts",
-        "announce",
     }
     actual = {
         field.key.removeprefix("issues.")
@@ -58,12 +56,9 @@ def test_issue_optional_defaults_are_visible_only_on_issue_machines(
     assert config.get("issues.max-comments") == 50
     assert config.get("issues.max-text-bytes") == 60000
     assert config.get("issues.list-limit") == 200
-    assert config.get("issues.pr-check-max") == 5
     assert config.get("issues.timeout") == 30
     assert config.get("issues.claim-attempts") == 3
-    assert config.get("issues.announce") is True
     assert config.source("issues.preference") == "file"
-    assert config.source("issues.announce") == "default"
     assert config.get("issues.task-dir") == tmp_path / "project/runs/issue-tasks"
     phases = cfgmod.load(write(tmp_path, json.dumps(BASE)))
     assert not any(key.startswith("issues.") for key in phases.values)
@@ -202,7 +197,6 @@ def test_difficulty_labels_and_order_must_match(tmp_path: Path) -> None:
         ("max-comments", True),
         ("max-text-bytes", 0),
         ("list-limit", -1),
-        ("pr-check-max", 0),
         ("timeout", 0),
         ("claim-attempts", 0),
         ("trusted-authors", [""]),
@@ -273,8 +267,8 @@ def test_issue_shell_and_report_render_structured_values(tmp_path: Path) -> None
     assert "BOARD_ISSUES_FILE=coordination/issues.json" in lines
     assert "ISSUES_REPO=example/project" in lines
     assert "ISSUES_PREFERENCE=newest" in lines
-    assert "ISSUES_ANNOUNCE=1" in lines
-    assert "ARGUS_SOURCE_ISSUES_ANNOUNCE='default'" in lines
+    assert "ISSUES_TIMEOUT=30" in lines
+    assert "ARGUS_SOURCE_ISSUES_TIMEOUT='default'" in lines
     groups = [
         line
         for line in cfgmod.report_lines(config)

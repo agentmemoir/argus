@@ -132,7 +132,9 @@ self-test:
 	$(RUN) python -m argus.gitsync.main --self-test
 	$(RUN) python -m argus.issues.selftest
 	$(RUN) pytest -q tests/test_driver_maintenance.py tests/test_driver_maintenance_cli.py tests/test_driver_saved_publication.py tests/test_driver_stop_contract.py tests/test_board_branch.py tests/test_board_lease_policy.py tests/test_selftest_git_isolation.py tests/test_selftest_recovery.py tests/test_selftest_teardown.py
-	$(RUN) pytest -q tests/test_config_issues.py tests/test_config_overlay.py tests/test_issue_board.py tests/test_issue_driver.py tests/test_issue_tick.py tests/test_idle_watcher.py tests/test_group_gate_hook.py tests/test_idle_tick_log.py tests/test_repair_session.py tests/test_repair_watchdog.py tests/test_selftest_groups.py tests/test_repair_checks_read.py tests/test_repair_regression.py tests/test_checkpoint_empty_stage.py tests/test_notify_target.py tests/test_selection_blocked.py tests/test_estimate.py tests/test_issues_*.py tests/test_issue_publication*.py
+	$(RUN) pytest -q tests/test_config_overlay.py tests/test_idle_watcher.py tests/test_idle_tick_log.py tests/test_checkpoint_empty_stage.py tests/test_notify_target.py tests/test_selection_blocked.py tests/test_estimate.py
+	$(RUN) pytest -q tests/test_config_issues.py tests/test_issue_board.py tests/test_issue_driver.py tests/test_issue_publication.py tests/test_issue_publication_cli.py tests/test_issue_publication_fixture.py tests/test_issue_publication_tidy.py tests/test_issue_tick.py tests/test_issues_boundary.py tests/test_issues_cases.py tests/test_issues_lifecycle.py tests/test_issues_selection.py
+	$(RUN) pytest -q tests/test_pr_signal_reply.py tests/test_pr_signal_guard.py tests/test_pr_signal_trust.py tests/test_pr_signals.py
 
 # The published folder must carry no identifier: no home path, no numeric
 # account or channel id, and no notification default or literal that is not a

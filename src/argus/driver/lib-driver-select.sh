@@ -179,9 +179,7 @@ PROBE
 confirm_pending_reviews() {
   local phase branch pr rc=0 state checked=0 cap
   PENDING_PUBLISHED=0
-  PENDING_READY=0
   MERGE_CHECK_HEALTH="ok"
-  GATED_PULL_REQUESTS=""
   # Bounded, because each phase costs a gh call and possibly a fetch, and a
   # selection is not a place where unbounded network work belongs. Five keeps
   # the worst case (five calls at the 15s bound in gitsync.py) to about 75
@@ -242,10 +240,6 @@ confirm_pending_reviews() {
         if [ "$MERGE_CHECK_HEALTH" = "UNAVAILABLE (gh could not be asked)" ]; then
           log_changed degraded "  the squash-merge check is DEGRADED: a squash-merged phase will keep waiting until gh works again"
         fi
-        # Still waiting for its pull request to merge: the one moment the group's
-        # fix pull requests and its ready transition are due.
-        gate_group_pull_request "$phase" "$pr"
-        watch_signals_pull_request "$phase"
         ;;
     esac
     rc=0

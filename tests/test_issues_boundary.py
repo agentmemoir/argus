@@ -40,7 +40,6 @@ def test_external_argv_keeps_remote_text_out(configured: Configured) -> None:
     client = IssueClient()
     row = client.search("newest")[0]
     client.view(row["number"], row)
-    client.assign(row["number"])
     calls = argv(repo)
     assert calls[0]["argv"] == [
         "search",
@@ -58,14 +57,11 @@ def test_external_argv_keeps_remote_text_out(configured: Configured) -> None:
         "--json",
         SEARCH_FIELDS,
     ]
-    assert calls[-1]["argv"] == [
+    assert calls[-1]["argv"][:4] == [
         "issue",
-        "edit",
+        "view",
         "100001",
         "--repo",
-        "example/project",
-        "--add-assignee",
-        "@me",
     ]
     assert all(
         SENTINEL not in str(call["argv"]) and not call["remote_in_env"]
@@ -237,26 +233,3 @@ def test_atomic_replacement_and_bounded_filename(configured: Configured) -> None
     write(path, "second")
     assert path.read_text() == "second"
     assert sorted(p.name for p in repo.iterdir()) == sorted(["github.json", path.name])
-
-
-def test_linked_pr_uses_upstream_repository_shape(configured: Configured) -> None:
-    repo, _ = configured
-    client = IssueClient()
-    assert (
-        client.pr_state(
-            {
-                "number": 200001,
-                "repository": {"name": "other-project", "owner": {"login": "example"}},
-            }
-        )
-        == "CLOSED"
-    )
-    assert argv(repo)[-1]["argv"] == [
-        "pr",
-        "view",
-        "200001",
-        "--repo",
-        "example/other-project",
-        "--json",
-        "state",
-    ]

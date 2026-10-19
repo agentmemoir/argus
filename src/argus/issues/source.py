@@ -18,12 +18,12 @@ from argus.issues import claims
 from argus.issues.client import IssueClient
 from argus.issues.evidence import Evidence, escalated, pending, signals
 from argus.issues.filter import eligible
-from argus.issues.lifecycle import announce
 from argus.issues.order import PREFERENCES, ordering
 from argus.issues.report import _Reports
 from argus.issues.task import render, task_directory, task_path, write
 from argus.issues.transport import IssuesUnavailable
 from argus.issues.trust import Trust
+from argus.phases.runstate import run_failed
 from argus.select.work_source import WorkSource
 
 
@@ -41,7 +41,7 @@ class IssuesSource(_Reports, WorkSource):
                 or conventions.setting("board.issues-file", None) is None
             ):
                 raise ValueError(
-                    "issue source requires board.file and board.issues-file"
+                    "issue source requires board.repo and board.issues-file"
                 )
         except ValueError as exc:
             raise IssuesUnavailable("configuration", str(exc)) from exc
@@ -69,9 +69,7 @@ class IssuesSource(_Reports, WorkSource):
                     "unknown_difficulty",
                     "blocked",
                     "claimed",
-                    "finished",
-                    "merged_but_open",
-                    "watching",
+                    "failed",
                     "escalated",
                 ),
                 0,
@@ -80,15 +78,12 @@ class IssuesSource(_Reports, WorkSource):
         for name in self.groups:
             self.skipped[f"missing_labels.{name}"] = 0
             self.skipped[f"{name}_ambiguous"] = 0
-        self.watching: list[dict[str, Any]] = []
         self.rows: list[dict[str, Any]] | None = None
         self.details: dict[int, dict[str, Any]] = {}
         self.records: dict[str, Any] = {}
         self.store: Any = None
         self.truncated = False
-        self.evidence = Evidence(
-            self.client, conventions.setting("issues.pr-check-max", 5)
-        )
+        self.evidence = Evidence()
 
     def _load(
         self, *, reserve: bool = False, store: Any = None, listing: bool = True
@@ -140,24 +135,11 @@ class IssuesSource(_Reports, WorkSource):
             else:
                 detail["evidence"] = self.evidence.inspect(detail)
                 if detail["evidence"]:
-                    reason = detail["evidence"]
-                    self.skipped[reason] += 1
-                    if reason in {"watching", "merged_but_open"}:
-                        self.skipped["finished"] += 1
-                    if reason == "watching":
-                        self.watching.append(
-                            {
-                                "issue": str(number),
-                                "pr_checks_truncated": detail.get(
-                                    "pr_checks_truncated", False
-                                ),
-                            }
-                        )
+                    self.skipped[detail["evidence"]] += 1
             self.details[number] = detail
         return self.details[number]
 
     def _cleanup(self, machine: str, reserve: bool) -> dict[str, Any] | None:
-        # Closed issues are absent from search, so owned claims need a direct read.
         for key, record in list(self.records.items()):
             if record.get("machine_id") != machine or not claims.held(record):
                 continue
@@ -184,12 +166,6 @@ class IssuesSource(_Reports, WorkSource):
                         error="validated report write-back is pending",
                     )
                 continue
-            issue = self.client.view(number)
-            if issue["state"].lower() == "closed":
-                self.skipped["finished"] += 1
-                if reserve:
-                    self.store.release_group(claims.token(number, record))
-                    self.records.pop(key, None)
         return None
 
     def select(
@@ -214,8 +190,13 @@ class IssuesSource(_Reports, WorkSource):
                 self.skipped["escalated"] += 1
                 continue
             if record is not None and claims.held(record):
-                self.skipped["claimed"] += 1
                 if record.get("machine_id") == machine:
+                    if run_failed(self.repo, number, task_path(self.directory, row)):
+                        # The job failed and left its claim; skip it so the line
+                        # continues to another issue while the claim waits to
+                        # resume through its own windows.
+                        self.skipped["failed"] += 1
+                        continue
                     frozen = claims.snapshot(self.repo, number, record)
                     if frozen is None:
                         return self._base(
@@ -230,6 +211,7 @@ class IssuesSource(_Reports, WorkSource):
                         record,
                         path=frozen.relative_to(self.repo).as_posix(),
                     )
+                self.skipped["claimed"] += 1
                 last = row, record
                 last_state = "WAIT_FOR_CLAIM"
                 continue
@@ -260,23 +242,7 @@ class IssuesSource(_Reports, WorkSource):
                     break
                 continue
             claims.save(self.repo, number, reservation, path)
-            assignment: dict[str, str] = {}
-            try:
-                self.client.assign(number)
-            except IssuesUnavailable as exc:
-                # The board claim is the exclusivity; the assignee only announces it.
-                assignment["assignment_error"] = exc.reason
-                print(f"issue assignment failed: {exc}", file=sys.stderr)
-                try:
-                    announce(self.client, number, machine, "assignment-failed")
-                except (IssuesUnavailable, OSError) as notice_error:
-                    print(
-                        f"issue assignment notice failed: {notice_error}",
-                        file=sys.stderr,
-                    )
-            return self._base(
-                "RESERVED", detail, reservation, attempts=attempts, **assignment
-            )
+            return self._base("RESERVED", detail, reservation, attempts=attempts)
         if last:
             return self._base(
                 last_state,

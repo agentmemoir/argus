@@ -117,7 +117,6 @@ on_stop() {
     printf '%s %s stopped by signal (rc=%s) at %s\n' \
       "${work_kind:-phase}" "$CUR_PHASE" "$rc" "$(ts)" >"$HALT"
     notify_phase "$CUR_PHASE_FILE" stopped-signal
-    issue_announce "$CUR_PHASE" halted
   fi
   rm -f "$CURRENT" "$PIDFILE"
   exit "$rc"
@@ -173,17 +172,6 @@ gitsync_land_leftovers() {
 # phase is skipped either way.
 handle_escalation() {
   local number="$1" rel="$2" phase_dir out rc=0
-  if [ "${work_kind:-phase}" = issue ]; then
-    "$PYTHON" "$ARGUS/issues/lifecycle.py" escalate \
-      "${ARGUS_CONFIG_ARGS[@]}" --issue "$number" \
-      --reservation-id "$CLIO_RESERVATION_ID" --generation "$CLIO_RESERVATION_GENERATION" \
-      >"$RUN_DIR/escalation-$number.json" 2>&1 \
-      || log "issue $number escalation could not be recorded; claim kept"
-    gitsync_clean "$number"
-    tmux_set_title "issue $number escalated"
-    notify_phase "$rel" escalated
-    return 0
-  fi
   phase_dir="$WF/phase-$(printf '%06d' "$number")"
   out="$RUN_DIR/escalation-$number.json"
   local args=("${ARGUS_CONFIG_ARGS[@]}" --run-dir "$phase_dir" --phase "$number" --repo-root "$REPO")
@@ -203,6 +191,8 @@ handle_escalation() {
 run_session() {
   local number="$1" rel="$2" rc=0 state started_at estimate_run="" halt_reason=""
   local state_source="rc"
+  # Set only when the real glide job fails after its retries; see the rc case.
+  local job_failed=0
   started_at="$(date +%s)"
   CUR_PHASE="$number"
   CUR_PHASE_FILE="$rel"
@@ -290,14 +280,10 @@ except OSError:
     local glide_inputs=() input input_values
     if input_values="$(glide_input_args "$number" "$rel")"; then
       while IFS= read -r input; do glide_inputs+=("$input"); done <<<"$input_values"
-      # glide refuses to rerun a run that already reached a terminal state unless
-      # --fresh archives that run first. The selector skips the states it knows
-      # need a decision, but any other terminal run it hands back (an older end
-      # state, or a state added later) would wedge every tick on that refusal:
-      # the driver would launch, glide would exit 2, and the driver would halt.
-      # Archive and restart instead. A `blocked` run is resumable and is left
-      # alone, and a missing run.json means there is nothing to archive.
-      local prior_state fresh_args=()
+      # glide refuses to rerun a terminal run unless --fresh archives it first;
+      # glide_run_once recomputes that per attempt. A `blocked` run is resumable
+      # and is left alone, and a missing run.json means there is nothing to archive.
+      local prior_state
       prior_state="$(terminal_state_of_file "$(phase_run_dir "$number" "$rel")/run.json")"
       # A run that continues an earlier one measures only part of the phase, so
       # the estimate factor skips it (estimate_run=1 marks it resumed).
@@ -311,12 +297,9 @@ except OSError:
         # the run it stopped. `--fresh` archives exactly the state the resume
         # exists to keep, so it is never added here.
         log "${work_kind:-phase} $number is resuming (prior state ${prior_state:-none}); the run is not archived"
-      elif [ -n "$prior_state" ]; then
-        fresh_args+=(--fresh)
-        log "${work_kind:-phase} $number run is terminal ($prior_state); restarting it with --fresh"
       fi
-      "$CMD_GLIDE" run --pipeline "$PIPELINE" \
-        "${fresh_args[@]+"${fresh_args[@]}"}" "${glide_inputs[@]}" || rc=$?
+      # Retry the job before giving up on it; glide_run_once and job_retry do the work.
+      job_retry glide_run_once || { rc=$?; job_failed=1; }
     else
       log "invalid pipeline inputs; glide was not launched"
       rc=2
@@ -350,7 +333,18 @@ except OSError:
     3)   : ;;
     130) tmux_set_title "HALTED ${work_kind:-phase} $number (interrupted)"
          notify_phase "$rel" interrupted "the process received an interrupt signal" ;;
-    *)   # glide can exit before writing run.json, as a configuration error
+    *)   if [ "$job_failed" = 1 ] || [ "${work_kind:-phase}" = issue ]; then
+           # Record the failure so the operator can see it, keep the claim, and
+           # let the line continue. The claim resumes through its own expiry
+           # windows plus the cooldown.
+           failure_residue_write "$number" "$rel" "$state" "$rc" "$(job_retries)"
+           log "job-failed: ${work_kind:-phase} $number rc=$rc state=${state:-unknown}; retries exhausted, recorded as failed; continuing"
+           tmux_set_title "${work_kind:-phase} $number failed"
+           notify_phase "$rel" failed "" "$rc"
+           rm -f "$CURRENT" "$PIDFILE"
+           exit 0
+         fi
+          # glide can exit before writing run.json, as a configuration error
           # does. Only when there is genuinely no run result may the session log
           # stand in for it. A run.json that exists but does not parse is a
           # damaged result, not a missing one: `phase_state` returns empty for
@@ -382,8 +376,7 @@ except OSError:
           # The title is set before the window closes, so the halt survives the
           # phase window going away and the idle display taking over.
           tmux_set_title "HALTED ${work_kind:-phase} $number (rc=$rc)"
-          notify_phase "$rel" stopped "" "$rc"
-          issue_announce "$number" halted ;;
+          notify_phase "$rel" stopped "" "$rc" ;;
   esac
   rm -f "$CURRENT" "$PIDFILE"
   exit "$rc"

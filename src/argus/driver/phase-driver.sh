@@ -64,7 +64,6 @@
 #
 # Local test hooks (never set these in cron):
 #   DISABLE_NOTIFY=1      log notifications instead of sending them
-#   DISABLE_DISCORD=1     alias for disabling Discord sends (same effect today)
 #   DRIVER_STUB_RC=<n>    skip glide; pretend it exited with rc <n>
 #   DRIVER_STUB_SLEEP=<s> how long the stub "works" (default 2)
 #   DRIVER_RUN_DIR=<dir>  isolate runtime state (used by --self-test)
@@ -149,8 +148,8 @@ NOTIFIER="$ARGUS/notify/notifications.py"
 for helper in \
   phase-tmux.sh lib-stat.sh \
   lib-driver-config.sh lib-driver-log.sh lib-driver-notify.sh \
-  lib-driver-run.sh lib-driver-select.sh lib-driver-check.sh \
-  lib-driver-drive.sh lib-driver-dryrun.sh lib-driver-select-flow.sh lib-driver-repair.sh \
+  lib-driver-run.sh lib-driver-job.sh lib-driver-select.sh lib-driver-check.sh \
+  lib-driver-drive.sh lib-driver-dryrun.sh lib-driver-select-flow.sh \
   lib-driver-select-stub.sh lib-driver-select-real.sh lib-driver-maintenance.sh lib-driver-launch.sh \
   lib-driver-halt-record.sh lib-driver-ledger.sh lib-driver-fence.sh \
   lib-driver-resume.sh lib-driver-abandon.sh lib-driver-estimate.sh \
@@ -158,7 +157,7 @@ for helper in \
   lib-selftest-unavailable.sh lib-selftest-reasons.sh lib-selftest-recovery.sh \
   lib-selftest-merge.sh lib-selftest-stranding.sh lib-selftest-group.sh \
   lib-selftest-resume.sh lib-selftest-resume-guards.sh \
-  lib-selftest-abandon.sh lib-selftest-clear-halt.sh \
+  lib-selftest-abandon.sh lib-selftest-clear-halt.sh lib-selftest-job.sh \
   lib-selftest-fixture.sh selftest-support.sh; do
   if [ ! -r "$ARGUS_DIR/$helper" ]; then
     printf 'argus: cannot read %s: this driver is broken, not misconfigured\n' \
@@ -182,6 +181,8 @@ done
 # Run state: sessions, stall checks, escalation, and the phase run directory.
 # shellcheck disable=SC1091
 . "$ARGUS_DIR/lib-driver-run.sh"
+# One job: retry a failed run, and record a failure that outlasts the retries.
+. "$ARGUS_DIR/lib-driver-job.sh"
 # The estimate factor update a finished phase makes.
 . "$ARGUS_DIR/lib-driver-estimate.sh"
 # The work selector, reservation results, and the merge check.
@@ -197,9 +198,6 @@ done
 # The tick: reserve, branch, and launch.
 # shellcheck disable=SC1091
 . "$ARGUS_DIR/lib-driver-drive.sh"
-# Self-healing: a repair run for a pull request whose checks finished red.
-# shellcheck disable=SC1091
-. "$ARGUS_DIR/lib-driver-repair.sh"
 # shellcheck disable=SC1091
 . "$ARGUS_DIR/lib-driver-dryrun.sh"
 # shellcheck disable=SC1091
@@ -250,6 +248,7 @@ done
 # shellcheck disable=SC1091
 . "$ARGUS_DIR/lib-selftest-abandon.sh"
 . "$ARGUS_DIR/lib-selftest-clear-halt.sh"
+. "$ARGUS_DIR/lib-selftest-job.sh"
 
 argus_init "${1:-}"
 
@@ -284,10 +283,6 @@ case "${1:-}" in
   --session)
     [ "$#" -eq 3 ] || { echo "usage: phase-driver.sh --session <N> <phase-file>" >&2; exit 2; }
     run_session "$2" "$3"
-    ;;
-  --repair-session)
-    [ "$#" -eq 6 ] || { echo "usage: phase-driver.sh --repair-session <id> <task-file> <branch> <base> <nonce>" >&2; exit 2; }
-    run_repair_session "$2" "$3" "$4" "$5" "$6"
     ;;
   --resume)
     shift
