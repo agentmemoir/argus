@@ -177,13 +177,17 @@ def test_halted_maintenance_retries_tidy_with_no_pending_receipts(
 : >"$HALT"
 pending_review_snapshot() { printf '{"awaiting_review":[]}'; }
 tidy_published_checkout() { log TIDY; [ -f "$RUN_DIR/repaired" ]; }
-_drive --merge-check-only
+rc=0; _drive --merge-check-only || rc=$?
+printf 'first_rc=%s\\n' "$rc" >>"$RUN_DIR/events"
 : >"$RUN_DIR/repaired"
 _drive --merge-check-only
 """,
     )
     events = (tmp_path / "events").read_text().splitlines()
     assert events.count("TIDY") == 2
+    # A blocked tidy (no repaired marker) is a narrow stop; the tick that finds
+    # it repaired continues.
+    assert "first_rc=1" in events
     assert "SELECT" not in events
 
 

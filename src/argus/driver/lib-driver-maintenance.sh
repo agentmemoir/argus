@@ -46,8 +46,9 @@ reconcile_pending_reviews() {
   # A prior pass may have recorded the merge before its checkout cleanup
   # failed. Published receipts leave the pending list, so retry tidy each pass.
   if [ -z "${DRIVER_STUB_COORDINATION:-}" ]; then
-    tidy_published_checkout \
-      || log "could not tidy the published checkout; continuing, the next tick retries"
+    # A blocked tidy is a narrow own-state or lost-work stop; a degraded tidy
+    # returns 0 and this pass continues.
+    tidy_published_checkout || return 1
   fi
   return 0
 }

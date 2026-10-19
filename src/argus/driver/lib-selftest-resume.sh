@@ -72,6 +72,10 @@ selftest_case_resume() {
     echo "FAIL: a completed record stopped the resume instead of repairing it"; fail=1
     { head -12 "$LOG" 2>/dev/null | sed 's/^/      /'; } || true
   fi
+  # The repair launched a phase, so let that window close before the next case:
+  # a live window makes the tick skip, and the skip would read as a refusal.
+  wait_phase_window_gone
+  sleep 0.3
 
   # A malformed record is not a resume either: a reader that guessed at it would
   # launch whatever phase the guess landed on.

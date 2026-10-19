@@ -109,8 +109,9 @@ _drive() {
 
   # Publication is maintenance of finished work. It never selects or reserves
   # work, and a halt holds launches while these receipts and group gates settle.
-  # A read that fails is a repair, not a stop: the next tick retries it.
-  reconcile_pending_reviews || true
+  # A receipt read that fails is a repair; a blocked tidy is a narrow own-state
+  # or lost-work stop, so that one return still stops the tick.
+  reconcile_pending_reviews || return 1
   if [ -f "$HALT" ]; then
     log_changed halted "halted ($(tr '\n' ' ' <"$HALT")); no new work"
     return 0
@@ -225,8 +226,10 @@ _drive_cut_branch() {
     # cut: a published phase's branch must not still be the one checked out when
     # the next phase starts from it. Running it in both places is deliberate —
     # the step is idempotent, and each place covers a case the other does not.
-    tidy_published_checkout \
-      || log "could not tidy the published checkout; continuing, the next tick retries"
+    # A blocked tidy is a narrow own-state or lost-work stop: the checkout has
+    # no repository, or moving it would lose work. A degraded tidy (a retryable
+    # failure) returns 0 and the launch continues.
+    tidy_published_checkout || { _DRIVE_RC=1; return 0; }
     # The exit code is captured by running the command and reading $? straight
     # after. Putting it behind `if ! cmd; then rc=$?` cannot work: the `!`
     # resets $? to 0 before the body runs, so the guard below saw success even

@@ -24,6 +24,9 @@ selftest_resume_gate_cases() {
   else
     echo "FAIL: a damaged run.json stopped the resume instead of repairing it"; fail=1
   fi
+  # The repair launched a phase, so let that window close before the next case.
+  wait_phase_window_gone
+  sleep 0.3
   rm -f "$run_dir/resume.json"
   printf '{"phase": "%s", "state": "blocked"}\n' "$phase" >"$run_dir/run.json"
 

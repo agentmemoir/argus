@@ -73,11 +73,13 @@ _ALLOWLIST = r"""
     driver/lib-driver-config.sh	return_nonzero	[ -n "$candidate" ] && [ -x "$candidate" ] || return 1
     driver/lib-driver-config.sh	return_nonzero	if ! out="$(run_config "$@")"; then return 2; fi
     driver/lib-driver-config.sh	return_nonzero	return 1
+    driver/lib-driver-drive.sh	drive_rc_nonzero	tidy_published_checkout || { _DRIVE_RC=1; return 0; }
     driver/lib-driver-drive.sh	halt_marker	[ -f "$HALT" ] || printf 'orphaned run pid %s at %s\n' "$opid" "$(ts)" >"$HALT"
     driver/lib-driver-drive.sh	halt_marker	helper:driver_orphan_check|[ -f "$HALT" ] || printf 'orphaned run pid %s at %s\n' "$opid" "$(ts)" >"$HALT"
     driver/lib-driver-drive.sh	halt_marker	printf 'stopped by operator at %s\n' "$(ts)" >"$HALT"
     driver/lib-driver-drive.sh	return_nonzero	flock -n 9 || { log "another driver instance holds the lock; skip"; return 1; }
     driver/lib-driver-drive.sh	return_nonzero	helper:driver_orphan_check|return 1
+    driver/lib-driver-drive.sh	return_nonzero	reconcile_pending_reviews || return 1
     driver/lib-driver-drive.sh	return_nonzero	return 1
     driver/lib-driver-dryrun.sh	drive_rc_zero_refusal	{ _DRIVE_RC=0; return 0; }
     driver/lib-driver-fence.sh	return_nonzero	reserve|fail) return 1 ;;
@@ -92,6 +94,7 @@ _ALLOWLIST = r"""
     driver/lib-driver-launch.sh	drive_rc_nonzero	|| { notify "${work_kind:-phase} $number failed to create tmux session '$SESSION'"; { _DRIVE_RC=1; return 0; }; }
     driver/lib-driver-launch.sh	drive_rc_nonzero	|| { notify "${work_kind:-phase} $number failed to launch in tmux"; { _DRIVE_RC=1; return 0; }; }
     driver/lib-driver-log.sh	return_nonzero	printf -v byte '%d' "'$last" || return 1
+    driver/lib-driver-maintenance.sh	return_nonzero	tidy_published_checkout || return 1
     driver/lib-driver-resume.sh	exit_nonzero	driver_lock_take || { printf 'argus: another driver instance holds the lock; try again\n' >&2; exit 1; }
     driver/lib-driver-resume.sh	exit_nonzero	driver_orphan_check || { printf 'argus: a phase run is alive with no window (orphaned); the line is halted\n' >&2; exit 1; }
     driver/lib-driver-resume.sh	exit_nonzero	exit 1
