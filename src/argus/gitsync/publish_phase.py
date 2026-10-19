@@ -44,10 +44,11 @@ def publish_phase(
 
     The caller must commit the phase's product changes first, on the phase's own
     branch. This helper commits only leftover files in that phase's run
-    directory, syncs both checkouts fail-closed, and pushes. It never stages an
-    unrelated phase, never uses a force push, and never merges: a phase's
-    commits reach the integration branch only when a human merges the pull
-    request this run's receipt points at.
+    directory, syncs both checkouts, and pushes. A failed sync is reported, not
+    gated: the dirty-tree check is gone, and the push is what publishes. It never
+    stages an unrelated phase, never uses a force push, and never merges: a
+    phase's commits reach the integration branch only when a human merges the
+    pull request this run's receipt points at.
     """
     root = Path(root).resolve()
     try:

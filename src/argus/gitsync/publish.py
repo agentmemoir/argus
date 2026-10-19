@@ -1,6 +1,6 @@
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
 # SPDX-License-Identifier: Apache-2.0
-"""Marking a phase published once a human has merged its pull request."""
+"""Record a phase as published once its commit, push, and pull request succeeded."""
 
 import json
 from pathlib import Path
@@ -19,28 +19,28 @@ from argus.gitsync.runstate import (
 def _commit_phase_receipt(root: str | Path, phase: int | str) -> dict[str, Any]:
     """Commit and push one phase's run directory in the private checkout.
 
-    ``mark_phase_published`` rewrites a merged phase's receipt from
-    ``awaiting_review`` to ``published``. Whoever rewrites a receipt must also
-    commit it. An uncommitted receipt is dirt in the private checkout, and the
-    *next* phase's ``publish_phase`` refuses to publish on top of another
-    phase's run artifact, so a finished phase blocks the line. That is the
-    defect that halted phase 100876: the merge check marked two merged phases
-    published, left both receipts modified, and the running phase's finalize
-    then refused with ``working tree is dirty after phase cleanup``.
+    ``mark_phase_published`` rewrites a phase's receipt from ``awaiting_review``
+    to ``published`` once its commit, push, and pull request succeeded. Whoever
+    rewrites a receipt must also commit it. An uncommitted receipt is dirt in the
+    private checkout, and the *next* phase's ``publish_phase`` refuses to publish
+    on top of another phase's run artifact, so a finished phase blocks the line.
+    That is the defect that halted phase 100876: the merge check marked two
+    phases published, left both receipts modified, and the running phase's
+    finalize then refused with ``working tree is dirty after phase cleanup``.
 
     Deliberately narrower than ``commit_leftover_run_state``. That helper also
     refuses when the *public* checkout is dirty, and the public checkout is
     normally mid-work while another phase runs — which is exactly when the
-    merge check fires. This commits only this phase's own run directory, in the
+    receipt is settled. This commits only this phase's own run directory, in the
     private repo, and pushes it, so a running phase's uncommitted work cannot
     block a finished phase's receipt. The phase scope is the same guarantee
     ``commit_leftover_run_state`` makes: a phase never carries another phase's
     run state.
 
     The receipt is already committed when only the push fails, and that is left
-    alone because the working tree is clean at that point. When the commit
-    itself fails the receipt is still dirty and nobody owns it, so
-    ``mark_phase_published`` restores the previous bytes; see it for why.
+    alone because the working tree is clean at that point. A commit that fails
+    leaves the receipt dirty and is reported by ``mark_phase_published``, which
+    continues rather than restoring the bytes or blocking the run.
     """
     repo = runstate_repo(root, phase)
     if repo is None:
