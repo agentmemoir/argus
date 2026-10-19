@@ -6,7 +6,8 @@
 #
 # - a job failure is recorded even when its run directory is absent;
 # - a terminal run with an owner-edited harness map keeps the edit across the
-#   --fresh restart (plan 0010, B8/C4).
+#   --fresh restart, and the owner-edit line fires on the sidecar evidence
+#   only (plan 0010, B8/C4).
 #
 # A glide job can fail before it writes run.json, so failure_residue_write has to
 # create the directory itself. Without that the residue is never written, the
@@ -33,8 +34,8 @@ selftest_case_job_fresh_keeps_edit() {
   # A terminal run whose harness map the owner edited must survive the retry:
   # the --fresh restart archives the run directory, and the new run's
   # harnesses.json still names the edited harness. Argus never chooses a
-  # harness; it decides --fresh, logs the kept edit naming the file and the
-  # run, and lets glide do the keep.
+  # harness; it decides --fresh, logs the detected edit naming the file and
+  # the run, and lets glide do the keep.
   local phase=100011 rel run_dir old_cmd_glide number glide_inputs=()
   rel="$(resume_phase_file_of "$phase")" || rel=""
   run_dir="$(phase_run_dir "$phase" "$rel")"
@@ -53,7 +54,6 @@ selftest_case_job_fresh_keeps_edit() {
   CMD_GLIDE=glide_keep_edit_stub
   number="$phase"
   glide_run_once
-  CMD_GLIDE="$old_cmd_glide"
   if grep -q -- '--fresh' "$job_stub_args"; then
     echo "ok: the retry handed --fresh to glide"
   else
@@ -70,6 +70,29 @@ selftest_case_job_fresh_keeps_edit() {
   else
     echo "FAIL: the detected owner edit was not logged"; fail=1
   fi
+  # The negative half: the line fires on the sidecar evidence, not on every
+  # terminal retry. An equal pair is the map glide last wrote; a missing
+  # sidecar carries no evidence at all. Neither may log the owner edit.
+  local keeps_before keeps_after
+  for variant in equal-pair missing-sidecar; do
+    rm -rf "$run_dir" "$run_dir".prev-*
+    mkdir -p "$run_dir"
+    printf '{"state":"rejected"}\n' >"$run_dir/run.json"
+    printf '{"version":1,"steps":{"developer":{"harness":"cmd:model-owner"}}}\n' \
+      >"$run_dir/harnesses.json"
+    if [ "$variant" = equal-pair ]; then
+      cp "$run_dir/harnesses.json" "$run_dir/harnesses.driver.json"
+    fi
+    keeps_before="$(grep -c 'owner-edited' "$LOG" || true)"
+    glide_run_once
+    keeps_after="$(grep -c 'owner-edited' "$LOG" || true)"
+    if [ "$keeps_after" = "$keeps_before" ]; then
+      echo "ok: a $variant logs no owner edit"
+    else
+      echo "FAIL: a $variant logged an owner edit"; fail=1
+    fi
+  done
+  CMD_GLIDE="$old_cmd_glide"
   rm -rf "$run_dir" "$run_dir".prev-* "$job_stub_args"
 }
 
