@@ -138,7 +138,7 @@ tidy_published_checkout() {
   if [ "$rc" -eq 0 ]; then
     return 0
   fi
-  not_a_tree="$("$PYTHON" - "$RUN_DIR/phase-tidy.json" <<'PROBE' 2>/dev/null || printf 'no'
+  repaired="$("$PYTHON" - "$RUN_DIR/phase-tidy.json" <<'PROBE' 2>/dev/null || printf 'no'
 import json, sys
 try:
     with open(sys.argv[1]) as fh:
@@ -147,15 +147,18 @@ except (OSError, ValueError):
     print("no")
     raise SystemExit(0)
 repos = doc.get("repos") or []
-# Every checkout refused, and each refused for that one reason. One checkout
-# refusing for it while another refused for something else is not this case.
-deferred = repos and all(
-    any(b == "not a git working tree" for b in (r.get("blockers") or []))
-    for r in repos)
-print("yes" if deferred else "no")
+# A lost checkout is a repair, not a stop: every checkout that did not move
+# said so by its own warning. A blocked result (a dirty tree that would lose
+# work) is the narrow G9 stop below.
+def lost(r):
+    return any("not a git working tree" in b for b in (r.get("blockers") or [])) \
+        or any("not a git working tree" in w for w in (r.get("warning") or [],))
+repaired_result = repos and all(lost(r) for r in repos)
+print("yes" if repaired_result else "no")
 PROBE
 )"
-  if [ "$not_a_tree" = "yes" ]; then
+  if [ "$repaired" = "yes" ]; then
+    log "could not return a published phase's checkout to the integration branch; the next tick retries (see $RUN_DIR/phase-tidy.json)"
     return 0
   fi
   log "could not return a published phase's checkout to the integration branch; refusing to launch (see $RUN_DIR/phase-tidy.json)"

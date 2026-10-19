@@ -226,9 +226,8 @@ _drive_cut_branch() {
     # cut: a published phase's branch must not still be the one checked out when
     # the next phase starts from it. Running it in both places is deliberate —
     # the step is idempotent, and each place covers a case the other does not.
-    # A blocked tidy is a narrow own-state or lost-work stop: the checkout has
-    # no repository, or moving it would lose work. A degraded tidy (a retryable
-    # failure) returns 0 and the launch continues.
+    # A tidy that cannot preserve its work is the narrow lost-work stop. A
+    # preserved, degraded, or clean tidy returns 0 and the launch continues.
     tidy_published_checkout || { _DRIVE_RC=1; return 0; }
     # The exit code is captured by running the command and reading $? straight
     # after. Putting it behind `if ! cmd; then rc=$?` cannot work: the `!`

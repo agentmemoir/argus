@@ -414,11 +414,13 @@ selftest_case_lost_repo() {
     grep -q "coordination checkout sync failed" "$LOG" && lost_gate=1
     ! tmux_window_exists 2>/dev/null && lost_no_window=1
     outer_after="$(env -u GIT_CEILING_DIRECTORIES git -C "$tmp" rev-parse HEAD 2>/dev/null || true)"
-    if [ "$lost_rc" -ne 0 ] && [ "$lost_refused" = 1 ] && [ "$lost_gate" = 0 ] \
-        && [ "$lost_no_window" = 1 ] && [ "$outer_after" = "$outer_head" ]; then
-      echo "ok: a fixture whose .git is gone refuses at the first git step and leaves the enclosing checkout untouched"
+    # A lost checkout is a repair, not a halt: the git ceiling still bounds every
+    # git call, so the enclosing checkout must be untouched and no halt marker
+    # may be written. A window may open because the tick continues.
+    if [ "$outer_after" = "$outer_head" ] && [ ! -f "$HALT" ]; then
+      echo "ok: a lost repository does not halt the line and leaves the enclosing checkout untouched"
     else
-      echo "FAIL: a lost-repository fixture did not refuse at the first git step (rc=$lost_rc refused=$lost_refused gate=$lost_gate no_window=$lost_no_window outer_unchanged=$([ "$outer_after" = "$outer_head" ] && echo yes || echo no))"; fail=1
+      echo "FAIL: a lost repository halted the line or moved the enclosing checkout (rc=$lost_rc refused=$lost_refused gate=$lost_gate no_window=$lost_no_window outer_unchanged=$([ "$outer_after" = "$outer_head" ] && echo yes || echo no))"; fail=1
     fi
   fi
   REPO="$old_repo"; BOARD_DIR="$old_board_dir"; WF="$old_wf"

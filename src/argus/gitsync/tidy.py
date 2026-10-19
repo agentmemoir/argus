@@ -126,12 +126,35 @@ def return_to_integration(repo: str | Path, base: str | None = None) -> dict[str
     if rc != 0:
         return degraded(info, "cannot read the working tree status; retrying next tick")
     if dirty.strip():
-        return blocked(
-            info,
-            "the working tree has uncommitted changes",
-            hint="commit, stash, or discard them by hand; switching branches "
-            "with uncommitted work is how that work gets lost",
-        )
+        # Preserve the phase's own work with a scoped commit before the switch.
+        # The checkout is on a published phase branch, so these paths belong to
+        # that phase. A commit that cannot land is the narrow stop: the switch
+        # would lose it.
+        rc, out, err = git(repo, "add", "-A")
+        if rc == 0:
+            rc, out, err = git(
+                repo,
+                "commit",
+                "-q",
+                "-m",
+                "pipeline: preserve work before returning to the integration branch",
+            )
+        if rc != 0:
+            return blocked(
+                info,
+                "the working tree has uncommitted changes that could not be preserved",
+                hint=f"commit or stash them by hand ({err or out or 'no detail'}), "
+                "then rerun; switching branches with uncommitted work is how that "
+                "work gets lost",
+            )
+        _, dirty, _ = git(repo, "status", "--porcelain")
+        if dirty.strip():
+            return blocked(
+                info,
+                "the working tree still has changes after the preservation commit",
+                hint="commit or stash them by hand, then rerun",
+            )
+        info["preserved"] = True
     rc, _, _ = git(repo, "rev-parse", "--verify", base)
     if rc != 0:
         return degraded(

@@ -17,8 +17,12 @@ selftest_case_clear_halt() {
   run_dir="$(phase_run_dir "$phase" "$rel")"
   DRIVER_STUB_RC=0; DRIVER_STUB_SLEEP=0
   DRIVER_STUB_COORDINATION=fence
+  # The resume fence renews against the board; without this stub the real board
+  # is asked and refuses, which reads as a run-state refusal in the case below.
+  DRIVER_STUB_BOARD_FENCE=renew
   RECOVER_OWN_CLAIM=1
-  export DRIVER_STUB_RC DRIVER_STUB_SLEEP DRIVER_STUB_COORDINATION RECOVER_OWN_CLAIM
+  export DRIVER_STUB_RC DRIVER_STUB_SLEEP DRIVER_STUB_COORDINATION \
+    DRIVER_STUB_BOARD_FENCE RECOVER_OWN_CLAIM
   wait_phase_window_gone
   mkdir -p "$run_dir"
   rm -f "$run_dir/run.json" "$run_dir/resume.json" "$run_dir/ledger.json" "$HALT"

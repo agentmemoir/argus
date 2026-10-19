@@ -259,23 +259,24 @@ def _merge_gate_checks(base: Path) -> list[tuple[str, object, str]]:
             )
         )
 
-        # 7. A dirty tree is the one case where switching branches could lose
-        #    work, so it must stop rather than carry the change across.
+        # 7. A dirty tree is preserved with a scoped commit on its own branch,
+        #    then the checkout returns to the integration branch. The work is
+        #    not lost and the switch carries nothing across.
+        git(pub, "checkout", "-q", branch)
         (pub / "uncommitted.txt").write_text("work in progress\n")
         res7 = return_to_integration(pub, base="main")
+        preserved = git(pub, "show", f"{branch}:uncommitted.txt")[1].strip()
         results.append(
             (
-                "a dirty working tree refuses to switch branch",
-                (not res7["ok"])
-                and "uncommitted changes" in res7["blockers"][-1]
+                "a dirty working tree is preserved and then switched",
+                res7["ok"]
+                and res7.get("preserved") is True
                 and current_branch(pub) == "main"
-                and (pub / "uncommitted.txt").exists(),
-                f"branch={current_branch(pub)} blockers={res7.get('blockers')}",
+                and preserved == "work in progress",
+                f"branch={current_branch(pub)} preserved={preserved!r} "
+                f"warning={res7.get('warning')}",
             )
         )
-        # Untracked, so removing the file is the whole cleanup. `git rm` would
-        # stage the removal and leave the tree just as dirty for the next check.
-        (pub / "uncommitted.txt").unlink()
 
         # 8. A missing integration branch is reported and the checkout stays.
         res8 = return_to_integration(pub, base="no-such-base")
