@@ -177,18 +177,8 @@ def _shared_destination(checkouts: dict[str, Path]) -> str | None:
     return None
 
 
-def sync_all(root: str | Path, mode: str, branch: str | None = None) -> dict[str, Any]:
-    """Sync the public checkout, the board, the phases, and the run state, if
-    present.
-
-    ``branch`` is the branch the public checkout must be on, and it reaches that
-    checkout alone: the board and the phases are read on their own branches, so
-    naming a group branch for them would refuse them for no reason. A caller
-    that names no branch leaves the check comparing a checkout's own branch
-    against itself, which is what every caller did before a group could name a
-    branch at all.
-    """
-    root = Path(root).resolve()
+def _checkouts(root: Path) -> dict[str, Path]:
+    """The public checkout and the configured peer checkouts that are repositories."""
     checkouts: dict[str, Path] = {"public": root}
     nested = board_repo(root)
     if nested is not None and is_git_repo(nested):
@@ -203,6 +193,35 @@ def sync_all(root: str | Path, mode: str, branch: str | None = None) -> dict[str
         and is_git_repo(runstate)
     ):
         checkouts["runstate"] = runstate
+    return checkouts
+
+
+def separation_reason(root: str | Path) -> str | None:
+    """Why the configured checkouts do not have distinct Git destinations.
+
+    This is the publish path's start-time gate: it runs before any commit or
+    push, so publication cannot send private run state to a public remote. It is
+    also checked inside ``sync_all`` for every other sync caller.
+    """
+    checkouts = _checkouts(Path(root).resolve())
+    if len(checkouts) <= 1:
+        return None
+    return _shared_destination(checkouts)
+
+
+def sync_all(root: str | Path, mode: str, branch: str | None = None) -> dict[str, Any]:
+    """Sync the public checkout, the board, the phases, and the run state, if
+    present.
+
+    ``branch`` is the branch the public checkout must be on, and it reaches that
+    checkout alone: the board and the phases are read on their own branches, so
+    naming a group branch for them would refuse them for no reason. A caller
+    that names no branch leaves the check comparing a checkout's own branch
+    against itself, which is what every caller did before a group could name a
+    branch at all.
+    """
+    root = Path(root).resolve()
+    checkouts = _checkouts(root)
     if len(checkouts) > 1:
         reason = _shared_destination(checkouts)
         if reason is not None:

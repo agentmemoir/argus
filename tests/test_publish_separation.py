@@ -1,0 +1,44 @@
+# Copyright 2026 Agent Memoir (https://agentmemoir.com/)
+# SPDX-License-Identifier: Apache-2.0
+"""Publication checks the Git destinations before it pushes anything."""
+
+from pathlib import Path
+
+import pytest
+
+from argus import conventions
+from argus.gitsync.git import git
+from argus.gitsync.publish_phase import publish_phase
+from argus.gitsync.selftest_publish import _publish_fixture
+
+
+@pytest.fixture(autouse=True)
+def git_settings(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        conventions, "_settings", {"commands.git": "git", "commands.gh": "gh"}
+    )
+
+
+def test_separate_destinations_publish(tmp_path: Path) -> None:
+    pub, _nested, run_dir = _publish_fixture(tmp_path, "separate", 100451)
+    result = publish_phase(pub, 100451)
+    assert result["ok"], result
+    assert result["state"] == "AWAITING_REVIEW", result
+    assert (run_dir / "publication.json").is_file()
+
+
+def test_a_shared_destination_returns_retry_without_a_push(tmp_path: Path) -> None:
+    pub, nested, run_dir = _publish_fixture(tmp_path, "shared", 100452)
+    public_remote = tmp_path / "shared" / "pub-remote.git"
+    assert (
+        git(nested, "remote", "set-url", "--push", "origin", str(public_remote))[0] == 0
+    )
+    before = git(public_remote, "for-each-ref", "--format=%(refname) %(objectname)")[1]
+
+    result = publish_phase(pub, 100452)
+
+    assert result["ok"] is False, result
+    assert result["state"] == "RETRY", result
+    assert not (run_dir / "publication.json").exists()
+    after = git(public_remote, "for-each-ref", "--format=%(refname) %(objectname)")[1]
+    assert after == before, "a shared destination received a push"

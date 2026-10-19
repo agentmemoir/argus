@@ -26,7 +26,7 @@ from argus.gitsync.runstate import (
     publish_dirt,
     runstate_repo,
 )
-from argus.gitsync.sync import mode_resync, sync_all
+from argus.gitsync.sync import mode_resync, separation_reason, sync_all
 
 
 def publish_phase(
@@ -59,6 +59,20 @@ def publish_phase(
         raise ConfigError(f"phase number out of range: {phase}")
     if not commit_run_state:
         raise ConfigError("publication requires phase-scoped run-state commit")
+    # The separation check runs before any commit or push: publication must
+    # never send private run state to a public remote. A shared destination is
+    # a retry with no push and no receipt.
+    unsafe = separation_reason(root)
+    if unsafe is not None:
+        return {
+            "ok": False,
+            "mode": "publish",
+            "phase": f"{phase:06d}",
+            "state": "RETRY",
+            "error": unsafe,
+            "hint": "fix the Git destinations, then the next tick retries; nothing "
+            "was pushed and no receipt was written",
+        }
     try:
         from argus.board.reservations import (
             PublicationBusy,
@@ -151,6 +165,20 @@ def publish_phase(
         if outcome is None:
             sync = sync_all(root, "push")
             results.append(sync)
+            if not sync.get("ok"):
+                # The separation check refused the destinations (or another
+                # sync step failed). Push nothing and write no receipt; the
+                # phase stays waiting.
+                outcome = {
+                    "ok": False,
+                    "mode": "publish",
+                    "phase": f"{int(phase):06d}",
+                    "state": "RETRY",
+                    "repos": results,
+                    "summary": sync.get("summary", ""),
+                    "hint": "the checkouts could not be synced safely; no push "
+                    "and no receipt, the next tick retries",
+                }
         if outcome is None:
             checkouts = [root, private]
             if run_repo is not None and run_repo not in checkouts:
