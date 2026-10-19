@@ -80,6 +80,13 @@ def _build(
     overrides: dict[str, object],
     origins: dict[str, Path],
 ) -> Config:
+    for legacy in ("roadmap-dir", "phases-dir"):
+        if legacy in raw:
+            raise ConfigError(
+                f"key '{legacy}' was replaced by the 'phases' object: set "
+                "'phases.directory' to the folder holding the work-item files, "
+                "and 'phases.repo', 'phases.branch', 'phases.remote' with it"
+            )
     for name in _OBJECT_KEYS:
         if name in raw and raw[name] is not None and not isinstance(raw[name], dict):
             raise ConfigError(f"invalid type for key '{name}': expected object")

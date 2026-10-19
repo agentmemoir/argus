@@ -143,6 +143,21 @@ def test_bad_values_name_key():
         expect_error(lambda: cfgmod.load(str(path)), "driver.include")
 
 
+def test_legacy_roadmap_dir_is_refused_naming_both():
+    with tempfile.TemporaryDirectory() as tmp:
+        document = copy.deepcopy(BASE)
+        document["roadmap-dir"] = "plans"
+        path = write(tmp, json.dumps(document))
+        try:
+            cfgmod.load(str(path))
+        except cfgmod.ConfigError as exc:
+            text = str(exc)
+            check("roadmap-dir" in text, text)
+            check("phases.directory" in text, text)
+            return
+        raise AssertionError("the legacy roadmap-dir key was accepted")
+
+
 def test_phase_source_without_a_phases_object_is_refused():
     with tempfile.TemporaryDirectory() as tmp:
         document = copy.deepcopy(BASE)
@@ -289,6 +304,7 @@ TESTS = (
     ("missing required key", test_missing_required_key_names_it),
     ("wrong type", test_wrong_type_names_key),
     ("bad values", test_bad_values_name_key),
+    ("legacy roadmap-dir", test_legacy_roadmap_dir_is_refused_naming_both),
     ("phases object required", test_phase_source_without_a_phases_object_is_refused),
     ("phases folder inside repo", test_phases_folder_must_stay_inside_the_phases_repo),
     ("phases repo work tree", test_phases_repo_must_be_a_git_work_tree),
