@@ -247,7 +247,7 @@ def _sequencing_merge_checks(
     (pub2 / "part.txt").write_text("work\n")
     git(pub2, "add", "part.txt")
     git(pub2, "commit", "-q", "-m", "phase 100452")
-    publish_phase(pub2, 100452)
+    publish_phase(pub2, 100452, pull_request="https://example.test/pr/1")
     with _StubGH({"returncode": 1}):
         offsite = mark_phase_published(pub2, 100452)
     offsite_receipt = cast("dict[str, Any]", phase_receipt(pub2, 100452))
