@@ -75,6 +75,7 @@ jobs:
           make noexecscan
           uv run pytest -q tests/test_exec_tempdir.py tests/test_notify_target.py tests/test_prose_lint.py tests/test_ci_only_targets.py
           uv run pytest -q tests/test_config_issues.py tests/test_issue_board.py tests/test_issue_driver.py tests/test_issue_publication.py tests/test_issue_publication_cli.py tests/test_issue_publication_fixture.py tests/test_issue_publication_tidy.py tests/test_issue_tick.py tests/test_issues_boundary.py tests/test_issues_cases.py tests/test_issues_lifecycle.py tests/test_issues_selection.py
+          uv run pytest -q tests/test_pr_signal_reply.py tests/test_pr_signal_guard.py tests/test_pr_signal_trust.py tests/test_pr_signals.py
           uv run python -m argus.board.reservations self-test
           uv run python -m argus.select.group --self-test
           uv run python -m argus.gitsync.main --self-test
