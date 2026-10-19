@@ -1,6 +1,6 @@
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
 # SPDX-License-Identifier: Apache-2.0
-"""The GitHub CLI reads and writes the group gate uses: open pull requests on a branch, a pull request's checks, its comments, and a guarded merge."""
+"""The GitHub CLI read the group review uses: a pull request's comment bodies."""
 
 import json
 import subprocess
@@ -11,17 +11,13 @@ from argus.gitsync.git import GH_TIMEOUT_S, gh_binary
 
 T = TypeVar("T")
 
-_LIST_FIELDS = (
-    "number,url,title,isDraft,isCrossRepository,mergeable,reviewDecision,headRefOid"
-)
-
 
 class GhRead(NamedTuple, Generic[T]):
     """One gh read: the answer, or ``None`` and why it could not be read.
 
     Every read returns this, so the reason travels with the answer and a call
     site names it instead of reading a failed read as an empty one. A two-field
-    tuple, so ``rows, why = gh_pull_request_checks(...)`` still unpacks.
+    tuple, so ``rows, why = gh_pull_request_comment_bodies(...)`` still unpacks.
     """
 
     value: T | None
@@ -34,10 +30,10 @@ def _gh(
     """Run one gh command. Returns the finished process, or ``None`` and why not.
 
     The same two outcomes ``gh.py`` reports for every call: gh is missing, or it
-    did not answer in time. A non-zero exit is left to the caller, because
-    ``gh pr checks`` exits non-zero on a red or running check and still prints
-    the answer. Stderr is captured and never reported, for the reason
-    ``_gh_pull_request_view`` gives.
+    did not answer in time. A non-zero exit is left to the caller, because a gh
+    read can exit non-zero and still print the answer it was asked for. Stderr
+    is captured and never reported, for the reason ``_gh_pull_request_view``
+    gives.
     """
     try:
         done = subprocess.run(
@@ -48,66 +44,6 @@ def _gh(
     except subprocess.TimeoutExpired:
         return None, f"gh did not answer within {timeout}s"
     return done, ""
-
-
-def _json_list(done: subprocess.CompletedProcess[str]) -> list[dict[str, Any]] | None:
-    """The JSON array gh printed, or ``None`` when it printed anything else."""
-    try:
-        raw: object = json.loads(done.stdout)
-    except ValueError:
-        return None
-    if not isinstance(raw, list):
-        return None
-    rows = cast("list[object]", raw)
-    if not all(isinstance(row, dict) for row in rows):
-        return None
-    return cast("list[dict[str, Any]]", rows)
-
-
-def gh_open_pull_requests(
-    base: str, owner: str | None, repo: str | None, host: str | None = None
-) -> GhRead[list[dict[str, Any]]]:
-    """The open pull requests whose base is ``base``, or ``None`` and why not.
-
-    ``None`` is not an empty list: a caller that read "could not ask" as "none
-    open" would publish past a fix that is waiting.
-    """
-    done, why = _gh(
-        ["pr", "list", "--repo", _repo_target(owner, repo, host)]
-        + ["--base", base, "--state", "open", "--limit", "100", "--json", _LIST_FIELDS]
-    )
-    if done is None:
-        return GhRead(None, why)
-    if done.returncode != 0:
-        return GhRead(None, f"gh exited {done.returncode}")
-    rows = _json_list(done)
-    if rows is None:
-        return GhRead(None, "gh did not return a list")
-    return GhRead(rows, "")
-
-
-def gh_pull_request_checks(
-    number: int | str, owner: str | None, repo: str | None, host: str | None = None
-) -> GhRead[list[dict[str, Any]]]:
-    """The checks on a pull request's current head, or ``None`` and why not.
-
-    Each row carries ``name``, ``link`` (the job's page) and ``bucket`` (``pass``,
-    ``fail``, ``pending``, ``skipping`` or ``cancel``). gh exits 1 for a failing
-    check and 8 for a running one, with the rows printed either way, so the rows
-    decide the answer. The exit status is the reason only when no list was
-    printed: a pull request with no checks prints no list and exits 1, and
-    neither an unreadable answer nor a missing one has rows to judge.
-    """
-    done, why = _gh(
-        ["pr", "checks", str(int(number)), "--json", "name,bucket,link"]
-        + ["--repo", _repo_target(owner, repo, host)]
-    )
-    if done is None:
-        return GhRead(None, why)
-    rows = _json_list(done)
-    if not rows:
-        return GhRead(None, f"gh printed no check list (exit {done.returncode})")
-    return GhRead(rows, "")
 
 
 def gh_pull_request_comment_bodies(
@@ -137,35 +73,8 @@ def gh_pull_request_comment_bodies(
     return GhRead(bodies, "")
 
 
-def gh_merge_pull_request(
-    number: int | str,
-    head: str,
-    owner: str | None,
-    repo: str | None,
-    host: str | None = None,
-) -> tuple[bool, str]:
-    """Merge a pull request, only if its head is still ``head``.
-
-    ``--match-head-commit`` is what makes the checks that were read a moment ago
-    the checks of what is merged: a push between the read and the merge makes
-    gh refuse. Never ``--admin``, so branch protection still applies.
-    """
-    done, why = _gh(
-        ["pr", "merge", str(int(number)), "--merge", "--match-head-commit", head]
-        + ["--repo", _repo_target(owner, repo, host)]
-    )
-    if done is None:
-        return False, why
-    if done.returncode != 0:
-        return False, f"gh exited {done.returncode}"
-    return True, f"pull request {int(number)} merged"
-
-
 __all__ = [
     "GhRead",
     "_gh",
-    "gh_merge_pull_request",
-    "gh_open_pull_requests",
-    "gh_pull_request_checks",
     "gh_pull_request_comment_bodies",
 ]
