@@ -132,22 +132,12 @@ def _commit_and_push_run_state(
                 staged=outside,
                 hint="commit or unstage them before publishing",
             )
-    rc, _, err = git(repo, "add", "-A", "--", pathspec)
-    if rc != 0:
-        return degraded(
-            info, f"could not stage {pathspec}: {err}; the next tick retries"
-        )
-    # Scoped to the pathspec: a staged path from another phase stays staged and
-    # cannot ride this commit.
-    rc, out, err = git(repo, "commit", "-q", "-m", message, "--", pathspec)
-    if rc != 0:
-        combined = err or out
-        if "nothing to commit" in combined.lower():
-            return dict(info, ok=True, action="clean", hint=message)
-        return degraded(
-            info,
-            f"commit of run state failed: {combined}; the next tick retries",
-        )
+    scoped = _scoped_pathspecs(pathspec)
+    error, committed = _stage_and_commit(repo, message, scoped)
+    if error is not None:
+        return degraded(info, error + "; the next tick retries")
+    if not committed:
+        return dict(info, ok=True, action="clean", hint=message)
     for attempt in (1, 2):
         rc, out, err = git(repo, "push", remote, branch)
         if rc == 0:
@@ -156,6 +146,11 @@ def _commit_and_push_run_state(
                 info, ok=True, action="committed-and-pushed", after=after, hint=message
             )
         if attempt == 1:
+            # The engine may have rewritten its own run artifact between the
+            # commit and the push, which leaves the index staged; a real merge
+            # needs a clean index. Commit that scoped path again, then integrate
+            # the remote's commits (the board writes its own) before retrying.
+            _stage_and_commit(repo, message, scoped)
             res = sync_one(repo, "start")
             if not res.get("ok"):
                 return degraded(
@@ -168,6 +163,41 @@ def _commit_and_push_run_state(
         info,
         f"push of run state failed: {err or out}; the next tick retries",
     )
+
+
+def _scoped_pathspecs(pathspec: str) -> list[str]:
+    """The phase path, minus the engine-written artifacts it rewrites.
+
+    The engine rewrites its own run artifacts while the tick runs, so a commit
+    that includes them can race the writer and leave the index staged against
+    HEAD, which then blocks the merge that integrates the board's own commits.
+    They are committed by a later, quiet cleanup instead.
+    """
+    return [
+        pathspec,
+        *(f":(exclude,glob){pathspec}/{name}" for name in ENGINE_WRITTEN_RUN_ARTIFACTS),
+    ]
+
+
+def _stage_and_commit(
+    repo: str | Path, message: str, pathspecs: list[str]
+) -> tuple[str | None, bool]:
+    """Stage and commit one scoped run-state path.
+
+    Returns ``(error, committed)``. Scoped with ``git commit -- <pathspec>``,
+    so a staged path from another phase stays staged and cannot ride this
+    commit. A path with nothing to commit is not an error.
+    """
+    rc, _, err = git(repo, "add", "-A", "--", *pathspecs)
+    if rc != 0:
+        return f"could not stage {pathspecs[0]}: {err}", False
+    rc, out, err = git(repo, "commit", "-q", "-m", message, "--", *pathspecs)
+    if rc != 0:
+        combined = err or out
+        if "nothing to commit" in combined.lower():
+            return None, False
+        return f"commit of run state failed: {combined}", False
+    return None, True
 
 
 def runstate_repo(root: str | Path, phase: int | str | None = None) -> Path | None:
