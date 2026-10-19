@@ -62,7 +62,6 @@ def settings(repo: Path, binary: Path) -> dict[str, Any]:
         "issues.label-groups": GROUPS,
         "issues.difficulty-order": ["difficulty:easy", "difficulty:hard"],
         "issues.task-dir": repo / "tasks",
-        "issues.announce": False,
     }
 
 

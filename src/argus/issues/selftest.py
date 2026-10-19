@@ -45,7 +45,6 @@ def _checks(repo: Path) -> None:
         "createdAt": "2026-01-01T12:00:00Z",
         "updatedAt": "2026-01-01T12:00:00Z",
         "blockedBy": {"nodes": [], "totalCount": 0},
-        "closedByPullRequestsReferences": [],
         "difficulty": "difficulty:easy",
     }
     (repo / "github.json").write_text(json.dumps(row), encoding="utf-8")

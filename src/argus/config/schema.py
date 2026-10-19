@@ -95,10 +95,8 @@ SCHEMA = (
     Field("issues.max-comments", "int", "optional"),
     Field("issues.max-text-bytes", "int", "optional"),
     Field("issues.list-limit", "int", "optional"),
-    Field("issues.pr-check-max", "int", "optional"),
     Field("issues.timeout", "int", "optional"),
     Field("issues.claim-attempts", "int", "optional"),
-    Field("issues.announce", "bool", "optional"),
     Field("estimate.factors-file", "path", "optional"),
     Field("estimate.ideal-days", "str", "optional"),
 )
@@ -174,10 +172,8 @@ ISSUES_DEFAULTS: dict[str, object] = {
     "issues.max-comments": 50,
     "issues.max-text-bytes": 60000,
     "issues.list-limit": 200,
-    "issues.pr-check-max": 5,
     "issues.timeout": 30,
     "issues.claim-attempts": 3,
-    "issues.announce": True,
 }
 
 # The four flag overrides: flag name -> (dotted key, wrap scalar in a list).

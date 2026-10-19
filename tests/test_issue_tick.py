@@ -159,7 +159,6 @@ def backlog(tmp_path: Path, exec_dir: Path) -> Path:
                     "difficulty-order": ["difficulty:easy"],
                     "preference": "newest",
                     "task-dir": str(board / "tasks"),
-                    "announce": False,
                 },
             }
         ),

@@ -68,9 +68,6 @@ class IssuesSource(_Reports, WorkSource):
                     "unknown_difficulty",
                     "blocked",
                     "claimed",
-                    "finished",
-                    "merged_but_open",
-                    "watching",
                     "escalated",
                 ),
                 0,
@@ -79,7 +76,6 @@ class IssuesSource(_Reports, WorkSource):
         for name in self.groups:
             self.skipped[f"missing_labels.{name}"] = 0
             self.skipped[f"{name}_ambiguous"] = 0
-        self.watching: list[dict[str, Any]] = []
         self.rows: list[dict[str, Any]] | None = None
         self.details: dict[int, dict[str, Any]] = {}
         self.records: dict[str, Any] = {}
@@ -137,19 +133,7 @@ class IssuesSource(_Reports, WorkSource):
             else:
                 detail["evidence"] = self.evidence.inspect(detail)
                 if detail["evidence"]:
-                    reason = detail["evidence"]
-                    self.skipped[reason] += 1
-                    if reason in {"watching", "merged_but_open"}:
-                        self.skipped["finished"] += 1
-                    if reason == "watching":
-                        self.watching.append(
-                            {
-                                "issue": str(number),
-                                "pr_checks_truncated": detail.get(
-                                    "pr_checks_truncated", False
-                                ),
-                            }
-                        )
+                    self.skipped[detail["evidence"]] += 1
             self.details[number] = detail
         return self.details[number]
 
