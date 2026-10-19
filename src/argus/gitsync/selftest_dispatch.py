@@ -121,6 +121,7 @@ def _tidy_and_dispatch_checks(base: Path) -> list[tuple[str, object, str]]:
         git(pub2, "push", "-q", "origin", "--delete", first)
         git(pub2, "checkout", "-q", second)
         git(pub2, "branch", "-D", second)
+        git(pub2, "checkout", "-q", "main")
         refusal = mode_branch(pub2, 100458, "phase-100458-dispatch-after.md")
         results.append(
             (

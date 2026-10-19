@@ -116,7 +116,7 @@ def _branch_pair_checks(base: Path) -> list[tuple[str, object, str]]:
             "a reported checkout still reports the branch it was left on",
             stuck_private["ok"]
             and stuck_private.get("after_branch") == "someones-unfinished-work"
-            and "not 'main'" in str(stuck_private.get("warning")),
+            and f"not '{INTEGRATION_BRANCH}'" in str(stuck_private.get("warning")),
             f"ok={stuck_private.get('ok')} "
             f"after_branch={stuck_private.get('after_branch')}",
         )

@@ -53,15 +53,15 @@ def mode_branch(
     # A duplicate branch name is reported, not refused. The phase continues on
     # the branch it derives; the warning names the collision for the operator.
     warnings: list[str] = []
-    if not unique["ok"]:
-        warnings.extend(unique.get("blockers") or [])
+    if unique.get("warning"):
+        warnings.append(str(unique["warning"]))
     branch = unique["branch"]
     if group:
         # A group branch comes from the group's lowest member, so two groups can
         # derive one name even when no phase branch collides with it.
         shared = assert_group_branch_unique(root, branch, group, phases_dir)
-        if not shared["ok"]:
-            warnings.extend(shared.get("blockers") or [])
+        if shared.get("warning"):
+            warnings.append(str(shared["warning"]))
     # The base is the open predecessor's branch when there is one. Without this
     # the phase starts from the integration branch, which does not contain the
     # previous phase's code, and the phase fails on a symbol that is not there.
