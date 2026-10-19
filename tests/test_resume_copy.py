@@ -63,11 +63,15 @@ def _run_destination(pipeline: Path, number: int, phase_file: str) -> str:
         raise AssertionError(f"cannot resolve the pipeline run_dir: {exc}") from exc
 
 
-def _stub_bin(tmp_path: Path) -> Path:
-    """A PATH entry whose harness commands fail and record that they ran."""
-    bin_dir = tmp_path / "stub-bin"
+def _stub_bin(exec_dir: Path) -> Path:
+    """A PATH entry whose harness commands fail and record that they ran.
+
+    ``exec_dir`` is the probed directory the suite runs executables from, so
+    the stubs run on a host that mounts its temporary storage ``noexec``.
+    """
+    bin_dir = exec_dir / "stub-bin"
     bin_dir.mkdir()
-    sentinel = tmp_path / "harness-ran"
+    sentinel = exec_dir / "harness-ran"
     for name in ("cmd", "opencode", "hermes", "agy", "cursor"):
         script = bin_dir / name
         script.write_text(f"#!/bin/sh\nprintf '%s\\n' $0 >>{sentinel}\nexit 1\n")
@@ -75,7 +79,9 @@ def _stub_bin(tmp_path: Path) -> Path:
     return bin_dir
 
 
-def test_copied_run_advances_from_developer_to_adversary(tmp_path: Path):
+def test_copied_run_advances_from_developer_to_adversary(
+    tmp_path: Path, exec_dir: Path
+):
     live = Path(str(LIVE))
     pipeline = Path(str(PIPELINE))
     glide = Path(str(GLIDE))
@@ -93,8 +99,8 @@ def test_copied_run_advances_from_developer_to_adversary(tmp_path: Path):
     destination.parent.mkdir(parents=True, exist_ok=True)
     shutil.copytree(live, destination)
 
-    stub = _stub_bin(tmp_path)
-    sentinel = tmp_path / "harness-ran"
+    stub = _stub_bin(exec_dir)
+    sentinel = exec_dir / "harness-ran"
     hooks = tmp_path / "hooks.toml"
     hooks.write_text("")
 
