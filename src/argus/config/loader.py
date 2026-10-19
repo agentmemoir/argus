@@ -3,6 +3,7 @@
 """Read, clean, resolve, and validate one configuration file."""
 
 import copy
+import sys
 from pathlib import Path
 from typing import Any, cast
 
@@ -74,21 +75,72 @@ def load(
     return _build(path, raw, supplied_overrides, origins)
 
 
+# Stale or removed top-level keys. A stale key is not an unacceptable value:
+# warn with the exact replacement and continue. Loopback values are read from
+# their replacements, if present.
+_LEGACY_KEYS: dict[str, str] = {
+    "roadmap-dir": "set 'phases.directory' to the work-item folder, and "
+    "'phases.repo', 'phases.branch', 'phases.remote' with it",
+    "phases-dir": "set 'phases.directory' to the work-item folder",
+    "repair": "remove it: Argus runs no repair loop",
+}
+
+# Objects whose children are host data, not schema keys.
+_FREE_FORM_OBJECTS = {"issues.label-groups", "issues.comment-trust"}
+
+# Keys the shell and the reply path read directly, so they are known even though
+# the schema does not carry them.
+_KNOWN_EXTRA_KEYS = {"commands.reply-check"}
+
+_SCHEMA_KEYS = {field.key for field in SCHEMA}
+_SCHEMA_ROOTS = {key.split(".")[0] for key in _SCHEMA_KEYS}
+
+
+def _warn(message: str) -> None:
+    print(f"warning: {message}", file=sys.stderr)
+
+
+def _known_children(prefix: str) -> set[str]:
+    return {
+        key[len(prefix) + 1 :].split(".", 1)[0]
+        for key in _SCHEMA_KEYS
+        if key.startswith(prefix + ".")
+    }
+
+
+def _unknown_keys(node: dict[str, Any], prefix: str = "") -> list[str]:
+    """Every key, including a nested one, that the schema does not name."""
+    if prefix in _FREE_FORM_OBJECTS:
+        return []
+    unknown: list[str] = []
+    known_children = _known_children(prefix)
+    for key, value in node.items():
+        full = f"{prefix}.{key}" if prefix else key
+        if not prefix:
+            if key in _LEGACY_KEYS:
+                continue
+            if key not in _SCHEMA_KEYS and key not in _SCHEMA_ROOTS:
+                unknown.append(full)
+                continue
+        elif key not in known_children and full not in _KNOWN_EXTRA_KEYS:
+            unknown.append(full)
+            continue
+        if isinstance(value, dict) and _known_children(full):
+            unknown.extend(_unknown_keys(cast("dict[str, Any]", value), full))
+    return unknown
+
+
 def _build(
     path: Path,
     raw: dict[str, Any],
     overrides: dict[str, object],
     origins: dict[str, Path],
 ) -> Config:
-    for legacy in ("roadmap-dir", "phases-dir"):
+    for legacy, fix in _LEGACY_KEYS.items():
         if legacy in raw:
-            raise ConfigError(
-                f"key '{legacy}' was replaced by the 'phases' object: set "
-                "'phases.directory' to the folder holding the work-item files, "
-                "and 'phases.repo', 'phases.branch', 'phases.remote' with it"
-            )
-    if "repair" in raw:
-        raise ConfigError("key 'repair' was removed: Argus runs no repair loop")
+            _warn(f"key '{legacy}' is stale: {fix}; continuing")
+    for key in _unknown_keys(raw):
+        _warn(f"unknown key '{key}' is ignored; remove it or fix the spelling")
     for name in _OBJECT_KEYS:
         if name in raw and raw[name] is not None and not isinstance(raw[name], dict):
             raise ConfigError(f"invalid type for key '{name}': expected object")

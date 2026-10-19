@@ -109,6 +109,8 @@ _drive() {
 
   # Publication is maintenance of finished work. It never selects or reserves
   # work, and a halt holds launches while these receipts and group gates settle.
+  # A receipt read that fails is a repair; a blocked tidy is a narrow own-state
+  # or lost-work stop, so that one return still stops the tick.
   reconcile_pending_reviews || return 1
   if [ -f "$HALT" ]; then
     log_changed halted "halted ($(tr '\n' ' ' <"$HALT")); no new work"
@@ -224,6 +226,8 @@ _drive_cut_branch() {
     # cut: a published phase's branch must not still be the one checked out when
     # the next phase starts from it. Running it in both places is deliberate —
     # the step is idempotent, and each place covers a case the other does not.
+    # A tidy that cannot preserve its work is the narrow lost-work stop. A
+    # preserved, degraded, or clean tidy returns 0 and the launch continues.
     tidy_published_checkout || { _DRIVE_RC=1; return 0; }
     # The exit code is captured by running the command and reading $? straight
     # after. Putting it behind `if ! cmd; then rc=$?` cannot work: the `!`
@@ -247,8 +251,10 @@ _drive_cut_branch() {
       >"$RUN_DIR/phase-branch.json" 2>/dev/null
     local branch_rc=$?
     if [ "$branch_rc" -ne 0 ]; then
-      log "could not put ${work_kind:-phase} $number on its own branch; refusing to launch (see $RUN_DIR/phase-branch.json)"
-      { _DRIVE_RC=1; return 0; }
+      # A branch cut that fails is a repair: launch on the branch the checkout
+      # already has and retry the cut next tick. The phase branch is published
+      # by the finalize push, which reports a real failure there.
+      log "could not put ${work_kind:-phase} $number on its own branch; continuing on $(git -C "$REPO" rev-parse --abbrev-ref HEAD 2>/dev/null || printf 'the current branch'); the next tick retries (see $RUN_DIR/phase-branch.json)"
     fi
     # Only a group records a branch of its own. A single phase's branch is not a
     # group branch, and writing it here would leave a group's own record naming

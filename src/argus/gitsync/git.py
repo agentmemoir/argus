@@ -279,6 +279,21 @@ def blocked(info: dict[str, Any], reason: str, **extra: Any) -> dict[str, Any]:
     return info
 
 
+def degraded(info: dict[str, Any], reason: str, **extra: Any) -> dict[str, Any]:
+    """Report a step that did not happen, and let the caller continue.
+
+    This is the repair form of :func:`blocked`: the work is reported in
+    ``warning`` so the next tick can retry it, and ``ok`` stays true so no
+    caller halts the line. A narrow lost-work stop still uses ``blocked``.
+    """
+    info = dict(info)
+    info["ok"] = True
+    info["action"] = "continued"
+    info["warning"] = reason
+    info.update(extra)
+    return info
+
+
 def dirty_paths(repo: str | Path) -> list[str]:
     """Repo-relative paths with any staged, unstaged, or untracked change.
 
@@ -330,4 +345,4 @@ def summarize(results: list[dict[str, Any]], mode: str) -> str:
     return f"{head}: " + "; ".join(parts)
 
 
-__all__ = ["_is_private_path", "git_toplevel"]
+__all__ = ["_is_private_path", "degraded", "git_toplevel"]

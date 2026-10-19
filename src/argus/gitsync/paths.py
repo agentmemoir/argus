@@ -14,7 +14,7 @@ from argus.conventions import (
 from argus.conventions import (
     phases_folder as _phases_folder,
 )
-from argus.gitsync.git import ConfigError, blocked
+from argus.gitsync.git import ConfigError, degraded
 
 # A phase branch is named from the behaviour in the phase's phases file, and
 # never from its number. The branch is pushed to the public repository, where
@@ -205,11 +205,10 @@ def assert_phase_branch_unique(
         number, _behaviour = _phase_file_parts(path.name)
         if int(number) == int(phase) or phase_branch(path.name) != branch:
             continue
-        return blocked(
+        return degraded(
             info,
-            f"{branch!r} is also the branch for {path.name!r}",
-            hint="two phases cannot share a branch; rename one phase file so "
-            "the behaviour part differs",
+            f"{branch!r} is also the branch for {path.name!r}; rename one "
+            "phase file so the behaviour part differs",
         )
     return dict(info, ok=True, action="phase-branch-name-unique", branch=branch)
 
@@ -256,11 +255,10 @@ def assert_group_branch_unique(
         if group_branch(root, other, phases_dir) != branch:
             continue
         other_members = [f"{int(member):06d}" for member in other]
-        return blocked(
+        return degraded(
             info,
             f"{branch!r} is also the branch for group {other_members!r} "
-            f"in {path.name!r}",
-            hint="two groups cannot share a branch; rename a member file so the "
-            "lowest member's behaviour part differs",
+            f"in {path.name!r}; rename a member file so the lowest member's "
+            "behaviour part differs",
         )
     return dict(info, ok=True, action="group-branch-name-unique")

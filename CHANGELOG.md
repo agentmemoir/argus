@@ -4,6 +4,20 @@ Notable changes to this project are documented here. The format follows [Keep a 
 
 ## [Unreleased]
 
+- Argus no longer proves the glide ledger or auto-pins its step commits on resume. Completion proof lives in glide's ledger; a resume gate that met a terminal or moved run, or a damaged run result, logs the reason and continues on the phase's own branch for glide to repair. ([#157](https://github.com/agentmemoir/argus/pull/157))
+
+- Argus reads glide's atomic `result.json` for every state. A `repair_pending` result is a resumable no-launch tick: the driver logs the step and the reason, writes no halt, and neither archives nor finalizes the run; the next tick continues it. ([#157](https://github.com/agentmemoir/argus/pull/157))
+
+- A plan's open decision gate no longer stops the line. `BLOCKED_ON_GATE` is gone from the selector, the driver, and `next_phase.py` `STATE_EXIT`; the gate is reported under `needs_decision` and every later phase still gets its turn. ([#157](https://github.com/agentmemoir/argus/pull/157))
+
+- Branch, merge, sync, run-state, and publication failures that do not threaten work on disk now report and continue instead of halting. A clean checkout on any other branch is switched to the phase branch; a dirty tree is the narrow lost-work stop. Run-state commits are scoped with `git commit -- <pathspec>`, so a staged path from another phase cannot ride them. A blocked tidy preserves the phase's own work with a scoped commit and continues, and keeps a narrow stop only when the work cannot be preserved. ([#157](https://github.com/agentmemoir/argus/pull/157))
+
+- Publication checks the configured Git destinations before it commits or pushes: a shared destination returns `RETRY` with no push and no receipt. No receipt is written unless a pushed head is recorded for both checkouts and a pull request is recorded, and a receipt is marked published only under the same condition; a missing head or a missing pull request leaves the phase waiting. ([#157](https://github.com/agentmemoir/argus/pull/157))
+
+- A stale config key (`roadmap-dir`, `phases-dir`, `repair`) and an unknown key, nested ones included, warn once with the exact replacement and continue. An unacceptable value still stops and names the fix. ([#157](https://github.com/agentmemoir/argus/pull/157))
+
+- A new stop path in the driver or gitsync fails the build. The tripwire scans every shell and Python stop form and allows only the stops with an owner reason, keyed by file, rule, owner function, and the occurrence of that form, so a new function and a second stop of the same form in an already-allowed function both fail. ([#157](https://github.com/agentmemoir/argus/pull/157))
+
 - A failed glide job is retried with capped full jitter and, when the retries run out, recorded as `failed.json` beside the run directory; the selector skips that phase and the line continues to the next job instead of halting until a person clears it. The retry count is `ARGUS_JOB_RETRIES`, 3 retries (4 attempts) by default. ([#156](https://github.com/agentmemoir/argus/pull/156))
 
 - The publication path no longer blocks on git history, merge-base, tree, commit-id, or receipt gates, and a tick no longer runs the GitHub group gate, the repair loop, or the pull-request lifecycle reads; commit, push, and opening the pull request stay. ([#156](https://github.com/agentmemoir/argus/pull/156))

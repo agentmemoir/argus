@@ -27,7 +27,8 @@ for repo in out.get("repos", []):
     path = repo.get("repo", "")
     role = "private" if Path(path).resolve() == Path(sys.argv[2]).resolve() else "public"
     where = repo.get("after_branch") or repo.get("action", "?")
-    print(f"{role} {where}", end="; ")
+    warning = repo.get("warning")
+    print(f"{role} {where}{f' ({warning})' if warning else ''}", end="; ")
 PY
 }
 

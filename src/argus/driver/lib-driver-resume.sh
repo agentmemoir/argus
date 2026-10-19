@@ -5,12 +5,11 @@
 # The resume: resolve the target, cut the branch, prove the ledger, hold the
 # fence, launch.
 #
-# The branch is cut before the ledger proof, because the proof proves the pins
-# against the launch HEAD and the branch step can move HEAD: proving first left
-# the launch on a HEAD the proof never saw. Every check runs before the launch,
-# so a refusal leaves the run untouched, rewrites the record and writes the
-# marker. Nothing here archives the run it continues: a resume exists to keep
-# the stage state `--fresh` would throw away.
+# The branch is cut before the launch, so the launch uses the phase's own
+# branch. Every check runs before the launch, so a refusal leaves the run
+# untouched, rewrites the record and writes the marker. Nothing here archives
+# the run it continues: a resume exists to keep the stage state `--fresh` would
+# throw away.
 
 resume_phase_file_of() {   # <number>
   "$PYTHON" - "$ARGUS" "$REPO" "$1" "${ARGUS_CONFIG_ARGS[@]}" <<'PY'
@@ -34,10 +33,10 @@ PY
 
 # Put the checkout on the phase branch before the resumed launch.
 #
-# The tick's own cut also runs a resync, which can move HEAD after the ledger
-# proof was taken. A resume proves the pins against HEAD and then must not move
-# it, so only the branch half runs here. A refusal is fail-closed: a launch onto
-# the integration branch would put unreviewed product code where others pull it.
+# The tick's own cut also runs a resync. Only the branch half runs here. A
+# failure is a repair, not a stop: the phase keeps its claim, the resume
+# continues on the branch the checkout already has, and the next tick retries
+# the cut.
 #
 # Every member of a group publishes on the group's one branch, and a resume has
 # no selection to read the group from: the tick's resume branch runs before the
@@ -65,8 +64,8 @@ _drive_resume_branch() {   # <number> <rel>
       --phases-directory "$(phases_dir)" \
       "${GROUP_ARGS[@]+"${GROUP_ARGS[@]}"}" \
       >"$RUN_DIR/phase-branch.json" 2>/dev/null; then
-    RESUME_REFUSAL="the branch helper refused (see $RUN_DIR/phase-branch.json); a dirty checkout is the usual cause"
-    return 1
+    log "resume: could not put ${work_kind:-phase} $number on its own branch; continuing on $(git -C "$REPO" rev-parse --abbrev-ref HEAD 2>/dev/null || printf 'the current branch'); the next tick retries (see $RUN_DIR/phase-branch.json)"
+    return 0
   fi
   if group_active; then
     group_record_branch "$(selection_value branch <"$RUN_DIR/phase-branch.json")"
@@ -150,39 +149,28 @@ _drive_resume() {   # [<number>]
     return 1
   fi
 
-  # The gate is asked of two states, and both must pass. The record's snapshot is
-  # the state the halt left and what the record promises a reader; the live run is
-  # the state now and what glide will actually continue. Asking only the snapshot
-  # let a run that reached a terminal state after the halt reach the launch, where
-  # only the child stopped it - after a `started` notification had gone out. For a
-  # phase the record does not name there is no snapshot, and the live run is the
-  # only state there is.
+  # The gate is asked of two states: the record's snapshot and the live run.
+  # A terminal or moved state is a repair, not a stop. Glide owns the two-tick
+  # repair: it restores the step's output and ledger entry from the run log, or
+  # re-runs the step when there is no evidence. Argus passes the launch through
+  # and treats `repair_pending` as a normal no-launch tick.
   local gate_state live_state
   live_state="$(phase_state "$number" "$rel")"
   RESUME_LIVE_STATE="$live_state"
   gate_state="${HALT_REC_STATE:-$live_state}"
-  reason="$(resume_gate_reason "$gate_state" "$run_dir")" || {
-    resume_refuse "$target" "$reason"
-    return 1
-  }
+  reason="$(resume_gate_reason "$gate_state" "$run_dir")" || \
+    log "resume gate: ${work_kind:-phase} $number: $reason; continuing on its own branch for the repair"
   if [ "$gate_state" != "$live_state" ]; then
-    reason="$(resume_gate_reason "$live_state" "$run_dir")" || {
-      resume_refuse "$target" "the run moved on since the halt: $reason"
-      return 1
-    }
+    reason="$(resume_gate_reason "$live_state" "$run_dir")" || \
+      log "resume gate: ${work_kind:-phase} $number moved on since the halt: $reason; continuing on its own branch for the repair"
   fi
 
-  # The branch is cut before the ledger proof, because the proof proves the pins
-  # against the HEAD the launch uses and the branch step can move HEAD. Proving
-  # first and cutting after left the launch on a HEAD the proof never saw.
-  # `group_active` reads GROUP_MEMBERS only, so the reorder is safe, and every
-  # failure path still refuses.
+  # The branch is cut before the launch so the launch lands on the phase's own
+  # branch. A gitsync branch failure is a repair: the resume continues on the
+  # branch the checkout has, and the next tick retries the cut. A group
+  # declaration the resume cannot read is the resume's own reservation and
+  # still stops it.
   if ! _drive_resume_branch "$number" "$rel"; then
-    resume_refuse "$target" "$RESUME_REFUSAL"
-    return 1
-  fi
-
-  if ! resume_ledger_proof "$run_dir" "$number" "$rel"; then
     resume_refuse "$target" "$RESUME_REFUSAL"
     return 1
   fi

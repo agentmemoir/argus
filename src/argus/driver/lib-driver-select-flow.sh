@@ -147,8 +147,11 @@ _drive_choose_selection() {
         fi
         ;;
       COORDINATION_INCONSISTENT)
-        log "coordination state conflicts with completion evidence; no launch"
-        { _DRIVE_RC=1; return 0; }
+        # The board and the completion evidence disagree. That is a repair: warn
+        # and continue; the next tick re-reads both. Only a genuine reservation
+        # conflict stops the line.
+        log "coordination state conflicts with completion evidence; no launch, the next tick retries"
+        { _DRIVE_RC=0; return 0; }
         ;;
       COORDINATION_UNAVAILABLE)
         # The board could not be reached or committed to, so the selector could
@@ -170,19 +173,6 @@ _drive_choose_selection() {
         notify_coordination_outage "$unavailable_error"
         { _DRIVE_RC=1; return 0; }
         ;;
-      BLOCKED_ON_GATE)
-        # A plan that owes the owner a product decision is not runnable. The
-        # selector stops here and reserves nothing, so the line waits on a
-        # person recording the decision rather than on an agent discovering it
-        # mid-run. Exiting 0 stops the driver without failing it: nothing is
-        # broken, the queue is waiting on a human.
-        gate_phase="$(printf '%s' "$selection" | selection_value "$item_key")"
-        gate_error="$(printf '%s' "$selection" | selection_value error)"
-        gate_rel="$(printf '%s' "$selection" | selection_value path)"
-        log "BLOCKED_ON_GATE for ${work_kind:-phase} $gate_phase ($gate_error); no launch, no reservation"
-        log "record the decision in $gate_rel, then re-run the driver"
-        { _DRIVE_RC=0; return 0; }
-        ;;
       NO_PHASE)
         log_changed idle "no uncompleted ${work_kind:-phase}"
         { _DRIVE_RC=0; return 0; }
@@ -196,15 +186,12 @@ _drive_choose_selection() {
         review_phase="$(printf '%s' "$selection" | selection_value "$item_key")"
         review_branch="$(printf '%s' "$selection" | selection_value branch)"
         review_pr="$(printf '%s' "$selection" | selection_value pull_request)"
+        # A selector that stops on a review is a bug, not a run stop. Warn and
+        # continue unconditionally; every later phase still gets its turn.
         log "phase $review_phase is waiting for review on $review_branch, but the selector stopped on it"
         log "the selector should skip an open pull request and continue; this phase now blocks every later one"
         [ -z "$review_pr" ] || log "  pull request: $review_pr"
-        [ -z "$STALL" ] || { _DRIVE_RC=0; return 0; }
-        notify "Phase $review_phase is waiting for a human, and the selector is holding the whole line behind it.
-
-Branch: $review_branch
-Pull request: ${review_pr:-none recorded}"
-        { _DRIVE_RC=1; return 0; }
+        { _DRIVE_RC=0; return 0; }
         ;;
       *)
         # A state nobody anticipated is the case where a reason matters most, so

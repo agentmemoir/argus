@@ -88,6 +88,17 @@ def _write_publication_receipt(
         raise ConfigError(f"phase run directory is missing: {run_dir}")
     public_commit = _published_head(results, root)
     private_commit = _published_head(results, repo)
+    missing_heads = [
+        label
+        for label, value in (("public", public_commit), ("private", private_commit))
+        if not value
+    ]
+    if missing_heads:
+        raise ConfigError(
+            "publication has no pushed head for the "
+            + " and ".join(missing_heads)
+            + " checkout; no receipt written"
+        )
     public_branch = current_branch(root)
     private_branch = current_branch(repo)
     # One branch covers a whole group, so a member's receipt records the pull
@@ -103,6 +114,10 @@ def _write_publication_receipt(
         pull_request = (
             _group_pull_request(root, group["group"], public_branch, phase)
             or pull_request
+        )
+    if not pull_request:
+        raise ConfigError(
+            "publication has no pull request recorded; no receipt written"
         )
     from argus.board.reservations import _now
 
@@ -127,15 +142,6 @@ def _write_publication_receipt(
         "private_head": private_commit,
         "published_at": _now(),
     }
-    missing_heads = [
-        label
-        for label, value in (("public", public_commit), ("private", private_commit))
-        if not value
-    ]
-    if missing_heads:
-        # A push that reported no head is external: record which label is
-        # missing and write the best receipt available rather than refusing.
-        receipt["missing_heads"] = missing_heads
     if group:
         # The declared array, so a reader can see which phases this branch and
         # this pull request cover, and so the merge check can tell whether every

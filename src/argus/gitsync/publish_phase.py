@@ -26,7 +26,7 @@ from argus.gitsync.runstate import (
     publish_dirt,
     runstate_repo,
 )
-from argus.gitsync.sync import mode_resync, sync_all
+from argus.gitsync.sync import mode_resync, separation_reason, sync_all
 
 
 def publish_phase(
@@ -59,6 +59,20 @@ def publish_phase(
         raise ConfigError(f"phase number out of range: {phase}")
     if not commit_run_state:
         raise ConfigError("publication requires phase-scoped run-state commit")
+    # The separation check runs before any commit or push: publication must
+    # never send private run state to a public remote. A shared destination is
+    # a retry with no push and no receipt.
+    unsafe = separation_reason(root)
+    if unsafe is not None:
+        return {
+            "ok": False,
+            "mode": "publish",
+            "phase": f"{phase:06d}",
+            "state": "RETRY",
+            "error": unsafe,
+            "hint": "fix the Git destinations, then the next tick retries; nothing "
+            "was pushed and no receipt was written",
+        }
     try:
         from argus.board.reservations import (
             PublicationBusy,
@@ -119,13 +133,17 @@ def publish_phase(
             )
             results.append(clean)
             if not clean["ok"]:
+                # A leftover commit that could not land is a repair: write no
+                # receipt, leave the phase waiting, and retry next tick.
                 outcome = {
                     "ok": False,
                     "mode": "publish",
                     "phase": f"{int(phase):06d}",
-                    "state": "BLOCKED",
+                    "state": "RETRY",
                     "repos": results,
                     "summary": clean["summary"],
+                    "hint": "run state did not commit; the next tick retries and "
+                    "no receipt is written",
                 }
         if outcome is None:
             dirty = [p for p in dirty_paths(root) if not _is_private_path(root, p)]
@@ -147,6 +165,20 @@ def publish_phase(
         if outcome is None:
             sync = sync_all(root, "push")
             results.append(sync)
+            if not sync.get("ok"):
+                # The separation check refused the destinations (or another
+                # sync step failed). Push nothing and write no receipt; the
+                # phase stays waiting.
+                outcome = {
+                    "ok": False,
+                    "mode": "publish",
+                    "phase": f"{int(phase):06d}",
+                    "state": "RETRY",
+                    "repos": results,
+                    "summary": sync.get("summary", ""),
+                    "hint": "the checkouts could not be synced safely; no push "
+                    "and no receipt, the next tick retries",
+                }
         if outcome is None:
             checkouts = [root, private]
             if run_repo is not None and run_repo not in checkouts:
@@ -158,13 +190,17 @@ def publish_phase(
                 pushed = _push_one(checkout)
                 results.append(pushed)
                 if not pushed.get("ok"):
+                    # A push that failed is a repair: the phase stays waiting
+                    # and no receipt is written until the push succeeds.
                     outcome = {
                         "ok": False,
                         "mode": "publish",
                         "phase": f"{int(phase):06d}",
-                        "state": "BLOCKED",
+                        "state": "RETRY",
                         "repos": results,
                         "summary": summarize([pushed], "publish"),
+                        "hint": "the push did not land; the next tick retries and "
+                        "no receipt is written",
                     }
                     break
         if outcome is None:
@@ -187,15 +223,32 @@ def publish_phase(
                 "engine_written": engine_churn,
                 "summary": summarize(push_results, "publish"),
             }
+        receipt: dict[str, Any] = {}
+        receipt_result: dict[str, Any] = {}
         if outcome.get("ok") and commit_run_state:
-            receipt, receipt_result = _write_publication_receipt(
-                root,
-                phase,
-                reservation,
-                results,
-                engine_written=engine_churn,
-                pull_request=pull_request,
-            )
+            try:
+                receipt, receipt_result = _write_publication_receipt(
+                    root,
+                    phase,
+                    reservation,
+                    results,
+                    engine_written=engine_churn,
+                    pull_request=pull_request,
+                )
+            except ConfigError as exc:
+                # No receipt is written without both pushed heads and a pull
+                # request. The phase stays waiting; the next tick retries.
+                outcome = {
+                    "ok": False,
+                    "mode": "publish",
+                    "phase": f"{int(phase):06d}",
+                    "state": "RETRY",
+                    "repos": results,
+                    "error": str(exc),
+                    "hint": "the push and the pull request must both be recorded; "
+                    "no receipt was written, the next tick retries",
+                }
+        if outcome.get("ok") and commit_run_state:
             results.append(receipt_result)
             outcome["receipt"] = receipt
             # The group's own answer, for the caller: the shared pull request

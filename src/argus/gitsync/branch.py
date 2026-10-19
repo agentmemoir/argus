@@ -9,6 +9,7 @@ from argus.conventions import board_repo
 from argus.gitsync.git import (
     blocked,
     current_branch,
+    degraded,
     dirty_paths,
     git,
     integration_branch,
@@ -26,23 +27,18 @@ def ensure_phase_branch(
     """Put a checkout on its phase branch, creating it from ``base`` if needed.
 
     Idempotent, because a driver tick runs more than once and a phase that is
-    already on its branch must not be moved. A phase that is on some *other*
-    branch is a hard stop rather than a silent switch: switching branches under
-    a working tree that holds unreviewed work is exactly the operation that can
-    leave that work in pieces, and the operator is the only one who can decide
-    it is safe.
+    already on its branch must not be moved. Any other branch is a starting
+    point when the tree is clean: nothing uncommitted can be reinterpreted
+    against the commit the phase branch is cut from. A dirty tree is the narrow
+    lost-work stop, on the integration branch or any other, and the message
+    names the paths.
 
-    The integration branch is the one exception, and only with a clean tree.
-    It is the ordinary state between two phases: the workflow asks a person to
-    return the checkout there once a pull request is open, and the tidy step
-    does it once a phase is published. When the next phase stacks on an earlier
-    phase whose pull request is still open, its base is that earlier phase's
-    branch and not the integration branch, so a checkout sitting on the
-    integration branch is a starting point and not a conflict. Refusing it meant
-    every such launch needed a person to run a checkout first, and the line
-    stopped on each one in turn. A clean tree is the whole condition: nothing
-    can be reinterpreted against the other commit. Uncommitted work on the
-    integration branch is still a stop, and the message names the paths.
+    The integration branch is the ordinary state between two phases: the
+    workflow asks a person to return the checkout there once a pull request is
+    open, and the tidy step does it once a phase is published. When the next
+    phase stacks on an earlier phase whose pull request is still open, its base
+    is that earlier phase's branch and not the integration branch, so a checkout
+    sitting on the integration branch is a starting point and not a conflict.
 
     The index is carried across, not required to be clean, when the checkout is
     already on the base. A phase stages its work and never commits it, so the
@@ -66,7 +62,9 @@ def ensure_phase_branch(
     base = base or integration_branch(repo)
     info: dict[str, Any] = {"repo": str(repo), "branch": branch, "base": base}
     if not is_git_repo(repo):
-        return blocked(info, "not a git working tree")
+        return degraded(
+            info, "not a git working tree; the branch step is retried next tick"
+        )
     # Recorded up front so every return below, blocked ones included, reports
     # where the checkout really is rather than only what was asked of it.
     info["after_branch"] = current_branch(repo) or "(detached)"
@@ -74,18 +72,14 @@ def ensure_phase_branch(
         here = current_branch(repo)
         rc, _, err = git(repo, "rev-parse", "--verify", base)
         if rc != 0:
-            return blocked(
+            return degraded(
                 info,
-                f"base branch {base!r} does not exist",
-                hint="the integration branch is missing; refusing to "
-                "publish run state with no starting point",
+                f"base branch {base!r} does not exist; run state is retried next tick",
             )
         if here and here != base:
-            return blocked(
+            return degraded(
                 info,
-                f"checkout is on {here!r}, not {base!r}",
-                hint="run state is published from the integration branch; "
-                "moving the working tree is an operator decision",
+                f"checkout is on {here!r}, not {base!r}; the next tick retries",
             )
         return dict(
             info,
@@ -112,49 +106,36 @@ def ensure_phase_branch(
     if why or not remote:
         rc_r, remote, _ = git(repo, "config", "--get", f"branch.{base}.remote")
         if rc_r != 0 or not remote:
-            return blocked(
+            return degraded(
                 info,
-                why or "no remote is configured",
-                hint="the phase branch cannot be published; "
-                "refusing to leave it with no remote copy",
+                (why or "no remote is configured")
+                + "; the branch cut is retried when the remote returns",
             )
     # The base is checked before the current branch, so a missing integration
     # branch is reported as itself rather than as "you are on the wrong
     # branch", which is what the reverse order would say.
     rc, _, err = git(repo, "rev-parse", "--verify", base)
     if rc != 0:
-        return blocked(
+        return degraded(
             info,
-            f"base branch {base!r} does not exist",
-            hint="the integration branch is missing; refusing to "
-            "invent a starting point",
+            f"base branch {base!r} does not exist; the branch cut is retried next tick",
         )
     if here and here != base:
-        # The integration branch is where the checkout is left between phases,
-        # so it is a place the launch may leave from rather than a conflict it
-        # must refuse. The tree has to be clean for that: the phase branch is
-        # cut from the base's commit, so anything uncommitted would be
-        # reinterpreted against a tree it was never written for. That is the
-        # case the refusal below exists for, and it keeps refusing it.
-        if here == integration_branch(repo):
-            carried = dirty_paths(repo)
-            if carried:
-                return blocked(
-                    info,
-                    f"checkout is on {here!r} with {len(carried)} "
-                    f"uncommitted path(s), and the phase branch is cut from "
-                    f"{base!r}",
-                    dirty=carried,
-                    hint="commit or stash the work, or move the checkout to the "
-                    f"base branch {base!r} yourself, then rerun; nothing "
-                    "was switched",
-                )
-        else:
+        # Any branch is a place the launch may leave from when the tree is
+        # clean: the phase branch is cut from the base's commit, so nothing
+        # uncommitted can be reinterpreted against the wrong tree. A dirty tree
+        # is the narrow lost-work stop, on the integration branch or any other.
+        carried = dirty_paths(repo)
+        if carried:
             return blocked(
                 info,
-                f"checkout is on {here!r}, not the phase branch or {base!r}",
-                hint="a phase's work lives on its own branch; moving it is an "
-                "operator decision, so nothing was switched",
+                f"checkout is on {here!r} with {len(carried)} "
+                f"uncommitted path(s), and the phase branch is cut from "
+                f"{base!r}",
+                dirty=carried,
+                hint="commit or stash the work, or move the checkout to the "
+                f"base branch {base!r} yourself, then rerun; nothing "
+                "was switched",
             )
     exists_rc, _, _ = git(repo, "rev-parse", "--verify", f"refs/heads/{branch}")
     if exists_rc == 0:
@@ -164,10 +145,9 @@ def ensure_phase_branch(
         # can be joined.
         rc, out, err = git(repo, "checkout", branch)
         if rc != 0:
-            return blocked(
+            return degraded(
                 info,
-                f"could not check out {branch!r}: {err or out}",
-                hint="resolve by hand; nothing was switched",
+                f"could not check out {branch!r}: {err or out}; the next tick retries",
             )
         return dict(
             info,
@@ -179,10 +159,9 @@ def ensure_phase_branch(
         )
     rc, out, err = git(repo, "checkout", "-b", branch, base)
     if rc != 0:
-        return blocked(
+        return degraded(
             info,
-            f"could not create {branch!r}: {err or out}",
-            hint="resolve by hand; nothing was switched",
+            f"could not create {branch!r}: {err or out}; the next tick retries",
         )
     # Publish the new branch and give it an upstream straight away. Two
     # reasons, both load-bearing: the sync helper refuses a branch with no
@@ -191,11 +170,10 @@ def ensure_phase_branch(
     # so it publishes no unreviewed work.
     rc, out, err = git(repo, "push", "-q", "-u", remote, branch)
     if rc != 0:
-        return blocked(
+        return degraded(
             info,
-            f"could not publish {branch!r} to {remote}: {err or out}",
-            hint="the phase branch must exist on the remote before the phase "
-            "starts; resolve by hand",
+            f"could not publish {branch!r} to {remote}: {err or out}; "
+            "the phase continues on it and the next tick retries the push",
         )
     return dict(
         info,

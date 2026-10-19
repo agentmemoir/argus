@@ -156,15 +156,16 @@ def test_active_phase_prevents_checkout_maintenance(tmp_path: Path) -> None:
     assert not {"GATE", "PUBLISH", "SELECT", "TIDY"}.intersection(events)
 
 
-def test_scan_failure_refuses_launch(tmp_path: Path) -> None:
+def test_scan_failure_continues_to_select(tmp_path: Path) -> None:
     shell(
         tmp_path,
         """
 pending_review_snapshot() { return 1; }
-if _drive; then exit 7; fi
+_drive
 """,
     )
-    assert "SELECT" not in (tmp_path / "events").read_text().splitlines()
+    events = (tmp_path / "events").read_text().splitlines()
+    assert "SELECT" in events
 
 
 def test_halted_maintenance_retries_tidy_with_no_pending_receipts(
@@ -176,13 +177,17 @@ def test_halted_maintenance_retries_tidy_with_no_pending_receipts(
 : >"$HALT"
 pending_review_snapshot() { printf '{"awaiting_review":[]}'; }
 tidy_published_checkout() { log TIDY; [ -f "$RUN_DIR/repaired" ]; }
-if _drive --merge-check-only; then exit 7; fi
+rc=0; _drive --merge-check-only || rc=$?
+printf 'first_rc=%s\\n' "$rc" >>"$RUN_DIR/events"
 : >"$RUN_DIR/repaired"
 _drive --merge-check-only
 """,
     )
     events = (tmp_path / "events").read_text().splitlines()
     assert events.count("TIDY") == 2
+    # A blocked tidy (no repaired marker) is a narrow stop; the tick that finds
+    # it repaired continues.
+    assert "first_rc=1" in events
     assert "SELECT" not in events
 
 
@@ -208,7 +213,6 @@ resume_phase_file_of() { printf 'phase-100020-fixture.md'; }
 phase_run_dir() { printf '%s' "$RUN_DIR"; }
 phase_state() { printf blocked; }
 _drive_resume_branch() { :; }
-resume_ledger_proof() { :; }
 resume_fence() { RESUME_RESERVATION_ID=rsv-fixture; RESUME_RESERVATION_GENERATION=2; }
 record_claim() { :; }
 resume_stage() { printf fixture; }

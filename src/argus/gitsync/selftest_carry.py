@@ -175,10 +175,10 @@ def _handoff_checks(base: Path) -> list[tuple[str, object, str]]:
     remote_head: str = git(pub, "rev-parse", f"origin/{branch}")[1]
     return [
         (
-            "the integration branch is refused",
-            not on_integration.get("ok")
+            "work in progress stays local on the integration branch",
+            on_integration.get("ok")
             and "work in progress" in json.dumps(on_integration),
-            f"state={on_integration.get('state')} {on_integration.get('summary')}",
+            f"warning={on_integration.get('warning')} {on_integration.get('summary')}",
         ),
         (
             "work in progress is committed and pushed on the phase branch",
@@ -230,8 +230,8 @@ def _group_branch_collision_checks(base: Path) -> list[tuple[str, object, str]]:
     )
     results.append(
         (
-            "two groups deriving one branch are refused",
-            not clash.get("ok") and "also the branch for group" in json.dumps(clash),
+            "two groups deriving one branch are reported and continued",
+            clash.get("ok") and "also the branch for group" in json.dumps(clash),
             f"{clash.get('summary')} {json.dumps(clash)}",
         )
     )

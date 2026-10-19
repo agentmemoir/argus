@@ -87,7 +87,6 @@ from argus.phases.group import (  # noqa: E402 - path set just above
 from argus.phases.index import audit  # noqa: E402 - path set just above
 from argus.phases.queue import (  # noqa: E402 - path set just above
     candidates,
-    gate_block,
     select_next,
 )
 from argus.phases.selftest import self_test  # noqa: E402 - path set just above
@@ -117,7 +116,6 @@ __all__ = [
     "declared_group_members",
     "file_approved",
     "finalize_log_done",
-    "gate_block",
     "index_complete",
     "is_done",
     "ledger_finalized",

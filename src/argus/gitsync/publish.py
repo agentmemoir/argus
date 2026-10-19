@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from argus.conventions import phase_run_dir
-from argus.gitsync.git import blocked
+from argus.gitsync.git import blocked, degraded
 from argus.gitsync.receipts import phase_receipt
 from argus.gitsync.runstate import (
     _commit_and_push_run_state,
@@ -85,16 +85,23 @@ def mark_phase_published(
             action="already-published",
             hint="this phase is already recorded as published",
         )
-    if not receipt.get("public_head") and not receipt.get("missing_heads"):
-        # A receipt with no pushed head and no recorded missing head is not a
-        # publish receipt: `_write_publication_receipt` always records one or the
-        # other. Leave it for a later tick; there is nothing to mark.
-        return dict(
+    if not receipt.get("public_head") or receipt.get("missing_heads"):
+        # A receipt with no pushed head, or one that records a missing head, is
+        # not publish evidence. Leave it waiting; the next tick retries when the
+        # push records both heads.
+        return degraded(
             info,
-            ok=False,
+            "the receipt records no pushed head for every checkout; nothing to "
+            "mark, the next tick retries",
             action="no-publish-evidence",
-            blockers=["the receipt records no pushed head; nothing to mark"],
-            hint="the phase keeps waiting until its publish records a head",
+        )
+    if not receipt.get("pull_request"):
+        # A phase is published only when its branch is pushed and its pull
+        # request is open. Without a pull request there is nothing to review.
+        return degraded(
+            info,
+            "the receipt records no pull request; nothing to mark, the next tick retries",
+            action="no-publish-evidence",
         )
     path = phase_run_dir(root, int(phase)) / "publication.json"
     data = dict(receipt)

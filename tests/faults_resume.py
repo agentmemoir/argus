@@ -18,7 +18,7 @@ RESUME_FAULTS = (
         "replace": "  if false; then  # FAULT: a present run.json is not refused\n",
         "cases": "resume",  # selftest_resume_gate_cases
         "verdict": "driver self-test:",
-        "expect": "a damaged run.json was accepted as the interrupted class",
+        "expect": "a damaged run.json stopped the resume instead of repairing it",
     },
     {
         "name": "resume-consumes-an-unowned-record",
@@ -29,23 +29,6 @@ RESUME_FAULTS = (
         "cases": "resume",  # selftest_case_resume cross-phase
         "verdict": "driver self-test:",
         "expect": "--resume N consumed another phase's record",
-    },
-    {
-        "name": "resume-proof-before-the-branch",
-        "breaks": "the ledger proof runs on a HEAD the launch does not use",
-        "file": "src/argus/driver/lib-driver-resume.sh",
-        "find": '  if ! _drive_resume_branch "$number" "$rel"; then\n',
-        "replace": "  if false; then  # FAULT: the branch step runs after the proof\n",
-        "second_find": '  if ! resume_fence "$number"; then\n',
-        "second_replace": '  if ! _drive_resume_branch "$number" "$rel"; then\n'
-        '    resume_refuse "$target" "$RESUME_REFUSAL"\n'
-        "    return 1\n"
-        "  fi\n"
-        "\n"
-        '  if ! resume_fence "$number"; then\n',
-        "cases": "resume",  # selftest_case_resume branch-proof
-        "verdict": "driver self-test:",
-        "expect": "the ledger proof ran before the branch step",
     },
     {
         "name": "resume-group-not-read",

@@ -2,8 +2,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """Run-state artifacts, and the phase-scoped commit that lands leftovers."""
 
-import re
-from collections.abc import Iterable
 from pathlib import Path
 from typing import Any, cast
 
@@ -19,6 +17,7 @@ from argus.gitsync.git import (
     ConfigError,
     _is_private_path,
     blocked,
+    degraded,
     dirty_paths,
     git,
     git_toplevel,
@@ -28,80 +27,11 @@ from argus.gitsync.git import (
     summarize,
 )
 from argus.gitsync.merge import sync_one
-
-# Run artifacts the running engine rewrites in place while a step runs.
-#
-# The test is the property, not the filename: a file sitting directly in a
-# phase's run directory whose whole content is a timestamp or an engine audit
-# line. The engine that is publishing is the engine that writes them, at least
-# once a second, so a check that demands a clean tree races the writer it is
-# checking and cannot win. The publication helper used to be unpublishable
-# from inside the engine for exactly that reason.
-#
-# These files are still committed and still pushed. The exemption is only
-# about the *check* that runs after the commit, and it is deliberately narrow:
-# a run log, findings, a ledger, a resume record, a receipt, a modified source
-# file, a staged change and an untracked file all still refuse publication.
-# Both halves of the test matter: the name alone would exempt a source file
-# that happens to be called `activity`, and the directory alone would exempt
-# every run artifact. Adding a name here is a commitment to say why the
-# artifact is engine telemetry and not phase evidence, so the next hot
-# artifact cannot slip in silently.
-ENGINE_WRITTEN_RUN_ARTIFACTS = (
-    # glide.nudge.touch_activity: "harness output at <epoch>", rewritten on
-    # every pump tick where the harness produced output.
-    "activity",
-    # glide.nudge.record: the reminder audit, appended on every decision.
-    "reminders.log",
+from argus.gitsync.runstate_artifacts import (
+    ENGINE_WRITTEN_RUN_ARTIFACTS,
+    is_engine_written_run_artifact,
+    publish_dirt,
 )
-
-# A run artifact is a file directly inside runs/phase-<N>/. The path may carry
-# a repository prefix, because the publish check reports the private checkout's
-# paths as seen from the public one.
-_RUN_ARTIFACT_RE = re.compile(r"(?:^|/)runs/(phase-\d+)/([^/]+)$")
-
-
-def is_engine_written_run_artifact(path: str) -> bool:
-    """Whether a repo-relative path is engine telemetry the running step
-    rewrites in place, rather than phase evidence.
-
-    Args:
-        path: A repo-relative path, as :func:`dirty_paths` reports it.
-
-    Returns:
-        Whether the path is an engine-written artifact of one phase.
-    """
-    match = _RUN_ARTIFACT_RE.search(path)
-    return match is not None and match.group(2) in ENGINE_WRITTEN_RUN_ARTIFACTS
-
-
-def publish_dirt(
-    dirty: Iterable[str],
-    root: str | Path | None = None,
-    phase: int | None = None,
-) -> tuple[list[str], list[str]]:
-    """Split dirty paths into the ones that must refuse publication and the
-    engine-written ones that were already committed and pushed.
-
-    The excluded set is reported, never dropped: an operator reading a
-    publication can see what the check chose not to look at.
-    """
-    if root is not None and phase is not None:
-        run = phase_run_dir(root, phase).resolve()
-
-        def engine_artifact(path: str) -> bool:
-            candidate = Path(path)
-            if not candidate.is_absolute():
-                candidate = Path(root) / candidate
-            return (
-                candidate.resolve().parent == run
-                and candidate.name in ENGINE_WRITTEN_RUN_ARTIFACTS
-            )
-    else:
-        engine_artifact = is_engine_written_run_artifact
-    real = [p for p in dirty if not engine_artifact(p)]
-    engine = sorted(p for p in dirty if engine_artifact(p))
-    return real, engine
 
 
 def _commit_and_push_run_state(
@@ -115,7 +45,7 @@ def _commit_and_push_run_state(
     branch, remote, _remote_branch, why = resolve_upstream(repo)
     info: dict[str, Any] = {"repo": str(repo), "pathspec": pathspec}
     if why:
-        return blocked(info, why)
+        return degraded(info, why + "; the next tick retries")
     branch = cast("str", branch)
     remote = cast("str", remote)
     _, staged, _ = git(repo, "diff", "--cached", "--name-only")
@@ -131,15 +61,12 @@ def _commit_and_push_run_state(
                 staged=outside,
                 hint="commit or unstage them before publishing",
             )
-    rc, _, err = git(repo, "add", "-A", "--", pathspec)
-    if rc != 0:
-        return blocked(info, f"could not stage {pathspec}: {err}")
-    rc, out, err = git(repo, "commit", "-q", "-m", message)
-    if rc != 0:
-        combined = err or out
-        if "nothing to commit" in combined.lower():
-            return dict(info, ok=True, action="clean", hint=message)
-        return blocked(info, f"commit of run state failed: {combined}")
+    scoped = _scoped_pathspecs(pathspec)
+    error, committed = _stage_and_commit(repo, message, scoped)
+    if error is not None:
+        return degraded(info, error + "; the next tick retries")
+    if not committed:
+        return dict(info, ok=True, action="clean", hint=message)
     for attempt in (1, 2):
         rc, out, err = git(repo, "push", remote, branch)
         if rc == 0:
@@ -148,18 +75,58 @@ def _commit_and_push_run_state(
                 info, ok=True, action="committed-and-pushed", after=after, hint=message
             )
         if attempt == 1:
+            # The engine may have rewritten its own run artifact between the
+            # commit and the push, which leaves the index staged; a real merge
+            # needs a clean index. Commit that scoped path again, then integrate
+            # the remote's commits (the board writes its own) before retrying.
+            _stage_and_commit(repo, message, scoped)
             res = sync_one(repo, "start")
             if not res.get("ok"):
-                return blocked(
+                return degraded(
                     info,
-                    "remote moved and could not be integrated before pushing run state",
+                    "remote moved and could not be integrated before pushing run state; "
+                    "the next tick retries",
                     detail=res.get("summary"),
                 )
-    return blocked(
+    return degraded(
         info,
-        f"push of run state failed: {err or out}",
-        hint="resolve the remote by hand, then rerun",
+        f"push of run state failed: {err or out}; the next tick retries",
     )
+
+
+def _scoped_pathspecs(pathspec: str) -> list[str]:
+    """The phase path, minus the engine-written artifacts it rewrites.
+
+    The engine rewrites its own run artifacts while the tick runs, so a commit
+    that includes them can race the writer and leave the index staged against
+    HEAD, which then blocks the merge that integrates the board's own commits.
+    They are committed by a later, quiet cleanup instead.
+    """
+    return [
+        pathspec,
+        *(f":(exclude,glob){pathspec}/{name}" for name in ENGINE_WRITTEN_RUN_ARTIFACTS),
+    ]
+
+
+def _stage_and_commit(
+    repo: str | Path, message: str, pathspecs: list[str]
+) -> tuple[str | None, bool]:
+    """Stage and commit one scoped run-state path.
+
+    Returns ``(error, committed)``. Scoped with ``git commit -- <pathspec>``,
+    so a staged path from another phase stays staged and cannot ride this
+    commit. A path with nothing to commit is not an error.
+    """
+    rc, _, err = git(repo, "add", "-A", "--", *pathspecs)
+    if rc != 0:
+        return f"could not stage {pathspecs[0]}: {err}", False
+    rc, out, err = git(repo, "commit", "-q", "-m", message, "--", *pathspecs)
+    if rc != 0:
+        combined = err or out
+        if "nothing to commit" in combined.lower():
+            return None, False
+        return f"commit of run state failed: {combined}", False
+    return None, True
 
 
 def runstate_repo(root: str | Path, phase: int | str | None = None) -> Path | None:
@@ -287,19 +254,31 @@ def commit_leftover_run_state(
             ]
             inside = [p for p in paths if p == pathspec or p.startswith(prefix)]
         if outside:
-            results.append(
-                blocked(
-                    {"repo": str(repo)},
-                    "private checkout has changes outside the current phase"
-                    if phase is not None
-                    else "private checkout has changes outside runs/",
-                    dirty=outside,
-                    hint="commit or move them before publishing this phase",
+            if phase is not None:
+                # Narrow lost-work stop: staged changes outside the phase are
+                # never carried, and this publication waits until they are moved.
+                results.append(
+                    blocked(
+                        {"repo": str(repo)},
+                        "private checkout has changes outside the current phase",
+                        dirty=outside,
+                        hint="commit or move them before publishing this phase",
+                    )
                 )
-            )
-        elif inside:
+            else:
+                # The sweep is scoped per phase, so a foreign staged path cannot
+                # ride it. Report it and keep going.
+                results.append(
+                    degraded(
+                        {"repo": str(repo)},
+                        "private checkout has changes outside runs/; they stay "
+                        "staged and are reported, the next tick retries",
+                        dirty=outside,
+                    )
+                )
+        if inside:
             results.append(_commit_and_push_run_state(repo, message, pathspec=pathspec))
-        else:
+        elif not outside:
             results.append({"repo": str(repo), "ok": True, "action": "clean"})
     ok = all(r.get("ok") for r in results)
     return {

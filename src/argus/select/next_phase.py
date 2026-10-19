@@ -23,14 +23,14 @@ reserves the item, and prints a JSON result:
   AVAILABLE                   claimable, reported without claiming (--read-only)
   NO_PHASE                    nothing left to do
   WAIT_FOR_CLAIM              owned by another live reservation; do not jump it
-  BLOCKED_ON_GATE             the plan owes the owner a decision
   COOLDOWN                    an expired claim is still in its cooldown window
   GROUP_UNAVAILABLE           a declared group could not be resolved
   COORDINATION_INCONSISTENT   the board and the evidence disagree
   COORDINATION_UNAVAILABLE    the board could not be reached
 
 Exit codes: 0 for RESERVED and AVAILABLE, 1 for NO_PHASE, 3 for
-WAIT_FOR_CLAIM, 4 for BLOCKED_ON_GATE, 2 for everything else. A result may
+WAIT_FOR_CLAIM, 2 for everything else. An open decision gate is reported under
+``needs_decision`` and never stops the run. A result may
 carry ``awaiting_review``: items skipped because a pull request of theirs is
 open and unmerged. They are finished work rather than queue work, and the
 driver runs the merge check on them. A result for a phase that declares a
@@ -94,7 +94,6 @@ STATE_EXIT = {
     "AVAILABLE": 0,
     "NO_PHASE": 1,
     "WAIT_FOR_CLAIM": 3,
-    "BLOCKED_ON_GATE": 4,
     "COOLDOWN": 2,
     "GROUP_UNAVAILABLE": 2,
     "COORDINATION_INCONSISTENT": 2,

@@ -7,7 +7,7 @@ from typing import Any, cast
 
 from argus.gitsync.git import (
     ConfigError,
-    blocked,
+    degraded,
     dirty_paths,
     git,
     integration_branch,
@@ -143,30 +143,35 @@ def mode_checkpoint(root: str | Path, paths: list[str] | None = None) -> dict[st
         )
     branch, remote, _remote_branch, why = resolve_upstream(root)
     if why:
-        return blocked(info, why)
+        return degraded(info, why + "; the checkpoint is retried next tick")
     remote = cast("str", remote)
     branch = cast("str", branch)
     if branch == integration_branch(root):
-        return blocked(
+        return degraded(
             info,
-            f"refusing to push work in progress on {branch!r}",
-            hint="a handoff is the phase branch, not the integration branch",
+            f"work in progress stays local on {branch!r}; a handoff needs a "
+            "phase branch, so the checkpoint is retried after the branch cut",
         )
     if paths:
         rc, staged, err = git(
             root, "diff", "--cached", "--no-renames", "--name-only", "-z"
         )
         if rc:
-            return blocked(info, "could not read staged paths")
+            return degraded(info, "could not read staged paths; retrying next tick")
         rc, scoped, err = git(
             root, "diff", "--cached", "--no-renames", "--name-only", "-z", "--", *paths
         )
         if rc:
-            return blocked(info, "could not read scoped staged paths")
+            return degraded(
+                info, "could not read scoped staged paths; retrying next tick"
+            )
         outside = sorted(set(staged.split("\0")) - set(scoped.split("\0")) - {""})
         if outside:
-            return blocked(
-                info, "staged changes exist outside checkpoint paths", staged=outside
+            return degraded(
+                info,
+                "staged changes exist outside checkpoint paths; they stay "
+                "staged and the checkpoint is retried",
+                staged=outside,
             )
         rc, selected, err = git(
             root,
@@ -179,13 +184,15 @@ def mode_checkpoint(root: str | Path, paths: list[str] | None = None) -> dict[st
             *paths,
         )
         if rc:
-            return blocked(info, "could not read checkpoint paths")
+            return degraded(info, "could not read checkpoint paths; retrying next tick")
         info["left_uncommitted"] = sorted(
             set(dirty_paths(root)) - set(selected.split("\0"))
         )
     rc, out, err = git(root, "add", "-A", *(["--", *paths] if paths else []))
     if rc != 0:
-        return blocked(info, f"could not stage the checkout: {err or out}")
+        return degraded(
+            info, f"could not stage the checkout: {err or out}; retrying next tick"
+        )
     # Ask git first. With nothing staged, the pre-commit hook refused the commit
     # with its own text, and git's "nothing to commit" never appeared. So an
     # empty stage must not reach the commit, and the push still runs: a repair
@@ -193,7 +200,10 @@ def mode_checkpoint(root: str | Path, paths: list[str] | None = None) -> dict[st
     # branch does not have yet, and the push is what says whether it moved.
     rc, out, err = git(root, "diff", "--cached", "--quiet")
     if rc not in (0, 1):
-        return blocked(info, f"could not read the staged changes: {err or out}")
+        return degraded(
+            info,
+            f"could not read the staged changes: {err or out}; retrying next tick",
+        )
     committed = rc == 1
     if committed:
         rc, out, err = git(
@@ -204,12 +214,17 @@ def mode_checkpoint(root: str | Path, paths: list[str] | None = None) -> dict[st
             f"{'wip' if paths else 'checkpoint'}: work in progress on {branch}",
         )
         if rc != 0:
-            return blocked(info, f"checkpoint commit failed: {err or out}")
+            return degraded(
+                info,
+                f"checkpoint commit failed: {err or out}; retrying next tick",
+            )
     # --porcelain reports a ref that was already up to date as well, so the
     # result names what the push did instead of what the stage held.
     rc, out, err = git(root, "push", "--porcelain", remote, branch)
     if rc != 0:
-        return blocked(info, f"checkpoint push failed: {err or out}")
+        return degraded(
+            info, f"checkpoint push failed: {err or out}; retrying next tick"
+        )
     if committed:
         action = "committed-and-pushed"
     elif push_moved(out, branch):

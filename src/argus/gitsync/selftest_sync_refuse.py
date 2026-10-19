@@ -178,10 +178,10 @@ def _sync_refuse_checks(base: Path, checks: list[dict[str, Any]]) -> None:
     _check(
         checks,
         "sync: a gone upstream is named, not misread as shared destinations",
-        (not res["ok"])
+        res["ok"]
         and "cannot prove separate" not in res["summary"]
         and public.get("action") == "no-upstream"
-        and "no upstream" in public["blockers"][-1],
+        and "no upstream" in public["warning"],
         res["summary"],
     )
 

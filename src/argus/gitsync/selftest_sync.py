@@ -56,7 +56,7 @@ def _sync_one_checks(base: Path, checks: list[dict[str, Any]]) -> None:
         f"action={res.get('action')} parents={parents}",
     )
 
-    # 2b. a conflicting divergence is aborted and halts, preserving local work.
+    # 2b. a conflicting divergence leaves the conflict for the phase agent.
     d = base / "conflict"
     d.mkdir()
     remote, work = _init_remote(d, "w")
@@ -67,11 +67,11 @@ def _sync_one_checks(base: Path, checks: list[dict[str, Any]]) -> None:
     res = sync_one(work, "start")
     _check(
         checks,
-        "sync: conflicting start aborts and preserves local work",
-        (not res["ok"])
+        "sync: conflicting start leaves the merge for the agent",
+        res["ok"]
         and res.get("conflicted") == ["a.txt"]
-        and (work / "a.txt").read_text() == "local change\n"
-        and not (work / ".git" / "MERGE_HEAD").exists(),
+        and "<<<<<<<" in (work / "a.txt").read_text()
+        and (work / ".git" / "MERGE_HEAD").exists(),
         f"conflicted={res.get('conflicted')}",
     )
 
@@ -120,7 +120,7 @@ def _sync_one_checks(base: Path, checks: list[dict[str, Any]]) -> None:
     )
 
     # 4b. a conflicting final push leaves the conflict in place so the
-    # finalize agent can resolve it (start mode aborts; push mode does not).
+    # finalize agent can resolve it.
     d = base / "push-conflict"
     d.mkdir()
     remote, work = _init_remote(d, "w")
@@ -132,7 +132,7 @@ def _sync_one_checks(base: Path, checks: list[dict[str, Any]]) -> None:
     _check(
         checks,
         "sync: conflicting final push leaves the merge to resolve",
-        (not res["ok"])
+        res["ok"]
         and res.get("conflicted") == ["a.txt"]
         and "<<<<<<<" in (work / "a.txt").read_text()
         and (work / ".git" / "MERGE_HEAD").exists(),
@@ -163,11 +163,11 @@ def _sync_one_checks(base: Path, checks: list[dict[str, Any]]) -> None:
     res = sync_one(work, "start")
     _check(
         checks,
-        "sync: overlapping dirty edit blocks and is preserved",
-        (not res["ok"])
+        "sync: overlapping dirty edit is reported and preserved",
+        res["ok"]
         and (work / "a.txt").read_text() == "local edit\n"
         and res.get("overlapping") == ["a.txt"],
-        f"blockers={res.get('blockers')} overlapping={res.get('overlapping')}",
+        f"warning={res.get('warning')} overlapping={res.get('overlapping')}",
     )
 
     # 6b. The stranding case: a strictly-behind remote whose incoming commit
@@ -196,8 +196,8 @@ def _sync_one_checks(base: Path, checks: list[dict[str, Any]]) -> None:
         f"action={res.get('action')} carried={res.get('carried')}",
     )
 
-    # 6c. The same overlap must still refuse, and must leave the index
-    # byte-identical: a refusal that half-integrates is worse than no attempt.
+    # 6c. The same overlap is reported, and the index stays byte-identical:
+    # a repair that half-integrates is worse than no attempt.
     d = base / "overlap-preserves-index"
     d.mkdir()
     remote, work = _init_remote(d, "w")
@@ -209,8 +209,8 @@ def _sync_one_checks(base: Path, checks: list[dict[str, Any]]) -> None:
     res = sync_one(work, "start")
     _check(
         checks,
-        "sync: an overlapping path refuses and the index is untouched",
-        (not res["ok"])
+        "sync: an overlapping path is reported and the index is untouched",
+        res["ok"]
         and res.get("overlapping") == ["a.txt"]
         and git(work, "diff", "--cached")[1] == index_before
         and git(work, "rev-parse", "HEAD")[1] == head_before
@@ -268,8 +268,8 @@ def _sync_one_checks(base: Path, checks: list[dict[str, Any]]) -> None:
     res = sync_one(work, "start")
     _check(
         checks,
-        "sync: a diverged merge refuses an overlapping unstaged edit",
-        (not res["ok"])
+        "sync: a diverged merge reports an overlapping unstaged edit",
+        res["ok"]
         and res.get("overlapping") == ["a.txt"]
         and git(work, "diff", "--cached")[1] == index_before
         and git(work, "rev-parse", "HEAD")[1] == head_before

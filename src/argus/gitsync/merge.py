@@ -9,6 +9,7 @@ from argus.gitsync.git import (
     FETCH_TIMEOUT_S,
     blocked,
     classify,
+    degraded,
     dirty_paths,
     git,
     is_git_repo,
@@ -33,23 +34,20 @@ def _fast_forward(
     local = dirty_paths(repo)
     clash = overlapping_paths(repo, upstream, local)
     if clash:
-        return blocked(
+        return degraded(
             info,
-            "incoming commits and local work touch the same paths",
+            "incoming commits and local work touch the same paths; "
+            "the next tick retries after the phase commits or moves them",
             overlapping=clash,
             dirty=sorted(local),
-            hint="commit or move the overlapping edits, then rerun; the "
-            "pipeline will not merge over unreviewed work",
         )
     rc, out, err = git(repo, "merge", "--ff-only", upstream)
     if rc != 0:
-        return blocked(
+        return degraded(
             info,
-            f"fast-forward merge refused: {err or out}",
+            f"fast-forward merge refused: {err or out}; the next tick retries",
             dirty=sorted(local),
             overlapping=[],
-            hint="git refused for a reason the overlap check does not name; "
-            "read the message and resolve it by hand",
         )
     after = git(repo, "rev-parse", "HEAD")[1]
     return dict(
@@ -95,13 +93,12 @@ def _merge(
     local = dirty_paths(repo)
     clash = overlapping_paths(repo, upstream, local)
     if clash:
-        return blocked(
+        return degraded(
             info,
-            "incoming commits and local work touch the same paths",
+            "incoming commits and local work touch the same paths; "
+            "the next tick retries after the phase commits or moves them",
             overlapping=clash,
             dirty=sorted(local),
-            hint="commit or move the overlapping edits, then rerun; the "
-            "pipeline will not merge over unreviewed work",
         )
     rc, out, err = git(
         repo, "merge", "--no-edit", upstream, extra_env={"GIT_MERGE_AUTOEDIT": "no"}
@@ -120,13 +117,12 @@ def _merge(
                 "complete the merge with `git commit`; never force or "
                 "rebase"
             )
-        return blocked(
+        return degraded(
             info,
-            reason,
+            f"{reason}; {hint}",
             conflicted=conflicts.splitlines() if conflicts else [],
             merge_error=(err or out),
             merge_aborted=aborted,
-            hint=hint,
         )
     after = git(repo, "rev-parse", "HEAD")[1]
     return dict(
@@ -158,7 +154,7 @@ def sync_one(
     repo = Path(repo).resolve()
     info: dict[str, Any] = {"repo": str(repo), "mode": mode}
     if not is_git_repo(repo):
-        return blocked(info, "not a git working tree")
+        return degraded(info, "not a git working tree; the next tick retries")
     cur_branch, cur_remote, remote_branch, why = resolve_upstream(repo)
     if why and cur_branch:
         # The branch may have a configured upstream whose remote-tracking ref
@@ -173,7 +169,7 @@ def sync_one(
             if fetch_rc == 0:
                 cur_branch, cur_remote, remote_branch, why = resolve_upstream(repo)
     if why:
-        result = blocked(info, why)
+        result = degraded(info, why + "; the next tick retries")
         if cur_branch and not cur_remote and "has no upstream" in why:
             # The branch is checked out with no upstream at all (none
             # configured, or none left after the recovery fetch). Its own action
@@ -185,15 +181,22 @@ def sync_one(
     branch = branch or cur_branch
     remote = cast("str", remote or cur_remote)
     if branch != cur_branch:
-        return blocked(info, f"checkout is on {cur_branch!r}, not {branch!r}")
+        return degraded(
+            info,
+            f"checkout is on {cur_branch!r}, not {branch!r}; the next tick retries",
+        )
     info.update(branch=branch, remote=remote)
     rc, _, err = git(repo, "fetch", "--prune", remote, timeout=FETCH_TIMEOUT_S)
     if rc != 0:
-        return blocked(info, f"git fetch {remote} failed", detail=err)
+        return degraded(
+            info, f"git fetch {remote} failed; the next tick retries", detail=err
+        )
     upstream = f"{remote}/{remote_branch}"
     rc, tip, _ = git(repo, "rev-parse", "--verify", upstream)
     if rc != 0 or not tip:
-        return blocked(info, f"upstream {upstream} does not exist after fetch")
+        return degraded(
+            info, f"upstream {upstream} does not exist after fetch; retrying next tick"
+        )
     local, tip, ahead, behind, relation = classify(repo, upstream)
     info.update(
         upstream=upstream,
@@ -224,9 +227,9 @@ def sync_one(
         )
     if relation == "behind":
         return _fast_forward(info, repo, upstream, behind)
-    return _merge(
-        info, repo, upstream, ahead, behind, abort_on_conflict=(mode != "push")
-    )
+    # Always leave a conflict in place for the phase agent. Start mode used to
+    # abort it, which turned a conflict the agent can fix into a halt.
+    return _merge(info, repo, upstream, ahead, behind, abort_on_conflict=False)
 
 
 # The two strategies this module is split into, and the one entry point the

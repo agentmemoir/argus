@@ -288,21 +288,30 @@ selftest_case_locks_stall() {
   rm -f "$STALL" "$CURRENT" "$PIDFILE"
   STALE_AFTER_SEC="$old_stale_after_sec"
 
+  # A glide exit with no run result is a repair, not a halt: the two-tick
+  # repair owns the recovery, so no marker and no record are written (D16a).
   DRIVER_STUB_RC=1; export DRIVER_STUB_RC
-  rm -f "$HALT"
+  rm -f "$HALT" "$HALT_RECORD"
   drive --self-test || true
   wait_phase_window_gone
-  [ -f "$HALT" ] \
-    && echo "ok: halt marker written" || { echo "FAIL: halt marker missing"; fail=1; }
-  grep -q "Phase .* stopped\." "$LOG" \
-    && echo "ok: halt notification logged" || { echo "FAIL: halt notification missing"; fail=1; }
+  [ ! -f "$HALT" ] \
+    && echo "ok: the unknown-rc path writes no halt marker" \
+    || { echo "FAIL: the unknown-rc path wrote a halt marker"; rm -f "$HALT"; fail=1; }
+  [ ! -f "$HALT_RECORD" ] \
+    && echo "ok: the unknown-rc path writes no halt record" \
+    || { echo "FAIL: the unknown-rc path wrote a halt record"; rm -f "$HALT_RECORD"; fail=1; }
+  grep -q "repair-pending:" "$LOG" \
+    && echo "ok: the unknown-rc path logs a repair-pending tick" \
+    || { echo "FAIL: no repair-pending line for the unknown-rc path"; fail=1; }
   case "$(title_of)" in
-    *HALTED*) echo "ok: halt title set ($(title_of))" ;;
-    *) echo "FAIL: halt title not set, got '$(title_of)'"; fail=1 ;;
+    *"repair pending"*) echo "ok: repair-pending title set ($(title_of))" ;;
+    *) echo "FAIL: repair-pending title not set, got '$(title_of)'"; fail=1 ;;
   esac
 
   # Maintenance may run behind a halt; the claim, phase branches and launch
-  # count must stay put. Diagnostic wording is not a launch oracle.
+  # count must stay put. Diagnostic wording is not a launch oracle. The marker
+  # is written here because the unknown-rc path above no longer writes one.
+  printf 'halted for the maintenance check\n' >"$HALT"
   local halted_claim_before halted_refs_before halted_starts_before
   halted_claim_before="$(cat "$CLAIM" 2>/dev/null || true)"
   halted_refs_before="$(git -C "$REPO" for-each-ref --format='%(refname):%(objectname)' refs/heads)"

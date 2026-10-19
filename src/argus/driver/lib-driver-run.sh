@@ -79,7 +79,6 @@ claim_read_fields() {   # <file>
 #
 # The names come from the configuration and the pipeline declaration, not from
 # this script, so a pipeline that renames its inputs still gets what it declared.
-# The resume path builds its auto-pin command from the same words.
 glide_input_args() {   # <number> <rel>
   "$PYTHON" - "$ARGUS" "$REPO" "$1" "$2" "${ARGUS_CONFIG_ARGS[@]}" <<'PY'
 import json, sys
@@ -226,21 +225,16 @@ except OSError:
   tmux_set_title "${work_kind:-phase} $number running"
   notify_phase "$rel" started
   if [ "${CLIO_RESUME:-}" = 1 ]; then
-    # The parent proved the resume gate before it launched, and the state can
+    # The parent read the resume gate before it launched, and the state can
     # still move in between: another machine, or an operator, may have taken the
-    # phase on. Re-check it before glide starts, so a stale resume stops the line
-    # instead of archiving a run that moved on.
+    # phase on. Re-check it and name it, then let glide run the two-tick repair.
+    # A moved state is evidence to repair from, not a reason to write the halt
+    # marker from the child.
     local resume_run_dir resume_state resume_reason
     resume_run_dir="$(phase_run_dir "$number" "$rel")"
     resume_state="$(phase_state "$number" "$rel")"
-    resume_reason="$(resume_gate_reason "$resume_state" "$resume_run_dir")" || {
-      printf 'resume refused: %s\n' "$resume_reason" >"$HALT"
-      halt_record_write "$number" "$rel" "$resume_run_dir" "$resume_state" "" \
-        resume-refused "$resume_reason"
-      log "resume refused: phase $number: $resume_reason"
-      rm -f "$CURRENT" "$PIDFILE"
-      exit 3
-    }
+    resume_reason="$(resume_gate_reason "$resume_state" "$resume_run_dir")" || \
+      log "resume gate: phase $number: $resume_reason; continuing for the repair"
   fi
   if [ -n "${DRIVER_STUB_RC:-}" ]; then
     log "STUB mode: simulating glide (rc=$DRIVER_STUB_RC)"
@@ -306,6 +300,40 @@ except OSError:
     fi
   fi
   state="$(phase_state "$number" "$rel")"
+  local run_dir result_file result_state
+  run_dir="$(phase_run_dir "$number" "$rel")"
+  result_file="$run_dir/result.json"
+  # Glide writes one atomic `result.json` for every state. Its repair tick is
+  # `repair_pending`: a no-launch, resumable tick that must not archive or
+  # finalize the run, even though glide exits 0 and writes no run.json. The rc=2
+  # invalid-input halt keeps its own path.
+  if [ "$rc" != 2 ] && [ -f "$result_file" ]; then
+    result_state="$("$PYTHON" -c 'import json,sys
+try:
+    data = json.load(open(sys.argv[1]))
+except (OSError, ValueError):
+    data = {}
+print(data.get("state", "") if isinstance(data, dict) else "")' \
+      "$result_file" 2>/dev/null || true)"
+    if [ "$result_state" = repair_pending ]; then
+      local repair_reason
+      repair_reason="$("$PYTHON" -c 'import json,sys
+try:
+    data = json.load(open(sys.argv[1]))
+except (OSError, ValueError):
+    data = {}
+if not isinstance(data, dict):
+    data = {}
+step = str(data.get("step", ""))
+reason = str(data.get("reason", ""))
+print(f"{step}: {reason}" if step and reason else (reason or step))' \
+        "$result_file" 2>/dev/null || true)"
+      log "repair-pending: ${work_kind:-phase} $number${repair_reason:+: $repair_reason}; no launch, the next tick retries"
+      tmux_set_title "${work_kind:-phase} $number repair pending"
+      rm -f "$CURRENT" "$PIDFILE"
+      exit 0
+    fi
+  fi
   if [ "${work_kind:-phase}" = issue ] && [ "$state" = writeback_pending ]; then
     gitsync_clean "$number"
     tmux_set_title "issue $number report pending"
@@ -345,38 +373,37 @@ except OSError:
            exit 0
          fi
           # glide can exit before writing run.json, as a configuration error
-          # does. Only when there is genuinely no run result may the session log
-          # stand in for it. A run.json that exists but does not parse is a
-          # damaged result, not a missing one: `phase_state` returns empty for
-          # both, so the file is tested here by name. A damaged result keeps the
-          # empty state, the `unknown` marker, and the resume gate's refusal.
+          # does. A run.json that exists but does not parse is a damaged
+          # result, not a missing one: `phase_state` returns empty for both, so
+          # the file is tested here by name.
           local run_dir
           run_dir="$(phase_run_dir "$number" "$rel")"
-          if [ ! -f "$run_dir/run.json" ]; then
-            halt_state_from_session "$session_log" "$session_log_offset"
-            if [ -n "$HALT_LOG_STATE" ]; then
-              state="$HALT_LOG_STATE"
-              halt_reason="$HALT_LOG_REASON"
-              state_source="session-log"
+          if [ "$rc" = 2 ]; then
+            # D65: invalid pipeline inputs. This is a start-time configuration
+            # halt, and it names the fix. Only an absent run.json may take its
+            # state from the session log.
+            if [ ! -f "$run_dir/run.json" ]; then
+              halt_state_from_session "$session_log" "$session_log_offset"
+              if [ -n "$HALT_LOG_STATE" ]; then
+                state="$HALT_LOG_STATE"
+                halt_reason="$HALT_LOG_REASON"
+                state_source="session-log"
+              fi
             fi
-          fi
-          printf '%s %s rc=%s state=%s at %s\n' \
-            "${work_kind:-phase}" "$number" "$rc" "${state:-unknown}" "$(ts)" >"$HALT"
-          # The record is written beside the marker, and only here: an operator
-          # stop or a signal leaves a run the board claim recovers, and a record
-          # would make the resume gate refuse it.
-          # The record keeps the raw state, which may be empty: the resume gate
-          # tells an absent run.json (the interrupted class) from a present but
-          # damaged one, and an `unknown` placeholder would hide that difference.
-          # A state read from the session log stands in for the missing run.json,
-          # because it is what glide recorded the run ended as.
-          halt_record_write "$number" "$rel" "$run_dir" \
-            "$state" "$rc" "$state_source" "$halt_reason"
-          log "halt-start: phase $number rc=$rc state=${state:-unknown} source=$state_source; marker written"
-          # The title is set before the window closes, so the halt survives the
-          # phase window going away and the idle display taking over.
-          tmux_set_title "HALTED ${work_kind:-phase} $number (rc=$rc)"
-          notify_phase "$rel" stopped "" "$rc" ;;
+            printf '%s %s rc=%s state=%s at %s\n' \
+              "${work_kind:-phase}" "$number" "$rc" "${state:-unknown}" "$(ts)" >"$HALT"
+            halt_record_write "$number" "$rel" "$run_dir" \
+              "$state" "$rc" "$state_source" "$halt_reason"
+            log "halt-start: phase $number rc=$rc state=${state:-unknown} source=$state_source; the pipeline inputs are invalid; fix commands.glide, pipeline, or the phase declaration, then clear the halt"
+            tmux_set_title "HALTED ${work_kind:-phase} $number (rc=$rc)"
+            notify_phase "$rel" stopped "" "$rc"
+          else
+            # D16a: glide exited non-zero with no run result and no recorded job
+            # failure. The two-tick repair owns the recovery, so this path
+            # writes no halt marker and no halt record; the next tick retries.
+            log "repair-pending: ${work_kind:-phase} $number rc=$rc state=${state:-unknown}; no run result, the next tick retries"
+            tmux_set_title "${work_kind:-phase} $number repair pending"
+          fi ;;
   esac
   rm -f "$CURRENT" "$PIDFILE"
   exit "$rc"

@@ -68,7 +68,6 @@
 #   DRIVER_STUB_SLEEP=<s> how long the stub "works" (default 2)
 #   DRIVER_RUN_DIR=<dir>  isolate runtime state (used by --self-test)
 #   DRIVER_STUB_BOARD_FENCE=<renew|reserve|fail>  the resume's board fence
-#   DRIVER_STUB_REPIN=<ok|fail>  the resume's ledger auto-pin decision
 set -euo pipefail
 
 # Parse the mode flags before reading the configuration file. The four layout
@@ -151,7 +150,7 @@ for helper in \
   lib-driver-run.sh lib-driver-job.sh lib-driver-select.sh lib-driver-check.sh \
   lib-driver-drive.sh lib-driver-dryrun.sh lib-driver-select-flow.sh \
   lib-driver-select-stub.sh lib-driver-select-real.sh lib-driver-maintenance.sh lib-driver-launch.sh \
-  lib-driver-halt-record.sh lib-driver-ledger.sh lib-driver-fence.sh \
+  lib-driver-halt-record.sh lib-driver-fence.sh \
   lib-driver-resume.sh lib-driver-abandon.sh lib-driver-estimate.sh \
   lib-selftest.sh lib-selftest-launch.sh lib-selftest-flow.sh \
   lib-selftest-unavailable.sh lib-selftest-reasons.sh lib-selftest-recovery.sh \
@@ -208,12 +207,11 @@ done
 . "$ARGUS_DIR/lib-driver-select-real.sh"
 # shellcheck disable=SC1091
 . "$ARGUS_DIR/lib-driver-launch.sh"
-# The halt record, the ledger proof, the board fence, the resume, and the
+# The halt record, the board fence, the resume, and the
 # abandon close-out.
 # shellcheck disable=SC1091
 . "$ARGUS_DIR/lib-driver-halt-record.sh"
 # shellcheck disable=SC1091
-. "$ARGUS_DIR/lib-driver-ledger.sh"
 # shellcheck disable=SC1091
 . "$ARGUS_DIR/lib-driver-fence.sh"
 # shellcheck disable=SC1091

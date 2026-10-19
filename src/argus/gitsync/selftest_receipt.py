@@ -49,7 +49,7 @@ def _publication_receipt_check(base: Path) -> tuple[bool, str]:
         run_dir.mkdir(parents=True, exist_ok=True)
         save_reservation_file(run_dir / "reservation.json", reservation)
         (run_dir / "run.json").write_text('{"state":"completed"}\\n')
-        result = publish_phase(pub, 100440)
+        result = publish_phase(pub, 100440, pull_request="https://example.test/pr/1")
         if not result.get("ok") or result.get("state") != "AWAITING_REVIEW":
             return False, str(result)
         receipt_path = result.get("receipt", {}).get("path")
@@ -170,7 +170,7 @@ def _group_publication_check(base: Path) -> tuple[bool, str]:
             "pr ready": {},
         }
         with _RoutedGH(green):
-            second = publish_phase(pub, 100030)
+            second = publish_phase(pub, 100030, pull_request=url)
         if not second.get("ok"):
             return False, f"the group's second member did not publish: {second}"
         if second.get("group_last_unfinished") is not True:
@@ -269,7 +269,7 @@ def _portable_publication_check(base: Path) -> tuple[bool, str]:
         (pub / "product.txt").write_text("release\n")
         git(pub, "add", "product.txt")
         git(pub, "commit", "-q", "-m", "generic release")
-        result = publish_phase(pub, phase)
+        result = publish_phase(pub, phase, pull_request="https://example.test/pr/1")
         receipt = result.get("receipt", {})
         if not result.get("ok"):
             return False, f"custom publication failed: {result}"

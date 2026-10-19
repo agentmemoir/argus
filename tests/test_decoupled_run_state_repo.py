@@ -29,6 +29,7 @@ from argus.gitsync.selftest_fixture import _configure_self_test, _init_remote
 PHASE = 100760
 THIRD_PHASE = 100762
 RESUME_PHASE = 100763
+PR = "https://example.test/pr/1"
 
 
 def _published_receipt(receipt: dict[str, Any]) -> dict[str, Any]:
@@ -63,7 +64,7 @@ def test_completion_confirms_receipt_in_the_decoupled_run_state_repo(
 
     # Phase publish succeeds even though the run state is in the workflow
     # repository and the board is a separate checkout.
-    published = publish_phase(workflow, PHASE)
+    published = publish_phase(workflow, PHASE, pull_request=PR)
     assert published.get("ok"), published
     assert published.get("state") == "AWAITING_REVIEW", published
     receipt_path = Path(published["receipt"]["path"])
@@ -126,7 +127,7 @@ def test_publication_uses_a_third_run_state_repository(
     save_reservation_file(run_dir / "reservation.json", reservation)
     (run_dir / "run.json").write_text('{"state":"completed"}\n')
 
-    published = publish_phase(workflow, THIRD_PHASE)
+    published = publish_phase(workflow, THIRD_PHASE, pull_request=PR)
     assert published.get("ok"), published
     assert published.get("state") == "AWAITING_REVIEW", published
     pushes = [
@@ -178,16 +179,16 @@ def test_publication_resumes_after_a_transient_run_state_push_failure(
     # fails once, deterministically and without a sleep.
     missing = tmp_path / "gone.git"
     assert git(runstate, "remote", "set-url", "origin", str(missing))[0] == 0
-    blocked = publish_phase(workflow, RESUME_PHASE)
+    blocked = publish_phase(workflow, RESUME_PHASE, pull_request=PR)
     assert blocked.get("ok") is False, blocked
-    assert blocked.get("state") == "BLOCKED", blocked
+    assert blocked.get("state") == "RETRY", blocked
     assert not (run_dir / PUBLICATION_NAME).exists()
 
     # The failed push left the run state committed locally, so the checkout is
     # clean and usable. Restoring the remote lets the same publication finish.
     assert git(runstate, "status", "--porcelain")[1] == ""
     assert git(runstate, "remote", "set-url", "origin", str(runstate_remote))[0] == 0
-    published = publish_phase(workflow, RESUME_PHASE)
+    published = publish_phase(workflow, RESUME_PHASE, pull_request=PR)
     assert published.get("ok"), published
     assert published.get("state") == "AWAITING_REVIEW", published
 

@@ -3,11 +3,14 @@
 # SPDX-License-Identifier: Apache-2.0
 """Check argus.config: JSONC, path resolution, flag precedence, and the CLI."""
 
+import contextlib
 import copy
+import io
 import json
 import sys
 import tempfile
 from pathlib import Path
+from typing import Any
 
 import test_config_cli
 from argus.config import cli as cfgmod
@@ -143,19 +146,53 @@ def test_bad_values_name_key():
         expect_error(lambda: cfgmod.load(str(path)), "driver.include")
 
 
-def test_legacy_roadmap_dir_is_refused_naming_both():
+def _load_with_stderr(path: Path) -> tuple[Any, str]:
+    err = io.StringIO()
+    with contextlib.redirect_stderr(err):
+        config = cfgmod.load(str(path))
+    return config, err.getvalue()
+
+
+def test_legacy_roadmap_dir_warns_naming_both_and_continues():
     with tempfile.TemporaryDirectory() as tmp:
         document = copy.deepcopy(BASE)
         document["roadmap-dir"] = "plans"
         path = write(tmp, json.dumps(document))
-        try:
-            cfgmod.load(str(path))
-        except cfgmod.ConfigError as exc:
-            text = str(exc)
-            check("roadmap-dir" in text, text)
-            check("phases.directory" in text, text)
-            return
-        raise AssertionError("the legacy roadmap-dir key was accepted")
+        config, text = _load_with_stderr(path)
+        check("roadmap-dir" in text, text)
+        check("phases.directory" in text, text)
+        check(
+            config.get("phases.directory") == "phases", config.get("phases.directory")
+        )
+
+
+def test_removed_repair_key_warns_and_continues():
+    with tempfile.TemporaryDirectory() as tmp:
+        document = copy.deepcopy(BASE)
+        document["repair"] = {"attempts": 2}
+        path = write(tmp, json.dumps(document))
+        _config, text = _load_with_stderr(path)
+        check("repair" in text and "no repair loop" in text, text)
+
+
+def test_unknown_key_warns_and_continues():
+    with tempfile.TemporaryDirectory() as tmp:
+        document = copy.deepcopy(BASE)
+        document["unknown-top"] = 1
+        document["driver"]["unknown-nested"] = 2
+        path = write(tmp, json.dumps(document))
+        config, text = _load_with_stderr(path)
+        check("unknown key 'unknown-top'" in text, text)
+        check("unknown key 'driver.unknown-nested'" in text, text)
+        check(config.get("driver.provider") == "phase", config.get("driver.provider"))
+
+
+def test_an_unacceptable_value_still_stops_and_names_it():
+    with tempfile.TemporaryDirectory() as tmp:
+        document = copy.deepcopy(BASE)
+        document["driver"]["stale-after"] = "soon"
+        path = write(tmp, json.dumps(document))
+        expect_error(lambda: cfgmod.load(str(path)), "driver.stale-after")
 
 
 def test_phase_source_without_a_phases_object_is_refused():
@@ -260,7 +297,13 @@ TESTS = (
     ("missing required key", test_missing_required_key_names_it),
     ("wrong type", test_wrong_type_names_key),
     ("bad values", test_bad_values_name_key),
-    ("legacy roadmap-dir", test_legacy_roadmap_dir_is_refused_naming_both),
+    (
+        "legacy roadmap-dir",
+        test_legacy_roadmap_dir_warns_naming_both_and_continues,
+    ),
+    ("removed repair key", test_removed_repair_key_warns_and_continues),
+    ("unknown keys", test_unknown_key_warns_and_continues),
+    ("unacceptable value", test_an_unacceptable_value_still_stops_and_names_it),
     ("phases object required", test_phase_source_without_a_phases_object_is_refused),
     ("phases folder inside repo", test_phases_folder_must_stay_inside_the_phases_repo),
     ("phases repo work tree", test_phases_repo_must_be_a_git_work_tree),

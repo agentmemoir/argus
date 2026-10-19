@@ -69,7 +69,7 @@ def _tidy_and_dispatch_checks(base: Path) -> list[tuple[str, object, str]]:
         (pub2 / "first.txt").write_text("the first phase's code\n")
         git(pub2, "add", "first.txt")
         git(pub2, "commit", "-q", "-m", "phase 100456: the first change")
-        publish_phase(pub2, 100456)
+        publish_phase(pub2, 100456, pull_request="https://example.test/pr/1")
         (nested2 / "phases").mkdir(parents=True, exist_ok=True)
         (nested2 / "phases" / "phase-100457-dispatch-next.md").write_text("x\n")
         (nested2 / "phases" / "phase-100458-dispatch-after.md").write_text("x\n")
@@ -121,14 +121,17 @@ def _tidy_and_dispatch_checks(base: Path) -> list[tuple[str, object, str]]:
         git(pub2, "push", "-q", "origin", "--delete", first)
         git(pub2, "checkout", "-q", second)
         git(pub2, "branch", "-D", second)
+        git(pub2, "checkout", "-q", "main")
         refusal = mode_branch(pub2, 100458, "phase-100458-dispatch-after.md")
         results.append(
             (
-                "the branch dispatch refuses when the predecessor's branch is gone, "
-                "rather than falling back to the integration branch",
-                (not refusal["ok"])
-                and "does not exist in this checkout"
-                in (refusal["repos"][0].get("blockers") or [""])[0]
+                "the branch dispatch reports a gone predecessor and uses the "
+                "phase's own branch",
+                refusal.get("ok")
+                and any(
+                    "does not exist" in str(warning)
+                    for warning in refusal.get("warnings", [])
+                )
                 and git(pub2, "rev-parse", "--verify", f"refs/heads/{first}")[0] != 0
                 and git(
                     pub2,
@@ -136,9 +139,8 @@ def _tidy_and_dispatch_checks(base: Path) -> list[tuple[str, object, str]]:
                     "--verify",
                     f"refs/heads/{phase_branch_for(100458, 'phase-100458-dispatch-after.md')}",
                 )[0]
-                != 0,
-                f"ok={refusal.get('ok')} "
-                f"blockers={refusal.get('repos', [{}])[0].get('blockers')}",
+                == 0,
+                f"ok={refusal.get('ok')} warnings={refusal.get('warnings')}",
             )
         )
 
@@ -153,41 +155,42 @@ def _tidy_and_dispatch_checks(base: Path) -> list[tuple[str, object, str]]:
         (pub3 / "phase.txt").write_text("the phase's change\n")
         git(pub3, "add", "phase.txt")
         git(pub3, "commit", "-q", "-m", "phase 100459: the change")
-        publish_phase(pub3, 100459)
+        url = "https://example.test/pr/1"
+        publish_phase(pub3, 100459, pull_request=url)
         base3 = integration_branch(pub3)
         for repo in (pub3, nested3):
             git(repo, "checkout", "-q", integration_branch(repo))
             git(repo, "merge", "-q", "--no-edit", branch3)
             git(repo, "push", "-q", "origin", integration_branch(repo))
             git(repo, "checkout", "-q", branch3)
-        # One stray untracked file is enough to stop the branch switch.
+        # A stray untracked file is preserved on the phase branch, then the
+        # checkout returns to the integration branch.
         (pub3 / "stray-run-artifact.log").write_text("harness noise\n")
         stalled = mode_published(pub3, 100459)
         receipt3 = cast("dict[str, Any]", phase_receipt(pub3, 100459))
+        preserved3 = git(pub3, "show", f"{branch3}:stray-run-artifact.log")[1]
         results.append(
             (
-                "a phase that is published but whose checkout cannot move reports "
-                "the two outcomes separately instead of calling it still waiting",
-                (not stalled["ok"])
-                and stalled.get("state") == "PUBLISHED-TIDY-PENDING"
+                "a published phase whose checkout is dirty preserves the work and "
+                "returns to the integration branch",
+                stalled["ok"]
+                and stalled.get("state") == "PUBLISHED"
                 and receipt3.get("state") == "published"
-                and current_branch(pub3) == branch3
-                and (pub3 / "stray-run-artifact.log").exists(),
+                and current_branch(pub3) == base3
+                and preserved3.strip() == "harness noise",
                 f"ok={stalled.get('ok')} state={stalled.get('state')} "
-                f"branch={current_branch(pub3)}",
+                f"branch={current_branch(pub3)} preserved={preserved3.strip()!r}",
             )
         )
-        # The next tick recovers, with nothing but the receipt to go on.
-        (pub3 / "stray-run-artifact.log").unlink()
+        # The next tick is a no-op: the checkout already moved from the receipt.
         tidied = mode_tidy(pub3)
         results.append(
             (
-                "the checkout is recovered on a later tick from the receipt alone, "
-                "so a published phase never leaves the pipeline stuck behind it",
+                "a later tidy tick finds the checkout already returned",
                 tidied["ok"]
                 and current_branch(pub3) == base3
                 and any(
-                    r.get("action") == "returned-to-integration-branch"
+                    r.get("action") == "nothing-to-tidy"
                     for r in tidied.get("repos", [])
                 ),
                 f"ok={tidied.get('ok')} branch={current_branch(pub3)} "
@@ -211,7 +214,7 @@ def _tidy_and_dispatch_checks(base: Path) -> list[tuple[str, object, str]]:
         (pub4 / "phase.txt").write_text("the phase's change\n")
         git(pub4, "add", "phase.txt")
         git(pub4, "commit", "-q", "-m", "phase 100460: the change")
-        publish_phase(pub4, 100460)
+        publish_phase(pub4, 100460, pull_request="https://example.test/pr/1")
         # Merged, so the checkout COULD move — but this is the control: a phase
         # whose receipt still says awaiting_review must never be moved off its
         # branch, because its code is not on the integration branch yet.
