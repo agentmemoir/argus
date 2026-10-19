@@ -4,8 +4,6 @@
 
 import json
 import shutil
-import sys
-from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -24,7 +22,6 @@ from argus.gitsync.selftest_carry import (
 from argus.gitsync.selftest_dispatch import _tidy_and_dispatch_checks
 from argus.gitsync.selftest_fixture import BOARD_REL, _check
 from argus.gitsync.selftest_group_checklist import _group_checklist_checks
-from argus.gitsync.selftest_group_gate import _group_gate_checks
 from argus.gitsync.selftest_group_review import _group_review_checks
 from argus.gitsync.selftest_group_sequence import _group_sequence_checks
 from argus.gitsync.selftest_merge_gate import _branch_pair_checks, _merge_gate_checks
@@ -37,8 +34,6 @@ from argus.gitsync.selftest_receipt import (
     _portable_publication_check,
     _publication_receipt_check,
 )
-from argus.gitsync.selftest_repair import _repair_step_checks
-from argus.gitsync.selftest_repair_scan import _repair_scan_checks
 from argus.gitsync.selftest_runstate import _runstate_checks
 from argus.gitsync.selftest_sequencing import _sequencing_checks
 from argus.gitsync.selftest_stack import _two_phase_stack_checks
@@ -47,11 +42,8 @@ from argus.gitsync.selftest_sync import _sync_one_checks
 from argus.gitsync.selftest_sync_refuse import _sync_refuse_checks
 
 
-def self_test_checks(names: Sequence[str] = ()) -> list[dict[str, Any]]:
-    """Run checks with explicit temporary layout settings.
-
-    ``names`` is empty for every group, or names the groups to run alone.
-    """
+def self_test_checks() -> list[dict[str, Any]]:
+    """Run checks with explicit temporary layout settings."""
     conventions.configure(
         {
             "repo-root": Path(),
@@ -69,10 +61,10 @@ def self_test_checks(names: Sequence[str] = ()) -> list[dict[str, Any]]:
             "board.remote": "origin",
         }
     )
-    return _self_test_checks(names)
+    return _self_test_checks()
 
 
-def _self_test_checks(names: Sequence[str] = ()) -> list[dict[str, Any]]:
+def _self_test_checks() -> list[dict[str, Any]]:
     """Stubbed-remote checks. Pure: temp dirs only, no repo state touched."""
     checks: list[dict[str, Any]] = []
     # The stubbed remotes carry hooks and fixtures git runs, so the base must be
@@ -89,10 +81,6 @@ def _self_test_checks(names: Sequence[str] = ()) -> list[dict[str, Any]]:
         return checks
     base = Path(executable)
     try:
-        if names:
-            # A named group runs alone: no other group's check may run, so the
-            # count of one group can be reproduced without the whole run.
-            return _named_checks(base, names)
         _sync_one_checks(base, checks)
         _sync_refuse_checks(base, checks)
         _runstate_checks(base, checks)
@@ -104,15 +92,6 @@ def _self_test_checks(names: Sequence[str] = ()) -> list[dict[str, Any]]:
         # directory.
         shutil.rmtree(base, ignore_errors=True)
 
-    return checks
-
-
-def _named_checks(base: Path, names: Sequence[str]) -> list[dict[str, Any]]:
-    """The checks of the named groups alone, and of no other group."""
-    checks: list[dict[str, Any]] = []
-    for name in names:
-        for label, ok, detail in GROUPS[name](base):
-            _check(checks, label, ok, detail)
     return checks
 
 
@@ -163,10 +142,6 @@ def _delegated_checks(base: Path, checks: list[dict[str, Any]]) -> None:
         _check(checks, f"group pull request: {name}", ok, detail)
     for name, ok, detail in _group_checklist_checks(base):
         _check(checks, f"group checklist: {name}", ok, detail)
-    for name, ok, detail in _group_gate_checks(base):
-        _check(checks, f"group gate: {name}", ok, detail)
-    for label, ok, detail in _repair_group_checks(base):
-        _check(checks, label, ok, detail)
     for name, ok, detail in _group_sequence_checks(base):
         _check(checks, f"group sequence: {name}", ok, detail)
     for name, ok, detail in _tidy_and_dispatch_checks(base):
@@ -187,28 +162,9 @@ def _delegated_checks(base: Path, checks: list[dict[str, Any]]) -> None:
         _check(checks, f"group name: {name}", ok, detail)
 
 
-def _repair_group_checks(base: Path) -> list[tuple[str, object, str]]:
-    """Every repair check, labelled: the repair step and the repair scan."""
-    results = [
-        (f"repair: {name}", ok, detail)
-        for name, ok, detail in _repair_step_checks(base)
-    ]
-    results += [
-        (f"repair scan: {name}", ok, detail)
-        for name, ok, detail in _repair_scan_checks(base)
-    ]
-    return results
-
-
-# The groups `--self-test GROUP` can run alone. The bare flag runs every group.
-GROUPS: dict[str, Callable[[Path], list[tuple[str, object, str]]]] = {
-    "repair": _repair_group_checks,
-}
-
-
-def self_test(names: Sequence[str] = ()) -> int:
-    """Print the checks, one per group named, and answer 0 when they all pass."""
-    checks = self_test_checks(names)
+def self_test() -> int:
+    """Print the checks and answer 0 when they all pass."""
+    checks = self_test_checks()
     ok = all(c["ok"] for c in checks)
     print(
         json.dumps(
@@ -216,19 +172,3 @@ def self_test(names: Sequence[str] = ()) -> int:
         )
     )
     return 0 if ok else 1
-
-
-def self_test_group(name: str) -> int:
-    """Run one group alone. An empty name is the whole run, as it always was.
-
-    An unknown name is refused before any check runs, and the message names the
-    groups there are, so a typo costs a second and not a whole run.
-    """
-    if name and name not in GROUPS:
-        known = ", ".join(sorted(GROUPS))
-        print(
-            f"argus: unknown self-test group '{name}'; accepted: {known}",
-            file=sys.stderr,
-        )
-        return 2
-    return self_test((name,) if name else ())

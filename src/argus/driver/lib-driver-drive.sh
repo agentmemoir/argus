@@ -131,7 +131,7 @@ _drive() {
   # gate still heartbeats the claim of a run this machine is driving. An idle or
   # manually stopped line returns above and does not renew.
   claim_renew
-  if [ "$PENDING_PUBLISHED" -gt 0 ] || [ "$PENDING_READY" -gt 0 ]; then
+  if [ "$PENDING_PUBLISHED" -gt 0 ]; then
     return 0
   fi
 
@@ -424,7 +424,6 @@ release() {
         log "release: returned the group for ${work_kind:-phase} $number to the queue"
       fi
       rm -f "$CLAIM"
-      issue_announce "$number" released
     else
       rc=$?
       log "release: could not return the group for ${work_kind:-phase} $number (rc=$rc; see $RUN_DIR/release${number:+-$number}.json)"

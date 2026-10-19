@@ -14,13 +14,12 @@ from argus import conventions
 from argus.board.core import CoordinationUnavailable
 from argus.board.git import _git, git_binary
 from argus.board.selftest_fixture import _git_test_repo
-from argus.board.state import _empty_state, _write_state_file, state_rel
+from argus.board.state import _empty_state, state_rel
 from argus.board.store import ReservationStore
 
 BRANCH = "fixture-board"
 BACKUP = f"{BRANCH}--argus-backup"
 STATE = "coordination/phases.json"
-ISSUES_STATE = "coordination/issues.json"
 
 
 @pytest.fixture
@@ -46,7 +45,6 @@ def _configure(
         "board.branch": BRANCH,
         "board.remote": "origin",
         "board.file": STATE,
-        "board.issues-file": ISSUES_STATE,
         "commands.git": git,
     }
     if backup_branch is not None:
@@ -110,32 +108,6 @@ def test_seeding_refuses_a_shallow_board_checkout(
     store = ReservationStore(project)
     with pytest.raises(CoordinationUnavailable, match="shallow"):
         store.migrate_board()
-
-
-def test_a_removed_phase_file_does_not_block_the_issue_board(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, git_exe: str
-) -> None:
-    project = _configure(tmp_path, monkeypatch, git_exe, "mixed-client-1")
-    _remote, clients = _git_test_repo(tmp_path, "mixed", initial_state=_empty_state())
-    _remove_and_push(clients[0], state_rel().as_posix())
-    issues = ReservationStore(project, issues=True)
-    assert issues.migrate_board() is True
-
-
-def test_a_removed_issue_file_refuses_the_issue_board(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, git_exe: str
-) -> None:
-    project = _configure(tmp_path, monkeypatch, git_exe, "issues-broken-client-1")
-    _remote, clients = _git_test_repo(tmp_path, "issues-broken")
-    issues_rel = state_rel(issues=True).as_posix()
-    _write_state_file(clients[0] / issues_rel, {"version": 1})
-    assert _git(clients[0], "add", issues_rel)[0] == 0
-    assert _git(clients[0], "commit", "-q", "-m", "add issues state")[0] == 0
-    assert _git(clients[0], "push", "-q", "origin", "HEAD:master")[0] == 0
-    _remove_and_push(clients[0], issues_rel)
-    issues = ReservationStore(project, issues=True)
-    with pytest.raises(CoordinationUnavailable, match="would read as broken"):
-        issues.migrate_board()
 
 
 def test_a_lost_board_branch_is_reseeded_from_its_backup(

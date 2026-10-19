@@ -117,7 +117,6 @@ on_stop() {
     printf '%s %s stopped by signal (rc=%s) at %s\n' \
       "${work_kind:-phase}" "$CUR_PHASE" "$rc" "$(ts)" >"$HALT"
     notify_phase "$CUR_PHASE_FILE" stopped-signal
-    issue_announce "$CUR_PHASE" halted
   fi
   rm -f "$CURRENT" "$PIDFILE"
   exit "$rc"
@@ -173,17 +172,6 @@ gitsync_land_leftovers() {
 # phase is skipped either way.
 handle_escalation() {
   local number="$1" rel="$2" phase_dir out rc=0
-  if [ "${work_kind:-phase}" = issue ]; then
-    "$PYTHON" "$ARGUS/issues/lifecycle.py" escalate \
-      "${ARGUS_CONFIG_ARGS[@]}" --issue "$number" \
-      --reservation-id "$CLIO_RESERVATION_ID" --generation "$CLIO_RESERVATION_GENERATION" \
-      >"$RUN_DIR/escalation-$number.json" 2>&1 \
-      || log "issue $number escalation could not be recorded; claim kept"
-    gitsync_clean "$number"
-    tmux_set_title "issue $number escalated"
-    notify_phase "$rel" escalated
-    return 0
-  fi
   phase_dir="$WF/phase-$(printf '%06d' "$number")"
   out="$RUN_DIR/escalation-$number.json"
   local args=("${ARGUS_CONFIG_ARGS[@]}" --run-dir "$phase_dir" --phase "$number" --repo-root "$REPO")
@@ -318,13 +306,6 @@ except OSError:
     fi
   fi
   state="$(phase_state "$number" "$rel")"
-  if [ "${work_kind:-phase}" = issue ] && [ "$state" = writeback_pending ]; then
-    gitsync_clean "$number"
-    tmux_set_title "issue $number report pending"
-    log "issue $number report is pending; claim kept for the next tick"
-    rm -f "$CURRENT" "$PIDFILE"
-    exit 0
-  fi
   if [ "$state" = "remedy_escalated" ]; then
     # The remedy approver used every round and findings are still open. That is
     # a budget fact, not a verdict: record the residue, release the claim, and
@@ -387,8 +368,7 @@ except OSError:
           # The title is set before the window closes, so the halt survives the
           # phase window going away and the idle display taking over.
           tmux_set_title "HALTED ${work_kind:-phase} $number (rc=$rc)"
-          notify_phase "$rel" stopped "" "$rc"
-          issue_announce "$number" halted ;;
+          notify_phase "$rel" stopped "" "$rc" ;;
   esac
   rm -f "$CURRENT" "$PIDFILE"
   exit "$rc"
@@ -429,10 +409,6 @@ check_stall() {
   if [ "$age" -gt "$STALE_AFTER_SEC" ]; then
     printf 'stalled: %s %s no agent output for %ss at %s\n' \
       "${work_kind:-phase}" "$n" "$age" "$(ts)" >"$STALL"
-    if [ "${work_kind:-phase}" = issue ]; then
-      notify "Issue $n looks stalled. There has been no agent output for $STALE_AFTER_SEC seconds. Inspect the run at $phase_dir."
-      return 0
-    fi
     phase_file="$("$PYTHON" - "$ARGUS" "$REPO" "$n" "${ARGUS_CONFIG_ARGS[@]}" <<'PY'
 import sys
 from pathlib import Path

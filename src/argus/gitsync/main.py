@@ -94,18 +94,12 @@ if not __package__:
 from argus import conventions
 from argus.config.loader import ConfigError as ArgusConfigError
 from argus.gitsync.git import ConfigError, summarize
-from argus.gitsync.group_gate import mode_gate, mode_ready
-from argus.gitsync.issue_modes import issue_mode
 from argus.gitsync.merge import sync_one
 from argus.gitsync.mode_branch import mode_branch
 from argus.gitsync.mode_clean import mode_checkpoint, mode_clean
 from argus.gitsync.modes import mode_published, mode_tidy, result_exit_code
-from argus.gitsync.pr_lifecycle import mode_pr
-from argus.gitsync.pr_signal_reply import mode_signal_reply
-from argus.gitsync.pr_signals import mode_signals
 from argus.gitsync.publish_phase import publish_phase
-from argus.gitsync.repair import mode_repair
-from argus.gitsync.selftest import self_test_group
+from argus.gitsync.selftest import self_test
 from argus.gitsync.sync import mode_resync, sync_all
 
 
@@ -118,7 +112,6 @@ def main() -> int:
         help="repo root; syncs it and the configured private checkout",
     )
     ap.add_argument("--config")
-    ap.add_argument("--kind", choices=["phase", "issue"], default="phase")
     ap.add_argument("--driver", dest="config_driver")
     ap.add_argument("--phases-directory", dest="config_phases_directory")
     ap.add_argument("--phase-glob", dest="config_phase_glob", action="append")
@@ -135,12 +128,6 @@ def main() -> int:
             "tidy",
             "clean",
             "checkpoint",
-            "open-pr",
-            "ready",
-            "gate",
-            "repair",
-            "signals",
-            "signal-reply",
         ],
         default="start",
         help="start: sync before a phase; push: verify a "
@@ -156,28 +143,12 @@ def main() -> int:
         "clean: commit and push leftover private run state, "
         "for one --phase or for every phase when it is omitted; "
         "checkpoint: commit and push a checkout's work in "
-        "progress on the branch it is on, for a release handoff; "
-        "gate: merge the fix pull requests waiting on a published "
-        "group phase's branch, and make the group's pull request "
-        "ready once its checks pass; "
-        "repair: prepare one repair run for a pull request this "
-        "machine published whose checks finished red; "
-        "signals: read the phase's pull request alerts and review "
-        "comments and record what changed; signal-reply: reply to "
-        "or react to one recorded review comment, for --comment",
+        "progress on the branch it is on, for a release handoff",
     )
     ap.add_argument(
         "--phase",
         default=None,
-        help="phase number for --mode publish, --mode clean, --mode gate, "
-        "--mode signals or --mode signal-reply",
-    )
-    ap.add_argument(
-        "--comment", type=int, default=None, help="review comment id for signal-reply"
-    )
-    ap.add_argument("--text", default=None, help="reply text for signal-reply")
-    ap.add_argument(
-        "--reaction", default=None, help="reaction name for signal-reply, e.g. eyes"
+        help="phase number for --mode publish, --mode clean, or --mode published",
     )
     ap.add_argument(
         "--reservation-file",
@@ -190,12 +161,8 @@ def main() -> int:
     ap.add_argument("--generation", type=int, default=None)
     ap.add_argument(
         "--self-test",
-        nargs="?",
-        const="",
-        default=None,
-        metavar="GROUP",
-        help="run stubbed-remote checks and exit; no value runs every group, "
-        "and a group name runs that group alone: repair",
+        action="store_true",
+        help="run stubbed-remote checks and exit",
     )
     ap.add_argument(
         "--phases", default=None, help="phase phases file name, for --mode branch"
@@ -219,15 +186,12 @@ def main() -> int:
         "receipt for --mode publish",
     )
     args = ap.parse_args()
-    if args.self_test is not None:
-        return self_test_group(args.self_test)
+    if args.self_test:
+        return self_test()
     try:
         conventions.configure_from_args(args)
         args.root = str(conventions.setting("repo-root"))
-        issue_result = issue_mode(args) if args.kind == "issue" else None
-        if issue_result is not None:
-            out = issue_result
-        elif args.mode == "branch":
+        if args.mode == "branch":
             if args.phase is None or not args.phases:
                 raise ConfigError(
                     "--phase and --phases are required with --mode branch"
@@ -255,36 +219,6 @@ def main() -> int:
             if args.phase is None:
                 raise ConfigError("--phase is required with --mode published")
             out = mode_published(args.root, args.phase)
-        elif args.mode in {"open-pr", "ready"}:
-            if args.phase is None:
-                raise ConfigError("--phase is required for this mode")
-            out = (
-                mode_ready(args.root, args.phase)
-                if args.mode == "ready"
-                else mode_pr(args.root, args.phase, args.mode)
-            )
-        elif args.mode == "repair":
-            out = mode_repair(args.root)
-        elif args.mode == "gate":
-            if args.phase is None:
-                raise ConfigError("--phase is required with --mode gate")
-            out = mode_gate(args.root, args.phase)
-        elif args.mode == "signals":
-            if args.phase is None:
-                raise ConfigError("--phase is required with --mode signals")
-            out = mode_signals(args.root, args.phase)
-        elif args.mode == "signal-reply":
-            if args.phase is None or args.comment is None:
-                raise ConfigError(
-                    "--phase and --comment are required with signal-reply"
-                )
-            out = mode_signal_reply(
-                args.root,
-                args.phase,
-                args.comment,
-                text=args.text,
-                reaction=args.reaction,
-            )
         elif args.mode == "clean":
             out = mode_clean(args.root, args.phase)
         elif args.mode == "resync":

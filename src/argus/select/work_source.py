@@ -59,7 +59,6 @@ DEFAULT_SOURCE = "phases"
 #: contract: importing both ways at module scope would be a cycle.
 SOURCES = {
     "phases": ("argus.phases.source", "PhasesSource"),
-    "issues": ("argus.issues.source", "IssuesSource"),
 }
 
 
@@ -161,7 +160,7 @@ def _self_test() -> None:
         refused = True
         # The message must name what is available, or the operator is left
         # guessing at a name they were never given.
-        assert "phases" in str(exc) and "issues" in str(exc), exc
+        assert "phases" in str(exc), exc
     assert refused, "an unknown work source must stop the tick, not fall back"
 
     _self_test_second_source()

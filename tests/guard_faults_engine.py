@@ -163,16 +163,6 @@ def run_selftest(
         if check == "phase_reservations"
         else [sys.executable, str(package / "select/next_phase.py"), "--self-test"]
         if check == "next_phase"
-        else [
-            sys.executable,
-            "-c",
-            "import sys; sys.path.insert(0, sys.argv[1]); "
-            "from argus.issues.selftest import main; sys.exit(main())",
-            str(repo / "src"),
-        ]
-        if check == "issues"
-        else [sys.executable, str(repo / "tests/issue_guards.py"), str(cases)]
-        if check == "issue_guards"
         else ["bash", str(driver), "--self-test"]
     )
     # The self-test under test writes its own stubs and hooks into TMPDIR, which

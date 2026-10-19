@@ -138,17 +138,14 @@ def format_notification(
     quiet_minutes: int = 45,
     run_json: Path | None = None,
     group: Any = None,
-    kind: str = "phase",
 ) -> str:
     """Format one phase event as a short, user-facing notification."""
-    label = phase_label(phase_file, kind=kind)
+    label = phase_label(phase_file)
     safe_reason = _safe_reason(reason)
-    suffix = _group_phrase(group) if kind == "phase" else ""
+    suffix = _group_phrase(group)
     if event == "started":
         return f"{label}{suffix} has started."
     if event == "released":
-        if kind == "issue":
-            return f"{label} was released. Another agent may pick it up."
         return (
             f"{label}{suffix} was released. Its group returned to the queue; "
             "another agent may pick it up."
@@ -182,7 +179,7 @@ def format_notification(
         run_dir = (run_json or default_run_json(phase_file)).parent
         return (
             f"{label} exhausted its remedy rounds with findings open. "
-            f"The line continues; this {kind} is skipped until a person decides. "
+            f"The line continues; this phase is skipped until a person decides. "
             f"For the open findings, run:\n\n```\ncat {run_dir / 'remedy-escalated.json'}\n```"
         )
     if event == "failed":
@@ -192,7 +189,7 @@ def format_notification(
         code = f" with exit code {exit_code}" if exit_code is not None else ""
         return (
             f"{label} failed after its retries{code}. "
-            f"The line continues; this {kind} is skipped until a person decides. "
+            f"The line continues; this phase is skipped until a person decides. "
             f"For the residue, run:\n\n```\ncat {run_dir / 'failed.json'}\n```"
         )
     if event == "stalled":
@@ -208,7 +205,6 @@ def format_notification(
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--phase-file", required=True)
-    parser.add_argument("--kind", choices=("phase", "issue"), default="phase")
     parser.add_argument(
         "--event",
         required=True,
@@ -260,7 +256,6 @@ def main(argv: list[str] | None = None) -> int:
                 else conventions.setting("driver.quiet-minutes")
             ),
             group=args.group,
-            kind=args.kind,
         )
     )
     return 0

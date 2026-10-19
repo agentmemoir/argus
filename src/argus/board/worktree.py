@@ -184,8 +184,8 @@ def _directory_bytes(path: Path) -> int:
     return total
 
 
-def _commit_state(checkout: Path, message: str, *, issues: bool = False) -> str | None:
-    rc, _, err = _git(checkout, "add", "--", state_rel(issues=issues).as_posix())
+def _commit_state(checkout: Path, message: str) -> str | None:
+    rc, _, err = _git(checkout, "add", "--", state_rel().as_posix())
     if rc != 0:
         raise CoordinationUnavailable(
             f"cannot stage coordination state: {_safe_detail(err)}"
@@ -208,8 +208,6 @@ def _transaction(
     branch: str,
     mutate: Callable[[dict[str, Any]], _Mutation],
     message: str,
-    *,
-    issues: bool = False,
 ) -> Any:
     """Run a read-modify-push transaction, retrying only rejected pushes."""
     last_error = None
@@ -217,7 +215,7 @@ def _transaction(
     # branch. It is done once here rather than per attempt, because the first
     # attempt either finds the branch or creates it and no attempt after that
     # has anything left to decide.
-    ensure_board_branch(private, remote, branch, issues=issues)
+    ensure_board_branch(private, remote, branch)
     swept, reclaimed = sweep_stale_worktrees()
     if swept:
         # A leak then reads as a number on the tick that found it, rather than
@@ -229,20 +227,17 @@ def _transaction(
         )
     for attempt in range(MAX_TRANSACTION_ATTEMPTS):
         ref, _commit = _fetch_branch_ref(private, remote, branch)
-        initialized = _state_initialized(private, ref, issues=issues)
+        initialized = _state_initialized(private, ref)
         with _detached_worktree(private, ref) as checkout:
             state = _read_state_file(
-                state_path(checkout.path, issues=issues),
+                state_path(checkout.path),
                 allow_missing=not initialized,
-                issues=issues,
             )
             mutation = mutate(state)
             if not mutation.changed:
                 return mutation.value
-            _write_state_file(
-                state_path(checkout.path, issues=issues), state, issues=issues
-            )
-            new_commit = _commit_state(checkout.path, message, issues=issues)
+            _write_state_file(state_path(checkout.path), state)
+            new_commit = _commit_state(checkout.path, message)
             if new_commit is None:
                 return mutation.value
             rc, out, err = _git(

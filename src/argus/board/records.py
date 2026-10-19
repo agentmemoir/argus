@@ -21,7 +21,7 @@ from argus.board.core import (
     _iso,
     _parse_moment,
 )
-from argus.board.state import _owner_matches, _receipt_of
+from argus.board.state import _owner_matches
 
 
 def _cooldown_remaining(
@@ -101,7 +101,7 @@ def _claim_window_passed(record: dict[str, Any], moment: _datetime.datetime) -> 
 
 
 def _expire_records(
-    state: dict[str, Any], moment: _datetime.datetime, *, issues: bool = False
+    state: dict[str, Any], moment: _datetime.datetime
 ) -> list[dict[str, Any]]:
     """Move every stale group to ``EXPIRED_STATUS`` under one cooldown stamp.
 
@@ -112,8 +112,6 @@ def _expire_records(
     """
     groups: dict[tuple[Any, Any], list[tuple[Any, Any]]] = {}
     for key, record in state["phases"].items():
-        if issues and _receipt_of(record).get("state_reason") == "writeback_pending":
-            continue
         if record.get("status") not in ACTIVE_STATUSES:
             continue
         reservation_id = record.get("reservation_id")
@@ -132,7 +130,7 @@ def _expire_records(
             record[COOLDOWN_UNTIL_FIELD] = until
             expired.append(
                 {
-                    "issue" if issues else "phase": int(key) if issues else key,
+                    "phase": key,
                     "machine_id": record.get("machine_id"),
                     "reservation_id": record.get("reservation_id"),
                 }
@@ -151,8 +149,6 @@ def _claim_one(
     status: str,
     number: int,
     now: _datetime.datetime | None = None,
-    *,
-    issues: bool = False,
 ) -> dict[str, Any]:
     """Write or refresh one claim in ``state``; return its phase record.
 
@@ -164,17 +160,8 @@ def _claim_one(
     group is never reserved.
     """
     existing: dict[str, Any] | None = state["phases"].get(key)
-    kind = "issue" if issues else "phase"
+    kind = "phase"
     if existing is not None:
-        receipt = _receipt_of(existing)
-        if (
-            issues
-            and receipt.get("state_reason") == "remedy_escalated"
-            and receipt.get("cleared") is not True
-        ):
-            raise ReservationConflict(
-                number, existing, "remedy escalation needs clearance", kind=kind
-            )
         if existing.get("status") == EXPIRED_STATUS:
             remaining = _cooldown_remaining(existing, number, now)
             if remaining > 0:

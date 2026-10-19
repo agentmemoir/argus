@@ -44,7 +44,6 @@ _drive_dry_run() {
     fi
     state="$(printf '%s' "$selection" | selection_value state)"
     bind_selection_kind "$selection"
-    report_issue_selection "$selection"
     report_needs_decision "$selection"
     case "$state" in
       AVAILABLE)
@@ -55,7 +54,7 @@ _drive_dry_run() {
         # dry run that named only the member in front of it would describe a
         # smaller claim than the tick makes. The member's own file is what the
         # launch would use, exactly as in the tick.
-        if [ "$work_kind" = issue ]; then group_take_selection ""; else group_take_selection "$selection"; fi
+        group_take_selection "$selection"
         if group_active && group_resolve_member "$number"; then
           rel="$GROUP_MEMBER_REL"
           log "dry-run: would claim the group [$(printf '%s' "$GROUP_MEMBERS" | tr '\n' ' ')] and launch member $number in tmux '$SESSION'"
@@ -67,9 +66,7 @@ _drive_dry_run() {
       WAIT_FOR_CLAIM)
         wait_phase="$(printf '%s' "$selection" | selection_value "$item_key")"
         wait_owner="$(printf '%s' "$selection" | selection_value owner)"
-        if [ "$work_kind" = issue ] && [ "$(printf '%s' "$selection" | selection_value status)" = writeback_pending ]; then
-          log "dry-run: issue $wait_phase report is pending; would retry the report, no launch"
-        elif [ "$RECOVER_OWN_CLAIM" = 1 ] \
+        if [ "$RECOVER_OWN_CLAIM" = 1 ] \
             && [ "$wait_owner" = "$PHASE_MACHINE_ID" ] \
             && [ "$wait_phase" != "" ]; then
           log "dry-run: would recover this host's own claim on ${work_kind:-phase} $wait_phase and launch it"

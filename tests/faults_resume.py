@@ -51,7 +51,7 @@ RESUME_FAULTS = (
         "name": "resume-group-not-read",
         "breaks": "a resumed member of a reservation group cuts a branch of its own",
         "file": "src/argus/driver/lib-driver-resume.sh",
-        "find": '  if [ "${work_kind:-phase}" != issue ] && ! group_take_declared "$number"; then\n',
+        "find": '  if ! group_take_declared "$number"; then\n',
         "replace": "  if false; then  # FAULT: the resume runs without the group\n",
         "cases": "group_resume",  # selftest_case_group_resume
         "verdict": "driver self-test:",

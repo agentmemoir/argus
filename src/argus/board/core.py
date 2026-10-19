@@ -88,7 +88,6 @@ RESERVATION_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 
 
 PHASE_KEY_RE = re.compile(r"^[0-9]{6}$")
-ISSUE_KEY_RE = re.compile(r"^[0-9]{1,10}$")
 
 
 PUBLICATION_NAME = "publication.json"
@@ -231,17 +230,6 @@ def _now() -> str:
     return _iso()
 
 
-def _issue_key(value: object) -> tuple[str, int]:
-    if isinstance(value, bool) or not isinstance(value, (int, str)):
-        raise CoordinationError(f"invalid issue number: {value!r}")
-    if isinstance(value, str) and not ISSUE_KEY_RE.fullmatch(value):
-        raise CoordinationError(f"invalid issue number: {value!r}")
-    number = int(value)
-    if not 1 <= number <= 9999999999:
-        raise CoordinationError(f"issue number is out of range: {value!r}")
-    return f"{number:06d}", number
-
-
 def _phase_key(phase: Any) -> tuple[str, int]:
     try:
         if isinstance(phase, bool):
@@ -323,7 +311,6 @@ __all__ = [
     "_Mutation",
     "_as_moment",
     "_iso",
-    "_issue_key",
     "_now",
     "_parse_moment",
     "_phase_key",

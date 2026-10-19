@@ -8,10 +8,6 @@ from typing import Any, cast
 from argus.config.document import read_document
 from argus.config.document import strip_comments as strip_comments
 from argus.config.errors import ConfigError
-from argus.config.issue_validation import (
-    validate_presence,
-    validate_trust,
-)
 from argus.config.overlay import apply_overlay
 from argus.config.phases_validation import validate_phases
 from argus.config.schema import (
@@ -84,6 +80,11 @@ def _build(
                 "'phases.directory' to the folder holding the work-item files, "
                 "and 'phases.repo', 'phases.branch', 'phases.remote' with it"
             )
+    for removed in ("issues", "repair"):
+        if removed in raw:
+            raise ConfigError(
+                f"key '{removed}' was removed: Argus runs the phase source only"
+            )
     for name in _OBJECT_KEYS:
         if name in raw and raw[name] is not None and not isinstance(raw[name], dict):
             raise ConfigError(f"invalid type for key '{name}': expected object")
@@ -101,14 +102,6 @@ def _build(
         cast("dict[str, Any]", notify_value) if isinstance(notify_value, dict) else None
     )
 
-    repair_value = raw.get("repair")
-    repair = (
-        cast("dict[str, Any]", repair_value) if isinstance(repair_value, dict) else None
-    )
-    issue_value = raw.get("issues")
-    issues = (
-        cast("dict[str, Any]", issue_value) if isinstance(issue_value, dict) else None
-    )
     runstate_value = raw.get("runstate")
     runstate = (
         cast("dict[str, Any]", runstate_value)
@@ -118,7 +111,10 @@ def _build(
     provider = overrides.get("driver")
     if provider is None:
         provider = _lookup(raw, "driver.provider")[1]
-    validate_presence(provider, issues)
+    if provider not in ("phase", "phases", None):
+        raise ConfigError(
+            "invalid value for key 'driver.provider': known drivers: phase, phases"
+        )
 
     supplied: dict[str, tuple[object, str]] = {}
     for field in SCHEMA:
@@ -139,9 +135,7 @@ def _build(
     values: dict[str, object] = {}
     sources: dict[str, str] = {}
     for field in SCHEMA:
-        required = _is_required(
-            field, board, notify, issues, repair, runstate, provider
-        )
+        required = _is_required(field, board, notify, runstate, provider)
         if field.key in supplied:
             raw_value, source = supplied[field.key]
             _check_type(field, raw_value)
@@ -155,8 +149,6 @@ def _build(
             sources[key] = source
         elif required:
             raise ConfigError(f"missing required key '{field.key}'")
-    if issues is not None:
-        validate_trust(issues)
     # The folder grows from the phases repository, so it is always confined to
     # it, whether the file or a flag named it. A flag that reached outside the
     # checkout would read a stranger's tree and write the index into it, and the
@@ -170,8 +162,6 @@ def _is_required(
     field: Field,
     board: dict[str, Any] | None,
     notify: dict[str, Any] | None,
-    issues: dict[str, Any] | None,
-    repair: dict[str, Any] | None,
     runstate: dict[str, Any] | None,
     provider: object,
 ) -> bool:
@@ -183,10 +173,6 @@ def _is_required(
         return provider in (None, "phase", "phases")
     if field.required == "notify":
         return notify is not None
-    if field.required == "issues":
-        return issues is not None and provider == "issues"
-    if field.required == "repair":
-        return repair is not None
     if field.required == "runstate":
         return runstate is not None
     return False
@@ -259,18 +245,6 @@ def _check_value(field: Field, value: object, required: bool) -> None:
         )
     if required and field.type in ("str", "path") and value == "":
         raise ConfigError(f"missing required key '{field.key}'")
-    if field.key == "repair.attempts" and cast("int", value) < 1:
-        raise ConfigError("invalid value for key 'repair.attempts': must be at least 1")
-    if field.key == "repair.wait" and cast("int", value) < 0:
-        raise ConfigError("invalid value for key 'repair.wait': must not be negative")
-    if field.key == "repair.verify-timeout" and cast("int", value) < 0:
-        raise ConfigError(
-            "invalid value for key 'repair.verify-timeout': must not be negative"
-        )
-    if field.key == "repair.stale-after" and cast("int", value) < 0:
-        raise ConfigError(
-            "invalid value for key 'repair.stale-after': must not be negative"
-        )
     if field.key == "driver.state" and "/" in cast("str", value):
         raise ConfigError(
             "invalid value for key 'driver.state': must be a folder name, not a path"

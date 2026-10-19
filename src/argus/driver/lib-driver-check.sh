@@ -91,46 +91,6 @@ check() {
   elif [ -f "$HALT_RECORD" ] && halt_record_read "$HALT_RECORD"; then
     echo "halt record: phase $HALT_REC_PHASE (state ${HALT_REC_STATE:-unknown}); the next tick resumes it"
   fi
-  if [ "${WORK_SOURCE:-phases}" = issues ]; then
-    for var in BOARD_ISSUES_FILE MACHINE_SETTINGS_FILE ISSUES_REPO ISSUES_PREFERENCE \
-        ISSUES_CATEGORY ISSUES_SEARCH ISSUES_TASK_DIR ISSUES_CODEOWNERS_FILE \
-        ISSUES_TRUSTED_AUTHORS ISSUES_TRUSTED_APPS ISSUES_TRUSTED_ASSOCIATIONS \
-        ISSUES_RESOLVE_TEAMS ISSUES_UNTRUSTED_COMMENTS ISSUES_MAX_COMMENTS \
-        ISSUES_MAX_TEXT_BYTES ISSUES_LIST_LIMIT ISSUES_PR_CHECK_MAX ISSUES_CLAIM_ATTEMPTS \
-        ISSUES_ANNOUNCE; do
-      check_config_value "$var"
-    done
-    if ! work_preflight; then
-      echo "issue preflight: REFUSED ($PREFLIGHT_REASON)"
-      return 1
-    fi
-    local issue_result issue_rc=0
-    issue_result="$(coordination_select --read-only)" || issue_rc=$?
-    bind_selection_kind "$issue_result"
-    report_issue_selection "$issue_result"
-    if [ "$issue_rc" -ne 0 ] && [ "$issue_rc" -ne 1 ] && [ "$issue_rc" -ne 3 ]; then
-      echo "issue readiness: REFUSED ($(printf '%s' "$issue_result" | selection_value error))"
-      return 1
-    fi
-    local issue_number issue_path
-    issue_number="$(printf '%s' "$issue_result" | selection_value issue)"
-    issue_path="$(printf '%s' "$issue_result" | selection_value path)"
-    if [ -n "$issue_number" ]; then
-      echo "next issue: $issue_number ($issue_path)"
-      echo "issue run directory: $(phase_run_dir "$issue_number" "$issue_path")"
-    fi
-    echo "issue readiness: accepted (exit $issue_rc)"
-    return "$warned"
-  fi
-  if [ -n "${REPAIR_PIPELINE:-}" ]; then
-    if [ -r "$REPAIR_PIPELINE" ]; then
-      echo "repair: $REPAIR_PIPELINE ($REPAIR_ATTEMPTS attempt(s) per pull request, waits up to ${REPAIR_WAIT}s for checks)"
-      echo "repair check: ${REPAIR_VERIFY:-(none)} (timeout ${REPAIR_VERIFY_TIMEOUT:-0}s)"
-    else
-      echo "repair: $REPAIR_PIPELINE MISSING OR UNREADABLE, a repair run would fail"
-      warned=1
-    fi
-  fi
   # The launch suffix says whether this machine can actually run what it
   # selects: a folder outside this checkout is readable but not launchable.
   if [ -n "$PHASES_DIRECTORY" ]; then

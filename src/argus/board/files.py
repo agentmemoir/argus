@@ -5,7 +5,7 @@
 import json
 import re
 from pathlib import Path
-from typing import Any, Literal, cast
+from typing import Any, cast
 
 from argus import conventions
 from argus.board.branch import _fetch_branch_ref, _integration_branch
@@ -13,7 +13,6 @@ from argus.board.core import (
     PUBLICATION_NAME,
     CoordinationError,
     CoordinationUnavailable,
-    _issue_key,
     _phase_key,
     _safe_detail,
     _validate_generation,
@@ -21,21 +20,14 @@ from argus.board.core import (
     _validate_reservation_id,
 )
 from argus.board.git import _git
-from argus.conventions import phase_run_dir, runs_dir
+from argus.conventions import phase_run_dir
 
 
 def reservation_file(
     repo_root: str | Path,
     phase: str | int,
-    *,
-    kind: Literal["phase", "issue"] = "phase",
 ) -> Path:
     """Return the token beside this phase's pipeline run record."""
-    if kind == "issue":
-        key, _number = _issue_key(phase)
-        return runs_dir(repo_root) / f"issue-{key}" / "reservation.json"
-    if kind != "phase":
-        raise CoordinationError(f"invalid reservation kind: {kind!r}")
     _key, number = _phase_key(phase)
     return phase_run_dir(repo_root, number) / "reservation.json"
 
@@ -179,11 +171,7 @@ def save_reservation_file(path: str | Path, reservation: Any) -> dict[str, Any]:
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = {
         "version": 1,
-        "issue" if "issue" in reservation else "phase": (
-            _issue_key(reservation["issue"])[1]
-            if "issue" in reservation
-            else reservation["phase"]
-        ),
+        "phase": reservation["phase"],
         "machine_id": reservation["machine_id"],
         "reservation_id": reservation["reservation_id"],
         "generation": reservation["generation"],
@@ -205,12 +193,9 @@ def load_reservation_file(path: str | Path) -> dict[str, Any] | None:
     if not isinstance(raw_data, dict):
         raise CoordinationError("reservation file is not an object")
     data = cast("dict[str, Any]", raw_data)
-    kind = "issue" if "issue" in data else "phase"
-    for field in (kind, "machine_id", "reservation_id", "generation"):
+    for field in ("phase", "machine_id", "reservation_id", "generation"):
         if field not in data:
             raise CoordinationError(f"reservation file is missing {field}")
-    if kind == "issue":
-        _issue_key(data["issue"])
     _validate_machine_id(data["machine_id"])
     _validate_reservation_id(data["reservation_id"])
     _validate_generation(data["generation"])

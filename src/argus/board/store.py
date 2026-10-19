@@ -4,7 +4,6 @@
 
 from argus.board.store_claim import _ClaimOps
 from argus.board.store_group import _GroupOps
-from argus.board.store_issue import _IssueOps
 from argus.board.store_lifecycle import _LifecycleOps
 from argus.board.store_publication import _PublicationOps
 from argus.board.store_takeover import _TakeoverOps
@@ -13,7 +12,6 @@ from argus.board.store_takeover import _TakeoverOps
 class ReservationStore(
     _ClaimOps,
     _GroupOps,
-    _IssueOps,
     _LifecycleOps,
     _TakeoverOps,
     _PublicationOps,
