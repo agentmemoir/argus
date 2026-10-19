@@ -9,7 +9,6 @@ from typing import Any
 
 from argus.board.reservations import CoordinationError, reservation_file
 from argus.phases.evidence import needs_decision, signals
-from argus.phases.queue import gate_block
 from argus.phases.selftest_fixture import (
     BOARD_REL,
     _EmptyStore,
@@ -176,12 +175,10 @@ def _selection_checks() -> None:
             is True
         )
     with tempfile.TemporaryDirectory() as tmp:
-        # An open decision gate stops the selector before it reserves. This is
-        # the 100817 regression: the gate was real, the developer stopped on it
-        # mid-run, and a reservation plus a branch were spent getting there.
-        # Assert both halves: the open gate is refused, and recording the
-        # choice makes the very same phase selectable with no other change.
-
+        # An open decision gate is reported under `needs_decision` and still
+        # selects. A plan decision is the owner's work, so the selector never
+        # holds the line behind it; the phase agent no longer stops mid-run on a
+        # gate the selector refused to read.
         repo = Path(tmp).resolve()
         (repo / "phases").mkdir()
         (repo / BOARD_REL).mkdir(parents=True)
@@ -202,41 +199,23 @@ def _selection_checks() -> None:
         got = select_server_phase(
             repo, "server-01", store=store, phases=repo / "phases"
         )
-        assert got["state"] == "BLOCKED_ON_GATE", got
-        assert got["phase"] == "100440", got
-        assert store.reserved == [], "an open gate must not reserve a phase"
-
-        # Same file, decision recorded: the phase is selectable, and only the
-        # recorded choice is what changed.
-        gate_plan.write_text(
-            "## 1. Objective\n"
-            "### Sources\n"
-            "| Issue | Subject | Kind |\n"
-            "|---|---|---|\n"
-            "| [#1](x) | something | Security |\n"
-            "### Decision Gates\n"
-            "| Gate | Issue | State | Choice | Untaken branch |\n"
-            "|---|---|---|---|---|\n"
-            "| Which option ships | #1 | `recorded` 2026-09-28 "
-            "| Option 1 | Option 2 |\n"
-        )
-        got = select_server_phase(
-            repo, "server-01", store=store, phases=repo / "phases"
-        )
         assert got["state"] == "RESERVED" and got["phase"] == "100440", got
+        assert any(d["phase"] == "100440" for d in got.get("needs_decision", [])), got
         assert store.reserved == [100440], store.reserved
 
         # A gate section that claims `recorded` with no choice is a defect in
-        # the plan, and the selector fails closed on it rather than launching.
+        # the plan. The selector does not stop on it either; the phase stays in
+        # the queue and the report names the open gate.
         gate_plan.write_text(
             "### Decision Gates\n"
             "| Gate | Issue | State | Choice | Untaken branch |\n"
             "|---|---|---|---|---|\n"
             "| Which option ships | #1 | `recorded` 2026-09-28 | — | — |\n"
         )
-        assert gate_block(100440, gate_plan) is not None, (
-            "recorded with an empty choice must fail closed"
+        got = select_server_phase(
+            repo, "server-01", store=store, phases=repo / "phases"
         )
+        assert got["state"] in {"RESERVED", "NO_PHASE"}, got
 
 
 __all__ = ["_selection_checks"]

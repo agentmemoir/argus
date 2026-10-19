@@ -104,11 +104,6 @@ _drive_dry_run() {
           log "dry-run: COORDINATION_UNAVAILABLE; no launch (see $RUN_DIR/coordination-selection.dry-run.json)"
         fi
         ;;
-      BLOCKED_ON_GATE)
-        gate_phase="$(printf '%s' "$selection" | selection_value "$item_key")"
-        gate_error="$(printf '%s' "$selection" | selection_value error)"
-        log "dry-run: BLOCKED_ON_GATE (${work_kind:-phase} $gate_phase: $gate_error); no launch"
-        ;;
       NO_PHASE)
         log "dry-run: no uncompleted ${work_kind:-phase}"
         ;;

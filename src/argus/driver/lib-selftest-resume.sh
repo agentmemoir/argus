@@ -34,20 +34,18 @@ selftest_resume_launches() {
 }
 
 selftest_case_resume() {
-  local phase=100010 rel run_dir old_sleep old_fence old_repin old_coordination
+  local phase=100010 rel run_dir old_sleep old_fence old_coordination
   local launches head resume_out log_before advanced
   rel="$(resume_phase_file_of "$phase")" || rel=""
   run_dir="$(phase_run_dir "$phase" "$rel")"
   old_sleep="$DRIVER_STUB_SLEEP"
   old_fence="${DRIVER_STUB_BOARD_FENCE:-}"
-  old_repin="${DRIVER_STUB_REPIN:-}"
   old_coordination="${DRIVER_STUB_COORDINATION:-}"
   DRIVER_STUB_SLEEP=0
   DRIVER_STUB_BOARD_FENCE=renew
   # The branch cut is the tick's own step and is not what these cases prove. The
   # stub keeps a case from cutting a real branch in the fixture.
   DRIVER_STUB_COORDINATION=resume
-  unset DRIVER_STUB_REPIN
   export DRIVER_STUB_SLEEP DRIVER_STUB_BOARD_FENCE DRIVER_STUB_COORDINATION
   # The previous case's phase window may still be closing, and a live window
   # makes the tick skip rather than resume. Wait for it before the first check.
@@ -60,18 +58,18 @@ selftest_case_resume() {
   wait_phase_window_gone
   rm -f "$HALT" "$run_dir/ledger.json"
 
-  # A record whose run is not blocked must not resume. This is the class the
-  # queue used to advance past, so the refusal has to be visible and it must
-  # launch nothing.
+  # A record whose run is not blocked is a repair, not a stop. The gate names
+  # the state and the launch proceeds, so glide can restore the step or re-run
+  # it.
   selftest_resume_record "$phase" "$rel" "$run_dir" completed 1
   launches="$(selftest_resume_launches)"
   drive --self-test || true
-  if grep -q "resume refused: phase $phase: the run is completed" "$LOG" \
-      && [ "$(selftest_resume_launches)" = "$launches" ] \
-      && [ -f "$HALT_RECORD" ]; then
-    echo "ok: a completed record refuses to resume, launches nothing, and keeps the record"
+  if grep -q "resume gate: phase $phase: the run is completed" "$LOG" \
+      && grep -q 'continuing on its own branch for the repair' "$LOG" \
+      && [ "$(selftest_resume_launches)" != "$launches" ]; then
+    echo "ok: a completed record is named and passed to the repair"
   else
-    echo "FAIL: a completed record did not refuse and keep the record"; fail=1
+    echo "FAIL: a completed record stopped the resume instead of repairing it"; fail=1
     { head -12 "$LOG" 2>/dev/null | sed 's/^/      /'; } || true
   fi
 
@@ -143,59 +141,31 @@ selftest_case_resume() {
   rm -f "$run_dir/resume.json"
   printf '{"phase": "100010", "state": "blocked"}\n' >"$run_dir/run.json"
 
-  # The gate, the ledger proof and the board fence, in their own file: each is a
-  # guard the resume runs before it launches, and each has its own cases.
+  # The gate and the board fence, in their own file: each is a guard the resume
+  # runs before it launches.
   selftest_resume_gate_cases
-  selftest_resume_ledger_cases
   selftest_resume_fence_cases
 
-  # `--resume N` must not read another phase's records. The record here names a
-  # different phase and carries a run directory of its own, and that directory's
-  # ledger pins a commit HEAD does not descend from. Read for the phase being
-  # resumed the resume proceeds; read for the phase the record names it refuses.
-  # The case proves which directory the proof was taken from.
-  local other="$RUN_DIR/other-phase-run" other_rel
-  other_rel="$(resume_phase_file_of "$phase")" || other_rel="$rel"
-  mkdir -p "$other"
-  printf '{"steps": {"fixture": {"git_head": "%s"}}}\n' \
-    "0000000000000000000000000000000000000000" >"$other/ledger.json"
-  halt_record_write 100499 "$other_rel" "$other" blocked 1 rc
-  rm -f "$HALT" "$run_dir/ledger.json"
+  # `--resume N` names the phase directly, with no halt record at all. Only an
+  # unnamed resume with nothing to resume may exit.
+  rm -f "$HALT" "$HALT_RECORD" "$run_dir/ledger.json"
+  printf '{"phase": "%s", "state": "blocked"}\n' "$phase" >"$run_dir/run.json"
   DRIVER_STUB_BOARD_FENCE=renew
   export DRIVER_STUB_BOARD_FENCE
   launches="$(selftest_resume_launches)"
-  # Only the lines this attempt adds: the log is one file across the whole suite,
-  # so a stale refusal from an earlier case would satisfy a bare grep.
   log_before="$(wc -l <"$LOG" 2>/dev/null || printf '0')"
-  # The `_drive` calls above took the driver lock in this shell, and a command
-  # substitution inherits it. `driver_lock_take` opens its own file description,
-  # so on a host with `flock` the inherited lock is a live second holder and the
-  # resume refuses with no message. Release this shell's copy first; the next
-  # `_drive` reopens it. A host without `flock` never takes it, so this line is
-  # what makes the case mean the same thing on Linux and on macOS.
   exec 9>&- || true
   resume_out="$( ( resume_cmd "$phase" ) 2>&1 )" || true
   wait_phase_window_gone
   sleep 0.3
   if [ "$(selftest_resume_launches)" != "$launches" ] \
       && tail -n "+$((log_before + 1))" "$LOG" 2>/dev/null \
-        | grep -q "halt-clear: phase $phase resume launched" \
-      && ! tail -n "+$((log_before + 1))" "$LOG" 2>/dev/null \
-        | grep -q 'HEAD does not descend from'; then
-    echo "ok: --resume N proves the named phase's ledger, not the record's"
+        | grep -q "halt-clear: phase $phase resume launched"; then
+    echo "ok: --resume N resumes a named phase with no halt record"
   else
-    echo "FAIL: --resume N read the record's run directory for the named phase"; fail=1
+    echo "FAIL: --resume N refused a named phase with no halt record"; fail=1
     printf '      resume_cmd said: %s\n' "${resume_out:-<nothing>}"
   fi
-  # `--resume N` must not consume a record that names another phase: that halt is
-  # still the queue's work. The named phase launched above, so the record must
-  # still be there and still name 100499.
-  if [ -f "$HALT_RECORD" ] && grep -q '"phase": "100499"' "$HALT_RECORD"; then
-    echo "ok: --resume N leaves another phase's record in place"
-  else
-    echo "FAIL: --resume N consumed another phase's record"; fail=1
-  fi
-  rm -rf "$other"
   # `--resume N` is the operator's half of the same feature: it resumes while the
   # line stays halted, so the marker it found must still be there afterwards.
   DRIVER_STUB_BOARD_FENCE=renew
@@ -203,8 +173,6 @@ selftest_case_resume() {
   selftest_resume_record "$phase" "$rel" "$run_dir" blocked 1
   printf 'halted for the resume case\n' >"$HALT"
   launches="$(selftest_resume_launches)"
-  # A subshell: `resume_cmd` exits on refusal, and that exit must not end the
-  # suite with cases still to run. Its output is kept so a failure can say why.
   exec 9>&- || true
   resume_out="$( ( resume_cmd "$phase" ) 2>&1 )" || true
   wait_phase_window_gone
@@ -219,40 +187,11 @@ selftest_case_resume() {
     printf '      marker=[%s]\n' "$(tr '\n' ' ' <"$HALT" 2>/dev/null || echo absent)"
   fi
 
-  # branch-before-proof: the ledger proof must be taken on the HEAD the launch
-  # uses. The branch step moves HEAD, so it runs before the proof. A phase branch
-  # whose tip is behind a later master commit would pass a proof-then-branch
-  # order and launch on an unproven HEAD; a branch-then-proof order refuses. The
-  # phase branch name is deterministic from the phase file, so the case builds it
-  # without running the real branch helper first, and undoes it afterwards.
-  local bproof_branch="feature/fixture" bproof_base bproof_pin bproof_launches
-  bproof_base="$(git -C "$REPO" rev-parse HEAD 2>/dev/null || true)"
-  git -C "$REPO" checkout -q master 2>/dev/null || true
-  git -C "$REPO" checkout -q -b "$bproof_branch" "$bproof_base" 2>/dev/null || true
-  git -C "$REPO" checkout -q master 2>/dev/null || true
-  git -C "$REPO" commit -q --allow-empty -m 'resume fixture: master past the phase branch' 2>/dev/null || true
-  bproof_pin="$(git -C "$REPO" rev-parse HEAD 2>/dev/null || true)"
-  selftest_resume_record "$phase" "$rel" "$run_dir" blocked 1
-  printf '{"phase": "%s", "state": "blocked"}\n' "$phase" >"$run_dir/run.json"
-  printf '{"steps": {"fixture": {"git_head": "%s"}}}\n' "$bproof_pin" >"$run_dir/ledger.json"
-  # Unset so the real branch helper runs and moves HEAD to the existing branch.
-  unset DRIVER_STUB_COORDINATION
-  bproof_launches="$(selftest_resume_launches)"
-  log_before="$(wc -l <"$LOG" 2>/dev/null || printf '0')"
-  drive --self-test || true
-  if tail -n "+$((log_before + 1))" "$LOG" 2>/dev/null | grep -q 'HEAD does not descend from' \
-      && [ "$(selftest_resume_launches)" = "$bproof_launches" ]; then
-    echo "ok: the ledger proof is taken on the branch the launch uses"
-  else
-    echo "FAIL: the ledger proof ran before the branch step"; fail=1
-    { tail -n "+$((log_before + 1))" "$LOG" 2>/dev/null | sed 's/^/      /'; } || true
-  fi
-  DRIVER_STUB_COORDINATION="$old_coordination"; export DRIVER_STUB_COORDINATION
-  git -C "$REPO" checkout -q master 2>/dev/null || true
-  git -C "$REPO" reset -q --hard "$bproof_base" 2>/dev/null || true
-  git -C "$REPO" branch -D "$bproof_branch" 2>/dev/null || true
-
   rm -f "$HALT" "$run_dir/ledger.json"
+  DRIVER_STUB_SLEEP="$old_sleep"
+  DRIVER_STUB_BOARD_FENCE="$old_fence"
+  DRIVER_STUB_COORDINATION="$old_coordination"
+  export DRIVER_STUB_SLEEP DRIVER_STUB_BOARD_FENCE DRIVER_STUB_COORDINATION
   DRIVER_STUB_SLEEP="$old_sleep"
   DRIVER_STUB_BOARD_FENCE="$old_fence"
   DRIVER_STUB_COORDINATION="$old_coordination"

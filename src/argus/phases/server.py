@@ -24,7 +24,7 @@ from argus.phases.evidence import (
 )
 from argus.phases.group import resolve_group_or_none
 from argus.phases.index import audit
-from argus.phases.queue import candidates, gate_block, select_next
+from argus.phases.queue import candidates, select_next
 from argus.phases.runstate import run_abandoned
 from argus.phases.select import _awaiting_review, _reservation_result, _select_group
 from argus.select.work_source import WorkSource, WorkSourceError
@@ -189,17 +189,9 @@ def select_server_phase(
         # rather than stopping the line on its still-open decision gate.
         if parked:
             continue
-        if not done:
-            # An open decision gate is checked before anything else that can
-            # claim this phase. Reserving a phase that owes the owner a
-            # decision spends a reservation, a branch, and a full agent round
-            # only to have the developer stop on its own stop condition. The
-            # line waits here instead, and it does not skip past: the phase
-            # keeps its place, so the order of phases that do run is unchanged.
-            blocked = gate_block(number, path)
-            if blocked:
-                blocked["path"] = reported_path(repo, path)
-                return finish(blocked)
+        # An open decision gate is reported under `needs_decision` above and
+        # never blocks the run. A plan decision is the owner's work, and argus
+        # does not stop the line on it.
         if record is not None:
             status = record.get("status")
             # Finished on disk, and the board is not asserting a completion we

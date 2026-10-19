@@ -226,21 +226,16 @@ except OSError:
   tmux_set_title "${work_kind:-phase} $number running"
   notify_phase "$rel" started
   if [ "${CLIO_RESUME:-}" = 1 ]; then
-    # The parent proved the resume gate before it launched, and the state can
+    # The parent read the resume gate before it launched, and the state can
     # still move in between: another machine, or an operator, may have taken the
-    # phase on. Re-check it before glide starts, so a stale resume stops the line
-    # instead of archiving a run that moved on.
+    # phase on. Re-check it and name it, then let glide run the two-tick repair.
+    # A moved state is evidence to repair from, not a reason to write the halt
+    # marker from the child.
     local resume_run_dir resume_state resume_reason
     resume_run_dir="$(phase_run_dir "$number" "$rel")"
     resume_state="$(phase_state "$number" "$rel")"
-    resume_reason="$(resume_gate_reason "$resume_state" "$resume_run_dir")" || {
-      printf 'resume refused: %s\n' "$resume_reason" >"$HALT"
-      halt_record_write "$number" "$rel" "$resume_run_dir" "$resume_state" "" \
-        resume-refused "$resume_reason"
-      log "resume refused: phase $number: $resume_reason"
-      rm -f "$CURRENT" "$PIDFILE"
-      exit 3
-    }
+    resume_reason="$(resume_gate_reason "$resume_state" "$resume_run_dir")" || \
+      log "resume gate: phase $number: $resume_reason; continuing for the repair"
   fi
   if [ -n "${DRIVER_STUB_RC:-}" ]; then
     log "STUB mode: simulating glide (rc=$DRIVER_STUB_RC)"
@@ -306,6 +301,24 @@ except OSError:
     fi
   fi
   state="$(phase_state "$number" "$rel")"
+  if [ "$state" = repair_pending ]; then
+    # Glide is repairing a step from its own evidence and has not advanced.
+    # That is a normal no-launch tick, not a stop: the next tick retries.
+    local repair_reason
+    repair_reason="$("$PYTHON" -c 'import json,sys
+try:
+    data = json.load(open(sys.argv[1]))
+except (OSError, ValueError):
+    data = {}
+repair = data.get("repair") if isinstance(data, dict) else None
+print((repair or {}).get("error", "") if isinstance(repair, dict) else "")' \
+      "$(phase_run_dir "$number" "$rel")/run.json" 2>/dev/null || true)"
+    gitsync_clean "$number"
+    log "repair-pending: ${work_kind:-phase} $number${repair_reason:+: $repair_reason}; no launch, the next tick retries"
+    tmux_set_title "${work_kind:-phase} $number repair pending"
+    rm -f "$CURRENT" "$PIDFILE"
+    exit 0
+  fi
   if [ "${work_kind:-phase}" = issue ] && [ "$state" = writeback_pending ]; then
     gitsync_clean "$number"
     tmux_set_title "issue $number report pending"

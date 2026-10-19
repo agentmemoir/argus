@@ -133,12 +133,6 @@ def phase_gate_state(path: str | pathlib.Path) -> tuple[str, str]:
     return worst, detail
 
 
-def phase_gates_blocked(path: str | pathlib.Path) -> bool:
-    """True when the plan carries a gate that must stop the phase being run."""
-    state, _ = phase_gate_state(path)
-    return state == "open"
-
-
 def scan_gates(phases_dir: str | pathlib.Path) -> dict[str, tuple[str, str, str]]:
     """Return ``{phase_number: (state, detail, filename)}`` for every plan."""
     found: dict[str, tuple[str, str, str]] = {}
