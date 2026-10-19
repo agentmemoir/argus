@@ -25,7 +25,7 @@ issue_preflight() {
   fi
   if [ -z "${BOARD_REPO:-}" ] || [ -z "${BOARD_FILE:-}" ] \
       || [ -z "${BOARD_ISSUES_FILE:-}" ]; then
-    PREFLIGHT_REASON="issue work requires board.file and board.issues-file"
+    PREFLIGHT_REASON="issue work requires board.repo, board.file, and board.issues-file"
     return 1
   fi
   local reason

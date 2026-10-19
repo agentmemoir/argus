@@ -88,7 +88,7 @@ def _build(
                 "and 'phases.repo', 'phases.branch', 'phases.remote' with it"
             )
     if "repair" in raw:
-        raise ConfigError("key 'repair' was removed: Argus runs the phase source only")
+        raise ConfigError("key 'repair' was removed: Argus runs no repair loop")
     for name in _OBJECT_KEYS:
         if name in raw and raw[name] is not None and not isinstance(raw[name], dict):
             raise ConfigError(f"invalid type for key '{name}': expected object")

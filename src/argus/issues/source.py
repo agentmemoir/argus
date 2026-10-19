@@ -40,7 +40,7 @@ class IssuesSource(_Reports, WorkSource):
                 or conventions.setting("board.issues-file", None) is None
             ):
                 raise ValueError(
-                    "issue source requires board.file and board.issues-file"
+                    "issue source requires board.repo and board.issues-file"
                 )
         except ValueError as exc:
             raise IssuesUnavailable("configuration", str(exc)) from exc
