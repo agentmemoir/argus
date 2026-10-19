@@ -223,15 +223,32 @@ def publish_phase(
                 "engine_written": engine_churn,
                 "summary": summarize(push_results, "publish"),
             }
+        receipt: dict[str, Any] = {}
+        receipt_result: dict[str, Any] = {}
         if outcome.get("ok") and commit_run_state:
-            receipt, receipt_result = _write_publication_receipt(
-                root,
-                phase,
-                reservation,
-                results,
-                engine_written=engine_churn,
-                pull_request=pull_request,
-            )
+            try:
+                receipt, receipt_result = _write_publication_receipt(
+                    root,
+                    phase,
+                    reservation,
+                    results,
+                    engine_written=engine_churn,
+                    pull_request=pull_request,
+                )
+            except ConfigError as exc:
+                # No receipt is written without both pushed heads and a pull
+                # request. The phase stays waiting; the next tick retries.
+                outcome = {
+                    "ok": False,
+                    "mode": "publish",
+                    "phase": f"{int(phase):06d}",
+                    "state": "RETRY",
+                    "repos": results,
+                    "error": str(exc),
+                    "hint": "the push and the pull request must both be recorded; "
+                    "no receipt was written, the next tick retries",
+                }
+        if outcome.get("ok") and commit_run_state:
             results.append(receipt_result)
             outcome["receipt"] = receipt
             # The group's own answer, for the caller: the shared pull request

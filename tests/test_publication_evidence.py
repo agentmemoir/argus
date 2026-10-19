@@ -8,6 +8,8 @@ from pathlib import Path
 import pytest
 
 from argus import conventions
+from argus.gitsync.git import ConfigError
+from argus.gitsync.group_publication import _write_publication_receipt
 from argus.gitsync.publish import mark_phase_published
 
 
@@ -54,3 +56,60 @@ def test_a_receipt_without_a_pull_request_is_not_published(tmp_path: Path) -> No
     assert result["ok"]
     assert result["action"] == "no-publish-evidence", result
     assert json.loads(path.read_text())["state"] == "awaiting_review"
+
+
+def _reservation() -> dict[str, object]:
+    return {"machine_id": "m", "reservation_id": "r", "generation": 1}
+
+
+def _stub_writer(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, head: str | None
+) -> None:
+    module = "argus.gitsync.group_publication"
+
+    def runstate(*_args: object, **_kwargs: object) -> Path:
+        return tmp_path
+
+    def run_dir(*_args: object, **_kwargs: object) -> Path:
+        return tmp_path
+
+    def no_group(*_args: object, **_kwargs: object) -> None:
+        return None
+
+    def published(*_args: object, **_kwargs: object) -> str | None:
+        return head
+
+    def branch(*_args: object, **_kwargs: object) -> str:
+        return "main"
+
+    monkeypatch.setattr(f"{module}.runstate_repo", runstate)
+    monkeypatch.setattr(f"{module}.phase_run_dir", run_dir)
+    monkeypatch.setattr(f"{module}._declared_group", no_group)
+    monkeypatch.setattr(f"{module}._published_head", published)
+    monkeypatch.setattr(f"{module}.current_branch", branch)
+    monkeypatch.setattr(f"{module}.integration_branch", branch)
+
+
+def test_the_receipt_writer_refuses_a_missing_head(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _stub_writer(monkeypatch, tmp_path, None)
+    with pytest.raises(ConfigError):
+        _write_publication_receipt(
+            tmp_path,
+            1,
+            _reservation(),
+            [],
+            pull_request="https://example.test/pr/1",
+        )
+
+
+def test_the_receipt_writer_refuses_no_pull_request(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _stub_writer(monkeypatch, tmp_path, "a" * 40)
+    results = [
+        {"repo": str(tmp_path), "ok": True, "action": "pushed", "after": "a" * 40},
+    ]
+    with pytest.raises(ConfigError):
+        _write_publication_receipt(tmp_path, 1, _reservation(), results)

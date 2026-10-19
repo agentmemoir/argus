@@ -125,6 +125,7 @@ def _scan(
     driver: Path = DRIVER, gitsync: Path = GITSYNC
 ) -> list[tuple[str, str, str, str, list[str]]]:
     findings: list[tuple[str, str, str, str, list[str]]] = []
+    counts: dict[tuple[str, str, str], int] = {}
     shell_texts = {
         f"driver/{path.name}": path.read_text()
         for path in sorted(driver.glob("*.sh"))
@@ -143,10 +144,14 @@ def _scan(
                     window = " ".join(text.splitlines()[max(0, i - 2) : i + 1])
                     if not REFUSAL_WORDS.search(window):
                         continue
-                # The owner function is part of the key: a new stop in a new
-                # function is not covered by an allowlist row for the same line
-                # text in another function.
-                anchor = f"fn:{owner}|{_normalize(line)}"
+                # The owner function, the rule, and the occurrence are the key:
+                # a new stop in a new function, or a second stop of the same
+                # form in an already-allowlisted function, is not covered by the
+                # row for the first occurrence.
+                base = f"fn:{owner}|{_normalize(line)}"
+                index = counts.get((rel, rule, base), 0) + 1
+                counts[(rel, rule, base)] = index
+                anchor = f"{base}#{index}"
                 helper = owner if owner in HELPER_STOPS else ""
                 callers = _callers(shell_texts, owner) if helper else []
                 findings.append((rel, rule, anchor, helper, callers))
@@ -163,9 +168,10 @@ def _scan(
             owner = _owner(spans, i)
             for rule, pattern in PY_RULES.items():
                 if pattern.search(line):
-                    findings.append(
-                        (rel, rule, f"fn:{owner}|{_normalize(line)}", "", [])
-                    )
+                    base = f"fn:{owner}|{_normalize(line)}"
+                    index = counts.get((rel, rule, base), 0) + 1
+                    counts[(rel, rule, base)] = index
+                    findings.append((rel, rule, f"{base}#{index}", "", []))
     return findings
 
 
@@ -233,8 +239,27 @@ def test_an_injected_stop_fails_the_tripwire(tmp_path: Path) -> None:
     assert (
         "driver/lib-driver-new.sh",
         "return_nonzero",
-        "fn:new_helper|new_helper() { return 1; }",
+        "fn:new_helper|new_helper() { return 1; }#1",
     ) in injected
+
+
+def test_a_duplicate_stop_in_an_allowed_function_fails(tmp_path: Path) -> None:
+    # The hardest case: a second stop of the same form and line text inside a
+    # function that already has an allowlisted one. The occurrence index makes
+    # it a new key.
+    driver = tmp_path / "driver"
+    driver.mkdir()
+    source = (DRIVER / "lib-driver-drive.sh").read_text()
+    needle = "_drive() {\n"
+    assert source.count(needle) == 1
+    (driver / "lib-driver-drive.sh").write_text(
+        source.replace(needle, needle + "  return 1\n", 1)
+    )
+    injected = _unexpected(driver, tmp_path)
+    assert any(
+        rule == "return_nonzero" and anchor == "fn:_drive|return 1#2"
+        for _rel, rule, anchor in injected
+    ), injected
 
 
 @pytest.mark.parametrize("rule", sorted(SHELL_INJECTIONS))

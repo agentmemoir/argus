@@ -135,7 +135,9 @@ def _publish_while_writing_check(base: Path) -> tuple[bool, str]:
             first = marker.read_text()
             time.sleep(1.1)
             second = marker.read_text()
-            result = publish_phase(pub, 100441)
+            result = publish_phase(
+                pub, 100441, pull_request="https://example.test/pr/1"
+            )
     finally:
         conventions.override({"board.branch": old_branch})
     ok = (
@@ -176,7 +178,9 @@ def _publish_still_refuses_check(base: Path) -> list[tuple[str, object, str]]:
         # 1. A modified tracked source file in the public checkout.
         pub, _nested, _run = _publish_fixture(base, "publish-dirt-source", 100442)
         (pub / "a.txt").write_text("one\nunreviewed edit\n")
-        res: dict[str, Any] = publish_phase(pub, 100442)
+        res: dict[str, Any] = publish_phase(
+            pub, 100442, pull_request="https://example.test/pr/1"
+        )
         results.append(
             (
                 "a modified tracked source file still blocks",
@@ -190,7 +194,7 @@ def _publish_still_refuses_check(base: Path) -> list[tuple[str, object, str]]:
         pub, nested, _run = _publish_fixture(base, "publish-dirt-staged", 100443)
         (nested / "stray.txt").write_text("unreviewed\n")
         git(nested, "add", "stray.txt")
-        res = publish_phase(pub, 100443)
+        res = publish_phase(pub, 100443, pull_request="https://example.test/pr/1")
         results.append(
             (
                 "a staged change outside the phase still blocks",
@@ -205,7 +209,7 @@ def _publish_still_refuses_check(base: Path) -> list[tuple[str, object, str]]:
         # measured: this is how the helper behaved before the change too.
         pub, nested, run_dir = _publish_fixture(base, "publish-inside", 100445)
         (run_dir / "findings.json").write_text('{"open": []}\n')
-        res = publish_phase(pub, 100445)
+        res = publish_phase(pub, 100445, pull_request="https://example.test/pr/1")
         tracked_files: str = git(nested, "ls-files", "runs")[1]
         pushed = "runs/phase-100445/findings.json" in tracked_files.splitlines()
         results.append(

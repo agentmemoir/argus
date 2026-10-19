@@ -21,10 +21,18 @@ def git_settings(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_separate_destinations_publish(tmp_path: Path) -> None:
     pub, _nested, run_dir = _publish_fixture(tmp_path, "separate", 100451)
-    result = publish_phase(pub, 100451)
+    result = publish_phase(pub, 100451, pull_request="https://example.test/pr/1")
     assert result["ok"], result
     assert result["state"] == "AWAITING_REVIEW", result
     assert (run_dir / "publication.json").is_file()
+
+
+def test_no_pull_request_returns_retry_without_a_receipt(tmp_path: Path) -> None:
+    pub, _nested, run_dir = _publish_fixture(tmp_path, "no-pull-request", 100453)
+    result = publish_phase(pub, 100453)
+    assert result["ok"] is False, result
+    assert result["state"] == "RETRY", result
+    assert not (run_dir / "publication.json").exists()
 
 
 def test_a_shared_destination_returns_retry_without_a_push(tmp_path: Path) -> None:

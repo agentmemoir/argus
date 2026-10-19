@@ -69,7 +69,7 @@ def _tidy_and_dispatch_checks(base: Path) -> list[tuple[str, object, str]]:
         (pub2 / "first.txt").write_text("the first phase's code\n")
         git(pub2, "add", "first.txt")
         git(pub2, "commit", "-q", "-m", "phase 100456: the first change")
-        publish_phase(pub2, 100456)
+        publish_phase(pub2, 100456, pull_request="https://example.test/pr/1")
         (nested2 / "phases").mkdir(parents=True, exist_ok=True)
         (nested2 / "phases" / "phase-100457-dispatch-next.md").write_text("x\n")
         (nested2 / "phases" / "phase-100458-dispatch-after.md").write_text("x\n")
