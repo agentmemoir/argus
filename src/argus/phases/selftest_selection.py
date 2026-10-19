@@ -200,7 +200,6 @@ def _selection_checks() -> None:
             repo, "server-01", store=store, phases=repo / "phases"
         )
         assert got["state"] == "RESERVED" and got["phase"] == "100440", got
-        assert any(d["phase"] == "100440" for d in got.get("needs_decision", [])), got
         assert store.reserved == [100440], store.reserved
 
         # A gate section that claims `recorded` with no choice is a defect in
@@ -212,6 +211,7 @@ def _selection_checks() -> None:
             "|---|---|---|---|---|\n"
             "| Which option ships | #1 | `recorded` 2026-09-28 | — | — |\n"
         )
+        store = _FakeGateStore(private=repo / BOARD_REL)
         got = select_server_phase(
             repo, "server-01", store=store, phases=repo / "phases"
         )

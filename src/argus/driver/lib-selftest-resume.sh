@@ -186,8 +186,24 @@ selftest_case_resume() {
     printf '      DRIVE_RC=[%s]\n' "${_DRIVE_RC:-}"
     printf '      marker=[%s]\n' "$(tr '\n' ' ' <"$HALT" 2>/dev/null || echo absent)"
   fi
+  # `--resume N` must not consume a record that names another phase: that halt
+  # is still the queue's work. The named phase still launches.
+  rm -f "$HALT"
+  halt_record_write 100499 "$rel" "$run_dir" blocked 1 rc
+  launches="$(selftest_resume_launches)"
+  exec 9>&- || true
+  resume_out="$( ( resume_cmd "$phase" ) 2>&1 )" || true
+  wait_phase_window_gone
+  sleep 0.3
+  if [ "$(selftest_resume_launches)" != "$launches" ] && [ -f "$HALT_RECORD" ] \
+      && grep -q '"phase": "100499"' "$HALT_RECORD"; then
+    echo "ok: --resume N leaves another phase's record in place"
+  else
+    echo "FAIL: --resume N consumed another phase's record"; fail=1
+    printf '      resume_cmd said: %s\n' "${resume_out:-<nothing>}"
+  fi
 
-  rm -f "$HALT" "$run_dir/ledger.json"
+  rm -f "$HALT" "$HALT_RECORD" "$run_dir/ledger.json"
   DRIVER_STUB_SLEEP="$old_sleep"
   DRIVER_STUB_BOARD_FENCE="$old_fence"
   DRIVER_STUB_COORDINATION="$old_coordination"

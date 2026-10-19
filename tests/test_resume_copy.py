@@ -30,7 +30,6 @@ import subprocess
 from pathlib import Path
 
 import pytest
-import yaml
 
 LIVE = os.environ.get("ARGUS_COPY_RUN")
 PIPELINE = os.environ.get("ARGUS_COPY_PIPELINE")
@@ -55,8 +54,8 @@ def _developer_signal(log_path: Path) -> str:
 
 def _run_destination(pipeline: Path, number: int, phase_file: str) -> str:
     """The pipeline's run_dir for this phase, with its inputs filled in."""
-    document = yaml.safe_load(pipeline.read_text())
-    template = str((document or {}).get("run_dir") or "")
+    match = re.search(r"(?m)^run_dir:[ \t]*(\S+)", pipeline.read_text())
+    template = match.group(1) if match is not None else ""
     try:
         return template.format(phase_number=number, phase_file=phase_file)
     except (KeyError, ValueError) as exc:

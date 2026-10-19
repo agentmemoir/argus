@@ -10,6 +10,7 @@ import json
 import sys
 import tempfile
 from pathlib import Path
+from typing import Any
 
 import test_config_cli
 from argus.config import cli as cfgmod
@@ -145,7 +146,7 @@ def test_bad_values_name_key():
         expect_error(lambda: cfgmod.load(str(path)), "driver.include")
 
 
-def _load_with_stderr(path):
+def _load_with_stderr(path: Path) -> tuple[Any, str]:
     err = io.StringIO()
     with contextlib.redirect_stderr(err):
         config = cfgmod.load(str(path))

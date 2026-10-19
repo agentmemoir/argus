@@ -110,7 +110,7 @@ def _known_children(prefix: str) -> set[str]:
 
 def _unknown_keys(node: dict[str, Any], prefix: str = "") -> list[str]:
     """Every key, including a nested one, that the schema does not name."""
-    if prefix in _FREE_FORM_OBJECTS or not isinstance(node, dict):
+    if prefix in _FREE_FORM_OBJECTS:
         return []
     unknown: list[str] = []
     known_children = _known_children(prefix)

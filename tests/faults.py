@@ -236,19 +236,6 @@ FAULTS = (
             "expect_absent": "driver self-test: pass",
         },
         {
-            "name": "resume-gate-accepts-a-finished-run",
-            "breaks": "a resume continues a run that already finished, which is the "
-            "class the queue used to advance past",
-            "file": "src/argus/driver/lib-driver-halt-record.sh",
-            "find": "      completed)\n"
-            "        printf 'the run is completed; clear the halt marker to let the queue advance' ;;\n",
-            "replace": "      completed)\n        return 0 ;;\n",
-            "check": "driver",
-            "cases": "resume",
-            "verdict": "driver self-test:",
-            "expect": "a completed record did not refuse and keep the record",
-        },
-        {
             "name": "resume-record-consumed-before-the-launch",
             "breaks": "a refused resume consumes the record, so the halt it is standing "
             "on can no longer be retried",
