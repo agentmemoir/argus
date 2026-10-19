@@ -357,38 +357,37 @@ print((repair or {}).get("error", "") if isinstance(repair, dict) else "")' \
            exit 0
          fi
           # glide can exit before writing run.json, as a configuration error
-          # does. Only when there is genuinely no run result may the session log
-          # stand in for it. A run.json that exists but does not parse is a
-          # damaged result, not a missing one: `phase_state` returns empty for
-          # both, so the file is tested here by name. A damaged result keeps the
-          # empty state, the `unknown` marker, and the resume gate's refusal.
+          # does. A run.json that exists but does not parse is a damaged
+          # result, not a missing one: `phase_state` returns empty for both, so
+          # the file is tested here by name.
           local run_dir
           run_dir="$(phase_run_dir "$number" "$rel")"
-          if [ ! -f "$run_dir/run.json" ]; then
-            halt_state_from_session "$session_log" "$session_log_offset"
-            if [ -n "$HALT_LOG_STATE" ]; then
-              state="$HALT_LOG_STATE"
-              halt_reason="$HALT_LOG_REASON"
-              state_source="session-log"
+          if [ "$rc" = 2 ]; then
+            # D65: invalid pipeline inputs. This is a start-time configuration
+            # halt, and it names the fix. Only an absent run.json may take its
+            # state from the session log.
+            if [ ! -f "$run_dir/run.json" ]; then
+              halt_state_from_session "$session_log" "$session_log_offset"
+              if [ -n "$HALT_LOG_STATE" ]; then
+                state="$HALT_LOG_STATE"
+                halt_reason="$HALT_LOG_REASON"
+                state_source="session-log"
+              fi
             fi
-          fi
-          printf '%s %s rc=%s state=%s at %s\n' \
-            "${work_kind:-phase}" "$number" "$rc" "${state:-unknown}" "$(ts)" >"$HALT"
-          # The record is written beside the marker, and only here: an operator
-          # stop or a signal leaves a run the board claim recovers, and a record
-          # would make the resume gate refuse it.
-          # The record keeps the raw state, which may be empty: the resume gate
-          # tells an absent run.json (the interrupted class) from a present but
-          # damaged one, and an `unknown` placeholder would hide that difference.
-          # A state read from the session log stands in for the missing run.json,
-          # because it is what glide recorded the run ended as.
-          halt_record_write "$number" "$rel" "$run_dir" \
-            "$state" "$rc" "$state_source" "$halt_reason"
-          log "halt-start: phase $number rc=$rc state=${state:-unknown} source=$state_source; marker written"
-          # The title is set before the window closes, so the halt survives the
-          # phase window going away and the idle display taking over.
-          tmux_set_title "HALTED ${work_kind:-phase} $number (rc=$rc)"
-          notify_phase "$rel" stopped "" "$rc" ;;
+            printf '%s %s rc=%s state=%s at %s\n' \
+              "${work_kind:-phase}" "$number" "$rc" "${state:-unknown}" "$(ts)" >"$HALT"
+            halt_record_write "$number" "$rel" "$run_dir" \
+              "$state" "$rc" "$state_source" "$halt_reason"
+            log "halt-start: phase $number rc=$rc state=${state:-unknown} source=$state_source; the pipeline inputs are invalid; fix commands.glide, pipeline, or the phase declaration, then clear the halt"
+            tmux_set_title "HALTED ${work_kind:-phase} $number (rc=$rc)"
+            notify_phase "$rel" stopped "" "$rc"
+          else
+            # D16a: glide exited non-zero with no run result and no recorded job
+            # failure. The two-tick repair owns the recovery, so this path
+            # writes no halt marker and no halt record; the next tick retries.
+            log "repair-pending: ${work_kind:-phase} $number rc=$rc state=${state:-unknown}; no run result, the next tick retries"
+            tmux_set_title "${work_kind:-phase} $number repair pending"
+          fi ;;
   esac
   rm -f "$CURRENT" "$PIDFILE"
   exit "$rc"
