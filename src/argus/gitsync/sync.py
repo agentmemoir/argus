@@ -12,6 +12,7 @@ from argus.gitsync.git import (
     classify,
     configured_remote_urls,
     current_branch,
+    degraded,
     git,
     integration_branch,
     is_git_repo,
@@ -51,13 +52,12 @@ def resync_integration(repo: str | Path, base: str | None = None) -> dict[str, A
     base = base or integration_branch(repo)
     info: dict[str, Any] = {"repo": str(repo), "mode": "resync", "base": base}
     if not is_git_repo(repo):
-        return blocked(info, "not a git working tree")
+        return degraded(info, "not a git working tree; the next tick retries")
     here = current_branch(repo)
     if not here:
-        return blocked(
+        return degraded(
             info,
-            "detached HEAD; refusing to move the working tree",
-            hint="check out the phase branch, then rerun",
+            "detached HEAD; the resync is retried once the phase branch is checked out",
         )
     info["branch"] = here
     if here == base:
@@ -75,22 +75,21 @@ def resync_integration(repo: str | Path, base: str | None = None) -> dict[str, A
         rc_r, from_base, _ = git(repo, "config", "--get", f"branch.{base}.remote")
         remote = from_base if rc_r == 0 else None
     if not remote:
-        return blocked(
+        return degraded(
             info,
-            why or "no remote is configured",
-            hint="the integration branch cannot be merged in "
-            "without a remote to read it from",
+            (why or "no remote is configured") + "; the next tick retries the resync",
         )
     rc, _, err = git(repo, "fetch", "--prune", remote, timeout=FETCH_TIMEOUT_S)
     if rc != 0:
-        return blocked(info, f"git fetch {remote} failed", detail=err)
+        return degraded(
+            info, f"git fetch {remote} failed; the next tick retries", detail=err
+        )
     upstream = f"{remote}/{base}"
     rc, _, _ = git(repo, "rev-parse", "--verify", upstream)
     if rc != 0:
-        return blocked(
+        return degraded(
             info,
-            f"{upstream} does not exist after fetch",
-            hint="the integration branch is missing on the remote",
+            f"{upstream} does not exist after fetch; the next tick retries",
         )
     local, tip, ahead, behind, relation = classify(repo, upstream)
     info.update(

@@ -9,7 +9,7 @@ from typing import Any
 
 from argus import conventions
 from argus.gitsync.git import (
-    blocked,
+    degraded,
     dirty_paths,
     git,
     integration_branch,
@@ -37,29 +37,29 @@ def commit_issue_state(
     info: dict[str, Any] = {"repo": str(private), "issue": number, "pathspecs": scopes}
     branch, _remote, remote_branch, why = resolve_upstream(private)
     if why:
-        return blocked(info, why)
+        return degraded(info, why)
     if branch != integration_branch(private):
-        return blocked(info, "private issue state must stay on the integration branch")
+        return degraded(info, "private issue state must stay on the integration branch")
     if remote_branch != branch:
-        return blocked(info, "private issue state upstream names a different branch")
+        return degraded(info, "private issue state upstream names a different branch")
     rc, staged, _err = git(private, "diff", "--cached", "--name-only", "-z")
     if rc != 0:
-        return blocked(info, "cannot read the private index")
+        return degraded(info, "cannot read the private index")
     outside = [p for p in staged.split("\0") if p and not inside_scope(p, scopes)]
     if outside:
-        return blocked(
+        return degraded(
             info, "staged changes exist outside the current issue", staged=outside
         )
     changed = [p for p in dirty_paths(private) if inside_scope(p, scopes)]
     if changed:
         rc, out, err = git(private, "--literal-pathspecs", "add", "-A", "--", *scopes)
         if rc != 0:
-            return blocked(info, f"could not stage issue state: {err or out}")
+            return degraded(info, f"could not stage issue state: {err or out}")
         rc, out, err = git(
             private, "commit", "-q", "-m", f"runs: close out issue {number} run state"
         )
         if rc != 0:
-            return blocked(info, f"could not commit issue state: {err or out}")
+            return degraded(info, f"could not commit issue state: {err or out}")
     # Push even when clean: a prior attempt may have committed and failed to push.
     for attempt in (1, 2):
         if before_push is not None:
@@ -77,10 +77,10 @@ def commit_issue_state(
         if attempt == 1:
             synced = sync_one(private, "start")
             if not synced["ok"]:
-                return blocked(
+                return degraded(
                     info, "private remote could not be integrated", detail=synced
                 )
-    return blocked(info, "issue run-state push failed", detail=result)
+    return degraded(info, "issue run-state push failed", detail=result)
 
 
 def mode_issue_clean(

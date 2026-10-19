@@ -230,8 +230,8 @@ def _group_branch_collision_checks(base: Path) -> list[tuple[str, object, str]]:
     )
     results.append(
         (
-            "two groups deriving one branch are refused",
-            not clash.get("ok") and "also the branch for group" in json.dumps(clash),
+            "two groups deriving one branch are reported and continued",
+            clash.get("ok") and "also the branch for group" in json.dumps(clash),
             f"{clash.get('summary')} {json.dumps(clash)}",
         )
     )

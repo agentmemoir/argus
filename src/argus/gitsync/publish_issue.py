@@ -81,7 +81,7 @@ def publish_issue(
             return dict(
                 info,
                 ok=False,
-                state="BLOCKED",
+                state="RETRY",
                 error="public checkout has uncommitted changes",
                 dirty=public_dirty,
             )
@@ -91,12 +91,12 @@ def publish_issue(
         synced = sync_all(root, "push", branch=branch)
         results.append(synced)
         if not synced["ok"]:
-            return dict(info, ok=False, state="BLOCKED", summary=synced["summary"])
+            return dict(info, ok=False, state="RETRY", summary=synced["summary"])
         clean = commit_issue_state(root, number, before_push=fence)
         results.append(clean)
         if not clean["ok"]:
             return dict(
-                info, ok=False, state="BLOCKED", summary=summarize([clean], "publish")
+                info, ok=False, state="RETRY", summary=summarize([clean], "publish")
             )
         run = private / scopes[0]
         dirty = [private / p for p in dirty_paths(private)]
@@ -117,7 +117,7 @@ def publish_issue(
             return dict(
                 info,
                 ok=False,
-                state="BLOCKED",
+                state="RETRY",
                 error="working tree is dirty after issue cleanup",
                 dirty=real,
                 engine_written=churn,
@@ -125,11 +125,11 @@ def publish_issue(
         resync = mode_resync(root)
         results.append(resync)
         if not resync["ok"]:
-            return dict(info, ok=False, state="BLOCKED", summary=resync["summary"])
+            return dict(info, ok=False, state="RETRY", summary=resync["summary"])
         synced = sync_all(root, "push", branch=branch)
         results.append(synced)
         if not synced["ok"]:
-            return dict(info, ok=False, state="BLOCKED", summary=synced["summary"])
+            return dict(info, ok=False, state="RETRY", summary=synced["summary"])
         for checkout in (root, private):
             fence()
             pushed = _push_one(checkout)
@@ -138,7 +138,7 @@ def publish_issue(
                 return dict(
                     info,
                     ok=False,
-                    state="BLOCKED",
+                    state="RETRY",
                     summary=summarize([pushed], "publish"),
                 )
         return dict(

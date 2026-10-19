@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from argus.conventions import phase_run_dir
-from argus.gitsync.git import blocked
+from argus.gitsync.git import blocked, degraded
 from argus.gitsync.receipts import phase_receipt
 from argus.gitsync.runstate import (
     _commit_and_push_run_state,
@@ -89,12 +89,10 @@ def mark_phase_published(
         # A receipt with no pushed head and no recorded missing head is not a
         # publish receipt: `_write_publication_receipt` always records one or the
         # other. Leave it for a later tick; there is nothing to mark.
-        return dict(
+        return degraded(
             info,
-            ok=False,
+            "the receipt records no pushed head; nothing to mark, the next tick retries",
             action="no-publish-evidence",
-            blockers=["the receipt records no pushed head; nothing to mark"],
-            hint="the phase keeps waiting until its publish records a head",
         )
     path = phase_run_dir(root, int(phase)) / "publication.json"
     data = dict(receipt)

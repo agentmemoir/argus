@@ -19,6 +19,7 @@ from argus.gitsync.git import (
     ConfigError,
     _is_private_path,
     blocked,
+    degraded,
     dirty_paths,
     git,
     git_toplevel,
@@ -115,7 +116,7 @@ def _commit_and_push_run_state(
     branch, remote, _remote_branch, why = resolve_upstream(repo)
     info: dict[str, Any] = {"repo": str(repo), "pathspec": pathspec}
     if why:
-        return blocked(info, why)
+        return degraded(info, why + "; the next tick retries")
     branch = cast("str", branch)
     remote = cast("str", remote)
     _, staged, _ = git(repo, "diff", "--cached", "--name-only")
@@ -133,13 +134,20 @@ def _commit_and_push_run_state(
             )
     rc, _, err = git(repo, "add", "-A", "--", pathspec)
     if rc != 0:
-        return blocked(info, f"could not stage {pathspec}: {err}")
-    rc, out, err = git(repo, "commit", "-q", "-m", message)
+        return degraded(
+            info, f"could not stage {pathspec}: {err}; the next tick retries"
+        )
+    # Scoped to the pathspec: a staged path from another phase stays staged and
+    # cannot ride this commit.
+    rc, out, err = git(repo, "commit", "-q", "-m", message, "--", pathspec)
     if rc != 0:
         combined = err or out
         if "nothing to commit" in combined.lower():
             return dict(info, ok=True, action="clean", hint=message)
-        return blocked(info, f"commit of run state failed: {combined}")
+        return degraded(
+            info,
+            f"commit of run state failed: {combined}; the next tick retries",
+        )
     for attempt in (1, 2):
         rc, out, err = git(repo, "push", remote, branch)
         if rc == 0:
@@ -150,15 +158,15 @@ def _commit_and_push_run_state(
         if attempt == 1:
             res = sync_one(repo, "start")
             if not res.get("ok"):
-                return blocked(
+                return degraded(
                     info,
-                    "remote moved and could not be integrated before pushing run state",
+                    "remote moved and could not be integrated before pushing run state; "
+                    "the next tick retries",
                     detail=res.get("summary"),
                 )
-    return blocked(
+    return degraded(
         info,
-        f"push of run state failed: {err or out}",
-        hint="resolve the remote by hand, then rerun",
+        f"push of run state failed: {err or out}; the next tick retries",
     )
 
 
@@ -287,19 +295,22 @@ def commit_leftover_run_state(
             ]
             inside = [p for p in paths if p == pathspec or p.startswith(prefix)]
         if outside:
+            # The commit is scoped to the phase pathspec, so a foreign staged
+            # path cannot ride it. Report it and keep going.
             results.append(
-                blocked(
+                degraded(
                     {"repo": str(repo)},
-                    "private checkout has changes outside the current phase"
+                    "private checkout has changes outside the current phase; "
+                    "they stay staged and are reported, the next tick retries"
                     if phase is not None
-                    else "private checkout has changes outside runs/",
+                    else "private checkout has changes outside runs/; they stay "
+                    "staged and are reported, the next tick retries",
                     dirty=outside,
-                    hint="commit or move them before publishing this phase",
                 )
             )
-        elif inside:
+        if inside:
             results.append(_commit_and_push_run_state(repo, message, pathspec=pathspec))
-        else:
+        elif not outside:
             results.append({"repo": str(repo), "ok": True, "action": "clean"})
     ok = all(r.get("ok") for r in results)
     return {

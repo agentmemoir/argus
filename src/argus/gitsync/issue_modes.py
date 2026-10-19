@@ -14,8 +14,8 @@ from argus.board.reservations import (
 from argus.gitsync.branch import branch_phase_checkouts
 from argus.gitsync.git import (
     ConfigError,
-    blocked,
     current_branch,
+    degraded,
     git,
     integration_branch,
     summarize,
@@ -68,7 +68,7 @@ def mode_issue_checkpoint(root: str | Path) -> dict[str, Any]:
     private, _tasks = private_layout(root)
     branch = current_branch(root)
     if not branch.startswith("issue/"):
-        return blocked({"repo": str(root)}, "checkpoint needs an issue branch")
+        return degraded({"repo": str(root)}, "checkpoint needs an issue branch")
     number = issue_number(branch.split("/", 1)[1].split("-", 1)[0])
     reservation = load_issue_reservation(root, number)
     store = ReservationStore(root, issues=True)
@@ -78,16 +78,18 @@ def mode_issue_checkpoint(root: str | Path) -> dict[str, Any]:
         args.append(f":(exclude,literal){private.relative_to(root).as_posix()}")
     rc, out, err = git(root, *args)
     if rc != 0:
-        return blocked({"repo": str(root)}, f"could not stage issue work: {err or out}")
+        return degraded(
+            {"repo": str(root)}, f"could not stage issue work: {err or out}"
+        )
     rc, staged, _err = git(root, "diff", "--cached", "--name-only")
     if rc != 0:
-        return blocked({"repo": str(root)}, "cannot read the issue index")
+        return degraded({"repo": str(root)}, "cannot read the issue index")
     if staged:
         rc, out, err = git(
             root, "commit", "-q", "-m", f"checkpoint: work in progress on {branch}"
         )
         if rc != 0:
-            return blocked(
+            return degraded(
                 {"repo": str(root)}, f"could not commit issue work: {err or out}"
             )
     store.assert_owner(reservation)

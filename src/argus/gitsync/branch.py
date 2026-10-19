@@ -9,6 +9,7 @@ from argus.conventions import board_repo
 from argus.gitsync.git import (
     blocked,
     current_branch,
+    degraded,
     dirty_paths,
     git,
     integration_branch,
@@ -66,7 +67,9 @@ def ensure_phase_branch(
     base = base or integration_branch(repo)
     info: dict[str, Any] = {"repo": str(repo), "branch": branch, "base": base}
     if not is_git_repo(repo):
-        return blocked(info, "not a git working tree")
+        return degraded(
+            info, "not a git working tree; the branch step is retried next tick"
+        )
     # Recorded up front so every return below, blocked ones included, reports
     # where the checkout really is rather than only what was asked of it.
     info["after_branch"] = current_branch(repo) or "(detached)"
@@ -74,18 +77,14 @@ def ensure_phase_branch(
         here = current_branch(repo)
         rc, _, err = git(repo, "rev-parse", "--verify", base)
         if rc != 0:
-            return blocked(
+            return degraded(
                 info,
-                f"base branch {base!r} does not exist",
-                hint="the integration branch is missing; refusing to "
-                "publish run state with no starting point",
+                f"base branch {base!r} does not exist; run state is retried next tick",
             )
         if here and here != base:
-            return blocked(
+            return degraded(
                 info,
-                f"checkout is on {here!r}, not {base!r}",
-                hint="run state is published from the integration branch; "
-                "moving the working tree is an operator decision",
+                f"checkout is on {here!r}, not {base!r}; the next tick retries",
             )
         return dict(
             info,
@@ -112,22 +111,19 @@ def ensure_phase_branch(
     if why or not remote:
         rc_r, remote, _ = git(repo, "config", "--get", f"branch.{base}.remote")
         if rc_r != 0 or not remote:
-            return blocked(
+            return degraded(
                 info,
-                why or "no remote is configured",
-                hint="the phase branch cannot be published; "
-                "refusing to leave it with no remote copy",
+                (why or "no remote is configured")
+                + "; the branch cut is retried when the remote returns",
             )
     # The base is checked before the current branch, so a missing integration
     # branch is reported as itself rather than as "you are on the wrong
     # branch", which is what the reverse order would say.
     rc, _, err = git(repo, "rev-parse", "--verify", base)
     if rc != 0:
-        return blocked(
+        return degraded(
             info,
-            f"base branch {base!r} does not exist",
-            hint="the integration branch is missing; refusing to "
-            "invent a starting point",
+            f"base branch {base!r} does not exist; the branch cut is retried next tick",
         )
     if here and here != base:
         # The integration branch is where the checkout is left between phases,
@@ -164,10 +160,9 @@ def ensure_phase_branch(
         # can be joined.
         rc, out, err = git(repo, "checkout", branch)
         if rc != 0:
-            return blocked(
+            return degraded(
                 info,
-                f"could not check out {branch!r}: {err or out}",
-                hint="resolve by hand; nothing was switched",
+                f"could not check out {branch!r}: {err or out}; the next tick retries",
             )
         return dict(
             info,
@@ -179,10 +174,9 @@ def ensure_phase_branch(
         )
     rc, out, err = git(repo, "checkout", "-b", branch, base)
     if rc != 0:
-        return blocked(
+        return degraded(
             info,
-            f"could not create {branch!r}: {err or out}",
-            hint="resolve by hand; nothing was switched",
+            f"could not create {branch!r}: {err or out}; the next tick retries",
         )
     # Publish the new branch and give it an upstream straight away. Two
     # reasons, both load-bearing: the sync helper refuses a branch with no
@@ -191,11 +185,10 @@ def ensure_phase_branch(
     # so it publishes no unreviewed work.
     rc, out, err = git(repo, "push", "-q", "-u", remote, branch)
     if rc != 0:
-        return blocked(
+        return degraded(
             info,
-            f"could not publish {branch!r} to {remote}: {err or out}",
-            hint="the phase branch must exist on the remote before the phase "
-            "starts; resolve by hand",
+            f"could not publish {branch!r} to {remote}: {err or out}; "
+            "the phase continues on it and the next tick retries the push",
         )
     return dict(
         info,

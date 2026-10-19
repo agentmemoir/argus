@@ -8,6 +8,7 @@ from typing import Any
 from argus.gitsync.git import (
     blocked,
     current_branch,
+    degraded,
     git,
     integration_branch,
     is_git_repo,
@@ -54,7 +55,7 @@ def tidy_published_checkout(
         "branch": here or "(detached)",
     }
     if not is_git_repo(repo):
-        return blocked(info, "not a git working tree")
+        return degraded(info, "not a git working tree; the tidy is retried next tick")
     if not here or here == base:
         return dict(
             info,
@@ -120,10 +121,10 @@ def return_to_integration(repo: str | Path, base: str | None = None) -> dict[str
     base = base or integration_branch(repo)
     info: dict[str, Any] = {"repo": str(repo), "base": base}
     if not is_git_repo(repo):
-        return blocked(info, "not a git working tree")
+        return degraded(info, "not a git working tree; the tidy is retried next tick")
     rc, dirty, _ = git(repo, "status", "--porcelain")
     if rc != 0:
-        return blocked(info, "cannot read the working tree status")
+        return degraded(info, "cannot read the working tree status; retrying next tick")
     if dirty.strip():
         return blocked(
             info,
@@ -133,11 +134,9 @@ def return_to_integration(repo: str | Path, base: str | None = None) -> dict[str
         )
     rc, _, _ = git(repo, "rev-parse", "--verify", base)
     if rc != 0:
-        return blocked(
+        return degraded(
             info,
-            f"integration branch {base!r} does not exist",
-            hint="the integration branch is missing; refusing to "
-            "move the checkout with no destination",
+            f"integration branch {base!r} does not exist; the tidy is retried",
         )
     here = current_branch(repo)
     if here == base:
@@ -148,14 +147,15 @@ def return_to_integration(repo: str | Path, base: str | None = None) -> dict[str
             hint=f"already on {base}",
         )
     if not here:
-        return blocked(
+        return degraded(
             info,
-            "the current branch is not readable",
-            hint="a detached HEAD is an operator decision, not something to guess at",
+            "the current branch is not readable; the tidy is retried next tick",
         )
     rc, _, err = git(repo, "checkout", base)
     if rc != 0:
-        return blocked(info, f"could not check out {base!r}: {err.strip()}")
+        return degraded(
+            info, f"could not check out {base!r}: {err.strip()}; retrying next tick"
+        )
     return dict(
         info,
         ok=True,

@@ -203,9 +203,9 @@ def _phase_branch_name_checks(base: Path) -> list[tuple[str, object, str]]:
     clash: dict[str, Any] = assert_phase_branch_unique(root, 100440, name)
     results.append(
         (
-            "a behaviour another phase also claims is refused",
-            (not clash["ok"]) and clash_name in clash["blockers"][-1],
-            f"blockers={clash.get('blockers')}",
+            "a behaviour another phase also claims is reported and continued",
+            clash["ok"] and clash_name in str(clash.get("warning")),
+            f"warning={clash.get('warning')}",
         )
     )
 
@@ -233,10 +233,10 @@ def _phase_branch_name_checks(base: Path) -> list[tuple[str, object, str]]:
     )
     results.append(
         (
-            "a behaviour another phase in the configured folder claims is refused",
-            (not same_name_only_in_derived["ok"])
-            and clash_name in same_name_only_in_derived["blockers"][-1],
-            f"blockers={same_name_only_in_derived.get('blockers')}",
+            "a behaviour another phase in the configured folder claims is reported",
+            same_name_only_in_derived["ok"]
+            and clash_name in str(same_name_only_in_derived.get("warning")),
+            f"warning={same_name_only_in_derived.get('warning')}",
         )
     )
     relative: dict[str, Any] = assert_phase_branch_unique(
@@ -245,8 +245,8 @@ def _phase_branch_name_checks(base: Path) -> list[tuple[str, object, str]]:
     results.append(
         (
             "a relative configured folder resolves against the repository root",
-            (not relative["ok"]) and clash_name in relative["blockers"][-1],
-            f"blockers={relative.get('blockers')}",
+            relative["ok"] and clash_name in str(relative.get("warning")),
+            f"warning={relative.get('warning')}",
         )
     )
 

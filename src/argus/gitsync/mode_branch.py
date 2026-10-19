@@ -6,13 +6,13 @@ from pathlib import Path
 from typing import Any
 
 from argus.gitsync.branch import branch_phase_checkouts
-from argus.gitsync.git import blocked, git, integration_branch, summarize
+from argus.gitsync.git import git, integration_branch, summarize
 from argus.gitsync.paths import (
     assert_group_branch_unique,
     assert_phase_branch_unique,
     group_branch,
 )
-from argus.gitsync.review import open_predecessor, phase_work_on_integration
+from argus.gitsync.review import open_predecessor
 
 
 def mode_branch(
@@ -50,27 +50,18 @@ def mode_branch(
         phases_dir,
         branch=group_branch(root, group, phases_dir) if group else None,
     )
+    # A duplicate branch name is reported, not refused. The phase continues on
+    # the branch it derives; the warning names the collision for the operator.
+    warnings: list[str] = []
     if not unique["ok"]:
-        return {
-            "ok": False,
-            "mode": "branch",
-            "branch": unique["branch"],
-            "repos": [unique],
-            "summary": summarize([unique], "branch"),
-        }
+        warnings.extend(unique.get("blockers") or [])
     branch = unique["branch"]
     if group:
         # A group branch comes from the group's lowest member, so two groups can
         # derive one name even when no phase branch collides with it.
         shared = assert_group_branch_unique(root, branch, group, phases_dir)
         if not shared["ok"]:
-            return {
-                "ok": False,
-                "mode": "branch",
-                "branch": branch,
-                "repos": [unique, shared],
-                "summary": summarize([shared], "branch"),
-            }
+            warnings.extend(shared.get("blockers") or [])
     # The base is the open predecessor's branch when there is one. Without this
     # the phase starts from the integration branch, which does not contain the
     # previous phase's code, and the phase fails on a symbol that is not there.
@@ -99,56 +90,17 @@ def mode_branch(
                 f"refs/remotes/origin/{predecessor['branch']}",
             )
         if rc != 0:
-            # The branch is gone and this phase is still treated as open, so
-            # there is no tree to build on and no proof the work landed. Naming
-            # the phase, the pull request and the missing proof is the point:
-            # this is the refusal the line retried silently for two days, and
-            # the line an operator reads has to say what to do about it.
-            landed = phase_work_on_integration(root, predecessor["phase"])
-            reason = (
+            # The predecessor branch is gone. The phase's own branch is the
+            # safe base; the warning names the missing branch and pull request.
+            # Nothing here halts the line.
+            warnings.append(
                 f"predecessor phase {predecessor['phase']:06d} names base "
-                f"{predecessor['branch']!r}, which does not exist in this "
-                f"checkout, and nothing confirms its pull request "
-                f"{predecessor.get('pull_request') or '(none recorded)'} "
-                f"was merged"
+                f"{predecessor['branch']!r}, which does not exist; using the "
+                f"phase's own branch (pull request "
+                f"{predecessor.get('pull_request') or '(none recorded)'})"
             )
-            if landed.get("github", {}).get("state") == "unknown":
-                reason += (
-                    f" (GitHub could not be asked: "
-                    f"{landed['github'].get('detail')}). A squash merge "
-                    f"of several commits leaves no local trace, so the "
-                    f"commit, content and patch tests cannot confirm it; "
-                    f"restore gh and rerun"
-                )
-            else:
-                reason += (
-                    " (its branch was deleted and no local proof of the "
-                    "merge remains: restore the branch, or let the merge "
-                    "check record the merge, then rerun)"
-                )
-            refusal = blocked(
-                {
-                    "repo": str(root),
-                    "branch": branch,
-                    "base": predecessor["branch"],
-                    "predecessor_phase": f"{int(predecessor['phase']):06d}",
-                    "pull_request": predecessor.get("pull_request"),
-                    "landed": landed,
-                },
-                reason,
-                hint="the phase branch is missing or was deleted; restore it, "
-                "or let the merge check confirm the pull request, then rerun",
-            )
-            return {
-                "ok": False,
-                "mode": "branch",
-                "branch": branch,
-                "base": predecessor["branch"],
-                "predecessor": predecessor,
-                "repos": [refusal],
-                "summary": summarize([refusal], "branch"),
-            }
-        base = predecessor["branch"]
+        else:
+            base = predecessor["branch"]
     made = branch_phase_checkouts(root, branch, base=base)
     ok = all(m["ok"] for m in made)
     out: dict[str, Any] = {
@@ -160,6 +112,8 @@ def mode_branch(
         "repos": made,
         "summary": summarize(made, "branch"),
     }
+    if warnings:
+        out["warnings"] = warnings
     if ok and predecessor and out["base"] == predecessor["branch"]:
         # Did the predecessor move since this phase was built on it? The
         # existence check above cannot see that: a force-pushed branch still

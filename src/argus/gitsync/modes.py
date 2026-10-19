@@ -36,6 +36,16 @@ def mode_published(root: str | Path, phase: int | str) -> dict[str, Any]:
     """
     root = Path(root).resolve()
     marked = mark_phase_published(root, phase)
+    if marked.get("action") == "no-publish-evidence":
+        # There is nothing to mark yet. The phase keeps waiting; the next tick
+        # retries when its publish records a head. Never report it published.
+        return {
+            "ok": True,
+            "mode": "published",
+            "state": "RETRY",
+            "repos": [marked],
+            "summary": summarize([marked], "published"),
+        }
     if not marked["ok"]:
         return {
             "ok": False,

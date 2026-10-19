@@ -119,13 +119,17 @@ def publish_phase(
             )
             results.append(clean)
             if not clean["ok"]:
+                # A leftover commit that could not land is a repair: write no
+                # receipt, leave the phase waiting, and retry next tick.
                 outcome = {
                     "ok": False,
                     "mode": "publish",
                     "phase": f"{int(phase):06d}",
-                    "state": "BLOCKED",
+                    "state": "RETRY",
                     "repos": results,
                     "summary": clean["summary"],
+                    "hint": "run state did not commit; the next tick retries and "
+                    "no receipt is written",
                 }
         if outcome is None:
             dirty = [p for p in dirty_paths(root) if not _is_private_path(root, p)]
@@ -158,13 +162,17 @@ def publish_phase(
                 pushed = _push_one(checkout)
                 results.append(pushed)
                 if not pushed.get("ok"):
+                    # A push that failed is a repair: the phase stays waiting
+                    # and no receipt is written until the push succeeds.
                     outcome = {
                         "ok": False,
                         "mode": "publish",
                         "phase": f"{int(phase):06d}",
-                        "state": "BLOCKED",
+                        "state": "RETRY",
                         "repos": results,
                         "summary": summarize([pushed], "publish"),
+                        "hint": "the push did not land; the next tick retries and "
+                        "no receipt is written",
                     }
                     break
         if outcome is None:

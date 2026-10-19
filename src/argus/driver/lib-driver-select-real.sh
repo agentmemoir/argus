@@ -17,8 +17,9 @@ _drive_real_selection() {
   if ! "$PYTHON" "$ARGUS/gitsync/main.py" "${ARGUS_CONFIG_ARGS[@]}" --root "$REPO" --mode start \
       "${SYNC_BRANCH_ARGS[@]+"${SYNC_BRANCH_ARGS[@]}"}" \
       >"$RUN_DIR/coordination-sync.json" 2>/dev/null; then
-    log "coordination checkout sync failed; refusing to launch (see $RUN_DIR/coordination-sync.json)"
-    { _DRIVE_RC=1; return 0; }
+    # A sync that fails is a repair: keep the claim and retry the sync next
+    # tick. The selection itself is already in hand.
+    log "coordination checkout sync failed; keeping the claim, the next tick retries (see $RUN_DIR/coordination-sync.json)"
   fi
   return 0
 }

@@ -34,8 +34,10 @@ reconcile_pending_reviews() {
     [ "$DRIVER_STUB_COORDINATION" = review ] || return 0
     pending='{"awaiting_review":[{"phase":"100010","branch":"feature/review-merged","pull_request":"https://example/pr/1"},{"phase":"100011","branch":"feature/review-open","pull_request":"https://example/pr/2"}]}'
   elif ! pending="$(pending_review_snapshot)"; then
-    log "publication receipts could not be read; refusing to advance"
-    return 1
+    # An unreadable receipt is a repair: keep the pending list untouched and
+    # retry next tick. It never stops the line.
+    log "publication receipts could not be read; keeping them untouched, the next tick retries"
+    return 0
   fi
   confirm_pending_reviews "$pending"
   if [ "$PENDING_PUBLISHED" -gt 0 ]; then
@@ -44,7 +46,8 @@ reconcile_pending_reviews() {
   # A prior pass may have recorded the merge before its checkout cleanup
   # failed. Published receipts leave the pending list, so retry tidy each pass.
   if [ -z "${DRIVER_STUB_COORDINATION:-}" ]; then
-    tidy_published_checkout || return 1
+    tidy_published_checkout \
+      || log "could not tidy the published checkout; continuing, the next tick retries"
   fi
   return 0
 }
