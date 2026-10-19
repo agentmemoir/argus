@@ -55,7 +55,11 @@ def tidy_published_checkout(
         "branch": here or "(detached)",
     }
     if not is_git_repo(repo):
-        return degraded(info, "not a git working tree; the tidy is retried next tick")
+        # Narrow own-state stop: a lost checkout refuses rather than letting a
+        # git call walk up into the enclosing repository.
+        return blocked(
+            info, "not a git working tree; restore the checkout's repository"
+        )
     if not here or here == base:
         return dict(
             info,
@@ -121,7 +125,11 @@ def return_to_integration(repo: str | Path, base: str | None = None) -> dict[str
     base = base or integration_branch(repo)
     info: dict[str, Any] = {"repo": str(repo), "base": base}
     if not is_git_repo(repo):
-        return degraded(info, "not a git working tree; the tidy is retried next tick")
+        # Narrow own-state stop: a lost checkout refuses rather than letting a
+        # git call walk up into the enclosing repository.
+        return blocked(
+            info, "not a git working tree; restore the checkout's repository"
+        )
     rc, dirty, _ = git(repo, "status", "--porcelain")
     if rc != 0:
         return degraded(info, "cannot read the working tree status; retrying next tick")

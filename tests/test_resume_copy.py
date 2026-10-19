@@ -29,6 +29,7 @@ import re
 import shutil
 import subprocess
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -163,11 +164,12 @@ def test_copied_run_advances_from_developer_to_adversary(
         resume = json.loads(resume_path.read_text())
         assert resume.get("current") == "adversary", resume
         assert resume.get("visits", {}).get("developer") == 1, resume
-        outputs = resume.get("outputs") or {}
-        assert "developer" in outputs, resume
+        outputs = resume.get("outputs")
+        assert isinstance(outputs, dict) and "developer" in outputs, resume
+        restored = cast(str, outputs["developer"])
+        assert restored, resume
         assert (
-            hashlib.sha256(outputs["developer"].encode()).hexdigest()
-            == developer["output_sha256"]
+            hashlib.sha256(restored.encode()).hexdigest() == developer["output_sha256"]
         )
 
     for marker in ("halted", "halted.json"):

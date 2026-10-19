@@ -166,9 +166,14 @@ _drive_resume() {   # [<number>]
   fi
 
   # The branch is cut before the launch so the launch lands on the phase's own
-  # branch. A failure there is logged and the launch continues; the next tick
-  # retries the cut.
-  _drive_resume_branch "$number" "$rel"
+  # branch. A gitsync branch failure is a repair: the resume continues on the
+  # branch the checkout has, and the next tick retries the cut. A group
+  # declaration the resume cannot read is the resume's own reservation and
+  # still stops it.
+  if ! _drive_resume_branch "$number" "$rel"; then
+    resume_refuse "$target" "$RESUME_REFUSAL"
+    return 1
+  fi
 
   if ! resume_fence "$number"; then
     resume_refuse "$target" "$RESUME_REFUSAL"

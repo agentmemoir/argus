@@ -24,22 +24,25 @@ selftest_case_clear_halt() {
   rm -f "$run_dir/run.json" "$run_dir/resume.json" "$run_dir/ledger.json" "$HALT"
 
   # A never-started phase: a record, no run.json and no resume.json. The tick
-  # refuses the resume, which is why clearing the marker alone never moved the
-  # queue.
+  # passes it to the two-tick repair and launches, rather than refusing.
   selftest_resume_record "$phase" "$rel" "$run_dir" "" 1
   launches="$(selftest_resume_launches)"
   local log_before
   log_before="$( [ -f "$LOG" ] && wc -l <"$LOG" || printf '0')"
   drive --self-test || true
+  wait_phase_window_gone
+  sleep 0.3
   if tail -n "+$((log_before + 1))" "$LOG" 2>/dev/null \
-      | grep -q "resume refused: phase $phase: run.json is absent" \
-      && [ "$(selftest_resume_launches)" = "$launches" ] \
-      && [ -f "$HALT_RECORD" ]; then
-    echo "ok: a phase with no run state refuses to resume and keeps its record"
+      | grep -q "continuing on its own branch for the repair" \
+      && [ "$(selftest_resume_launches)" != "$launches" ]; then
+    echo "ok: a phase with no run state is passed to the two-tick repair"
   else
-    echo "FAIL: a phase with no run state resumed or lost its record"; fail=1
+    echo "FAIL: a phase with no run state was refused instead of repaired"; fail=1
   fi
 
+  # clear-halt still removes a never-started record by name.
+  rm -f "$HALT"
+  selftest_resume_record "$phase" "$rel" "$run_dir" "" 1
   out="$(clear_halt_cmd)"
   if [ ! -f "$HALT_RECORD" ] && [ ! -f "$HALT" ] \
       && printf '%s' "$out" | grep -q "removed $HALT_RECORD (phase $phase never started)"; then

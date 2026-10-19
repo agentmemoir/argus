@@ -109,31 +109,22 @@ selftest_case_flow() {
     CURRENT="$RUN_DIR/current"; PIDFILE="$RUN_DIR/pid"
     NOTIFY_BROKEN="$RUN_DIR/notify-broken"; LOG="$RUN_DIR/driver.log"
     SESSION="ar-driver-coord-failure-$$"
-    # The state the tick sees, read without reserving. The driver refuses at the
-    # sync gate before its state dispatch, so it never logs this on this path;
-    # the failure line below carries it instead.
+    # The state the tick sees, read without reserving.
     coord_state="$(coordination_select --read-only 2>/dev/null | selection_value state || true)"
-    # The sync gate is what this case is written for, so the checkout has to
-    # reach it. Its remote is pointed at a path that is not there, and its .git
-    # is left alone. Removing .git refuses one step earlier — the tick returns a
-    # published phase's checkout to the integration branch before the sync gate,
-    # and it cannot do that without a repository — and a missing .git was worse
-    # while the walk-up was open: on a host whose temporary directory is
-    # `noexec` the fixture lives inside this checkout, where `git -C` walked up
-    # out of the fixture and synced the real checkout instead of failing. The
-    # ceiling at the fixture root now refuses that walk (selftest_case_git_ceiling),
-    # and this case keeps the remote break for the refusal it asserts: the sync
-    # gate's, not git's.
+    # A sync that fails is a repair: the tick logs it, keeps the claim, and
+    # continues. The checkout has to reach the gate, so its remote is pointed
+    # at a path that is not there and its .git is left alone. A missing .git is
+    # a narrow own-state stop one step earlier, covered by the lost-repo case
+    # and the git ceiling.
     git -C "$coord_root" remote set-url origin "$tmp/coordination-failure-remote-gone.git"
     drive || true
-    coord_sync_refused=0; coord_no_window=0
-    grep -q "coordination checkout sync failed" "$LOG" && coord_sync_refused=1
-    ! tmux_window_exists 2>/dev/null && coord_no_window=1
-    if [ "$coord_sync_refused" = 1 ] && [ "$coord_no_window" = 1 ]; then
-      echo "ok: coordination failure refuses launch"
+    coord_sync_refused=0
+    grep -q "coordination checkout sync failed; keeping the claim" "$LOG" && coord_sync_refused=1
+    if [ "$coord_sync_refused" = 1 ]; then
+      echo "ok: a coordination sync failure is a repair that keeps the claim"
     else
       coord_sync_hint="$( { head -c 300 "$RUN_DIR/coordination-sync.json" 2>/dev/null || true; } | tr '\n' ' ' )"
-      echo "FAIL: coordination failure did not refuse launch (sync_refused=$coord_sync_refused no_window=$coord_no_window selection_state=${coord_state:-unknown} sync=$coord_sync_hint)"; fail=1
+      echo "FAIL: coordination failure did not report the repair (sync_refused=$coord_sync_refused selection_state=${coord_state:-unknown} sync=$coord_sync_hint)"; fail=1
     fi
     tmux kill-session -t "$SESSION" 2>/dev/null || true
   fi

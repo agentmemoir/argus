@@ -186,6 +186,7 @@ _ALLOWLIST = r"""
     gitsync/runstate.py	raise_config	raise ConfigError(f"phase number out of range: {number}")
     gitsync/sync.py	blocked_call	blocked({"repo": str(path), "mode": mode}, reason)
     gitsync/sync.py	blocked_call	blocked_result = blocked(
+    gitsync/sync.py	blocked_call	return blocked(
     gitsync/sync.py	ok_false	"ok": False,
     gitsync/tidy.py	blocked_call	return blocked(
 """
