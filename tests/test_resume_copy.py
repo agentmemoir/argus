@@ -22,6 +22,7 @@ made when the snapshot is present.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -85,7 +86,7 @@ def test_copied_run_advances_from_developer_to_adversary(
     pipeline = Path(str(PIPELINE))
     glide = Path(str(GLIDE))
     name = live.name
-    match = re.fullmatch(r".*?(?:phase)?-?(\d+)", name)
+    match = re.search(r"(\d{3,})", name)
     assert match, f"cannot read a phase number from {name}"
     number = int(match.group(1))
 
@@ -151,12 +152,23 @@ def test_copied_run_advances_from_developer_to_adversary(
     developer = ledger["steps"]["developer"]
     assert developer.get("routed_to") == "adversary", developer
     assert developer.get("visits") == 1, developer
+    # The completion the ledger records is the step's own run log, by hash.
+    log_text = (destination / "developer-task-r1.log").read_bytes()
+    assert developer.get("output_sha256") == hashlib.sha256(log_text).hexdigest(), (
+        developer.get("output_sha256")
+    )
 
     resume_path = destination / "resume.json"
     if resume_path.is_file():
         resume = json.loads(resume_path.read_text())
         assert resume.get("current") == "adversary", resume
         assert resume.get("visits", {}).get("developer") == 1, resume
+        outputs = resume.get("outputs") or {}
+        assert "developer" in outputs, resume
+        assert (
+            hashlib.sha256(outputs["developer"].encode()).hexdigest()
+            == developer["output_sha256"]
+        )
 
     for marker in ("halted", "halted.json"):
         assert not (destination / marker).exists(), (
