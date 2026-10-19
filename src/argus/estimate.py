@@ -109,18 +109,24 @@ def _commit(repo: Path, rel: str, message: str) -> str:
 
     Returns "" on success, or what went wrong for the log line.
     """
-    if _commit_and_push_run_state(repo, message, pathspec=rel).get("ok"):
+    # Only a real commit-and-push is success. A degraded result is ok, so the
+    # ok flag alone would read a failed push as done.
+    result = _commit_and_push_run_state(repo, message, pathspec=rel)
+    if result.get("ok") and result.get("action") == "committed-and-pushed":
         return ""
-    if rel in dirty_paths(repo):
-        git(repo, "checkout", "--", rel)
-        return "not committed, file put back"
     # Committed but not pushed, most often because another machine pushed its
     # own update first. A revert, not a reset, so no history is rewritten: the
     # pair leaves the file as it was, and the next sync merges without a
-    # conflict on it.
+    # conflict on it. The failed sync may have left a conflicted merge; abort
+    # that first, then revert.
     if git(repo, "log", "-1", "--format=%s")[1] == message:
+        if (repo / ".git" / "MERGE_HEAD").exists():
+            git(repo, "merge", "--abort")
         git(repo, "revert", "--no-edit", "HEAD")
         return "not pushed; reverted locally"
+    if rel in dirty_paths(repo):
+        git(repo, "checkout", "--", rel)
+        return "not committed, file put back"
     return "committed but not pushed"
 
 
