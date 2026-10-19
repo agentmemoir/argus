@@ -300,23 +300,39 @@ except OSError:
     fi
   fi
   state="$(phase_state "$number" "$rel")"
-  if [ "$state" = repair_pending ]; then
-    # Glide is repairing a step from its own evidence and has not advanced.
-    # That is a normal no-launch tick, not a stop: the next tick retries.
-    local repair_reason
-    repair_reason="$("$PYTHON" -c 'import json,sys
+  local run_dir result_file result_state
+  run_dir="$(phase_run_dir "$number" "$rel")"
+  result_file="$run_dir/result.json"
+  # Glide writes one atomic `result.json` for every state. Its repair tick is
+  # `repair_pending`: a no-launch, resumable tick that must not archive or
+  # finalize the run, even though glide exits 0 and writes no run.json. The rc=2
+  # invalid-input halt keeps its own path.
+  if [ "$rc" != 2 ] && [ -f "$result_file" ]; then
+    result_state="$("$PYTHON" -c 'import json,sys
 try:
     data = json.load(open(sys.argv[1]))
 except (OSError, ValueError):
     data = {}
-repair = data.get("repair") if isinstance(data, dict) else None
-print((repair or {}).get("error", "") if isinstance(repair, dict) else "")' \
-      "$(phase_run_dir "$number" "$rel")/run.json" 2>/dev/null || true)"
-    gitsync_clean "$number"
-    log "repair-pending: ${work_kind:-phase} $number${repair_reason:+: $repair_reason}; no launch, the next tick retries"
-    tmux_set_title "${work_kind:-phase} $number repair pending"
-    rm -f "$CURRENT" "$PIDFILE"
-    exit 0
+print(data.get("state", "") if isinstance(data, dict) else "")' \
+      "$result_file" 2>/dev/null || true)"
+    if [ "$result_state" = repair_pending ]; then
+      local repair_reason
+      repair_reason="$("$PYTHON" -c 'import json,sys
+try:
+    data = json.load(open(sys.argv[1]))
+except (OSError, ValueError):
+    data = {}
+if not isinstance(data, dict):
+    data = {}
+step = str(data.get("step", ""))
+reason = str(data.get("reason", ""))
+print(f"{step}: {reason}" if step and reason else (reason or step))' \
+        "$result_file" 2>/dev/null || true)"
+      log "repair-pending: ${work_kind:-phase} $number${repair_reason:+: $repair_reason}; no launch, the next tick retries"
+      tmux_set_title "${work_kind:-phase} $number repair pending"
+      rm -f "$CURRENT" "$PIDFILE"
+      exit 0
+    fi
   fi
   if [ "${work_kind:-phase}" = issue ] && [ "$state" = writeback_pending ]; then
     gitsync_clean "$number"
