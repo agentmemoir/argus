@@ -17,6 +17,7 @@ bind_selection_kind() {
   fi
 }
 
+# Retained for a manual run; no tick calls it since issue intake was cut.
 issue_preflight() {
   if ! command -v "$CMD_GH" >/dev/null 2>&1 \
       && { [ ! -f "$CMD_GH" ] || [ ! -x "$CMD_GH" ]; }; then

@@ -4,8 +4,9 @@
 #
 # Self-healing: one repair run for a pull request whose checks finished red.
 #
-# Sourced by phase-driver.sh; not executable on its own. Everything here is off
-# unless the configuration has a `repair` object.
+# Sourced by phase-driver.sh; not executable on its own. Nothing here is called
+# by a tick: the repair loop is cut from the running path, and these functions
+# are retained for a manual run.
 
 # Whether this tick belongs to a repair, so it must not start other work.
 #

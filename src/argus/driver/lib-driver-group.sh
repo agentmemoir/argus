@@ -259,6 +259,7 @@ claim_renew() {
 # says so once, and the tick that finds the checks green says so once, rather
 # than every tick for as long as the group waits for its merge. A gate that gave
 # no answer is logged the same way, with the file that holds its error.
+# Retained, uncalled: the tick no longer runs the GitHub gate.
 gate_group_pull_request() {
   local phase="$1" pr="$2" out summary last
   [ -n "$pr" ] || return 0
@@ -287,6 +288,7 @@ gate_group_pull_request() {
 # review comment change in the phase run folder, so a change is returned on the
 # first tick that sees it. This logs the kinds it returned. A read that failed
 # is logged once, as not read, so it never looks like no change.
+# Retained, uncalled: the tick no longer reads pull request signals.
 watch_signals_pull_request() {
   local phase="$1" out summary
   [ -z "${DRIVER_STUB_COORDINATION:-}" ] || return 0
