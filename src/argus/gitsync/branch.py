@@ -27,23 +27,18 @@ def ensure_phase_branch(
     """Put a checkout on its phase branch, creating it from ``base`` if needed.
 
     Idempotent, because a driver tick runs more than once and a phase that is
-    already on its branch must not be moved. A phase that is on some *other*
-    branch is a hard stop rather than a silent switch: switching branches under
-    a working tree that holds unreviewed work is exactly the operation that can
-    leave that work in pieces, and the operator is the only one who can decide
-    it is safe.
+    already on its branch must not be moved. Any other branch is a starting
+    point when the tree is clean: nothing uncommitted can be reinterpreted
+    against the commit the phase branch is cut from. A dirty tree is the narrow
+    lost-work stop, on the integration branch or any other, and the message
+    names the paths.
 
-    The integration branch is the one exception, and only with a clean tree.
-    It is the ordinary state between two phases: the workflow asks a person to
-    return the checkout there once a pull request is open, and the tidy step
-    does it once a phase is published. When the next phase stacks on an earlier
-    phase whose pull request is still open, its base is that earlier phase's
-    branch and not the integration branch, so a checkout sitting on the
-    integration branch is a starting point and not a conflict. Refusing it meant
-    every such launch needed a person to run a checkout first, and the line
-    stopped on each one in turn. A clean tree is the whole condition: nothing
-    can be reinterpreted against the other commit. Uncommitted work on the
-    integration branch is still a stop, and the message names the paths.
+    The integration branch is the ordinary state between two phases: the
+    workflow asks a person to return the checkout there once a pull request is
+    open, and the tidy step does it once a phase is published. When the next
+    phase stacks on an earlier phase whose pull request is still open, its base
+    is that earlier phase's branch and not the integration branch, so a checkout
+    sitting on the integration branch is a starting point and not a conflict.
 
     The index is carried across, not required to be clean, when the checkout is
     already on the base. A phase stages its work and never commits it, so the
@@ -126,31 +121,21 @@ def ensure_phase_branch(
             f"base branch {base!r} does not exist; the branch cut is retried next tick",
         )
     if here and here != base:
-        # The integration branch is where the checkout is left between phases,
-        # so it is a place the launch may leave from rather than a conflict it
-        # must refuse. The tree has to be clean for that: the phase branch is
-        # cut from the base's commit, so anything uncommitted would be
-        # reinterpreted against a tree it was never written for. That is the
-        # case the refusal below exists for, and it keeps refusing it.
-        if here == integration_branch(repo):
-            carried = dirty_paths(repo)
-            if carried:
-                return blocked(
-                    info,
-                    f"checkout is on {here!r} with {len(carried)} "
-                    f"uncommitted path(s), and the phase branch is cut from "
-                    f"{base!r}",
-                    dirty=carried,
-                    hint="commit or stash the work, or move the checkout to the "
-                    f"base branch {base!r} yourself, then rerun; nothing "
-                    "was switched",
-                )
-        else:
+        # Any branch is a place the launch may leave from when the tree is
+        # clean: the phase branch is cut from the base's commit, so nothing
+        # uncommitted can be reinterpreted against the wrong tree. A dirty tree
+        # is the narrow lost-work stop, on the integration branch or any other.
+        carried = dirty_paths(repo)
+        if carried:
             return blocked(
                 info,
-                f"checkout is on {here!r}, not the phase branch or {base!r}",
-                hint="a phase's work lives on its own branch; moving it is an "
-                "operator decision, so nothing was switched",
+                f"checkout is on {here!r} with {len(carried)} "
+                f"uncommitted path(s), and the phase branch is cut from "
+                f"{base!r}",
+                dirty=carried,
+                hint="commit or stash the work, or move the checkout to the "
+                f"base branch {base!r} yourself, then rerun; nothing "
+                "was switched",
             )
     exists_rc, _, _ = git(repo, "rev-parse", "--verify", f"refs/heads/{branch}")
     if exists_rc == 0:

@@ -73,20 +73,30 @@ def _phase_branch_checks(base: Path) -> list[tuple[str, object, str]]:
         )
     )
 
-    # 4. A checkout sitting on some other branch is a hard stop. Moving a
-    #    working tree that holds unreviewed work between branches is the
-    #    operation that can leave that work in pieces.
+    # 4. A clean checkout on another branch is a starting point; a dirty one is
+    #    the narrow lost-work stop, because the switch would reinterpret it.
     git(work, "checkout", "-q", "-b", "someone-elses-work")
     res4: dict[str, Any] = ensure_phase_branch(work, branch, base="main")
     results.append(
         (
-            "a checkout on another branch is never switched silently",
-            (not res4["ok"])
-            and "not the phase branch" in res4["blockers"][-1]
-            and current_branch(work) == "someone-elses-work",
-            f"blockers={res4.get('blockers')}",
+            "a clean checkout on another branch is switched to the phase branch",
+            res4["ok"] and current_branch(work) == branch,
+            f"branch={current_branch(work)} action={res4.get('action')}",
         )
     )
+    git(work, "checkout", "-q", "someone-elses-work")
+    (work / "unreviewed.txt").write_text("keep me\n")
+    res4dirty: dict[str, Any] = ensure_phase_branch(work, branch, base="main")
+    results.append(
+        (
+            "a dirty checkout on another branch is not switched",
+            (not res4dirty["ok"])
+            and "uncommitted path" in res4dirty["blockers"][-1]
+            and current_branch(work) == "someone-elses-work",
+            f"blockers={res4dirty.get('blockers')}",
+        )
+    )
+    (work / "unreviewed.txt").unlink()
 
     # 5. A missing integration branch is reported rather than inventing a start
     # point, and the next tick retries.
