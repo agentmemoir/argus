@@ -106,6 +106,31 @@ def test_resumed_run_leaves_the_factor_alone(setup: dict[str, Path]) -> None:
     assert factor_in(setup["factors"]) == 1.0
 
 
+def test_harness_only_edit_changes_the_factor_key(setup: dict[str, Path]) -> None:
+    # A harness-only edit carries no matching index, display, or options; the
+    # saved `harness` string is still what the factor is keyed on. A map this
+    # reader cannot use is a skipped update, never a stop.
+    run_dir = setup["run_dir"]
+    (run_dir / "harnesses.json").write_text(
+        json.dumps({"steps": {"developer": {"harness": "cmd:model-b", "index": 9}}}),
+        encoding="utf-8",
+    )
+    line = estimate.update(101041, run_dir, 460 * 60, resumed=False)
+    assert "cmd:model-b" in line
+    factors = json.loads(setup["factors"].read_text(encoding="utf-8"))["factors"]
+    assert factors["cmd:model-b"] == pytest.approx(1.2)
+    assert factors[HARNESS] == 1.0
+
+
+def test_unreadable_harness_map_continues_without_a_stop(
+    setup: dict[str, Path],
+) -> None:
+    (setup["run_dir"] / "harnesses.json").write_text("not json", encoding="utf-8")
+    line = estimate.update(101041, setup["run_dir"], 460 * 60, resumed=False)
+    assert "no developer harness recorded" in line
+    assert factor_in(setup["factors"]) == 1.0
+
+
 def test_phase_without_an_estimate_leaves_the_factor_alone(
     setup: dict[str, Path], monkeypatch: pytest.MonkeyPatch
 ) -> None:
