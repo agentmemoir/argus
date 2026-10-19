@@ -65,10 +65,10 @@ selftest_case_job_fresh_keeps_edit() {
   else
     echo "FAIL: the retry lost the owner-edited harnesses.json"; fail=1
   fi
-  if grep -q "keeps the owner-edited $run_dir/harnesses.json" "$LOG"; then
-    echo "ok: the kept edit is logged naming the file and the run"
+  if grep -q "owner-edited $run_dir/harnesses.json" "$LOG"; then
+    echo "ok: the detected edit is logged naming the file and the run"
   else
-    echo "FAIL: the kept owner edit was not logged"; fail=1
+    echo "FAIL: the detected owner edit was not logged"; fail=1
   fi
   rm -rf "$run_dir" "$run_dir".prev-* "$job_stub_args"
 }

@@ -54,13 +54,14 @@ glide_run_once() {
     # The restart archives the run directory. glide keeps an owner-edited
     # harnesses.json across it and fills only the missing fields (plan 0010,
     # C4/B8); the map is owner-edited when it differs from the snapshot glide
-    # last wrote, so the kept edit is named here, before the archive moves it
-    # aside. No sidecar, or an equal pair, is no evidence of an edit, and no
-    # argus code chooses a harness.
+    # last wrote. This line is written before glide runs, so it can only
+    # claim the detection, never a keep glide has not done yet; no sidecar,
+    # or an equal pair, is no evidence of an edit, and no argus code chooses
+    # a harness.
     map_file="$run_dir/harnesses.json"
     driver_map="$run_dir/harnesses.driver.json"
     if [ -f "$map_file" ] && [ -f "$driver_map" ] && ! cmp -s "$map_file" "$driver_map"; then
-      log "${work_kind:-phase} $number keeps the owner-edited $map_file; glide fills only the missing fields"
+      log "${work_kind:-phase} $number owner-edited $map_file detected before the --fresh restart; glide keeps and fills only the missing fields"
     fi
   fi
   "$CMD_GLIDE" run --pipeline "$PIPELINE" \

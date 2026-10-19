@@ -4,7 +4,7 @@ Notable changes to this project are documented here. The format follows [Keep a 
 
 ## [Unreleased]
 
-- A terminal retry keeps an owner-edited `harnesses.json`: the `--fresh` restart archives the run directory, glide restores the edited map into the new one and fills only the missing fields, and the driver logs the kept edit naming the file and the run. The estimate reader keys the developer factor on the saved `steps.developer.harness` alone, so a harness-only edit changes the factor key, and an unreadable map is a skipped update, never a stop. Argus never chooses a harness. ([#159](https://github.com/agentmemoir/argus/pull/159))
+- A terminal retry keeps an owner-edited `harnesses.json`: the `--fresh` restart archives the run directory, glide restores the edited map into the new one and fills only the missing fields (glide #66), and the driver logs the detected owner edit before the restart, naming the file and the run. The estimate reader keys the developer factor on the saved `steps.developer.harness` alone, so a harness-only edit changes the factor key, and an unreadable map is a skipped update, never a stop. Argus never chooses a harness. ([#159](https://github.com/agentmemoir/argus/pull/159))
 
 - Argus no longer proves the glide ledger or auto-pins its step commits on resume. Completion proof lives in glide's ledger; a resume gate that met a terminal or moved run, or a damaged run result, logs the reason and continues on the phase's own branch for glide to repair. ([#157](https://github.com/agentmemoir/argus/pull/157))
 
