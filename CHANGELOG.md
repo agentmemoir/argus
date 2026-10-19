@@ -4,6 +4,16 @@ Notable changes to this project are documented here. The format follows [Keep a 
 
 ## [Unreleased]
 
+- Argus no longer proves the glide ledger or auto-pins its step commits on resume. Completion proof lives in glide's ledger; a resume gate that met a terminal or moved run, or a damaged run result, logs the reason and continues on the phase's own branch for glide to repair, and a `repair_pending` result is a normal no-launch tick. ([#157](https://github.com/agentmemoir/argus/pull/157))
+
+- A plan's open decision gate no longer stops the line. `BLOCKED_ON_GATE` is gone from the selector, the driver, and `next_phase.py` `STATE_EXIT`; the gate is reported under `needs_decision` and every later phase still gets its turn. ([#157](https://github.com/agentmemoir/argus/pull/157))
+
+- Branch, merge, sync, run-state, and publication failures that do not threaten work on disk now report and continue instead of halting. Run-state commits are scoped with `git commit -- <pathspec>`, so a staged path from another phase cannot ride them. A publication that cannot commit run state or push returns `RETRY` and writes no receipt until the push and pull request succeed. Both narrow lost-work stops stay: an uncommitted integration checkout and a staged index outside the phase. ([#157](https://github.com/agentmemoir/argus/pull/157))
+
+- A stale config key (`roadmap-dir`, `phases-dir`, `repair`) and an unknown key, nested ones included, warn once with the exact replacement and continue. An unacceptable value still stops and names the fix. ([#157](https://github.com/agentmemoir/argus/pull/157))
+
+- A new stop path in the driver or gitsync fails the build. The tripwire scans every shell and Python stop form and allows only the stops with an owner reason, keyed by file, rule, and stop line, never by line number. ([#157](https://github.com/agentmemoir/argus/pull/157))
+
 - A failed glide job is retried with capped full jitter and, when the retries run out, recorded as `failed.json` beside the run directory; the selector skips that phase and the line continues to the next job instead of halting until a person clears it. The retry count is `ARGUS_JOB_RETRIES`, 3 retries (4 attempts) by default. ([#156](https://github.com/agentmemoir/argus/pull/156))
 
 - The publication path no longer blocks on git history, merge-base, tree, commit-id, or receipt gates, and a tick no longer runs the GitHub group gate, the repair loop, or the pull-request lifecycle reads; commit, push, and opening the pull request stay. ([#156](https://github.com/agentmemoir/argus/pull/156))
