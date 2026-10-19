@@ -2,7 +2,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """Read, clean, resolve, and validate one configuration file."""
 
-import copy
 from pathlib import Path
 from typing import Any, cast
 
@@ -10,7 +9,6 @@ from argus.config.document import read_document
 from argus.config.document import strip_comments as strip_comments
 from argus.config.errors import ConfigError
 from argus.config.issue_validation import (
-    validate_issues,
     validate_presence,
     validate_trust,
 )
@@ -20,7 +18,6 @@ from argus.config.schema import (
     _OBJECT_KEYS,
     _OVERRIDES,
     _REPORT_KEY,
-    ISSUES_DEFAULTS,
     SCHEMA,
     Field,
 )
@@ -121,16 +118,13 @@ def _build(
     provider = overrides.get("driver")
     if provider is None:
         provider = _lookup(raw, "driver.provider")[1]
-    validate_presence(provider, issues, board)
+    validate_presence(provider, issues)
 
     supplied: dict[str, tuple[object, str]] = {}
     for field in SCHEMA:
         found, value = _lookup(raw, field.key)
         if found and value is not None:
             supplied[field.key] = (value, "overlay" if field.key in origins else "file")
-    if provider == "issues":
-        for key, default in ISSUES_DEFAULTS.items():
-            supplied.setdefault(key, (copy.deepcopy(default), "default"))
 
     for flag, value in overrides.items():
         if value is None:
@@ -163,8 +157,6 @@ def _build(
             raise ConfigError(f"missing required key '{field.key}'")
     if issues is not None:
         validate_trust(issues)
-    if provider == "issues":
-        validate_issues(values)
     # The folder grows from the phases repository, so it is always confined to
     # it, whether the file or a flag named it. A flag that reached outside the
     # checkout would read a stranger's tree and write the index into it, and the

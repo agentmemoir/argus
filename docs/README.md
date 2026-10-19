@@ -13,7 +13,7 @@ These pages cover all of Argus. Start with the [project README](../README.md) fo
 | [paths-and-ownership.md](paths-and-ownership.md) | Run directories, publication, the board, and reservation groups. |
 | [program-files.md](program-files.md) | The map of the files inside the program folder. |
 | [checks.md](checks.md) | The checks, and what each one proves. |
-| [issues.md](issues.md) | The GitHub issue work source. |
+| [issues.md](issues.md) | The removed GitHub issue work source. |
 
 ## Worked Example
 

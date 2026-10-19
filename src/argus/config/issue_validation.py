@@ -24,19 +24,13 @@ TRUST_KEYS = (
 def validate_presence(
     provider: object,
     issues: dict[str, Any] | None,
-    board: dict[str, Any] | None,
 ) -> None:
     """Reject incomplete or contradictory work-source settings before loading paths."""
-    if provider not in ("phase", "phases", "issues", None):
+    if provider not in ("phase", "phases", None):
         raise ConfigError(
-            "invalid value for key 'driver.provider': known drivers: phase, phases, issues"
+            "invalid value for key 'driver.provider': known drivers: phase, phases"
         )
-    if provider == "issues":
-        if issues is None:
-            raise ConfigError("missing required key 'issues.repo'")
-        if board is None:
-            raise ConfigError("missing required key 'board.file' for the issue source")
-    elif issues is not None:
+    if issues is not None:
         unknown = sorted(set(issues) - set(TRUST_KEYS))
         if unknown:
             raise ConfigError(

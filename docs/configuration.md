@@ -16,7 +16,7 @@ The file's rules:
 - `pipeline` — the pipeline file a tick runs. Required.
 - `phases` — the phases repository the work-item files live in: `repo` (a separate checkout), `directory` (a folder inside it), `branch`, and `remote`, where Argus commits and pushes what it writes. Required for the phase source. The checkout must be its own repository, with a Git destination different from the public `repo-root`'s. The board and the phases are both private: they may share one Git destination, so one private checkout can hold both.
 - `number-input`, `file-input` — the pipeline input names that carry the work-item number and file. Optional, but a pipeline that declares those inputs needs them named.
-- `driver.provider` — the work source. Required. An `issues` block that holds only the trust keys (`trusted-authors`, `trusted-apps`, `trusted-associations`, `codeowners-file`, `resolve-teams`, `comment-trust`, `untrusted-comments`) is allowed for any provider; the issue-source keys still require the `issues` provider.
+- `driver.provider` — the work source. Required: `phase` or `phases`. An `issues` block that holds only the trust keys (`trusted-authors`, `trusted-apps`, `trusted-associations`, `codeowners-file`, `resolve-teams`, `comment-trust`, `untrusted-comments`) is allowed for any provider; any other key in it is refused.
 - `driver.include` — the work-item file globs. Required. `driver.exclude` — file names to ignore. Optional.
 - `driver.runs` — the run-state folder, holding session logs, the ledger, and the receipts. Required. The folder must exist before a tick starts.
 - `driver.state` — the folder inside `driver.runs` that holds the driver's own log, lock, halt marker, and pid file. Required. A name, not a path.
@@ -48,5 +48,3 @@ The four flags `--driver`, `--repo-root`, `--phases-directory`, and repeatable `
 ## Worked Sample
 
 [`examples/argus-config.jsonc`](../examples/argus-config.jsonc) is a filled-in configuration, and [`examples/project/`](../examples/project/) is the small project it points at.
-
-[`examples/issue-config.jsonc`](../examples/issue-config.jsonc) shows the issue source. [Issues](issues.md) lists its keys, trust rules, separate board file, and private task path.

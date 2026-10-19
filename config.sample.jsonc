@@ -52,7 +52,7 @@
 
   "driver": {
     // Which work source runs the queue. Required: "phase" for the phases
-    // folder, or "issues" for a GitHub issue backlog (see docs/issues.md).
+    // folder.
     "provider": "phase",
 
     // The work-item files to consider, as globs. Required. A list, so more than
@@ -103,7 +103,7 @@
   "machine": {
     "id-file": "machine.id"
     // Optional: "settings-file" names a small per-machine overlay whose keys
-    // replace this file's values (see docs/issues.md).
+    // replace this file's values (see docs/configuration.md#overrides).
   },
 
   // The external commands, named rather than searched for. Required, so nothing
@@ -155,8 +155,7 @@
     // here, so it is this file's folder.
     "repo": ".",
 
-    // The board file's path inside that checkout. Required with "board". An
-    // issue machine also names "issues-file", a second file on the same branch.
+    // The board file's path inside that checkout. Required with "board".
     "file": "claims.json",
 
     // The branch the board lives on, and the remote it is pushed to. Required
