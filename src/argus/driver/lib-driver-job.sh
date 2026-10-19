@@ -61,6 +61,12 @@ glide_run_once() {
 failure_residue_write() {   # <number> <rel> <state> <rc> <retries>
   local dir
   dir="$(phase_run_dir "$1" "$2")"
+  # A job can fail before glide creates its run directory, so make it here; a
+  # residue that cannot be written is logged and never halts the line.
+  mkdir -p "$dir" || {
+    log "job-failed: could not create $dir to record the failure; continuing"
+    return 0
+  }
   "$PYTHON" - "$dir/failed.json.tmp.$$" "$1" "$3" "$4" "$5" "$(ts)" \
     "$dir/failed.json" <<'PY'
 import json, os, sys
@@ -83,4 +89,7 @@ with open(sys.argv[1], "w", encoding="utf-8") as handle:
     handle.write("\n")
 os.replace(sys.argv[1], sys.argv[7])
 PY
+  [ "$?" -eq 0 ] \
+    || log "job-failed: could not record the failure at $dir/failed.json; continuing"
+  return 0
 }

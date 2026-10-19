@@ -397,6 +397,9 @@ PROBE
   selftest_run_case resume
   selftest_run_case abandon
   selftest_run_case clear_halt
+  # The failure-residue case writes its own run directory, so it runs after the
+  # cases that share the fixture's phase state.
+  selftest_run_case job_failure
 
 
   tmux kill-session -t "$SESSION" 2>/dev/null || true

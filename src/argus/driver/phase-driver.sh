@@ -157,7 +157,7 @@ for helper in \
   lib-selftest-unavailable.sh lib-selftest-reasons.sh lib-selftest-recovery.sh \
   lib-selftest-merge.sh lib-selftest-stranding.sh lib-selftest-group.sh \
   lib-selftest-resume.sh lib-selftest-resume-guards.sh \
-  lib-selftest-abandon.sh lib-selftest-clear-halt.sh \
+  lib-selftest-abandon.sh lib-selftest-clear-halt.sh lib-selftest-job.sh \
   lib-selftest-fixture.sh selftest-support.sh; do
   if [ ! -r "$ARGUS_DIR/$helper" ]; then
     printf 'argus: cannot read %s: this driver is broken, not misconfigured\n' \
@@ -251,6 +251,7 @@ done
 # shellcheck disable=SC1091
 . "$ARGUS_DIR/lib-selftest-abandon.sh"
 . "$ARGUS_DIR/lib-selftest-clear-halt.sh"
+. "$ARGUS_DIR/lib-selftest-job.sh"
 
 argus_init "${1:-}"
 
