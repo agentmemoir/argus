@@ -43,6 +43,12 @@ A fix merged by the same run holds it too, because the merge moves the head the 
 
 The result is the `group_gate` object in the publication output: `state` (`WAITING` while a member is still to publish, `HELD`, or `READY`), the `reasons` it is held, and `fix_pull_requests` with the numbers merged and the pull requests held. The driver logs a changed answer once, not on every tick.
 
+## Issue Work
+
+An issue machine keeps its claims in `board.issues-file`, a second file on the same board branch. A phase claim and an issue claim never share a record, even for the same number.
+
+The pipeline's `run_dir` names each issue run directory, for example `runs/issue-000295`, and the issue's reservation token lives there. The frozen task file lives in `issues.task-dir`, which must be inside the checkout. An issue run writes no `publication.json`: GitHub's own issue state is the completion record.
+
 ## The Glide Contract
 
 The configured `glide` command runs the pipeline as `glide run --pipeline <file> --input <name>=<value>`. A missing command stops the tick before a claim. Argus names no Glide source tree, sets no `PYTHONPATH`, and keeps no fallback copy. The pipeline's stages and hooks are project content, so Argus needs no project `scripts/` folder.

@@ -52,7 +52,7 @@
 
   "driver": {
     // Which work source runs the queue. Required: "phase" for the phases
-    // folder.
+    // folder, or "issues" for a GitHub issue backlog (see docs/issues.md).
     "provider": "phase",
 
     // The work-item files to consider, as globs. Required. A list, so more than
@@ -117,7 +117,11 @@
     "tmux": "tmux",
     "python": "/usr/bin/python3",
     "hermes": "hermes",
-    "gh": "gh"
+    "gh": "gh",
+
+    // A command that reads a draft pull request reply on stdin and exits
+    // non-zero to refuse it. Optional. An empty string disables the check.
+    "reply-check": ""
   },
 
   // The tmux session the runs happen in. Required when tmux is used to launch.
@@ -151,7 +155,8 @@
     // here, so it is this file's folder.
     "repo": ".",
 
-    // The board file's path inside that checkout. Required with "board".
+    // The board file's path inside that checkout. Required with "board". An
+    // issue machine also names "issues-file", a second file on the same branch.
     "file": "claims.json",
 
     // The branch the board lives on, and the remote it is pushed to. Required
