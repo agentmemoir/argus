@@ -91,6 +91,7 @@ def test_each_filter_counts_once_and_the_survivor_wins(configured: Configured) -
         "unknown_difficulty": 0,
         "blocked": 1,
         "claimed": 1,
+        "failed": 0,
         "escalated": 0,
         "missing_labels.type": 1,
         "type_ambiguous": 0,

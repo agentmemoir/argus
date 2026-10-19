@@ -176,6 +176,32 @@ def test_escalation_skips_until_clear_and_truncation_is_visible(
     assert IssuesSource(repo).select(reserve=False)["state"] == "AVAILABLE"
 
 
+def test_failed_issue_claim_is_skipped_for_the_next_issue(
+    configured: Configured,
+) -> None:
+    repo, _, board = configured
+    fixture_update(repo, rows=[issue(100001), issue(100002)])
+    board.records = {
+        "100001": {
+            "issue": "100001",
+            "machine_id": "worker-one",
+            "status": "claimed",
+            "reservation_id": "rsv-fixture",
+            "generation": 1,
+            "run_id": "issue-100001",
+        }
+    }
+    run_dir = repo / "runs" / "phase-100001"
+    run_dir.mkdir(parents=True)
+    (run_dir / "failed.json").write_text(
+        json.dumps({"version": 1, "phase": "100001"}), encoding="utf-8"
+    )
+    result = IssuesSource(repo).select(reserve=False)
+    assert result["state"] == "AVAILABLE" and result["issue"] == "100002"
+    assert result["skipped"]["failed"] == 1
+    assert "100001" in board.records
+
+
 def test_pending_validated_writeback_retries_before_search(
     configured: Configured,
 ) -> None:

@@ -23,6 +23,7 @@ from argus.issues.report import _Reports
 from argus.issues.task import render, task_directory, task_path, write
 from argus.issues.transport import IssuesUnavailable
 from argus.issues.trust import Trust
+from argus.phases.runstate import run_failed
 from argus.select.work_source import WorkSource
 
 
@@ -68,6 +69,7 @@ class IssuesSource(_Reports, WorkSource):
                     "unknown_difficulty",
                     "blocked",
                     "claimed",
+                    "failed",
                     "escalated",
                 ),
                 0,
@@ -188,8 +190,13 @@ class IssuesSource(_Reports, WorkSource):
                 self.skipped["escalated"] += 1
                 continue
             if record is not None and claims.held(record):
-                self.skipped["claimed"] += 1
                 if record.get("machine_id") == machine:
+                    if run_failed(self.repo, number, task_path(self.directory, row)):
+                        # The job failed and left its claim; skip it so the line
+                        # continues to another issue while the claim waits to
+                        # resume through its own windows.
+                        self.skipped["failed"] += 1
+                        continue
                     frozen = claims.snapshot(self.repo, number, record)
                     if frozen is None:
                         return self._base(
@@ -204,6 +211,7 @@ class IssuesSource(_Reports, WorkSource):
                         record,
                         path=frozen.relative_to(self.repo).as_posix(),
                     )
+                self.skipped["claimed"] += 1
                 last = row, record
                 last_state = "WAIT_FOR_CLAIM"
                 continue
