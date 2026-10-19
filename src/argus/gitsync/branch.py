@@ -67,10 +67,8 @@ def ensure_phase_branch(
     base = base or integration_branch(repo)
     info: dict[str, Any] = {"repo": str(repo), "branch": branch, "base": base}
     if not is_git_repo(repo):
-        # Narrow own-state stop: a checkout with no repository cannot be cut, and
-        # a git call would walk up into the enclosing checkout.
-        return blocked(
-            info, "not a git working tree; restore the checkout's repository"
+        return degraded(
+            info, "not a git working tree; the branch step is retried next tick"
         )
     # Recorded up front so every return below, blocked ones included, reports
     # where the checkout really is rather than only what was asked of it.

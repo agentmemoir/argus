@@ -154,11 +154,7 @@ def sync_one(
     repo = Path(repo).resolve()
     info: dict[str, Any] = {"repo": str(repo), "mode": mode}
     if not is_git_repo(repo):
-        # Narrow own-state stop: a lost checkout refuses rather than letting a
-        # git call walk up into the enclosing repository.
-        return blocked(
-            info, "not a git working tree; restore the checkout's repository"
-        )
+        return degraded(info, "not a git working tree; the next tick retries")
     cur_branch, cur_remote, remote_branch, why = resolve_upstream(repo)
     if why and cur_branch:
         # The branch may have a configured upstream whose remote-tracking ref

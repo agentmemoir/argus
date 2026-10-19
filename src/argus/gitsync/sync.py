@@ -52,11 +52,7 @@ def resync_integration(repo: str | Path, base: str | None = None) -> dict[str, A
     base = base or integration_branch(repo)
     info: dict[str, Any] = {"repo": str(repo), "mode": "resync", "base": base}
     if not is_git_repo(repo):
-        # Narrow own-state stop: a lost checkout refuses rather than letting a
-        # git call walk up into the enclosing repository.
-        return blocked(
-            info, "not a git working tree; restore the checkout's repository"
-        )
+        return degraded(info, "not a git working tree; the next tick retries")
     here = current_branch(repo)
     if not here:
         return degraded(
