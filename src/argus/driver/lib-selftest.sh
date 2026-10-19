@@ -400,6 +400,9 @@ PROBE
   # The failure-residue case writes its own run directory, so it runs after the
   # cases that share the fixture's phase state.
   selftest_run_case job_failure
+  # The fresh-keep case also writes its own run directory: it stubs glide's
+  # `--fresh` keep contract and reads the edited map back from the new run.
+  selftest_run_case job_fresh_keeps_edit
 
 
   tmux kill-session -t "$SESSION" 2>/dev/null || true
