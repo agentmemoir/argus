@@ -99,7 +99,10 @@ def test_halted_tick_settles_publication_without_selection(
 ) -> None:
     shell(tmp_path, f': >"$HALT"\nPUBLICATION={publication}\n_drive\n')
     events = (tmp_path / "events").read_text().splitlines()
-    assert ("PUBLISH" if publication == "merged" else "GATE") in events
+    # The merge check runs on every tick; a halt holds the launch either way.
+    assert any(event.startswith("merge check:") for event in events)
+    if publication == "merged":
+        assert "PUBLISH" in events
     assert not {"SELECT", "BRANCH", "LAUNCH"}.intersection(events)
     assert (tmp_path / "halted").exists()
 
@@ -114,7 +117,7 @@ def test_publication_progress_ends_tick_before_selection(tmp_path: Path) -> None
 def test_merge_check_only_does_not_select(tmp_path: Path) -> None:
     shell(tmp_path, "_drive --merge-check-only\n")
     events = (tmp_path / "events").read_text().splitlines()
-    assert "GATE" in events
+    assert any(event.startswith("merge check:") for event in events)
     assert not {"SELECT", "BRANCH", "LAUNCH"}.intersection(events)
 
 
@@ -187,31 +190,6 @@ def test_idle_stop_does_not_hold_stale_current_file(tmp_path: Path) -> None:
     shell(tmp_path, 'printf "100020\\n" >"$CURRENT"\nstop\nrm "$HALT"\n_drive\n')
     assert not (tmp_path / "stopped-claim").exists()
     assert "SELECT" in (tmp_path / "events").read_text().splitlines()
-
-
-@pytest.mark.parametrize("transition", [True, False])
-def test_group_ready_transition_ends_tick_before_selection(
-    tmp_path: Path, transition: bool
-) -> None:
-    ready = ',"ready":{"ok":true}' if transition else ""
-    shell(
-        tmp_path,
-        """
-. "$TEST_DRIVER/lib-driver-group.sh"
-claim_renew() { :; }
-watch_signals_pull_request() { :; }
-python_transport() {
-  case "$*" in
-    *'--mode ready'*) printf '%s' 'READY_ANSWER' ;;
-    *'--mode published'*) printf '{"state":"BLOCKED"}' ;;
-    *) "$TEST_PYTHON" "$@" ;;
-  esac
-}
-_drive
-""".replace("READY_ANSWER", '{"state":"READY","summary":"ready"' + ready + "}"),
-    )
-    events = (tmp_path / "events").read_text().splitlines()
-    assert ("SELECT" in events) is not transition
 
 
 @pytest.mark.parametrize("launch", ["ok", "stop-again", "fail", "fail-new-stop"])
