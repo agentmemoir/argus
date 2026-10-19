@@ -15,7 +15,7 @@ def _receipt(tmp_path: Path, **fields: object) -> Path:
     runs = tmp_path / "runs"
     run = runs / "phase-000001"
     run.mkdir(parents=True)
-    receipt = {
+    receipt: dict[str, object] = {
         "version": 1,
         "phase": "000001",
         "state": "awaiting_review",

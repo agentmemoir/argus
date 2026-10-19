@@ -59,7 +59,7 @@ printf 'rc=%s\\n' "$rc"
 printf 'halt=%s\\n' "$([ -f "$HALT" ] && echo present || echo absent)"
 printf 'record=%s\\n' "$([ -f "$HALT_RECORD" ] && echo present || echo absent)"
 """
-    result = subprocess.run(
+    completed = subprocess.run(
         ["bash", "-c", script],
         cwd=tmp_path,
         env={
@@ -75,8 +75,8 @@ printf 'record=%s\\n' "$([ -f "$HALT_RECORD" ] && echo present || echo absent)"
         timeout=30,
         check=False,
     )
-    assert result.returncode == 0, result.stderr
-    return result.stdout
+    assert completed.returncode == 0, completed.stderr
+    return completed.stdout
 
 
 def test_a_pending_repair_logs_its_reason_and_launches_nothing(
