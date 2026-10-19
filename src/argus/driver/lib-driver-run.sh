@@ -351,6 +351,7 @@ except OSError:
            failure_residue_write "$number" "$rel" "$state" "$rc" "$(job_retries)"
            log "job-failed: ${work_kind:-phase} $number rc=$rc state=${state:-unknown}; retries exhausted, recorded as failed; continuing"
            tmux_set_title "${work_kind:-phase} $number failed"
+           notify_phase "$rel" failed "" "$rc"
            rm -f "$CURRENT" "$PIDFILE"
            exit 0
          fi

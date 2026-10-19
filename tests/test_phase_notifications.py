@@ -197,6 +197,21 @@ class PhaseNotificationTests(unittest.TestCase):
             message,
         )
 
+    def test_failed_says_the_line_continues_and_names_the_residue(self) -> None:
+        message = format_notification(
+            "phase-100520-scale-ceilings-docs.md",
+            "failed",
+            exit_code=2,
+        )
+        self.assertIn("failed after its retries", message)
+        self.assertIn("line continues", message)
+        self.assertNotIn("halted", message)
+        self.assertIn(
+            "cat "
+            + str(conventions.setting("driver.runs") / "phase-100520/failed.json"),
+            message,
+        )
+
     def test_stalled_uses_friendly_duration(self) -> None:
         message = format_notification(
             "phase-100520-scale-ceilings-docs.md",
