@@ -19,13 +19,13 @@ def _check_rows(text: str) -> list[dict[str, Any]] | None:
     the caller as "not a pass", which is the safe direction.
     """
     try:
-        raw = json.loads(text)
+        parsed: object = json.loads(text)
     except ValueError:
         return None
-    if not isinstance(raw, list):
+    if not isinstance(parsed, list):
         return None
     rows: list[dict[str, Any]] = []
-    for entry in raw:
+    for entry in cast("list[object]", parsed):
         if not isinstance(entry, dict):
             continue
         row = cast("dict[str, Any]", entry)

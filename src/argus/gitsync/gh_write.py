@@ -5,7 +5,7 @@
 import subprocess
 from pathlib import Path
 
-from argus.gitsync.gh_target import _repo_target
+from argus.gitsync.gh_target import repo_target
 from argus.gitsync.git import GH_TIMEOUT_S, gh_binary
 
 
@@ -22,7 +22,7 @@ def gh_mark_pull_request_ready(
     safe. A closed pull request exits non-zero, which is reported rather than
     hidden. Returns ``(ok, detail)``.
     """
-    target = _repo_target(owner, repo, host)
+    target = repo_target(owner, repo, host)
     argv = [gh_binary(), "pr", "ready", str(int(number)), "--repo", target]
     try:
         done = subprocess.run(
@@ -49,7 +49,7 @@ def gh_edit_pull_request_body(
     A failure is reported, never raised. The caller keeps its own state, so a
     GitHub blip must not undo a publication that already landed.
     """
-    target = _repo_target(owner, repo, host)
+    target = repo_target(owner, repo, host)
     argv = [
         gh_binary(),
         "pr",
@@ -81,7 +81,7 @@ def gh_comment_pull_request(
     body: str,
 ) -> tuple[bool, str]:
     """Post a comment on a pull request. Returns ``(ok, detail)``."""
-    target = _repo_target(owner, repo, host)
+    target = repo_target(owner, repo, host)
     argv = [
         gh_binary(),
         "pr",

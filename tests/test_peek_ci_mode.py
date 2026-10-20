@@ -12,9 +12,9 @@ from gh_mode_support import (
     STUB_PEEK_CI,
     URL,
     Workspace,
-    _open_pr,
-    _row,
     build_workspace,
+    check_row,
+    open_pull_request,
 )
 
 
@@ -34,8 +34,12 @@ def workspace(
 
 def test_every_check_passing_is_the_only_way_to_pass(workspace: Workspace) -> None:
     workspace.answer(
-        list=_open_pr(),
-        checks=[_row("build", "pass"), _row("lint", "pass"), _row("test", "pass")],
+        list=open_pull_request(),
+        checks=[
+            check_row("build", "pass"),
+            check_row("lint", "pass"),
+            check_row("test", "pass"),
+        ],
     )
 
     out = mode_peek_ci(workspace.root, branch=BRANCH)
@@ -61,8 +65,8 @@ def test_every_check_passing_is_the_only_way_to_pass(workspace: Workspace) -> No
 
 def test_one_failing_check_is_failing_and_not_passing(workspace: Workspace) -> None:
     workspace.answer(
-        list=_open_pr(),
-        checks=[_row("build", "fail"), _row("lint", "pass")],
+        list=open_pull_request(),
+        checks=[check_row("build", "fail"), check_row("lint", "pass")],
         checks_exit=1,
     )
 
@@ -83,8 +87,8 @@ def test_a_pending_check_is_pending_and_the_mode_does_not_wait(
     workspace: Workspace,
 ) -> None:
     workspace.answer(
-        list=_open_pr(),
-        checks=[_row("build", "pending"), _row("lint", "pass")],
+        list=open_pull_request(),
+        checks=[check_row("build", "pending"), check_row("lint", "pass")],
         checks_exit=8,
     )
 
@@ -104,8 +108,8 @@ def test_all_skipped_exits_zero_and_must_not_be_reported_as_passing(
     # gh exits 0 when nothing failed and nothing is pending, which a skipped
     # check satisfies. Reading the exit code alone would call this a pass.
     workspace.answer(
-        list=_open_pr(),
-        checks=[_row("build", "skipping"), _row("lint", "skipping")],
+        list=open_pull_request(),
+        checks=[check_row("build", "skipping"), check_row("lint", "skipping")],
         checks_exit=0,
     )
 
@@ -120,7 +124,9 @@ def test_all_skipped_exits_zero_and_must_not_be_reported_as_passing(
 
 
 def test_a_cancelled_check_is_not_a_pass(workspace: Workspace) -> None:
-    workspace.answer(list=_open_pr(), checks=[_row("build", "cancel")], checks_exit=0)
+    workspace.answer(
+        list=open_pull_request(), checks=[check_row("build", "cancel")], checks_exit=0
+    )
 
     out = mode_peek_ci(workspace.root, branch=BRANCH)
 
@@ -134,8 +140,8 @@ def test_an_unrecognised_bucket_is_named_in_the_summary(workspace: Workspace) ->
     # total, so a summary that names only the four known buckets leaves it
     # unexplained while still saying the pull request did not pass.
     workspace.answer(
-        list=_open_pr(),
-        checks=[_row("build", "pass"), _row("flaky-job", "neutral")],
+        list=open_pull_request(),
+        checks=[check_row("build", "pass"), check_row("flaky-job", "neutral")],
         checks_exit=0,
     )
 
@@ -154,8 +160,8 @@ def test_a_bucket_outside_the_known_set_is_not_a_pass(workspace: Workspace) -> N
     # The whole dangerous path: every row is a non-pass, gh exits 0, and no
     # known bucket is non-zero. Reading only the known buckets calls this a pass.
     workspace.answer(
-        list=_open_pr(),
-        checks=[_row("flaky-job", "neutral")],
+        list=open_pull_request(),
+        checks=[check_row("flaky-job", "neutral")],
         checks_exit=0,
     )
 
@@ -174,7 +180,7 @@ def test_gh_exiting_zero_without_a_check_list_is_not_a_pass(
 ) -> None:
     # gh answered 0 but printed no list at all, so there are no rows to read.
     # A code of 0 with no rows is a fault, not an empty passing list.
-    workspace.answer(list=_open_pr(), checks_exit=0, checks=None)
+    workspace.answer(list=open_pull_request(), checks_exit=0, checks=None)
 
     out = mode_peek_ci(workspace.root, branch=BRANCH)
 
@@ -191,8 +197,8 @@ def test_a_non_zero_exit_beside_all_pass_rows_is_not_a_pass(
     # The rows and the exit code disagree. Trusting the rows alone would report
     # a pass on an exit code gh uses to say something went wrong.
     workspace.answer(
-        list=_open_pr(),
-        checks=[_row("build", "pass")],
+        list=open_pull_request(),
+        checks=[check_row("build", "pass")],
         checks_exit=8,
     )
 
@@ -209,7 +215,7 @@ def test_a_non_zero_exit_beside_all_pass_rows_is_not_a_pass(
 
 
 def test_an_empty_check_list_is_not_a_pass(workspace: Workspace) -> None:
-    workspace.answer(list=_open_pr(), checks=[], checks_exit=0)
+    workspace.answer(list=open_pull_request(), checks=[], checks_exit=0)
 
     out = mode_peek_ci(workspace.root, branch=BRANCH)
 
@@ -222,7 +228,7 @@ def test_an_empty_check_list_is_not_a_pass(workspace: Workspace) -> None:
 def test_no_checks_reported_at_all_is_not_a_pass(workspace: Workspace) -> None:
     # What gh really does on a branch with no checks: nothing on stdout, a
     # message on stderr, and a non-zero exit.
-    workspace.answer(list=_open_pr(), checks_exit=1, checks=None)
+    workspace.answer(list=open_pull_request(), checks_exit=1, checks=None)
 
     out = mode_peek_ci(workspace.root, branch=BRANCH)
 

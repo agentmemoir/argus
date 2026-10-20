@@ -3,7 +3,7 @@
 """The ``[HOST/]OWNER/REPO`` argument gh wants, on its own."""
 
 
-def _repo_target(owner: str | None, repo: str | None, host: str | None) -> str:
+def repo_target(owner: str | None, repo: str | None, host: str | None) -> str:
     """The ``[HOST/]OWNER/REPO`` argument gh wants for one pull request.
 
     The host is passed through rather than matched, so a GitHub Enterprise

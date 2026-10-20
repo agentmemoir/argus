@@ -13,9 +13,9 @@ MAX_NAMED = 5
 NEVER_RAN = -1
 
 
-def _counts(rows: list[dict[str, Any]]) -> dict[str, int]:
+def bucket_counts(rows: list[dict[str, Any]]) -> dict[str, int]:
     """One count per bucket gh reports, plus the number of rows."""
-    counts = dict.fromkeys(BUCKETS, 0)
+    counts: dict[str, int] = dict.fromkeys(BUCKETS, 0)
     counts["total"] = len(rows)
     for row in rows:
         bucket = str(row.get("bucket") or "")
@@ -24,7 +24,7 @@ def _counts(rows: list[dict[str, Any]]) -> dict[str, int]:
     return counts
 
 
-def _state(rows: list[dict[str, Any]], counts: dict[str, int]) -> str:
+def checks_state(rows: list[dict[str, Any]], counts: dict[str, int]) -> str:
     """The one word for this pull request's checks.
 
     ``passing`` needs a row to exist and every row to be a pass. A fail bucket
@@ -91,7 +91,7 @@ def _unknown_labels(rows: list[dict[str, Any]]) -> list[str]:
     ]
 
 
-def _reasons(
+def blocker_reasons(
     rows: list[dict[str, Any]], counts: dict[str, int], code: int
 ) -> list[str]:
     """Why these checks are not a pass, one short line per fact."""
@@ -131,7 +131,9 @@ def _reasons(
     return reasons
 
 
-def _summary(row: dict[str, Any], code: int | None, rows: list[dict[str, Any]]) -> str:
+def summary_line(
+    row: dict[str, Any], code: int | None, rows: list[dict[str, Any]]
+) -> str:
     """What ran, what did not, and what is unknown, in one line.
 
     A skipped or cancelled check is named here and not only counted, because a
@@ -163,7 +165,7 @@ def _summary(row: dict[str, Any], code: int | None, rows: list[dict[str, Any]]) 
     return f"{head}: " + "; ".join(parts)
 
 
-def _target_label(number: int | None, url: str | None) -> str:
+def target_label(number: int | None, url: str | None) -> str:
     """How to name the pull request in a message, and never ``#None``.
 
     A URL whose last segment is not a number, such as one that ends in

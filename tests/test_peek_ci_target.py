@@ -17,10 +17,10 @@ from gh_mode_support import (
     STUB_PEEK_CI,
     URL,
     Workspace,
-    _keep_settings,
-    _open_pr,
-    _row,
     build_workspace,
+    check_row,
+    keep_settings,
+    open_pull_request,
 )
 
 
@@ -43,7 +43,7 @@ def test_an_explicit_pull_request_still_reports_the_branch(
 ) -> None:
     # The pull request comes from --pull-request, but the branch is still a fact
     # the reader needs, so it is resolved and reported rather than left null.
-    workspace.answer(checks=[_row("build", "pass")])
+    workspace.answer(checks=[check_row("build", "pass")])
 
     out = mode_peek_ci(workspace.root, pull_request=URL)
 
@@ -57,7 +57,7 @@ def test_an_explicit_pull_request_survives_a_branch_that_cannot_be_resolved(
     # A URL names the pull request on its own, so a checkout on a detached HEAD
     # is not a reason to refuse the read: the branch is null and the read holds.
     assert git(workspace.root, "checkout", "-q", "--detach")[0] == 0
-    workspace.answer(checks=[_row("build", "pass")])
+    workspace.answer(checks=[check_row("build", "pass")])
 
     out = mode_peek_ci(workspace.root, pull_request=URL)
 
@@ -66,7 +66,7 @@ def test_an_explicit_pull_request_survives_a_branch_that_cannot_be_resolved(
 
 
 def test_an_explicit_url_is_read_directly(workspace: Workspace) -> None:
-    workspace.answer(checks=[_row("build", "pass")])
+    workspace.answer(checks=[check_row("build", "pass")])
 
     out = mode_peek_ci(workspace.root, pull_request=URL)
 
@@ -97,7 +97,7 @@ def test_a_url_without_a_number_is_named_by_the_url(workspace: Workspace) -> Non
 
 
 def test_an_explicit_number_keeps_the_url_unknown(workspace: Workspace) -> None:
-    workspace.answer(checks=[_row("build", "pass")])
+    workspace.answer(checks=[check_row("build", "pass")])
 
     out = mode_peek_ci(workspace.root, pull_request="42")
 
@@ -122,8 +122,8 @@ def test_the_cli_accepts_the_peek_ci_mode(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    monkeypatch.setattr(conventions, "configure_from_args", _keep_settings)
-    workspace.answer(list=_open_pr(), checks=[_row("build", "pass")])
+    monkeypatch.setattr(conventions, "configure_from_args", keep_settings)
+    workspace.answer(list=open_pull_request(), checks=[check_row("build", "pass")])
 
     monkeypatch.setattr(
         sys, "argv", ["gitsync", "--mode", "peek-ci", "--branch", BRANCH]
@@ -140,10 +140,10 @@ def test_a_pending_pull_request_exits_one(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    monkeypatch.setattr(conventions, "configure_from_args", _keep_settings)
+    monkeypatch.setattr(conventions, "configure_from_args", keep_settings)
     workspace.answer(
-        list=_open_pr(),
-        checks=[_row("build", "pending")],
+        list=open_pull_request(),
+        checks=[check_row("build", "pending")],
         checks_exit=8,
     )
 
@@ -166,8 +166,8 @@ def test_the_repo_flag_names_the_checkout_to_peek_at(
     # read the wrong checkout.
     other = tmp_path / "elsewhere"
     other.mkdir()
-    monkeypatch.setattr(conventions, "configure_from_args", _keep_settings)
-    workspace.answer(list=_open_pr(), checks=[_row("build", "pass")])
+    monkeypatch.setattr(conventions, "configure_from_args", keep_settings)
+    workspace.answer(list=open_pull_request(), checks=[check_row("build", "pass")])
 
     monkeypatch.setattr(
         sys,

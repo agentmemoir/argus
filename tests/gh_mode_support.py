@@ -75,7 +75,7 @@ class Workspace:
     phases: Path
     transport: Path
     calls: Path
-    defaults: dict[str, object] = field(default_factory=dict)
+    defaults: dict[str, object] = field(default_factory=dict[str, object])
 
     def answer(self, **data: object) -> None:
         """Set what the stub gh answers next, over the file's own defaults."""
@@ -90,7 +90,7 @@ class Workspace:
         return [call for call in self.commands() if call[:2] == ["pr", "checks"]]
 
 
-def _keep_settings(_args: object) -> None:
+def keep_settings(_args: object) -> None:
     return None
 
 
@@ -154,7 +154,7 @@ def build_workspace(
     return Workspace(root, phases, transport, calls, defaults)
 
 
-def _row(name: str, bucket: str) -> dict[str, object]:
+def check_row(name: str, bucket: str) -> dict[str, object]:
     return {
         "bucket": bucket,
         "state": bucket.upper(),
@@ -163,7 +163,7 @@ def _row(name: str, bucket: str) -> dict[str, object]:
     }
 
 
-def _open_pr(number: int = 11) -> list[dict[str, object]]:
+def open_pull_request(number: int = 11) -> list[dict[str, object]]:
     return [
         {
             "number": number,

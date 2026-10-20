@@ -18,8 +18,8 @@ from gh_mode_support import (
     STUB_OPEN_PR,
     URL,
     Workspace,
-    _keep_settings,
     build_workspace,
+    keep_settings,
 )
 
 
@@ -255,7 +255,7 @@ def test_the_cli_accepts_open_pr_and_reports_config_error(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    monkeypatch.setattr(conventions, "configure_from_args", _keep_settings)
+    monkeypatch.setattr(conventions, "configure_from_args", keep_settings)
     workspace.answer(list=[], create=URL, reread=[CREATED])
 
     monkeypatch.setattr(
@@ -282,7 +282,7 @@ def test_a_create_the_cli_cannot_confirm_exits_one(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    monkeypatch.setattr(conventions, "configure_from_args", _keep_settings)
+    monkeypatch.setattr(conventions, "configure_from_args", keep_settings)
     workspace.answer(list=[], create="")
     monkeypatch.setattr(
         sys, "argv", ["gitsync", "--mode", "open-pr", "--branch", BRANCH]
@@ -300,7 +300,7 @@ def test_blocked_exits_one(
     workspace.answer(
         list=[{"number": 9, "state": "MERGED", "isDraft": False, "url": "u/9"}]
     )
-    monkeypatch.setattr(conventions, "configure_from_args", _keep_settings)
+    monkeypatch.setattr(conventions, "configure_from_args", keep_settings)
     monkeypatch.setattr(
         sys, "argv", ["gitsync", "--mode", "open-pr", "--branch", BRANCH]
     )

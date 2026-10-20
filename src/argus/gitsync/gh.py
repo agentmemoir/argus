@@ -8,13 +8,7 @@ This module stays the import path every caller already uses.
 """
 
 from argus.gitsync.gh_checks import (
-    _check_rows as _check_rows,
-)
-from argus.gitsync.gh_checks import (
     gh_pull_request_checks as gh_pull_request_checks,
-)
-from argus.gitsync.gh_read import (
-    _gh_pull_request_view as _gh_pull_request_view,
 )
 from argus.gitsync.gh_read import (
     gh_pull_request_body as gh_pull_request_body,
@@ -29,7 +23,7 @@ from argus.gitsync.gh_read import (
     gh_pull_requests_for_branch as gh_pull_requests_for_branch,
 )
 from argus.gitsync.gh_target import (
-    _repo_target as _repo_target,
+    repo_target as repo_target,
 )
 from argus.gitsync.gh_write import (
     gh_comment_pull_request as gh_comment_pull_request,
@@ -45,7 +39,6 @@ from argus.gitsync.gh_write import (
 )
 
 __all__ = [
-    "_repo_target",
     "gh_comment_pull_request",
     "gh_edit_pull_request_body",
     "gh_mark_pull_request_ready",

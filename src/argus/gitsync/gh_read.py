@@ -7,7 +7,7 @@ import subprocess
 from pathlib import Path
 from typing import Any, cast
 
-from argus.gitsync.gh_target import _repo_target
+from argus.gitsync.gh_target import repo_target
 from argus.gitsync.git import GH_TIMEOUT_S, gh_binary
 
 
@@ -28,7 +28,7 @@ def _gh_pull_request_view(
     logs are copied into issues; the exit status is what this needs and the
     status alone is enough to separate an answer from "could not ask".
     """
-    target = _repo_target(owner, repo, host)
+    target = repo_target(owner, repo, host)
     argv = [
         gh_binary(),
         "pr",
@@ -139,7 +139,7 @@ def gh_pull_request_body(
     Returns ``(body, detail)`` where body is the text gh reports. None is not
     empty: a caller that reads "could not ask" as empty would wipe the body.
     """
-    target = _repo_target(owner, repo, host)
+    target = repo_target(owner, repo, host)
     argv = [
         gh_binary(),
         "pr",
@@ -217,13 +217,13 @@ def gh_pull_requests_for_branch(
     if done.returncode != 0:
         return None, f"gh exited {done.returncode}"
     try:
-        raw = json.loads(done.stdout)
+        parsed: object = json.loads(done.stdout)
     except ValueError:
         return None, "gh did not return JSON"
-    if not isinstance(raw, list):
+    if not isinstance(parsed, list):
         return None, "gh returned JSON that is not a list"
     rows: list[dict[str, Any]] = []
-    for entry in raw:
+    for entry in cast("list[object]", parsed):
         if not isinstance(entry, dict):
             continue
         row = cast("dict[str, Any]", entry)

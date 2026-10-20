@@ -26,11 +26,11 @@ from argus.gitsync.mode_open_pr import resolve_branch
 from argus.gitsync.peek_ci_summary import (
     BUCKETS,
     NEVER_RAN,
-    _counts,
-    _reasons,
-    _state,
-    _summary,
-    _target_label,
+    blocker_reasons,
+    bucket_counts,
+    checks_state,
+    summary_line,
+    target_label,
 )
 
 # The buckets gh reports. Anything else counts toward the row total and toward
@@ -70,7 +70,7 @@ def _target_from(pull_request: int | str) -> tuple[int | str, int | None, str | 
 
 def _row(root: Path) -> dict[str, Any]:
     """One repository's row, with every field present and unclaimed."""
-    checks = dict.fromkeys(BUCKETS, 0)
+    checks: dict[str, int] = dict.fromkeys(BUCKETS, 0)
     checks["total"] = 0
     return {
         "repo": str(root),
@@ -112,7 +112,7 @@ def _result(
         "branch": branch,
         "state": row["state"],
         "repos": [row],
-        "summary": _summary(row, code, rows or []),
+        "summary": summary_line(row, code, rows or []),
     }
 
 
@@ -179,12 +179,12 @@ def mode_peek_ci(
     row["url"] = url
     if rows is None:
         row["blockers"] = [
-            f"gh could not report checks for {_target_label(number, url)}: {detail}"
+            f"gh could not report checks for {target_label(number, url)}: {detail}"
         ]
         return _result(branch_name, row, None if code < 0 else code)
 
-    counts = _counts(rows)
-    state = _state(rows, counts)
+    counts = bucket_counts(rows)
+    state = checks_state(rows, counts)
     row["checks"] = counts
     row["state"] = state
     if state == "passing" and code in (0, NEVER_RAN):
@@ -196,7 +196,7 @@ def mode_peek_ci(
         row["state"] = "unknown"
         row["blockers"] = [f"gh exited {code} while every row said pass"]
         return _result(branch_name, row, code, rows)
-    row["blockers"] = _reasons(rows, counts, code)
+    row["blockers"] = blocker_reasons(rows, counts, code)
     return _result(branch_name, row, code, rows)
 
 

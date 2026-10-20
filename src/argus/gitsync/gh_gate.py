@@ -6,7 +6,7 @@ import json
 import subprocess
 from typing import Any, Generic, NamedTuple, TypeVar, cast
 
-from argus.gitsync.gh import _repo_target
+from argus.gitsync.gh import repo_target
 from argus.gitsync.git import GH_TIMEOUT_S, gh_binary
 
 T = TypeVar("T")
@@ -52,7 +52,7 @@ def gh_pull_request_comment_bodies(
     """Every comment body on a pull request, or ``None`` and why not."""
     done, why = _gh(
         ["pr", "view", str(int(number)), "--json", "comments"]
-        + ["--repo", _repo_target(owner, repo, host)]
+        + ["--repo", repo_target(owner, repo, host)]
     )
     if done is None:
         return GhRead(None, why)
