@@ -4,7 +4,6 @@
 
 import json
 import sys
-from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
@@ -13,110 +12,29 @@ from argus import conventions
 from argus.gitsync import main
 from argus.gitsync.git import ConfigError, git
 from argus.gitsync.mode_open_pr import mode_open_pr
-
-BRANCH = "feature/cache-warm"
-URL = "https://github.com/example/argus/pull/11"
-# What the read after a create reports for the new pull request.
-CREATED = {"number": 11, "state": "OPEN", "isDraft": True, "url": URL}
-
-STUB = """#!__PYTHON__
-import json
-import sys
-from pathlib import Path
-
-transport = json.loads(Path(__TRANSPORT__).read_text())
-call = sys.argv[1:]
-log = Path(__CALLS__)
-seen = log.read_text().splitlines() if log.exists() else []
-reads = sum(1 for item in seen if json.loads(item)[:2] == ["pr", "list"])
-with log.open("a", encoding="utf-8") as handle:
-    handle.write(json.dumps(call) + "\\n")
-if call[:2] == ["pr", "list"]:
-    later = transport.get("reread")
-    print(json.dumps(later if reads and later is not None else (transport.get("list") or [])))
-    raise SystemExit(int(transport.get("list_exit", 0)))
-elif call[:2] == ["pr", "create"]:
-    print(transport.get("create") or "")
-    raise SystemExit(int(transport.get("create_exit", 0)))
-else:
-    raise SystemExit(3)
-"""
-
-
-@dataclass
-class Workspace:
-    """A checkout, the phases folder beside it, and a stubbed gh."""
-
-    root: Path
-    phases: Path
-    transport: Path
-    calls: Path
-
-    def answer(self, **data: object) -> None:
-        """Set what the stub gh prints next."""
-        self.transport.write_text(json.dumps(data))
-
-    def commands(self) -> list[list[str]]:
-        if not self.calls.exists():
-            return []
-        return [json.loads(row) for row in self.calls.read_text().splitlines()]
-
-
-def _keep_settings(_args: object) -> None:
-    return None
+from gh_mode_support import (
+    BRANCH,
+    CREATED,
+    STUB_OPEN_PR,
+    URL,
+    Workspace,
+    _keep_settings,
+    build_workspace,
+)
 
 
 @pytest.fixture
 def workspace(
     tmp_path: Path, exec_dir: Path, monkeypatch: pytest.MonkeyPatch
 ) -> Workspace:
-    root = tmp_path / "public"
-    root.mkdir()
-    phases = root / "phases"
-    phases.mkdir()
-    # The stub lives where the host really runs a file; only its data is temp.
-    stub = exec_dir / "gh"
-    transport = tmp_path / "transport.json"
-    calls = tmp_path / "calls.jsonl"
-    transport.write_text(json.dumps({"list": [], "create": URL, "reread": [CREATED]}))
-    stub.write_text(
-        STUB.replace("__PYTHON__", sys.executable)
-        .replace("__TRANSPORT__", repr(str(transport)))
-        .replace("__CALLS__", repr(str(calls)))
+    return build_workspace(
+        tmp_path,
+        exec_dir,
+        monkeypatch,
+        stub=STUB_OPEN_PR,
+        defaults={"list": [], "create": URL, "reread": [CREATED]},
+        branch=BRANCH,
     )
-    stub.chmod(0o755)
-    monkeypatch.setattr(
-        conventions,
-        "_settings",
-        {
-            "commands.git": "git",
-            "commands.gh": str(stub),
-            "repo-root": str(root),
-            "phases.directory": str(phases),
-            "driver.include": ["phase-*.md"],
-            "driver.exclude": [],
-        },
-    )
-    assert git(root, "init", "-q", "-b", "main")[0] == 0
-    (root / "product.txt").write_text("work\n")
-    assert git(root, "add", "-A")[0] == 0
-    assert (
-        git(
-            root,
-            "-c",
-            "user.email=test@example.com",
-            "-c",
-            "user.name=test",
-            "commit",
-            "-qm",
-            "work",
-        )[0]
-        == 0
-    )
-    # An explicit --branch must be a branch this checkout has, so the fixture
-    # makes the one the tests name.
-    assert git(root, "branch", BRANCH)[0] == 0
-    return Workspace(root, phases, transport, calls)
 
 
 def test_creates_a_draft_and_reports_what_the_read_back_says(
