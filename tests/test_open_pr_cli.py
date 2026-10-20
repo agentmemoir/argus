@@ -141,6 +141,8 @@ def test_blocked_exits_one(
     )
 
     assert main.main() == 1
+
+
 def test_the_help_names_the_new_modes_for_branch_and_phase(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -159,4 +161,3 @@ def test_the_help_names_the_new_modes_for_branch_and_phase(
 
     assert "for the open-pr and peek-ci modes" in flat, flat
     assert "--mode open-pr or --mode peek-ci" in flat, flat
-
