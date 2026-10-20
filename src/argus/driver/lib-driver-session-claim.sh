@@ -63,6 +63,10 @@ elif left or state == "COOLDOWN":
         f"phase {number} is in cooldown for {left} more second(s); no launch. "
         "Action: wait, then run --session again"
     )
+elif "is already completed" in error:
+    # The owner check reports a terminal record as a fence with its own
+    # reason in the error, and this is the refusal that reason names.
+    line = f"phase {number} is already completed; no launch"
 elif state == "FENCED":
     line = (
         f"phase {number} reservation is stale; no launch. "
@@ -88,26 +92,38 @@ print(line)
 #
 # A session that ends without releasing leaves its claim on the board. A second
 # start on the same machine is the operator running the phase again, not a rival
-# owner, so the claim is reused rather than reported as a conflict with itself. A
-# record owned elsewhere, or one already expired, prints nothing.
+# owner, so the claim is reused rather than reported as a conflict with itself.
+# Only a live claim is reused: a record whose window has passed is one the queue
+# has already taken back, even before a tick marks it expired, so it prints
+# nothing and the start takes a fresh claim. A record owned elsewhere, or one
+# already expired, prints nothing.
 session_claim_own() {   # <number>
   local state=""
   state="$("$PYTHON" "$ARGUS/board/reservations.py" show \
     "${ARGUS_CONFIG_ARGS[@]}" "${BOARD_KIND_ARGS[@]+"${BOARD_KIND_ARGS[@]}"}" \
     --repo-root "$REPO" --machine-id "$PHASE_MACHINE_ID" 2>/dev/null)" || return 0
   printf '%s\n' "$state" | "$PYTHON" -c '
-import json, sys
+import datetime, json, sys
+sys.path.insert(0, sys.argv[1])
+import _bootstrap
+from argus import conventions
+conventions.configure_from_cli(sys.argv[3:])
+from argus.board.core import _as_moment
+from argus.board.records import _claim_window_passed
 try:
     data = json.load(sys.stdin)
 except ValueError:
     data = {}
-record = (data.get("phases") or {}).get(sys.argv[1]) if isinstance(data, dict) else None
+record = (data.get("phases") or {}).get(sys.argv[2]) if isinstance(data, dict) else None
 if not isinstance(record, dict):
     raise SystemExit(0)
 if record.get("status") not in {"claimed", "running", "paused", "blocked"}:
     raise SystemExit(0)
+moment = _as_moment(None) or datetime.datetime.now(datetime.UTC)
+if _claim_window_passed(record, moment):
+    raise SystemExit(0)
 print(str(record.get("reservation_id", "")) + "\t" + str(record.get("generation", "")))
-' "$1"
+' "$ARGUS" "$1" "${ARGUS_CONFIG_ARGS[@]}"
 }
 
 # Hold a live claim for one `--session` run, or refuse to start it.
@@ -151,7 +167,32 @@ session_claim_ensure() {   # <number> <rel>
       generation="${own#*$'\t'}"
     fi
     if [ -n "$id" ] && [ -n "$generation" ]; then
-      :
+      # A reused claim still owes the phase's declaration: the group governs
+      # the branch the run publishes on, and a declaration that cannot be read
+      # refuses, the same way a fresh claim would. When a group is declared,
+      # the board is the truth for the fence: the group request answers this
+      # machine's own held claim with the same reservation id, and claims any
+      # member the reused record did not cover.
+      if ! group_take_declared "$number"; then
+        printf 'argus: the reservation group for phase %s cannot be read: %s; no launch\n' \
+          "$number" "$GROUP_ERROR" >&2
+        return 1
+      fi
+      if group_active; then
+        out="$("$PYTHON" "$ARGUS/select/group.py" "${ARGUS_CONFIG_ARGS[@]}" \
+          --phase "$number" --machine-id "$PHASE_MACHINE_ID" 2>/dev/null)" || rc=$?
+        if [ "$rc" -ne 0 ]; then
+          printf 'argus: %s\n' "$(session_claim_refusal "$number" "$out")" >&2
+          return 1
+        fi
+        id="$(printf '%s\n' "$out" | session_claim_field reservation_id)"
+        generation="$(printf '%s\n' "$out" | session_claim_field generation)"
+        if [ -z "$id" ] || [ -z "$generation" ]; then
+          printf 'argus: the board returned no reservation for phase %s; no launch. Action: retry\n' \
+            "$number" >&2
+          return 1
+        fi
+      fi
     else
       if ! group_take_declared "$number"; then
         printf 'argus: the reservation group for phase %s cannot be read: %s; no launch\n' \

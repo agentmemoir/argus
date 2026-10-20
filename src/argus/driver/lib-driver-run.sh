@@ -51,6 +51,10 @@ record_claim() {
     rm -f "$CLAIM"
     return 0
   fi
+  # A hand-started --session writes the claim before run_session creates the
+  # run directory, so the write makes the folder it needs. The tick path has
+  # the folder already; mkdir -p answers both.
+  mkdir -p "$RUN_DIR"
   printf '%s\t%s\t%s\n' "$number" "$reservation_id" "$generation" >"$CLAIM"
 }
 

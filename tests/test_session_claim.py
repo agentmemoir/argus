@@ -5,9 +5,14 @@
 import os
 import subprocess
 import sys
+from collections.abc import Callable
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 
+from argus.board.core import _iso, _Mutation
 from argus.board.store import ReservationStore
+from argus.board.worktree import _transaction
 from driver_publication_fixture import DRIVER, DriverPublication
 from driver_publication_fixture import (
     driver_publication_fixture as driver_publication_fixture,  # noqa: F401
@@ -64,6 +69,25 @@ def session(
 
 def windows(fixture: DriverPublication) -> list[list[str]]:
     return [row for row in fixture.commands() if row[1] == "new-window"]
+
+
+def patch_record(
+    fixture: DriverPublication,
+    number: int,
+    change: Callable[[dict[str, Any]], None],
+    message: str,
+) -> None:
+    """Change one board record through the store's own write transaction."""
+    store = ReservationStore(fixture.root)
+
+    def mutate(state: dict[str, Any]) -> _Mutation:
+        record = state["phases"][str(number)]
+        change(record)
+        return _Mutation(True, None)
+
+    _transaction(
+        store.private, store.remote, store.branch, mutate, message, issues=False
+    )
 
 
 def test_session_on_a_free_phase_claims_it_and_records_the_claim(
@@ -154,3 +178,140 @@ printf 'rc=%s\\n' "$rc"
     assert "rc=1" in result.stdout
     assert "machine id is empty" in (tmp_path / "err").read_text()
     assert not (tmp_path / "claim").exists()
+
+
+def test_session_reuses_this_machines_live_claim(
+    driver_publication: DriverPublication,
+) -> None:
+    fixture = driver_publication
+    rel = add_phase(fixture, OTHER, "own")
+    (fixture.state / "claim").unlink()
+    token = ReservationStore(fixture.root).reserve(OTHER, "server-01")
+    result = session(fixture, OTHER, rel)
+    assert result.returncode == 0, result.stderr
+    claim = (fixture.state / "claim").read_text().split("\t")
+    assert claim[0] == str(OTHER)
+    record = ReservationStore(fixture.root).read()[0]["phases"][str(OTHER)]
+    # Reuse, not a second reservation: the id the board already held is the id
+    # the run wrote, and the owner never changed.
+    assert claim[1] == token["reservation_id"] == record["reservation_id"]
+    assert record["machine_id"] == "server-01"
+    assert record["status"] == "running"
+
+
+def test_session_refuses_to_reuse_a_claim_past_its_window(
+    driver_publication: DriverPublication,
+) -> None:
+    fixture = driver_publication
+    rel = add_phase(fixture, OTHER, "stale-window")
+    (fixture.state / "claim").unlink()
+    token = ReservationStore(fixture.root).reserve(OTHER, "server-01")
+    patch_record(
+        fixture,
+        OTHER,
+        lambda record: record.__setitem__(
+            "claimed_at", _iso(datetime.now(UTC) - timedelta(hours=49))
+        ),
+        "test: a claim whose start window has passed",
+    )
+    before = len(windows(fixture))
+    result = session(fixture, OTHER, rel)
+    assert result.returncode != 0
+    assert "no launch" in result.stderr
+    assert not (fixture.state / "claim").exists()
+    assert len(windows(fixture)) == before
+    record = ReservationStore(fixture.root).read()[0]["phases"][str(OTHER)]
+    # The stale claim was not reused and nothing new was minted over it.
+    assert record["reservation_id"] == token["reservation_id"]
+
+
+def test_session_refuses_a_completed_phase_at_the_gate(
+    driver_publication: DriverPublication,
+) -> None:
+    fixture = driver_publication
+    rel = add_phase(fixture, OTHER, "done")
+    (fixture.state / "claim").unlink()
+    token = ReservationStore(fixture.root).reserve(OTHER, "server-01")
+    patch_record(
+        fixture,
+        OTHER,
+        lambda record: record.__setitem__("status", "completed"),
+        "test: a phase the board already finished",
+    )
+    before = len(windows(fixture))
+    result = session(
+        fixture,
+        OTHER,
+        rel,
+        CLIO_RESERVATION_ID=str(token["reservation_id"]),
+        CLIO_RESERVATION_GENERATION=str(token["generation"]),
+    )
+    assert result.returncode != 0
+    assert "already completed; no launch" in result.stderr
+    assert not (fixture.state / "claim").exists()
+    assert len(windows(fixture)) == before
+
+
+def test_session_refuses_an_expired_record_at_the_gate(
+    driver_publication: DriverPublication,
+) -> None:
+    fixture = driver_publication
+    rel = add_phase(fixture, OTHER, "expired")
+    (fixture.state / "claim").unlink()
+    token = ReservationStore(fixture.root).reserve(OTHER, "server-01")
+    ReservationStore(fixture.root).expire_stale(
+        now=datetime.now(UTC) + timedelta(hours=49)
+    )
+    before = len(windows(fixture))
+    result = session(
+        fixture,
+        OTHER,
+        rel,
+        CLIO_RESERVATION_ID=str(token["reservation_id"]),
+        CLIO_RESERVATION_GENERATION=str(token["generation"]),
+    )
+    assert result.returncode != 0
+    assert "no launch" in result.stderr
+    assert not (fixture.state / "claim").exists()
+    assert len(windows(fixture)) == before
+
+
+def add_group_phase(fixture: DriverPublication, number: int, members: list[int]) -> str:
+    """Add a phase document that declares a reservation group."""
+    rel = add_phase(fixture, number, f"member-{number}")
+    path = fixture.root / rel
+    listed = ", ".join(str(member) for member in members)
+    path.write_text(
+        f"# {number}. Group member\n\n- [ ] Work to do.\n\n"
+        f"### Reservation Group\n\n`together: {listed}`\n",
+        encoding="utf-8",
+    )
+    folder = fixture.root / "phases-data"
+    subprocess.run(
+        ["git", "-C", str(folder), "add", "-A"], check=True, capture_output=True
+    )
+    subprocess.run(
+        ["git", "-C", str(folder), "commit", "-qm", f"group {number}"],
+        check=True,
+        capture_output=True,
+    )
+    return rel
+
+
+def test_session_reuse_claims_the_declared_group(
+    driver_publication: DriverPublication,
+) -> None:
+    fixture = driver_publication
+    rel = add_group_phase(fixture, OTHER, [OTHER, OTHER + 1])
+    add_group_phase(fixture, OTHER + 1, [OTHER, OTHER + 1])
+    (fixture.state / "claim").unlink()
+    tokens = ReservationStore(fixture.root).reserve_group(
+        [OTHER, OTHER + 1], "server-01"
+    )
+    result = session(fixture, OTHER, rel)
+    assert result.returncode == 0, result.stderr
+    claim = (fixture.state / "claim").read_text().split("\t")
+    record = ReservationStore(fixture.root).read()[0]["phases"][str(OTHER)]
+    # The reused hold is the same group reservation, not a fresh one.
+    assert claim[1] == tokens[0]["reservation_id"] == record["reservation_id"]
+    assert record["status"] == "running"

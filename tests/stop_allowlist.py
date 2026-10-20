@@ -92,6 +92,9 @@ STOP_ALLOWLIST = r"""
     driver/lib-driver-session-claim.sh	return_nonzero	fn:session_claim_ensure|return 1#3
     driver/lib-driver-session-claim.sh	return_nonzero	fn:session_claim_ensure|return 1#4
     driver/lib-driver-session-claim.sh	return_nonzero	fn:session_claim_ensure|return 1#5
+    driver/lib-driver-session-claim.sh	return_nonzero	fn:session_claim_ensure|return 1#6
+    driver/lib-driver-session-claim.sh	return_nonzero	fn:session_claim_ensure|return 1#7
+    driver/lib-driver-session-claim.sh	return_nonzero	fn:session_claim_ensure|return 1#8
     driver/lib-driver-select-flow.sh	drive_rc_nonzero	fn:_drive_choose_selection|{ _DRIVE_RC=1; return 0; }#1
     driver/lib-driver-select-flow.sh	drive_rc_nonzero	fn:_drive_choose_selection|{ _DRIVE_RC=1; return 0; }#2
     driver/lib-driver-select-flow.sh	drive_rc_nonzero	fn:_drive_choose_selection|{ _DRIVE_RC=1; return 0; }#3

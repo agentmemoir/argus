@@ -283,7 +283,13 @@ class _LifecycleOps(_StoreBase):
         )
 
     def assert_owner(self, reservation: Any) -> dict[str, Any]:
-        """Fetch the latest board and verify the three-part fence."""
+        """Fetch the latest board and verify the three-part fence.
+
+        An expired record fails the check on every board kind: the window
+        closed and the group returned to the queue, so a fence held past expiry
+        verifies nothing. A terminal record fails too, with its own reason: a
+        gate that reads the fence must not run work the board already finished.
+        """
         if not isinstance(reservation, dict):
             raise CoordinationError("reservation must be an object")
         reservation = cast("dict[str, Any]", reservation)
@@ -299,10 +305,12 @@ class _LifecycleOps(_StoreBase):
             raise ReservationFenced(
                 f"{self.kind} {key} is no longer owned by this reservation"
             )
-        if self.issues and record.get("status") == EXPIRED_STATUS:
-            raise ReservationFenced(f"issue {key} reservation expired")
+        if record.get("status") == EXPIRED_STATUS:
+            raise ReservationFenced(f"{self.kind} {key} reservation expired")
         if record.get("status") in TERMINAL_STATUSES:
-            return dict(record)
+            raise ReservationFenced(
+                f"{self.kind} {key} is already {record.get('status')}"
+            )
         return dict(record)
 
 
