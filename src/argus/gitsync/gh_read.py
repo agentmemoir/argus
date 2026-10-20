@@ -201,8 +201,13 @@ def gh_default_branch(root: Path) -> tuple[str | None, str]:
         raw = json.loads(done.stdout)
     except ValueError:
         return None, "gh did not return JSON"
-    ref = raw.get("defaultBranchRef") if isinstance(raw, dict) else None
-    name = ref.get("name") if isinstance(ref, dict) else None
+    if not isinstance(raw, dict):
+        return None, "gh returned JSON that is not an object"
+    data = cast("dict[str, Any]", raw)
+    ref = data.get("defaultBranchRef")
+    if not isinstance(ref, dict):
+        return None, "gh reported no default branch"
+    name = cast("dict[str, Any]", ref).get("name")
     if isinstance(name, str) and name:
         return name, ""
     return None, "gh reported no default branch"
