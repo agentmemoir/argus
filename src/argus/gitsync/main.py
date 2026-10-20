@@ -208,6 +208,12 @@ def main() -> int:
         "for the open-pr and peek-ci modes",
     )
     ap.add_argument(
+        "--base",
+        default=None,
+        help="the branch to open the pull request into, for --mode open-pr; "
+        "resolved from the checkout and then from gh when it is not given",
+    )
+    ap.add_argument(
         "--title-file",
         default=None,
         help="file holding the title for --mode open-pr; the branch name "
@@ -297,6 +303,7 @@ def main() -> int:
                 branch=args.branch,
                 title_file=args.title_file,
                 body_file=args.body_file,
+                base=args.base,
             )
         elif args.mode == "peek-ci":
             # peek-ci reads one checkout, and --repo names it. The dispatch

@@ -27,7 +27,14 @@ def workspace(
         exec_dir,
         monkeypatch,
         stub=STUB_OPEN_PR,
-        defaults={"list": [], "create": URL, "reread": [CREATED]},
+        defaults={
+            "list": [],
+            "create": URL,
+            "reread": [CREATED],
+            # The checkout names no base branch of its own: it is on main,
+            # and has no master and no origin/HEAD, so gh is asked.
+            "repo_view": {"defaultBranchRef": {"name": "main"}},
+        },
         branch=BRANCH,
     )
 

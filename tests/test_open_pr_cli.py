@@ -15,7 +15,8 @@ import pytest
 
 from argus import conventions
 from argus.gitsync import main
-from argus.gitsync.git import git
+from argus.gitsync.git import ConfigError, git
+from argus.gitsync.mode_open_pr import mode_open_pr
 from gh_mode_support import (
     BRANCH,
     CREATED,
@@ -36,7 +37,14 @@ def workspace(
         exec_dir,
         monkeypatch,
         stub=STUB_OPEN_PR,
-        defaults={"list": [], "create": URL, "reread": [CREATED]},
+        defaults={
+            "list": [],
+            "create": URL,
+            "reread": [CREATED],
+            # The checkout names no base branch of its own: it is on main,
+            # and has no master and no origin/HEAD, so gh is asked.
+            "repo_view": {"defaultBranchRef": {"name": "main"}},
+        },
         branch=BRANCH,
     )
 
@@ -161,3 +169,63 @@ def test_the_help_names_the_new_modes_for_branch_and_phase(
 
     assert "for the open-pr and peek-ci modes" in flat, flat
     assert "--mode open-pr or --mode peek-ci" in flat, flat
+
+
+def _create_call(workspace: Workspace) -> list[str]:
+    """The one `pr create` argv the stub recorded."""
+    creates = [call for call in workspace.commands() if call[:2] == ["pr", "create"]]
+    assert len(creates) == 1, creates
+    return creates[0]
+
+
+def test_an_explicit_base_is_used_and_nothing_is_asked_for_one(
+    workspace: Workspace,
+) -> None:
+    """`--base` wins over every other source, so it is the way out of a stop."""
+    workspace.answer(list=[], create=URL, reread=[CREATED])
+
+    out = mode_open_pr(workspace.root, branch=BRANCH, base="trunk")
+
+    assert out["ok"] is True, out
+    create = _create_call(workspace)
+    assert create[create.index("--base") + 1] == "trunk"
+    asked = [call for call in workspace.commands() if call[:2] == ["repo", "view"]]
+    assert asked == []
+
+
+def test_the_base_falls_back_to_gh_when_the_checkout_cannot_name_one(
+    workspace: Workspace,
+) -> None:
+    """The checkout here has no master and no origin/HEAD, which is the fault.
+
+    `integration_branch` answered `master` for this checkout whatever gh said,
+    so a `main`-default repository got `--base master`. gh names the default
+    branch instead, and that is the branch the create names.
+    """
+    workspace.answer(
+        list=[],
+        create=URL,
+        reread=[CREATED],
+        repo_view={"defaultBranchRef": {"name": "release"}},
+    )
+
+    out = mode_open_pr(workspace.root, branch=BRANCH)
+
+    assert out["ok"] is True, out
+    create = _create_call(workspace)
+    assert create[create.index("--base") + 1] == "release"
+
+
+def test_a_base_no_source_can_name_blocks_and_names_the_flag(
+    workspace: Workspace,
+) -> None:
+    """A guess here is a bare gh exit on a real host, so the mode refuses first."""
+    workspace.answer(list=[], create=URL, reread=[CREATED], repo_view_exit=1)
+
+    with pytest.raises(ConfigError) as refused:
+        mode_open_pr(workspace.root, branch=BRANCH)
+
+    assert "--base" in str(refused.value)
+    assert BRANCH not in str(refused.value)
+    creates = [call for call in workspace.commands() if call[:2] == ["pr", "create"]]
+    assert creates == []

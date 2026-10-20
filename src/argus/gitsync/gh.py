@@ -11,6 +11,9 @@ from argus.gitsync.gh_checks import (
     gh_pull_request_checks as gh_pull_request_checks,
 )
 from argus.gitsync.gh_read import (
+    gh_default_branch as gh_default_branch,
+)
+from argus.gitsync.gh_read import (
     gh_pull_request_body as gh_pull_request_body,
 )
 from argus.gitsync.gh_read import (
@@ -41,6 +44,7 @@ from argus.gitsync.gh_write import (
 __all__ = [
     "gh_comment_pull_request",
     "gh_create_draft_pull_request",
+    "gh_default_branch",
     "gh_edit_pull_request_body",
     "gh_mark_pull_request_ready",
     "gh_pull_request_body",

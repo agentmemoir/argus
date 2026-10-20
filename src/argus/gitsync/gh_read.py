@@ -173,6 +173,41 @@ def gh_pull_request_body(
     return body_value, ""
 
 
+def gh_default_branch(root: Path) -> tuple[str | None, str]:
+    """Ask gh for the repository's default branch, from inside the checkout.
+
+    This is the one source that knows a default branch this clone never
+    fetched, so it is the last answer before a refusal. Returns the branch name
+    and an empty detail, or ``None`` and why gh could not name it. ``None`` is
+    never read as ``master``, or ``main``: a guess here is a wrong ``--base``
+    and a bare gh exit on a real host.
+
+    Its stderr is captured and discarded for the reason the pull-request view
+    discards it: an unauthenticated call prints the host account name, and run
+    logs are copied into issues.
+    """
+    argv = [gh_binary(), "repo", "view", "--json", "defaultBranchRef"]
+    try:
+        done = subprocess.run(
+            argv, cwd=root, capture_output=True, text=True, timeout=GH_TIMEOUT_S
+        )
+    except FileNotFoundError:
+        return None, "gh is not installed"
+    except subprocess.TimeoutExpired:
+        return None, f"gh did not answer within {GH_TIMEOUT_S}s"
+    if done.returncode != 0:
+        return None, gh_exit_detail(done.returncode, "the default branch read")
+    try:
+        raw = json.loads(done.stdout)
+    except ValueError:
+        return None, "gh did not return JSON"
+    ref = raw.get("defaultBranchRef") if isinstance(raw, dict) else None
+    name = ref.get("name") if isinstance(ref, dict) else None
+    if isinstance(name, str) and name:
+        return name, ""
+    return None, "gh reported no default branch"
+
+
 def gh_pull_requests_for_branch(
     root: Path, branch: str, limit: int = 50
 ) -> tuple[list[dict[str, Any]] | None, str]:

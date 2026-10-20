@@ -41,6 +41,11 @@ if call[:2] == ["pr", "list"]:
 elif call[:2] == ["pr", "create"]:
     print(transport.get("create") or "")
     raise SystemExit(int(transport.get("create_exit", 0)))
+elif call[:2] == ["repo", "view"]:
+    view = transport.get("repo_view")
+    if view is not None:
+        print(json.dumps(view))
+    raise SystemExit(int(transport.get("repo_view_exit") or 0))
 else:
     raise SystemExit(3)
 """

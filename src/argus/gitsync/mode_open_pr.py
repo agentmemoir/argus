@@ -35,8 +35,8 @@ from argus.gitsync.git import (
     ConfigError,
     current_branch,
     git,
-    integration_branch,
 )
+from argus.gitsync.open_pr_base import resolve_base
 from argus.gitsync.paths import phase_branch
 
 
@@ -203,6 +203,7 @@ def mode_open_pr(
     branch: str | None = None,
     title_file: str | Path | None = None,
     body_file: str | Path | None = None,
+    base: str | None = None,
 ) -> dict[str, Any]:
     """Open a draft pull request for a branch, or reuse the one that exists.
 
@@ -210,6 +211,10 @@ def mode_open_pr(
     the pipeline's own call gets. ``title_file`` and ``body_file`` let a caller
     supply its own text, and a file that is missing or empty is refused rather
     than quietly replaced by the default.
+
+    ``base`` names the branch to open into. When it is not given, the base is
+    resolved from the checkout and then from gh, and a base neither can name is
+    a refusal naming ``--base`` rather than a guess.
 
     Returns the mode's result dict: ``ok``, ``mode``, ``state``, ``branch``,
     ``repos``, and ``summary``, with ``state: BLOCKED`` and a blocker naming the
@@ -271,7 +276,7 @@ def mode_open_pr(
     created, detail = gh_create_draft_pull_request(
         root,
         branch_name,
-        integration_branch(root),
+        resolve_base(root, base),
         title=title,
         body=body,
     )
