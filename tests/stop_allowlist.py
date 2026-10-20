@@ -150,8 +150,19 @@ STOP_ALLOWLIST = r"""
     gitsync/main.py	raise_config	fn:main|raise ConfigError("--phase is required with --mode signals")#1
     gitsync/main.py	raise_config	fn:main|raise ConfigError(#1
     gitsync/main.py	raise_config	fn:main|raise ConfigError(#2
+    gitsync/mode_open_pr.py	raise_config	fn:resolve_branch|raise ConfigError(#1
+    gitsync/mode_open_pr.py	raise_config	fn:resolve_branch|raise ConfigError(#2
+    gitsync/mode_open_pr.py	raise_config	fn:resolve_branch|raise ConfigError(#3
+    gitsync/open_pr_ready.py	raise_config	fn:text_from_file|raise ConfigError(f"{flag} {str(source)!r} does not exist")#1
+    gitsync/open_pr_ready.py	raise_config	fn:text_from_file|raise ConfigError(f"{flag} {str(source)!r} is empty")#1
+    gitsync/mode_open_pr.py	ok_false	fn:_row|"ok": False,#1
+    gitsync/mode_open_pr.py	raise_config	fn:mode_open_pr|raise ConfigError(missing)#1
+    gitsync/mode_open_pr.py	raise_config	fn:mode_open_pr|raise ConfigError(refusal)#1
+    gitsync/mode_peek_ci.py	raise_config	fn:_target_from|raise ConfigError(f"--pull-request {text!r} is not a pull request number or URL")#1
+    gitsync/mode_peek_ci.py	ok_false	fn:_row|"ok": False,#1
     gitsync/merge.py	blocked_call	fn:_merge|return blocked(#1
     gitsync/modes.py	ok_false	fn:mode_published|"ok": False,#1
+    gitsync/open_pr_base.py	raise_config	fn:resolve_base|raise ConfigError(#1
     gitsync/paths.py	raise_config	fn:_phase_file_parts|raise ConfigError(#1
     gitsync/paths.py	raise_config	fn:_phase_file_parts|raise ConfigError(f"phase file carries no behaviour: {phases_name!r}")#1
     gitsync/paths.py	raise_config	fn:group_branch|raise ConfigError("a group branch needs at least one member")#1

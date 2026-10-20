@@ -98,6 +98,8 @@ from argus.gitsync.issue_modes import issue_mode
 from argus.gitsync.merge import sync_one
 from argus.gitsync.mode_branch import mode_branch
 from argus.gitsync.mode_clean import mode_checkpoint, mode_clean
+from argus.gitsync.mode_open_pr import mode_open_pr
+from argus.gitsync.mode_peek_ci import mode_peek_ci
 from argus.gitsync.modes import mode_published, mode_tidy, result_exit_code
 from argus.gitsync.pr_signal_reply import mode_signal_reply
 from argus.gitsync.pr_signals import mode_signals
@@ -134,6 +136,8 @@ def main() -> int:
             "checkpoint",
             "signals",
             "signal-reply",
+            "open-pr",
+            "peek-ci",
         ],
         default="start",
         help="start: sync before a phase; push: verify a "
@@ -152,13 +156,18 @@ def main() -> int:
         "progress on the branch it is on, for a release handoff; "
         "signals: read the phase's pull request alerts and review "
         "comments and record what changed; signal-reply: reply to "
-        "or react to one recorded review comment, for --comment",
+        "or react to one recorded review comment, for --comment; "
+        "open-pr: open a draft pull request for the branch, or reuse "
+        "the one already open for it; peek-ci: read a pull "
+        "request's checks once and report whether every row passed, "
+        "without waiting",
     )
     ap.add_argument(
         "--phase",
         default=None,
         help="phase number for --mode publish, --mode clean, --mode published, "
-        "--mode signals or --mode signal-reply",
+        "--mode signals, --mode signal-reply, --mode open-pr or "
+        "--mode peek-ci",
     )
     ap.add_argument(
         "--comment", type=int, default=None, help="review comment id for signal-reply"
@@ -194,13 +203,33 @@ def main() -> int:
     ap.add_argument(
         "--branch",
         default=None,
-        help="the branch the public checkout must be on, for the start and push modes",
+        help="the branch the public checkout must be on, for the start and push "
+        "modes; the branch to open a pull request from or read checks for, "
+        "for the open-pr and peek-ci modes",
+    )
+    ap.add_argument(
+        "--base",
+        default=None,
+        help="the branch to open the pull request into, for --mode open-pr; "
+        "resolved from the checkout and then from gh when it is not given",
+    )
+    ap.add_argument(
+        "--title-file",
+        default=None,
+        help="file holding the title for --mode open-pr; the branch name "
+        "when it is not given",
+    )
+    ap.add_argument(
+        "--body-file",
+        default=None,
+        help="file holding the body for --mode open-pr; empty when it is not given",
     )
     ap.add_argument(
         "--pull-request",
         default=None,
         help="pull request URL finalize opened, recorded in the "
-        "receipt for --mode publish",
+        "receipt for --mode publish, or the number or URL "
+        "to peek at for --mode peek-ci",
     )
     args = ap.parse_args()
     if args.self_test:
@@ -263,6 +292,29 @@ def main() -> int:
             out = mode_tidy(args.root)
         elif args.mode == "checkpoint":
             out = mode_checkpoint(args.root, args.paths)
+        elif args.mode == "open-pr":
+            # As with peek-ci below, this branch sits before the generic
+            # --repo branch, so the flag is honoured here. Without it a caller
+            # who named a checkout got the configured root acted on, and a
+            # draft opened from the wrong one, with no error.
+            out = mode_open_pr(
+                Path(args.repo).resolve() if args.repo else args.root,
+                phase=args.phase,
+                branch=args.branch,
+                title_file=args.title_file,
+                body_file=args.body_file,
+                base=args.base,
+            )
+        elif args.mode == "peek-ci":
+            # peek-ci reads one checkout, and --repo names it. The dispatch
+            # branch sits before the generic --repo branch, so the flag is
+            # honoured here rather than falling through to the repo root.
+            out = mode_peek_ci(
+                Path(args.repo).resolve() if args.repo else args.root,
+                phase=args.phase,
+                branch=args.branch,
+                pull_request=args.pull_request,
+            )
         elif args.repo:
             res = sync_one(Path(args.repo).resolve(), args.mode, branch=args.branch)
             out = {
@@ -279,7 +331,7 @@ def main() -> int:
                 {
                     "ok": False,
                     "mode": args.mode,
-                    "state": "config_error",
+                    "state": "CONFIG_ERROR",
                     "error": str(e),
                 },
                 indent=2,

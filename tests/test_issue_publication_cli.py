@@ -85,4 +85,4 @@ def test_phase_published_mode_is_not_available_for_issues(
     )
     assert main.main() == 2
     result = json.loads(capsys.readouterr().out)
-    assert result["state"] == "config_error"
+    assert result["state"] == "CONFIG_ERROR"
