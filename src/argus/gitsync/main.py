@@ -98,6 +98,7 @@ from argus.gitsync.issue_modes import issue_mode
 from argus.gitsync.merge import sync_one
 from argus.gitsync.mode_branch import mode_branch
 from argus.gitsync.mode_clean import mode_checkpoint, mode_clean
+from argus.gitsync.mode_open_pr import mode_open_pr
 from argus.gitsync.modes import mode_published, mode_tidy, result_exit_code
 from argus.gitsync.pr_signal_reply import mode_signal_reply
 from argus.gitsync.pr_signals import mode_signals
@@ -134,6 +135,7 @@ def main() -> int:
             "checkpoint",
             "signals",
             "signal-reply",
+            "open-pr",
         ],
         default="start",
         help="start: sync before a phase; push: verify a "
@@ -152,7 +154,9 @@ def main() -> int:
         "progress on the branch it is on, for a release handoff; "
         "signals: read the phase's pull request alerts and review "
         "comments and record what changed; signal-reply: reply to "
-        "or react to one recorded review comment, for --comment",
+        "or react to one recorded review comment, for --comment; "
+        "open-pr: open a draft pull request for the branch, or reuse "
+        "the one already open for it",
     )
     ap.add_argument(
         "--phase",
@@ -195,6 +199,17 @@ def main() -> int:
         "--branch",
         default=None,
         help="the branch the public checkout must be on, for the start and push modes",
+    )
+    ap.add_argument(
+        "--title-file",
+        default=None,
+        help="file holding the title for --mode open-pr; the branch name "
+        "when it is not given",
+    )
+    ap.add_argument(
+        "--body-file",
+        default=None,
+        help="file holding the body for --mode open-pr; empty when it is not given",
     )
     ap.add_argument(
         "--pull-request",
@@ -263,6 +278,14 @@ def main() -> int:
             out = mode_tidy(args.root)
         elif args.mode == "checkpoint":
             out = mode_checkpoint(args.root, args.paths)
+        elif args.mode == "open-pr":
+            out = mode_open_pr(
+                args.root,
+                phase=args.phase,
+                branch=args.branch,
+                title_file=args.title_file,
+                body_file=args.body_file,
+            )
         elif args.repo:
             res = sync_one(Path(args.repo).resolve(), args.mode, branch=args.branch)
             out = {

@@ -280,10 +280,88 @@ def gh_comment_pull_request(
     return True, f"pull request {int(number)} comment posted"
 
 
+def gh_pull_requests_for_branch(
+    root: Path, branch: str, limit: int = 50
+) -> tuple[list[dict[str, Any]] | None, str]:
+    """Every pull request whose head is ``branch``, newest first.
+
+    Returns the rows and an empty detail, or ``None`` and the reason gh could
+    not answer. Every state is asked for, not only the open ones: a caller that
+    looked at open pull requests alone would see no pull request at all for a
+    branch whose work was already merged or closed, and would open a second one
+    for the same commits.
+
+    Each row carries ``number``, ``url``, ``isDraft``, and ``state``. A row that
+    is missing one of them is dropped, because a caller reading a default in its
+    place would report an invented state.
+    """
+    argv = [
+        gh_binary(),
+        "pr",
+        "list",
+        "--head",
+        branch,
+        "--state",
+        "all",
+        "--limit",
+        str(int(limit)),
+        "--json",
+        "number,url,isDraft,state",
+    ]
+    try:
+        done = subprocess.run(
+            argv,
+            cwd=root,
+            capture_output=True,
+            text=True,
+            timeout=GH_TIMEOUT_S,
+        )
+    except FileNotFoundError:
+        return None, "gh is not installed"
+    except subprocess.TimeoutExpired:
+        return None, f"gh did not answer within {GH_TIMEOUT_S}s"
+    if done.returncode != 0:
+        return None, f"gh exited {done.returncode}"
+    try:
+        raw = json.loads(done.stdout)
+    except ValueError:
+        return None, "gh did not return JSON"
+    if not isinstance(raw, list):
+        return None, "gh returned JSON that is not a list"
+    rows: list[dict[str, Any]] = []
+    for entry in raw:
+        if not isinstance(entry, dict):
+            continue
+        row = cast("dict[str, Any]", entry)
+        number = row.get("number")
+        state = row.get("state")
+        if not isinstance(number, int) or not isinstance(state, str):
+            continue
+        rows.append(
+            {
+                "number": number,
+                "url": str(row.get("url") or ""),
+                "isDraft": bool(row.get("isDraft")),
+                "state": state,
+            }
+        )
+    return rows, ""
+
+
 def gh_create_draft_pull_request(
-    root: Path, branch: str, base: str
+    root: Path,
+    branch: str,
+    base: str,
+    title: str | None = None,
+    body: str | None = None,
 ) -> tuple[str | None, str]:
-    """Create a draft for the recorded branch, with an empty body."""
+    """Create a draft pull request from ``branch`` into ``base``.
+
+    The title defaults to the branch name and the body to the empty string, so
+    a caller that passes neither gets exactly what this function always did.
+    Returns gh's own output, which is the new pull request's URL, or ``None``
+    and why gh could not create it.
+    """
     try:
         done = subprocess.run(
             [
@@ -296,9 +374,9 @@ def gh_create_draft_pull_request(
                 "--base",
                 base,
                 "--title",
-                branch,
+                branch if title is None else title,
                 "--body",
-                "",
+                "" if body is None else body,
             ],
             cwd=root,
             capture_output=True,
@@ -322,4 +400,5 @@ __all__ = [
     "gh_pull_request_body",
     "gh_pull_request_open",
     "gh_pull_request_state",
+    "gh_pull_requests_for_branch",
 ]
