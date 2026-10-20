@@ -31,6 +31,9 @@ BUCKETS = ("pass", "fail", "pending", "skipping", "cancel")
 # How many check names one summary line names before it counts the rest.
 MAX_NAMED = 5
 
+# The code gh's helper reports when gh never ran, which is not a gh exit code.
+NEVER_RAN = -1
+
 
 def _number_from_url(url: str) -> int | None:
     """The pull request number gh put at the end of its URL, when there is one."""
@@ -309,8 +312,14 @@ def mode_peek_ci(
     state = _state(rows, counts)
     row["checks"] = counts
     row["state"] = state
-    if state == "passing":
+    if state == "passing" and code in (0, NEVER_RAN):
         row["ok"] = True
+        return _result(branch_name, row, code, rows)
+    if state == "passing":
+        # gh printed all-pass rows and did not exit 0. The rows and the code
+        # disagree, so neither is trusted: the state is unknown, not passing.
+        row["state"] = "unknown"
+        row["blockers"] = [f"gh exited {code} while every row said pass"]
         return _result(branch_name, row, code, rows)
     row["blockers"] = _reasons(rows, counts, code)
     return _result(branch_name, row, code, rows)

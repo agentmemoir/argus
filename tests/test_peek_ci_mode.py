@@ -303,6 +303,30 @@ def test_gh_exiting_zero_without_a_check_list_is_not_a_pass(
     blockers = out["repos"][0]["blockers"]
     assert any("without a check list" in reason for reason in blockers), blockers
 
+def test_a_non_zero_exit_beside_all_pass_rows_is_not_a_pass(
+    workspace: Workspace,
+) -> None:
+    # The rows and the exit code disagree. Trusting the rows alone would report
+    # a pass on an exit code gh uses to say something went wrong.
+    workspace.answer(
+        list=_open_pr(),
+        checks=[_row("build", "pass")],
+        checks_exit=8,
+    )
+
+    out = mode_peek_ci(workspace.root, branch=BRANCH)
+
+    assert out["ok"] is False, out
+    assert out["state"] == "unknown"
+    row = out["repos"][0]
+    assert row["ok"] is False
+    assert row["checks"]["pass"] == 1
+    assert any(
+        "gh exited 8 while every row said pass" in reason for reason in row["blockers"]
+    ), row["blockers"]
+
+
+
 
 
 def test_an_empty_check_list_is_not_a_pass(workspace: Workspace) -> None:
