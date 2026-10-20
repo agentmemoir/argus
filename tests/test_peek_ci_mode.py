@@ -149,7 +149,6 @@ def _open_pr(number: int = 11) -> list[dict[str, object]]:
     ]
 
 
-
 def test_every_check_passing_is_the_only_way_to_pass(workspace: Workspace) -> None:
     workspace.answer(
         list=_open_pr(),
@@ -247,7 +246,6 @@ def test_a_cancelled_check_is_not_a_pass(workspace: Workspace) -> None:
     assert any("build" in reason for reason in out["repos"][0]["blockers"])
 
 
-
 def test_an_unrecognised_bucket_is_named_in_the_summary(workspace: Workspace) -> None:
     # gh may add a bucket this mode does not know. Such a row is counted in the
     # total, so a summary that names only the four known buckets leaves it
@@ -303,6 +301,7 @@ def test_gh_exiting_zero_without_a_check_list_is_not_a_pass(
     blockers = out["repos"][0]["blockers"]
     assert any("without a check list" in reason for reason in blockers), blockers
 
+
 def test_a_non_zero_exit_beside_all_pass_rows_is_not_a_pass(
     workspace: Workspace,
 ) -> None:
@@ -324,9 +323,6 @@ def test_a_non_zero_exit_beside_all_pass_rows_is_not_a_pass(
     assert any(
         "gh exited 8 while every row said pass" in reason for reason in row["blockers"]
     ), row["blockers"]
-
-
-
 
 
 def test_an_empty_check_list_is_not_a_pass(workspace: Workspace) -> None:
@@ -388,6 +384,7 @@ def test_a_closed_pull_request_has_no_checks_in_flight(workspace: Workspace) -> 
     assert any("MERGED" in reason for reason in out["repos"][0]["blockers"])
     assert workspace.check_calls() == []
 
+
 def test_an_explicit_pull_request_still_reports_the_branch(
     workspace: Workspace,
 ) -> None:
@@ -415,8 +412,6 @@ def test_an_explicit_pull_request_survives_a_branch_that_cannot_be_resolved(
     assert out["branch"] is None
 
 
-
-
 def test_an_explicit_url_is_read_directly(workspace: Workspace) -> None:
     workspace.answer(checks=[_row("build", "pass")])
 
@@ -431,6 +426,21 @@ def test_an_explicit_url_is_read_directly(workspace: Workspace) -> None:
     assert len(checks) == 1
     assert URL in checks[0]
     assert checks[0][checks[0].index("--json") + 1] == "bucket,state,name,link"
+
+
+def test_a_url_without_a_number_is_named_by_the_url(workspace: Workspace) -> None:
+    # A URL ending in /files carries no pull request number. The blocker names
+    # the URL instead of reading "for #None".
+    files = f"{URL}/files"
+    workspace.answer(checks_exit=1, checks_reported=False)
+
+    out = mode_peek_ci(workspace.root, pull_request=files)
+
+    assert out["ok"] is False, out
+    assert out["repos"][0]["number"] is None
+    blockers = out["repos"][0]["blockers"]
+    assert any(files in reason for reason in blockers), blockers
+    assert not any("#None" in reason for reason in blockers), blockers
 
 
 def test_an_explicit_number_keeps_the_url_unknown(workspace: Workspace) -> None:
@@ -522,4 +532,3 @@ def test_the_repo_flag_names_the_checkout_to_peek_at(
     assert main.main() == 0
     out = json.loads(capsys.readouterr().out)
     assert out["repos"][0]["repo"] == str(other.resolve())
-

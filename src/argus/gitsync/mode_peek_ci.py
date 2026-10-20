@@ -154,6 +154,7 @@ def _row(root: Path) -> dict[str, Any]:
         "blockers": [],
     }
 
+
 def _reasons(
     rows: list[dict[str, Any]], counts: dict[str, int], code: int
 ) -> list[str]:
@@ -161,8 +162,7 @@ def _reasons(
     total = counts["total"]
     if total == 0:
         return [
-            "gh reported no check rows; an empty list is not a pass "
-            f"(gh exited {code})"
+            f"gh reported no check rows; an empty list is not a pass (gh exited {code})"
         ]
     reasons: list[str] = []
     if counts["fail"]:
@@ -195,9 +195,7 @@ def _reasons(
     return reasons
 
 
-def _summary(
-    row: dict[str, Any], code: int | None, rows: list[dict[str, Any]]
-) -> str:
+def _summary(row: dict[str, Any], code: int | None, rows: list[dict[str, Any]]) -> str:
     """What ran, what did not, and what is unknown, in one line.
 
     A skipped or cancelled check is named here and not only counted, because a
@@ -227,6 +225,19 @@ def _summary(
         parts.append(f"gh exited {code}")
     head = f"peek-ci sync {'ok' if row['ok'] else 'BLOCKED'}"
     return f"{head}: " + "; ".join(parts)
+
+
+def _target_label(number: int | None, url: str | None) -> str:
+    """How to name the pull request in a message, and never ``#None``.
+
+    A URL whose last segment is not a number, such as one that ends in
+    ``/files``, gives no number to read, so the URL itself is the name.
+    """
+    if number is not None:
+        return f"#{number}"
+    if url:
+        return url
+    return "the named pull request"
 
 
 def _branch_or_none(
@@ -324,7 +335,9 @@ def mode_peek_ci(
     row["number"] = number
     row["url"] = url
     if rows is None:
-        row["blockers"] = [f"gh could not report checks for #{number}: {detail}"]
+        row["blockers"] = [
+            f"gh could not report checks for {_target_label(number, url)}: {detail}"
+        ]
         return _result(branch_name, row, None if code < 0 else code)
 
     counts = _counts(rows)
