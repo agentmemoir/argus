@@ -135,6 +135,23 @@ def test_scan_reports_an_unreadable_board_with_exit_two(
     assert "phases" not in printed
 
 
+def test_scan_names_a_broken_pipeline_with_exit_two(
+    scan_store: ReservationStore, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A pipeline configuration the run folder cannot be resolved under is the
+    documented exit 2 with a named error, not a traceback and exit 1."""
+    _run(scan_store, "100007")
+    pipeline = scan_store.root / "pipeline.yaml"
+    pipeline.write_text("run_dir: runs/phase-{phase_number}\n", encoding="utf-8")
+    # The fixture's monkeypatch restores the settings attribute at teardown,
+    # so the override does not outlive this test.
+    conventions.override({"pipeline": str(pipeline)})
+    assert main(["scan"]) == 2
+    printed = json.loads(capsys.readouterr().out)
+    assert printed["state"] == "COORDINATION_UNAVAILABLE"
+    assert "pipeline" in printed["error"]
+
+
 def test_the_documented_command_runs_the_scan() -> None:
     """The `scan` command the CHANGELOG documents is reachable from the module.
 

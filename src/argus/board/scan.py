@@ -18,6 +18,7 @@ from argus.board.core import (
     ACTIVE_STATUSES,
     EXPIRED_STATUS,
     TERMINAL_STATUSES,
+    CoordinationUnavailable,
     _as_moment,
     _phase_key,
 )
@@ -45,7 +46,10 @@ def scan_claims(
     """List run-work phases with no live claim, each with the reason.
 
     Raises ``CoordinationUnavailable`` when the board cannot be read, so a
-    broken read is never mistaken for a board with no claims.
+    broken read is never mistaken for a board with no claims. A pipeline
+    configuration that cannot be resolved raises the same way: the run folder
+    is not usable, which is the documented exit-2 contract, not an answer
+    about claims.
     """
     wanted = None if phase is None else _phase_key(phase)[0]
     state, _commit = store.read()
@@ -61,7 +65,14 @@ def scan_claims(
             continue
         if wanted is not None and key != wanted:
             continue
-        if run_completed(repo, int(key)):
+        try:
+            completed = run_completed(repo, int(key))
+        except ValueError as exc:
+            # A malformed pipeline configuration makes the run folder unusable
+            # for this phase. Name the configuration error and fail under the
+            # documented contract instead of letting the traceback escape.
+            raise CoordinationUnavailable(f"phase {key}: {exc}") from exc
+        if completed:
             continue
         record = records.get(key)
         if record is None:

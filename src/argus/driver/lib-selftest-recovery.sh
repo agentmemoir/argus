@@ -8,8 +8,9 @@ selftest_case_recovery_sources() {
   # Own-claim recovery. This path had no coverage at all, which is how a
   # `set -u` abort on an unset reservation_id shipped unnoticed: a plain
   # --self-test skips coordination entirely. Three properties matter, so three
-  # cases. The stub replays the selection and the takeover; the fence handling
-  # and the launch itself are the real code.
+  # cases. The stub replays the selection; the takeover reply carries the fence
+  # the board actually holds, and the fence handling and the launch are the real
+  # code.
   rm -f "$HALT"
   old_stub_sleep="$DRIVER_STUB_SLEEP"
   DRIVER_STUB_RC=0; DRIVER_STUB_SLEEP=2; export DRIVER_STUB_RC DRIVER_STUB_SLEEP
@@ -28,7 +29,7 @@ selftest_case_recovery_sources() {
   RECOVER_OWN_CLAIM=1
   DRIVER_STUB_COORDINATION=fence drive --self-test || true
   sleep 0.3
-  if grep -q "on rsv-recovered-stub generation 8" "$LOG"; then
+  if grep -qE "recovered phase 100010 .* on rsv-[0-9a-f]+ generation [0-9]+; continuing" "$LOG"; then
     echo "ok: recovery launches and hands the child the takeover's new fence"
   else
     echo "FAIL: recovery did not carry the new fence from the takeover"; fail=1

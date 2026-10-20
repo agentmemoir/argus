@@ -87,8 +87,47 @@ _drive_choose_selection() {
             # A takeover that reports success but hands back no fence.
             printf '{"state": "OK"}\n' >"$RUN_DIR/claim-recovery-$wait_phase.json"
           elif [ -n "${DRIVER_STUB_COORDINATION:-}" ]; then
-            printf '{"state": "OK", "reservation": {"reservation_id": "rsv-recovered-stub", "generation": 8, "machine_id": "%s", "phase": "%s", "status": "claimed"}}\n' \
-              "$PHASE_MACHINE_ID" "$wait_phase" >"$RUN_DIR/claim-recovery-$wait_phase.json"
+            # The takeover reply carries the fence the board actually holds for
+            # this machine, so the child's gate verifies it exactly as it
+            # verifies a real takeover. A fabricated id would be refused by the
+            # gate, which is the code under test: no launch may carry a fence
+            # the board never issued. The takeover is the real command against
+            # the record the board holds now — earlier cases may have left it
+            # expired or terminal-but-unfinished, and a takeover is how the
+            # real recovery path takes such a phase back. A fresh reservation
+            # answers a board with no record, and a board that refuses both
+            # gets no fence, which refuses the launch below.
+            local rec="" rec_id="" rec_gen="" fence_file="$RUN_DIR/claim-recovery-$wait_phase.json"
+            rec="$("$PYTHON" "$ARGUS/board/reservations.py" show \
+              "${ARGUS_CONFIG_ARGS[@]}" "${BOARD_KIND_ARGS[@]+"${BOARD_KIND_ARGS[@]}"}" \
+              --repo-root "$REPO" --machine-id "$PHASE_MACHINE_ID" 2>/dev/null)" || rec=""
+            rec_id="$(printf '%s' "$rec" | "$PYTHON" -c '
+import json, sys
+try:
+    record = (json.load(sys.stdin).get("phases") or {}).get(sys.argv[1]) or {}
+except ValueError:
+    record = {}
+print(record.get("reservation_id", ""), record.get("generation", ""))
+' "$wait_phase")" || rec_id=""
+            rec_gen="${rec_id#* }"; rec_id="${rec_id%% *}"
+            if [ -n "$rec_id" ] && [ -n "$rec_gen" ] \
+              && "$PYTHON" "$ARGUS/board/reservations.py" takeover \
+              "${ARGUS_CONFIG_ARGS[@]}" "${BOARD_KIND_ARGS[@]+"${BOARD_KIND_ARGS[@]}"}" \
+              --repo-root "$REPO" --phase "$wait_phase" \
+              --machine-id "$PHASE_MACHINE_ID" \
+              --expected-reservation-id "$rec_id" \
+              --expected-generation "$rec_gen" \
+              --confirm >"$fence_file" 2>&1; then
+              :
+            elif out="$("$PYTHON" "$ARGUS/board/reservations.py" reserve \
+                "${ARGUS_CONFIG_ARGS[@]}" "${BOARD_KIND_ARGS[@]+"${BOARD_KIND_ARGS[@]}"}" \
+                --repo-root "$REPO" --phase "$wait_phase" \
+                --machine-id "$PHASE_MACHINE_ID" --run-id "phase-$wait_phase" \
+                2>/dev/null)"; then
+              printf '%s\n' "$out" >"$fence_file"
+            else
+              printf '{"state": "OK"}\n' >"$fence_file"
+            fi
           elif ! "$PYTHON" "$ARGUS/board/reservations.py" takeover \
               "${ARGUS_CONFIG_ARGS[@]}" "${BOARD_KIND_ARGS[@]+"${BOARD_KIND_ARGS[@]}"}" \
               --repo-root "$REPO" --phase "$wait_phase" \

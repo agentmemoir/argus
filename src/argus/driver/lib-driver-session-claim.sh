@@ -65,15 +65,17 @@ elif left or state == "COOLDOWN":
     )
 elif "is already completed" in error:
     # The owner check reports a terminal record as a fence with its own
-    # reason in the error, and this is the refusal that reason names.
-    line = f"phase {number} is already completed; no launch"
+    # reason in the error, and this is the refusal that reason names. A
+    # finished phase asks for nothing: the belief 3 good line closes with
+    # "no action needed", and so does this one.
+    line = f"phase {number} is already completed; no launch. No action needed."
 elif state == "FENCED":
     line = (
         f"phase {number} reservation is stale; no launch. "
         "Action: run argus --release, then --session again"
     )
 elif state == "ALREADY_COMPLETED":
-    line = f"phase {number} is already completed; no launch"
+    line = f"phase {number} is already completed; no launch. No action needed."
 elif state == "GROUP_UNAVAILABLE":
     line = (
         f"the reservation group for phase {number} cannot be read; no launch. "
@@ -174,7 +176,7 @@ session_claim_ensure() {   # <number> <rel>
       # machine's own held claim with the same reservation id, and claims any
       # member the reused record did not cover.
       if ! group_take_declared "$number"; then
-        printf 'argus: the reservation group for phase %s cannot be read: %s; no launch\n' \
+        printf 'argus: the reservation group for phase %s cannot be read: %s; no launch. Action: fix the phase group declaration, then retry\n' \
           "$number" "$GROUP_ERROR" >&2
         return 1
       fi
@@ -195,7 +197,7 @@ session_claim_ensure() {   # <number> <rel>
       fi
     else
       if ! group_take_declared "$number"; then
-        printf 'argus: the reservation group for phase %s cannot be read: %s; no launch\n' \
+        printf 'argus: the reservation group for phase %s cannot be read: %s; no launch. Action: fix the phase group declaration, then retry\n' \
           "$number" "$GROUP_ERROR" >&2
         return 1
       fi
@@ -231,21 +233,26 @@ session_claim_ensure() {   # <number> <rel>
 # Mark the held claim running, immediately before the work starts.
 #
 # A claim is taken as `claimed` and only becomes `running` when work begins, so a
-# run that never launched leaves a claim the queue can take back. The renewal is
-# logged when it fails and never halts: the next tick's renew tries again.
+# run that never launched leaves a claim the queue can take back. This renewal is
+# also the last fence check before work: a refusal here means the board no longer
+# covers this run, so the caller must not launch. Continuing past it would start
+# work under a claim nobody holds, which is the one path this file exists to
+# close, so the failure is named with its action and the launch is stopped.
 session_claim_start_running() {   # <number>
   [ -n "${CLIO_RESERVATION_ID:-}" ] || return 0
   [ -n "${CLIO_RESERVATION_GENERATION:-}" ] || return 0
   [ -n "${PHASE_MACHINE_ID:-}" ] || return 0
-  local rc=0
-  "$PYTHON" "$ARGUS/board/reservations.py" renew-group \
+  local rc=0 out=""
+  out="$("$PYTHON" "$ARGUS/board/reservations.py" renew-group \
     "${ARGUS_CONFIG_ARGS[@]}" "${BOARD_KIND_ARGS[@]+"${BOARD_KIND_ARGS[@]}"}" \
     --repo-root "$REPO" --machine-id "$PHASE_MACHINE_ID" \
     --reservation-id "$CLIO_RESERVATION_ID" \
     --generation "$CLIO_RESERVATION_GENERATION" --status running \
-    >/dev/null 2>&1 || rc=$?
+    2>&1)" || rc=$?
   if [ "$rc" -ne 0 ]; then
-    log "claim start: could not mark the claim for ${work_kind:-phase} $1 running (rc=$rc); the launch continues"
+    printf 'argus: %s\n' "$(session_claim_refusal "$1" "$out")" >&2
+    log "claim start: the claim for ${work_kind:-phase} $1 could not be marked running (rc=$rc); no launch"
+    return 1
   fi
   return 0
 }

@@ -192,6 +192,12 @@ handle_escalation() {
 }
 
 run_session() {
+  # Every caller must hold a verified claim before this function runs. The
+  # production entry is the `--session` gate: phase-driver.sh runs
+  # `session_claim_ensure` first and exits on a refusal, and the tick's pane
+  # carries the fence it verified. A direct call with no claim runs phase work
+  # the board does not cover, so any new caller has to pass through the same
+  # gate first. The pre-launch renew below is the last check, not the gate.
   local number="$1" rel="$2" rc=0 state started_at estimate_run="" halt_reason=""
   local state_source="rc"
   # Set only when the real glide job fails after its retries; see the rc case.
@@ -226,17 +232,19 @@ except OSError:
   trap 'on_stop 143' TERM
   printf '%s\n' "$$" >"$PIDFILE"
   cd "$REPO"
-  tmux_set_title "${work_kind:-phase} $number running"
-  notify_phase "$rel" started
   # The claim is held as `claimed` until the work starts, so a session that never
   # launched leaves a claim the queue can take back. Mark it running here, with
-  # the fence the tick or the session gate put in the environment. The helper is
-  # only present when the driver's own files are sourced; a harness that calls
-  # run_session alone has no board fence to mark.
+  # the fence the tick or the session gate put in the environment, and stop on a
+  # refusal: a failed renew means the board no longer covers this run, and work
+  # that starts anyway is the one path that runs a phase without a live claim.
+  # The helper is only present when the driver's own files are sourced; a harness
+  # that calls run_session alone has no board fence to mark.
   if [ -n "${CLIO_RESERVATION_ID:-}" ] \
       && declare -F session_claim_start_running >/dev/null; then
-    session_claim_start_running "$number"
+    session_claim_start_running "$number" || return 1
   fi
+  tmux_set_title "${work_kind:-phase} $number running"
+  notify_phase "$rel" started
   if [ "${CLIO_RESUME:-}" = 1 ]; then
     # The parent read the resume gate before it launched, and the state can
     # still move in between: another machine, or an operator, may have taken the

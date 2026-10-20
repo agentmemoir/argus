@@ -232,7 +232,7 @@ selftest_case_release() {
   # halt notification, or trigger the stall or orphan check. The parent writes
   # the release marker before it interrupts the phase window; the child's signal
   # trap reads it. This exercises that handshake on a live stub run.
-  rm -f "$HALT" "$RELEASE" "$CLAIM"
+  rm -f "$HALT" "$RELEASE" "$CLAIM" "$RUN_DIR/stopped-claim"
   local release_wait="$tmp/release-wait" release_ready="$tmp/release-ready"
   rm -f "$release_wait" "$release_ready"
   local old_stub_sleep="${DRIVER_STUB_SLEEP:-}"
