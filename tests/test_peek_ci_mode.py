@@ -248,6 +248,63 @@ def test_a_cancelled_check_is_not_a_pass(workspace: Workspace) -> None:
 
 
 
+def test_an_unrecognised_bucket_is_named_in_the_summary(workspace: Workspace) -> None:
+    # gh may add a bucket this mode does not know. Such a row is counted in the
+    # total, so a summary that names only the four known buckets leaves it
+    # unexplained while still saying the pull request did not pass.
+    workspace.answer(
+        list=_open_pr(),
+        checks=[_row("build", "pass"), _row("flaky-job", "neutral")],
+        checks_exit=0,
+    )
+
+    out = mode_peek_ci(workspace.root, branch=BRANCH)
+
+    assert out["ok"] is False, out
+    assert out["state"] == "unknown"
+    assert "flaky-job" in out["summary"]
+    assert "1 unknown bucket" in out["summary"]
+    assert any("neutral" in reason for reason in out["repos"][0]["blockers"]), out[
+        "repos"
+    ][0]["blockers"]
+
+
+def test_a_bucket_outside_the_known_set_is_not_a_pass(workspace: Workspace) -> None:
+    # The whole dangerous path: every row is a non-pass, gh exits 0, and no
+    # known bucket is non-zero. Reading only the known buckets calls this a pass.
+    workspace.answer(
+        list=_open_pr(),
+        checks=[_row("flaky-job", "neutral")],
+        checks_exit=0,
+    )
+
+    out = mode_peek_ci(workspace.root, branch=BRANCH)
+
+    assert out["ok"] is False, out
+    assert out["state"] == "unknown"
+    row = out["repos"][0]
+    assert row["checks"]["pass"] == 0
+    assert row["checks"]["total"] == 1
+    assert any("does not know" in reason for reason in row["blockers"])
+
+
+def test_gh_exiting_zero_without_a_check_list_is_not_a_pass(
+    workspace: Workspace,
+) -> None:
+    # gh answered 0 but printed no list at all, so there are no rows to read.
+    # A code of 0 with no rows is a fault, not an empty passing list.
+    workspace.answer(list=_open_pr(), checks_exit=0, checks_reported=False)
+
+    out = mode_peek_ci(workspace.root, branch=BRANCH)
+
+    assert out["ok"] is False, out
+    assert out["state"] == "unknown"
+    assert out["repos"][0]["checks"]["total"] == 0
+    blockers = out["repos"][0]["blockers"]
+    assert any("without a check list" in reason for reason in blockers), blockers
+
+
+
 def test_an_empty_check_list_is_not_a_pass(workspace: Workspace) -> None:
     workspace.answer(list=_open_pr(), checks=[], checks_exit=0)
 
