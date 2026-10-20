@@ -132,7 +132,7 @@ def test_the_cli_accepts_the_peek_ci_mode(
     out = json.loads(capsys.readouterr().out)
     assert out["mode"] == "peek-ci"
     assert out["ok"] is True
-    assert out["repos"][0]["state"] == "passing"
+    assert out["repos"][0]["state"] == "PASSING"
 
 
 def test_a_pending_pull_request_exits_one(
@@ -152,7 +152,7 @@ def test_a_pending_pull_request_exits_one(
     )
     assert main.main() == 1
     out = json.loads(capsys.readouterr().out)
-    assert out["state"] == "pending"
+    assert out["state"] == "PENDING"
 
 
 def test_the_repo_flag_names_the_checkout_to_peek_at(

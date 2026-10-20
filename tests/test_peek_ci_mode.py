@@ -46,12 +46,12 @@ def test_every_check_passing_is_the_only_way_to_pass(workspace: Workspace) -> No
 
     assert out["ok"] is True, out
     assert out["mode"] == "peek-ci"
-    assert out["state"] == "passing"
+    assert out["state"] == "PASSING"
     row = out["repos"][0]
     assert row["ok"] is True
     assert row["number"] == 11
     assert row["url"] == URL
-    assert row["state"] == "passing"
+    assert row["state"] == "PASSING"
     assert row["checks"] == {
         "pass": 3,
         "fail": 0,
@@ -73,7 +73,7 @@ def test_one_failing_check_is_failing_and_not_passing(workspace: Workspace) -> N
     out = mode_peek_ci(workspace.root, branch=BRANCH)
 
     assert out["ok"] is False, out
-    assert out["state"] == "failing"
+    assert out["state"] == "FAILING"
     row = out["repos"][0]
     assert row["ok"] is False
     assert row["checks"]["fail"] == 1
@@ -95,7 +95,7 @@ def test_a_pending_check_is_pending_and_the_mode_does_not_wait(
     out = mode_peek_ci(workspace.root, branch=BRANCH)
 
     assert out["ok"] is False, out
-    assert out["state"] == "pending"
+    assert out["state"] == "PENDING"
     assert out["repos"][0]["checks"]["pending"] == 1
     # One read, never a watch: gh was called once and no wait flag was passed.
     assert len(workspace.check_calls()) == 1
@@ -116,7 +116,7 @@ def test_all_skipped_exits_zero_and_must_not_be_reported_as_passing(
     out = mode_peek_ci(workspace.root, branch=BRANCH)
 
     assert out["ok"] is False, out
-    assert out["state"] == "unknown"
+    assert out["state"] == "UNKNOWN"
     assert out["repos"][0]["checks"]["skipping"] == 2
     assert "build" in out["summary"]
     assert "lint" in out["summary"]
@@ -131,7 +131,7 @@ def test_a_cancelled_check_is_not_a_pass(workspace: Workspace) -> None:
     out = mode_peek_ci(workspace.root, branch=BRANCH)
 
     assert out["ok"] is False, out
-    assert out["state"] == "unknown"
+    assert out["state"] == "UNKNOWN"
     assert any("build" in reason for reason in out["repos"][0]["blockers"])
 
 
@@ -148,7 +148,7 @@ def test_an_unrecognised_bucket_is_named_in_the_summary(workspace: Workspace) ->
     out = mode_peek_ci(workspace.root, branch=BRANCH)
 
     assert out["ok"] is False, out
-    assert out["state"] == "unknown"
+    assert out["state"] == "UNKNOWN"
     assert "flaky-job" in out["summary"]
     assert "1 unknown bucket" in out["summary"]
     assert any("neutral" in reason for reason in out["repos"][0]["blockers"]), out[
@@ -168,7 +168,7 @@ def test_a_bucket_outside_the_known_set_is_not_a_pass(workspace: Workspace) -> N
     out = mode_peek_ci(workspace.root, branch=BRANCH)
 
     assert out["ok"] is False, out
-    assert out["state"] == "unknown"
+    assert out["state"] == "UNKNOWN"
     row = out["repos"][0]
     assert row["checks"]["pass"] == 0
     assert row["checks"]["total"] == 1
@@ -185,7 +185,7 @@ def test_gh_exiting_zero_without_a_check_list_is_not_a_pass(
     out = mode_peek_ci(workspace.root, branch=BRANCH)
 
     assert out["ok"] is False, out
-    assert out["state"] == "unknown"
+    assert out["state"] == "UNKNOWN"
     assert out["repos"][0]["checks"]["total"] == 0
     blockers = out["repos"][0]["blockers"]
     assert any("without a check list" in reason for reason in blockers), blockers
@@ -205,7 +205,7 @@ def test_a_non_zero_exit_beside_all_pass_rows_is_not_a_pass(
     out = mode_peek_ci(workspace.root, branch=BRANCH)
 
     assert out["ok"] is False, out
-    assert out["state"] == "unknown"
+    assert out["state"] == "UNKNOWN"
     row = out["repos"][0]
     assert row["ok"] is False
     assert row["checks"]["pass"] == 1
@@ -222,7 +222,7 @@ def test_an_empty_check_list_is_not_a_pass(workspace: Workspace) -> None:
     out = mode_peek_ci(workspace.root, branch=BRANCH)
 
     assert out["ok"] is False, out
-    assert out["state"] == "unknown"
+    assert out["state"] == "UNKNOWN"
     assert out["repos"][0]["checks"]["total"] == 0
     assert any("no check rows" in reason for reason in out["repos"][0]["blockers"])
 
@@ -235,7 +235,7 @@ def test_no_checks_reported_at_all_is_not_a_pass(workspace: Workspace) -> None:
     out = mode_peek_ci(workspace.root, branch=BRANCH)
 
     assert out["ok"] is False, out
-    assert out["state"] == "unknown"
+    assert out["state"] == "UNKNOWN"
     assert out["repos"][0]["checks"]["total"] == 0
     blockers = out["repos"][0]["blockers"]
     assert any("could not report checks" in reason for reason in blockers)
@@ -249,7 +249,7 @@ def test_no_pull_request_for_the_branch_is_a_reason_not_a_crash(
     out = mode_peek_ci(workspace.root, branch=BRANCH)
 
     assert out["ok"] is False, out
-    assert out["state"] == "unknown"
+    assert out["state"] == "UNKNOWN"
     row = out["repos"][0]
     assert row["number"] is None
     assert any(BRANCH in reason for reason in row["blockers"])

@@ -46,6 +46,9 @@ def test_creates_a_draft_and_reports_what_the_read_back_says(
 
     assert out["ok"] is True, out
     assert out["mode"] == "open-pr"
+    # One vocabulary across modes: an upper-case state on the result, not only
+    # on the row, so a record reader switches on the same key everywhere.
+    assert out["state"] == "OPEN"
     row = out["repos"][0]
     assert row["action"] == "created"
     # These four come from the read after the create, not from the create.
@@ -69,7 +72,7 @@ def test_a_create_that_prints_no_url_is_blocked(workspace: Workspace) -> None:
     out = mode_open_pr(workspace.root, branch=BRANCH)
 
     assert out["ok"] is False, out
-    assert out["state"] == "blocked"
+    assert out["state"] == "BLOCKED"
     row = out["repos"][0]
     assert row["action"] is None
     assert row["number"] is None
@@ -84,7 +87,7 @@ def test_a_create_that_cannot_be_read_back_is_blocked(workspace: Workspace) -> N
     out = mode_open_pr(workspace.root, branch=BRANCH)
 
     assert out["ok"] is False, out
-    assert out["state"] == "blocked"
+    assert out["state"] == "BLOCKED"
     row = out["repos"][0]
     assert row["number"] is None
     assert any(URL in reason for reason in row["blockers"])
@@ -96,7 +99,7 @@ def test_a_failed_read_is_blocked_and_creates_nothing(workspace: Workspace) -> N
     out = mode_open_pr(workspace.root, branch=BRANCH)
 
     assert out["ok"] is False, out
-    assert out["state"] == "blocked"
+    assert out["state"] == "BLOCKED"
     row = out["repos"][0]
     assert any("could not list pull requests" in reason for reason in row["blockers"])
     assert [call for call in workspace.commands() if call[:2] == ["pr", "create"]] == []
@@ -108,7 +111,7 @@ def test_a_failed_create_is_blocked_and_claims_nothing(workspace: Workspace) -> 
     out = mode_open_pr(workspace.root, branch=BRANCH)
 
     assert out["ok"] is False, out
-    assert out["state"] == "blocked"
+    assert out["state"] == "BLOCKED"
     row = out["repos"][0]
     assert row["action"] is None
     assert row["number"] is None
@@ -149,7 +152,7 @@ def test_a_closed_or_merged_pull_request_blocks_a_duplicate(
     out = mode_open_pr(workspace.root, branch=BRANCH)
 
     assert out["ok"] is False, out
-    assert out["state"] == "blocked"
+    assert out["state"] == "BLOCKED"
     row = out["repos"][0]
     assert row["number"] == 9
     assert row["state"] == state
@@ -273,7 +276,7 @@ def test_the_cli_accepts_open_pr_and_reports_config_error(
     )
     assert main.main() == 2
     refused = json.loads(capsys.readouterr().out)
-    assert refused["state"] == "config_error"
+    assert refused["state"] == "CONFIG_ERROR"
     assert "no phases file" in refused["error"]
     assert workspace.commands() == []
 
@@ -292,7 +295,7 @@ def test_a_create_the_cli_cannot_confirm_exits_one(
     assert main.main() == 1
     out = json.loads(capsys.readouterr().out)
     assert out["ok"] is False
-    assert out["state"] == "blocked"
+    assert out["state"] == "BLOCKED"
 
 
 def test_blocked_exits_one(

@@ -47,7 +47,7 @@ def test_a_list_of_only_unreadable_rows_blocks_and_creates_nothing(
     out = mode_open_pr(workspace.root, branch=BRANCH)
 
     assert out["ok"] is False, out
-    assert out["state"] == "blocked"
+    assert out["state"] == "BLOCKED"
     blockers = out["repos"][0]["blockers"]
     assert any("gh listed 1 pull request rows" in reason for reason in blockers), (
         blockers
@@ -67,7 +67,7 @@ def test_a_row_with_no_draft_flag_blocks_and_reports_no_draft_state(
     out = mode_open_pr(workspace.root, branch=BRANCH)
 
     assert out["ok"] is False, out
-    assert out["state"] == "blocked"
+    assert out["state"] == "BLOCKED"
     row = out["repos"][0]
     assert row["draft"] is None
     assert any("draft flag for #11" in reason for reason in row["blockers"]), row[

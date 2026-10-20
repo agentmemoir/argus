@@ -317,7 +317,7 @@ def main() -> int:
                 {
                     "ok": False,
                     "mode": args.mode,
-                    "state": "config_error",
+                    "state": "CONFIG_ERROR",
                     "error": str(e),
                 },
                 indent=2,

@@ -29,22 +29,25 @@ def bucket_counts(rows: list[dict[str, Any]]) -> dict[str, int]:
 def checks_state(rows: list[dict[str, Any]], counts: dict[str, int]) -> str:
     """The one word for this pull request's checks.
 
-    ``passing`` needs a row to exist and every row to be a pass. A fail bucket
+    ``PASSING`` needs a row to exist and every row to be a pass. A fail bucket
     outranks a pending one, because a caller can act on a failure now. A
     skipping or cancelled row, or a bucket gh did not report as one of the five,
-    is ``unknown``: it is not a failure to fix and it is not a pass to trust.
+    is ``UNKNOWN``: it is not a failure to fix and it is not a pass to trust.
+
+    Every word is upper case, like every other gitsync mode's state, so a record
+    reader switches on one key and one vocabulary across all of them.
     """
     if not rows:
-        return "unknown"
+        return "UNKNOWN"
     if counts["fail"]:
-        return "failing"
+        return "FAILING"
     if counts["pending"]:
-        return "pending"
+        return "PENDING"
     if counts["skipping"] or counts["cancel"]:
-        return "unknown"
+        return "UNKNOWN"
     if counts["pass"] == len(rows):
-        return "passing"
-    return "unknown"
+        return "PASSING"
+    return "UNKNOWN"
 
 
 def _shortened(names: list[str]) -> str:

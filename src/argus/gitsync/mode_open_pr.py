@@ -14,8 +14,12 @@ Three outcomes, and the mode keeps them apart:
   every tick, so a second call must never open a second draft for the same
   commits.
 * the newest pull request for the branch is merged or closed: refuse with
-  ``state: blocked`` and name that pull request. New work on a branch whose
+  ``state: BLOCKED`` and name that pull request. New work on a branch whose
   pull request already closed is the reviewer's decision, not this mode's.
+
+``state`` is upper case, like every other gitsync mode, so one reader switches
+on the same key across all of them. A created or reused pull request reports
+the state gh gave for it, which is ``OPEN``; a refusal reports ``BLOCKED``.
 
 A gh read that fails is never read as "no pull request". Believing that would
 create a duplicate on every network blip, so an unreadable list stops the mode.
@@ -111,9 +115,7 @@ def _local_branch_missing(root: Path, branch: str) -> str | None:
 def _blocked(branch: str, row: dict[str, Any], reasons: list[str]) -> dict[str, Any]:
     """The mode's result for one blocked row, with the reasons recorded on it."""
     row["blockers"] = reasons
-    out = _result(branch, [row])
-    out["state"] = "blocked"
-    return out
+    return _result(branch, [row])
 
 
 def _draft_or_reason(item: dict[str, Any]) -> tuple[bool | None, str | None]:
@@ -163,11 +165,19 @@ def _summary(rows: list[dict[str, Any]]) -> str:
 
 
 def _result(branch: str, rows: list[dict[str, Any]]) -> dict[str, Any]:
-    """The mode's result, in the shape every other mode returns."""
+    """The mode's result, in the shape every other mode returns.
+
+    ``state`` is the pull request state gh reported for the row, so a created or
+    reused pull request reports ``OPEN``, and ``BLOCKED`` when the mode could not
+    finish. It is upper case for the same reason every other mode's is: a record
+    reader switches on one key and one vocabulary across all of them.
+    """
     ok = bool(rows) and all(bool(row.get("ok")) for row in rows)
+    state = str(rows[0].get("state")) if ok else "BLOCKED"
     return {
         "ok": ok,
         "mode": "open-pr",
+        "state": state,
         "branch": branch,
         "repos": rows,
         "summary": _summary(rows),
@@ -201,9 +211,9 @@ def mode_open_pr(
     supply its own text, and a file that is missing or empty is refused rather
     than quietly replaced by the default.
 
-    Returns the mode's result dict: ``ok``, ``mode``, ``branch``, ``repos``, and
-    ``summary``, with ``state: blocked`` and a blocker naming the reason when the
-    mode could not finish.
+    Returns the mode's result dict: ``ok``, ``mode``, ``state``, ``branch``,
+    ``repos``, and ``summary``, with ``state: BLOCKED`` and a blocker naming the
+    reason when the mode could not finish.
     """
     root = Path(root).resolve()
     branch_name = resolve_branch(root, phase, branch)

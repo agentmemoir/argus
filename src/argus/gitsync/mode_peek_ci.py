@@ -78,7 +78,7 @@ def _row(root: Path) -> dict[str, Any]:
         "ok": False,
         "number": None,
         "url": None,
-        "state": "unknown",
+        "state": "UNKNOWN",
         "checks": checks,
         "blockers": [],
     }
@@ -194,13 +194,13 @@ def mode_peek_ci(
     state = checks_state(rows, counts)
     row["checks"] = counts
     row["state"] = state
-    if state == "passing" and code in (0, NEVER_RAN):
+    if state == "PASSING" and code in (0, NEVER_RAN):
         row["ok"] = True
         return _result(branch_name, row, code, rows)
-    if state == "passing":
+    if state == "PASSING":
         # gh printed all-pass rows and did not exit 0. The rows and the code
         # disagree, so neither is trusted: the state is unknown, not passing.
-        row["state"] = "unknown"
+        row["state"] = "UNKNOWN"
         row["blockers"] = [
             f"{gh_exit_detail(code, 'the checks read')}; every row said pass"
         ]
