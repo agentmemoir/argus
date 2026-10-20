@@ -4,7 +4,7 @@
 
 from typing import Any
 
-from argus.gitsync.git import gh_exit_detail
+from argus.gitsync.gh_exit import gh_exit_detail
 
 BUCKETS = ("pass", "fail", "pending", "skipping", "cancel")
 

@@ -5,8 +5,9 @@
 import subprocess
 from pathlib import Path
 
+from argus.gitsync.gh_exit import gh_exit_detail
 from argus.gitsync.gh_target import repo_target
-from argus.gitsync.git import GH_TIMEOUT_S, gh_binary, gh_exit_detail
+from argus.gitsync.git import GH_TIMEOUT_S, gh_binary
 
 
 def gh_mark_pull_request_ready(

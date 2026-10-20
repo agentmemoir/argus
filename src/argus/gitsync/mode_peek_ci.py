@@ -21,7 +21,8 @@ from pathlib import Path
 from typing import Any
 
 from argus.gitsync.gh import gh_pull_request_checks, gh_pull_requests_for_branch
-from argus.gitsync.git import ConfigError, gh_exit_detail
+from argus.gitsync.gh_exit import gh_exit_detail
+from argus.gitsync.git import ConfigError
 from argus.gitsync.mode_open_pr import resolve_branch
 from argus.gitsync.peek_ci_summary import (
     BUCKETS,

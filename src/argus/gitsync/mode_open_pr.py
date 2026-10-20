@@ -26,10 +26,10 @@ from typing import Any
 
 from argus import conventions
 from argus.gitsync.gh import gh_create_draft_pull_request, gh_pull_requests_for_branch
+from argus.gitsync.gh_exit import gh_exit_detail
 from argus.gitsync.git import (
     ConfigError,
     current_branch,
-    gh_exit_detail,
     git,
     integration_branch,
 )
