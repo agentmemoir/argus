@@ -388,6 +388,34 @@ def test_a_closed_pull_request_has_no_checks_in_flight(workspace: Workspace) -> 
     assert any("MERGED" in reason for reason in out["repos"][0]["blockers"])
     assert workspace.check_calls() == []
 
+def test_an_explicit_pull_request_still_reports_the_branch(
+    workspace: Workspace,
+) -> None:
+    # The pull request comes from --pull-request, but the branch is still a fact
+    # the reader needs, so it is resolved and reported rather than left null.
+    workspace.answer(checks=[_row("build", "pass")])
+
+    out = mode_peek_ci(workspace.root, pull_request=URL)
+
+    assert out["ok"] is True, out
+    assert out["branch"] == "main"
+
+
+def test_an_explicit_pull_request_survives_a_branch_that_cannot_be_resolved(
+    workspace: Workspace,
+) -> None:
+    # A URL names the pull request on its own, so a checkout on a detached HEAD
+    # is not a reason to refuse the read: the branch is null and the read holds.
+    assert git(workspace.root, "checkout", "-q", "--detach")[0] == 0
+    workspace.answer(checks=[_row("build", "pass")])
+
+    out = mode_peek_ci(workspace.root, pull_request=URL)
+
+    assert out["ok"] is True, out
+    assert out["branch"] is None
+
+
+
 
 def test_an_explicit_url_is_read_directly(workspace: Workspace) -> None:
     workspace.answer(checks=[_row("build", "pass")])
@@ -462,3 +490,36 @@ def test_a_pending_pull_request_exits_one(
     assert main.main() == 1
     out = json.loads(capsys.readouterr().out)
     assert out["state"] == "pending"
+
+
+def test_the_repo_flag_names_the_checkout_to_peek_at(
+    workspace: Workspace,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # peek-ci has its own dispatch branch, which comes before the generic --repo
+    # branch. Without handling it there, --repo fell through to the repo root and
+    # read the wrong checkout.
+    other = tmp_path / "elsewhere"
+    other.mkdir()
+    monkeypatch.setattr(conventions, "configure_from_args", _keep_settings)
+    workspace.answer(list=_open_pr(), checks=[_row("build", "pass")])
+
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "gitsync",
+            "--mode",
+            "peek-ci",
+            "--repo",
+            str(other),
+            "--branch",
+            BRANCH,
+        ],
+    )
+    assert main.main() == 0
+    out = json.loads(capsys.readouterr().out)
+    assert out["repos"][0]["repo"] == str(other.resolve())
+

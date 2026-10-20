@@ -292,8 +292,11 @@ def main() -> int:
                 body_file=args.body_file,
             )
         elif args.mode == "peek-ci":
+            # peek-ci reads one checkout, and --repo names it. The dispatch
+            # branch sits before the generic --repo branch, so the flag is
+            # honoured here rather than falling through to the repo root.
             out = mode_peek_ci(
-                args.root,
+                Path(args.repo).resolve() if args.repo else args.root,
                 phase=args.phase,
                 branch=args.branch,
                 pull_request=args.pull_request,

@@ -229,6 +229,22 @@ def _summary(
     return f"{head}: " + "; ".join(parts)
 
 
+def _branch_or_none(
+    root: Path, phase: int | str | None, branch: str | None
+) -> str | None:
+    """The branch this read is about, when one can be resolved.
+
+    ``--pull-request`` names the pull request by number or URL, so the read is
+    well defined even when the checkout cannot say which branch it is on. The
+    branch is still resolved best effort and reported, and a null field is the
+    honest answer when it cannot be.
+    """
+    try:
+        return resolve_branch(root, phase, branch)
+    except ConfigError:
+        return None
+
+
 def _result(
     branch: str | None,
     row: dict[str, Any],
@@ -256,8 +272,10 @@ def mode_peek_ci(
 
     The pull request is the one ``--pull-request`` names, or else the open pull
     request whose head is the resolved branch: the explicit ``--branch``, else
-    the phase's branch, else the branch the checkout is on. No pull request
-    found is a result with a reason, not a crash.
+    the phase's branch, else the branch the checkout is on. An explicit pull
+    request is read directly, and the branch beside it is resolved best effort,
+    so it is null when the checkout cannot say. No pull request found is a
+    result with a reason, not a crash.
 
     Returns ``ok``, ``mode``, ``branch``, ``state``, ``repos``, and ``summary``.
     Each repository row carries ``repo``, ``ok``, ``number``, ``url``, ``state``,
@@ -272,6 +290,7 @@ def mode_peek_ci(
 
     if pull_request is not None:
         target, number, url = _target_from(pull_request)
+        branch_name = _branch_or_none(root, phase, branch)
     else:
         branch_name = resolve_branch(root, phase, branch)
         found, why = gh_pull_requests_for_branch(root, branch_name)
