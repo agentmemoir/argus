@@ -141,3 +141,22 @@ def test_blocked_exits_one(
     )
 
     assert main.main() == 1
+def test_the_help_names_the_new_modes_for_branch_and_phase(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A flag's help must name every mode that reads it.
+
+    Both strings said less than the code does: `--branch` named only start and
+    push, and `--phase` did not name open-pr at all. A caller reading the help
+    would not know the new modes accept them.
+    """
+    monkeypatch.setattr(sys, "argv", ["gitsync", "--help"])
+    with pytest.raises(SystemExit):
+        main.main()
+    # argparse wraps the help at the terminal width, so the words are joined
+    # before they are compared: the sentence, not the line breaks, is the claim.
+    flat = " ".join(capsys.readouterr().out.split())
+
+    assert "for the open-pr and peek-ci modes" in flat, flat
+    assert "--mode open-pr or --mode peek-ci" in flat, flat
+

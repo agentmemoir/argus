@@ -166,7 +166,8 @@ def main() -> int:
         "--phase",
         default=None,
         help="phase number for --mode publish, --mode clean, --mode published, "
-        "--mode signals or --mode signal-reply",
+        "--mode signals, --mode signal-reply, --mode open-pr or "
+        "--mode peek-ci",
     )
     ap.add_argument(
         "--comment", type=int, default=None, help="review comment id for signal-reply"
@@ -202,7 +203,9 @@ def main() -> int:
     ap.add_argument(
         "--branch",
         default=None,
-        help="the branch the public checkout must be on, for the start and push modes",
+        help="the branch the public checkout must be on, for the start and push "
+        "modes; the branch to open a pull request from or read checks for, "
+        "for the open-pr and peek-ci modes",
     )
     ap.add_argument(
         "--title-file",
