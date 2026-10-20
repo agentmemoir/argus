@@ -189,8 +189,14 @@ def test_an_explicit_base_is_used_and_nothing_is_asked_for_one(
     assert out["ok"] is True, out
     create = _create_call(workspace)
     assert create[create.index("--base") + 1] == "trunk"
-    asked = [call for call in workspace.commands() if call[:2] == ["repo", "view"]]
-    assert asked == []
+    # The fork question is a different one and is asked either way. What must not
+    # happen is a second question about the base branch.
+    asked = [
+        call
+        for call in workspace.commands()
+        if call[:2] == ["repo", "view"] and "defaultBranchRef" in call
+    ]
+    assert asked == [], asked
 
 
 def test_the_base_falls_back_to_gh_when_the_checkout_cannot_name_one(
