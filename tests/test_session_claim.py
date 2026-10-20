@@ -26,7 +26,9 @@ def add_phase(fixture: DriverPublication, number: int, name: str) -> str:
         ["git", "-C", str(folder), "add", "-A"], check=True, capture_output=True
     )
     subprocess.run(
-        ["git", "-C", str(folder), "commit", "-qm", name], check=True, capture_output=True
+        ["git", "-C", str(folder), "commit", "-qm", name],
+        check=True,
+        capture_output=True,
     )
     return f"phases-data/phases/{path.name}"
 
@@ -41,7 +43,15 @@ def session(
     }
     base.update(DRIVER_STUB_RC="0", DRIVER_STUB_SLEEP="0", **env)
     return subprocess.run(
-        ["bash", str(DRIVER), "--config", str(fixture.config), "--session", str(number), rel],
+        [
+            "bash",
+            str(DRIVER),
+            "--config",
+            str(fixture.config),
+            "--session",
+            str(number),
+            rel,
+        ],
         cwd=fixture.root,
         env=base,
         stdin=subprocess.DEVNULL,
@@ -130,7 +140,10 @@ printf 'rc=%s\\n' "$rc"
     result = subprocess.run(
         ["bash", "-c", script],
         cwd=tmp_path,
-        env={"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "TEST_ROOT": str(tmp_path)},
+        env={
+            "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
+            "TEST_ROOT": str(tmp_path),
+        },
         stdin=subprocess.DEVNULL,
         capture_output=True,
         encoding="utf-8",

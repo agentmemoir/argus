@@ -84,6 +84,32 @@ print(line)
 ' "$1"
 }
 
+# The claim this machine already holds on one phase, as `id<TAB>generation`.
+#
+# A session that ends without releasing leaves its claim on the board. A second
+# start on the same machine is the operator running the phase again, not a rival
+# owner, so the claim is reused rather than reported as a conflict with itself. A
+# record owned elsewhere, or one already expired, prints nothing.
+session_claim_own() {   # <number>
+  local state=""
+  state="$("$PYTHON" "$ARGUS/board/reservations.py" show \
+    "${ARGUS_CONFIG_ARGS[@]}" "${BOARD_KIND_ARGS[@]+"${BOARD_KIND_ARGS[@]}"}" \
+    --repo-root "$REPO" --machine-id "$PHASE_MACHINE_ID" 2>/dev/null)" || return 0
+  printf '%s\n' "$state" | "$PYTHON" -c '
+import json, sys
+try:
+    data = json.load(sys.stdin)
+except ValueError:
+    data = {}
+record = (data.get("phases") or {}).get(sys.argv[1]) if isinstance(data, dict) else None
+if not isinstance(record, dict):
+    raise SystemExit(0)
+if record.get("status") not in {"claimed", "running", "paused", "blocked"}:
+    raise SystemExit(0)
+print(str(record.get("reservation_id", "")) + "\t" + str(record.get("generation", "")))
+' "$1"
+}
+
 # Hold a live claim for one `--session` run, or refuse to start it.
 #
 # Under a tick the parent already claimed: the fence it passed in the environment
@@ -114,42 +140,44 @@ session_claim_ensure() {   # <number> <rel>
     id="$CLIO_RESERVATION_ID"
     generation="$CLIO_RESERVATION_GENERATION"
   else
-    # A claim this machine already recorded for this phase is this run's own
-    # claim: a crash, or a second manual start, must not be refused as a
-    # conflict with itself. It is only reused when the board still names it.
-    if claim_read_fields "$CLAIM" && [ "$CLAIM_NUMBER" = "$number" ] \
-        && [ -n "$CLAIM_ID" ] && [ -n "$CLAIM_GEN" ] \
-        && "$PYTHON" "$ARGUS/board/reservations.py" assert-owner \
+    # A claim this machine already holds on the phase is this run's own claim: a
+    # session that ended without releasing, or a second manual start, must not be
+    # refused as a conflict with itself. The board is the truth, so the fence is
+    # read from it rather than from a claim file an earlier run may have left.
+    local own=""
+    own="$(session_claim_own "$number")"
+    if [ -n "$own" ]; then
+      id="${own%%$'\t'*}"
+      generation="${own#*$'\t'}"
+    fi
+    if [ -n "$id" ] && [ -n "$generation" ]; then
+      :
+    else
+      if ! group_take_declared "$number"; then
+        printf 'argus: the reservation group for phase %s cannot be read: %s; no launch\n' \
+          "$number" "$GROUP_ERROR" >&2
+        return 1
+      fi
+      if group_active; then
+        out="$("$PYTHON" "$ARGUS/select/group.py" "${ARGUS_CONFIG_ARGS[@]}" \
+          --phase "$number" --machine-id "$PHASE_MACHINE_ID" 2>/dev/null)" || rc=$?
+      else
+        out="$("$PYTHON" "$ARGUS/board/reservations.py" reserve \
           "${ARGUS_CONFIG_ARGS[@]}" "${BOARD_KIND_ARGS[@]+"${BOARD_KIND_ARGS[@]}"}" \
           --repo-root "$REPO" --phase "$number" \
-          --machine-id "$PHASE_MACHINE_ID" --reservation-id "$CLAIM_ID" \
-          --generation "$CLAIM_GEN" >/dev/null 2>&1; then
-      id="$CLAIM_ID"
-      generation="$CLAIM_GEN"
-    elif ! group_take_declared "$number"; then
-      printf 'argus: the reservation group for phase %s cannot be read: %s; no launch\n' \
-        "$number" "$GROUP_ERROR" >&2
-      return 1
-    fi
-    if group_active; then
-      out="$("$PYTHON" "$ARGUS/select/group.py" "${ARGUS_CONFIG_ARGS[@]}" \
-        --phase "$number" --machine-id "$PHASE_MACHINE_ID" 2>/dev/null)" || rc=$?
-    else
-      out="$("$PYTHON" "$ARGUS/board/reservations.py" reserve \
-        "${ARGUS_CONFIG_ARGS[@]}" "${BOARD_KIND_ARGS[@]+"${BOARD_KIND_ARGS[@]}"}" \
-        --repo-root "$REPO" --phase "$number" \
-        --machine-id "$PHASE_MACHINE_ID" --run-id "phase-$number" 2>/dev/null)" || rc=$?
-    fi
-    if [ "$rc" -ne 0 ]; then
-      printf 'argus: %s\n' "$(session_claim_refusal "$number" "$out")" >&2
-      return 1
-    fi
-    id="$(printf '%s\n' "$out" | session_claim_field reservation_id)"
-    generation="$(printf '%s\n' "$out" | session_claim_field generation)"
-    if [ -z "$id" ] || [ -z "$generation" ]; then
-      printf 'argus: the board returned no reservation for phase %s; no launch. Action: retry\n' \
-        "$number" >&2
-      return 1
+          --machine-id "$PHASE_MACHINE_ID" --run-id "phase-$number" 2>/dev/null)" || rc=$?
+      fi
+      if [ "$rc" -ne 0 ]; then
+        printf 'argus: %s\n' "$(session_claim_refusal "$number" "$out")" >&2
+        return 1
+      fi
+      id="$(printf '%s\n' "$out" | session_claim_field reservation_id)"
+      generation="$(printf '%s\n' "$out" | session_claim_field generation)"
+      if [ -z "$id" ] || [ -z "$generation" ]; then
+        printf 'argus: the board returned no reservation for phase %s; no launch. Action: retry\n' \
+          "$number" >&2
+        return 1
+      fi
     fi
   fi
   CLIO_RESERVATION_ID="$id"

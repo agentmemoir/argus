@@ -3,7 +3,10 @@
 """``scan`` reports run work that no live claim covers."""
 
 import json
+import os
 import shutil
+import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -130,3 +133,26 @@ def test_scan_reports_an_unreadable_board_with_exit_two(
     printed = json.loads(capsys.readouterr().out)
     assert printed["state"] == "COORDINATION_UNAVAILABLE"
     assert "phases" not in printed
+
+
+def test_the_documented_command_runs_the_scan() -> None:
+    """The `scan` command the CHANGELOG documents is reachable from the module.
+
+    A check that the documented command exists belongs in a test: the
+    CHANGELOG once claimed a `scan` verb that no documented command exposed.
+    """
+    result = subprocess.run(
+        [sys.executable, "-m", "argus.board.reservations", "scan", "--help"],
+        env=dict(
+            os.environ, PYTHONPATH=str(Path(__file__).resolve().parents[1] / "src")
+        ),
+        stdin=subprocess.DEVNULL,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        timeout=60,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "--machine-id" in result.stdout
+    assert "--phase" in result.stdout

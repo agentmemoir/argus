@@ -7,6 +7,7 @@ from collections.abc import Sequence
 from typing import Any, cast
 
 from argus import conventions
+from argus.board.cli_scan import add_scan_parser, check_scan_args, scan_command
 from argus.board.core import (
     ACTIVE_STATUSES,
     STATUSES,
@@ -19,7 +20,6 @@ from argus.board.core import (
     _print_json,
 )
 from argus.board.files import reservation_file, save_reservation_file
-from argus.board.scan import scan_claims
 from argus.board.selftest import self_test
 from argus.board.store import ReservationStore
 from argus.config.loader import ConfigError
@@ -197,15 +197,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     sub.add_parser("self-test", help="run hermetic two-client checks")
 
-    scan = sub.add_parser(
-        "scan", help="report run work that no live claim covers"
-    )
-    _add_store_args(scan)
-    scan.add_argument("--phase", help="scan only this phase")
-    scan.add_argument(
-        "--machine-id",
-        help="treat a claim held by another machine as uncovered",
-    )
+    add_scan_parser(sub, _add_store_args)
 
     args = parser.parse_args(argv)
     if not args.command:
@@ -220,10 +212,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "show":
             machine_id, reservation_ids = _show_filters(args)
         if args.command == "scan":
-            if args.machine_id is not None and not args.machine_id.strip():
-                raise CoordinationError("--machine-id must not be empty")
-            if args.phase is not None and not args.phase.strip():
-                raise CoordinationError("--phase must not be empty")
+            check_scan_args(args)
         if args.command == "reserve":
             result = store.reserve(
                 args.phase, args.machine_id, run_id=args.run_id, status=args.status
@@ -315,14 +304,7 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "expire-stale":
             result = store.expire_stale()
         elif args.command == "scan":
-            result = scan_claims(
-                conventions.setting("repo-root"),
-                store,
-                phase=None if args.phase is None else args.phase.strip(),
-                machine_id=(
-                    None if args.machine_id is None else args.machine_id.strip()
-                ),
-            )
+            result = scan_command(args, store)
         else:
             result, _commit = store.read()
         if args.command == "show":

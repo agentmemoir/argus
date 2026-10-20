@@ -54,6 +54,20 @@ An idle halted or manually stopped line does not renew its claim. The claim can 
 
 A later resume must renew the old fence or take a fresh reservation. It refuses when another owner holds the work.
 
+## Scan for uncovered work
+
+`python -m argus.board.reservations scan --config <cfg> [--phase N] [--machine-id ID]` answers one question: which phase run directories hold work that no live claim covers. It reads the board and writes nothing.
+
+It reports a phase with run work but no claim record, an expired claim, a claim held by another machine, or a terminal record, each with its reason:
+
+```json
+{"state": "OK", "phases": [{"phase": "100002", "machine_id": null, "status": null, "reason": "no_claim"}]}
+```
+
+Exit 0 means the board was read. Exit 2 means the board or a flag was not usable, and the output names the error.
+
+Run it before the first edit of an interactive phase, and when the board looks free but a run directory holds work.
+
 ## Failed jobs
 
 A glide job that fails is retried with capped exponential backoff and full jitter, then recorded as `failed.json` beside the phase's run directory; the selector skips that phase, so the line continues to the next job instead of halting. `ARGUS_JOB_RETRIES` sets the retry count, 3 by default, so a job is tried 4 times. A failure that exhausts its retries sends a `failed` notification naming the residue.
