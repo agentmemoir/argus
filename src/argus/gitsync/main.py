@@ -99,6 +99,7 @@ from argus.gitsync.merge import sync_one
 from argus.gitsync.mode_branch import mode_branch
 from argus.gitsync.mode_clean import mode_checkpoint, mode_clean
 from argus.gitsync.mode_open_pr import mode_open_pr
+from argus.gitsync.mode_peek_ci import mode_peek_ci
 from argus.gitsync.modes import mode_published, mode_tidy, result_exit_code
 from argus.gitsync.pr_signal_reply import mode_signal_reply
 from argus.gitsync.pr_signals import mode_signals
@@ -136,6 +137,7 @@ def main() -> int:
             "signals",
             "signal-reply",
             "open-pr",
+            "peek-ci",
         ],
         default="start",
         help="start: sync before a phase; push: verify a "
@@ -156,7 +158,9 @@ def main() -> int:
         "comments and record what changed; signal-reply: reply to "
         "or react to one recorded review comment, for --comment; "
         "open-pr: open a draft pull request for the branch, or reuse "
-        "the one already open for it",
+        "the one already open for it; peek-ci: read a pull "
+        "request's checks once and report whether every row passed, "
+        "without waiting",
     )
     ap.add_argument(
         "--phase",
@@ -215,7 +219,8 @@ def main() -> int:
         "--pull-request",
         default=None,
         help="pull request URL finalize opened, recorded in the "
-        "receipt for --mode publish",
+        "receipt for --mode publish, or the number or URL "
+        "to peek at for --mode peek-ci",
     )
     args = ap.parse_args()
     if args.self_test:
@@ -285,6 +290,13 @@ def main() -> int:
                 branch=args.branch,
                 title_file=args.title_file,
                 body_file=args.body_file,
+            )
+        elif args.mode == "peek-ci":
+            out = mode_peek_ci(
+                args.root,
+                phase=args.phase,
+                branch=args.branch,
+                pull_request=args.pull_request,
             )
         elif args.repo:
             res = sync_one(Path(args.repo).resolve(), args.mode, branch=args.branch)

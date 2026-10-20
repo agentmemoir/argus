@@ -392,12 +392,98 @@ def gh_create_draft_pull_request(
     return done.stdout.strip(), ""
 
 
+def _check_rows(text: str) -> list[dict[str, Any]] | None:
+    """The check rows in gh's JSON output, or ``None`` when there were none.
+
+    A row keeps its bucket, state, name, and link as strings. A row missing a
+    field keeps the empty string in its place rather than being dropped: the
+    count of rows gh reported is itself a fact, and an empty bucket is read by
+    the caller as "not a pass", which is the safe direction.
+    """
+    try:
+        raw = json.loads(text)
+    except ValueError:
+        return None
+    if not isinstance(raw, list):
+        return None
+    rows: list[dict[str, Any]] = []
+    for entry in raw:
+        if not isinstance(entry, dict):
+            continue
+        row = cast("dict[str, Any]", entry)
+        rows.append(
+            {
+                "bucket": str(row.get("bucket") or ""),
+                "state": str(row.get("state") or ""),
+                "name": str(row.get("name") or ""),
+                "link": str(row.get("link") or ""),
+            }
+        )
+    return rows
+
+
+def gh_pull_request_checks(
+    root: Path, target: int | str
+) -> tuple[list[dict[str, Any]] | None, int, str]:
+    """Every check gh reports for one pull request, and gh's own exit code.
+
+    ``target`` is a pull request number or URL. Returns the rows, the exit code
+    gh returned, and a detail. The rows and the code are returned together so a
+    caller can report what really happened instead of one number standing in
+    for both: 0 means no failure and nothing pending, 1 means a fail bucket, and
+    8 means pending. Exit 0 is never the whole answer here, because a skipping,
+    neutral, or cancelled row is neither failed nor pending.
+
+    When gh never ran, the rows are ``None``, the code is ``-1``, and the
+    detail says why. When gh ran but printed nothing that parses as a list, the
+    rows are ``None`` and the code is gh's. Only the code and the row list are
+    reported, never gh's stderr: an unauthenticated call prints the host account
+    name, and run logs are copied into issues.
+
+    ``--required`` is deliberately absent. It narrows the list and hides a
+    non-required failure, so a caller that used it would report a passing pull
+    request with a failing check on it. ``--watch`` is absent too: this reads
+    once and returns.
+    """
+    argv = [
+        gh_binary(),
+        "pr",
+        "checks",
+        str(int(target)) if isinstance(target, int) else str(target),
+        "--json",
+        "bucket,state,name,link",
+    ]
+    try:
+        done = subprocess.run(
+            argv,
+            cwd=root,
+            capture_output=True,
+            text=True,
+            timeout=GH_TIMEOUT_S,
+        )
+    except FileNotFoundError:
+        return None, -1, "gh is not installed"
+    except subprocess.TimeoutExpired:
+        return None, -1, f"gh did not answer within {GH_TIMEOUT_S}s"
+    rows = _check_rows(done.stdout)
+    if rows is None:
+        # An empty branch has no checks, and gh says so on stderr with a
+        # non-zero code. No row list is not an empty one for a caller's purpose
+        # here, but both are reported so the caller can tell them apart: a code
+        # of 0 with no JSON is a different fault from a code of 1.
+        if done.returncode:
+            return None, done.returncode, f"gh exited {done.returncode} with no checks"
+        return None, 0, "gh exited 0 without a check list"
+    return rows, done.returncode, ""
+
+
 __all__ = [
     "_repo_target",
     "gh_comment_pull_request",
     "gh_edit_pull_request_body",
     "gh_mark_pull_request_ready",
     "gh_pull_request_body",
+    "gh_pull_request_checks",
     "gh_pull_request_open",
     "gh_pull_request_state",
     "gh_pull_requests_for_branch",

@@ -34,7 +34,7 @@ from argus.gitsync.git import (
 from argus.gitsync.paths import phase_branch
 
 
-def _resolve_branch(root: Path, phase: int | str | None, branch: str | None) -> str:
+def resolve_branch(root: Path, phase: int | str | None, branch: str | None) -> str:
     """The branch to open the pull request from.
 
     An explicit branch wins; then the phase's own branch, derived from its phases
@@ -133,7 +133,7 @@ def mode_open_pr(
     mode could not finish.
     """
     root = Path(root).resolve()
-    branch_name = _resolve_branch(root, phase, branch)
+    branch_name = resolve_branch(root, phase, branch)
     title = _text_from_file(title_file, "--title-file")
     body = _text_from_file(body_file, "--body-file")
     row = _row(root)
@@ -205,4 +205,4 @@ def mode_open_pr(
     return _result(branch_name, [row])
 
 
-__all__ = ["mode_open_pr"]
+__all__ = ["mode_open_pr", "resolve_branch"]
