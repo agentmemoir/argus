@@ -293,7 +293,9 @@ def gh_pull_requests_for_branch(
 
     Each row carries ``number``, ``url``, ``isDraft``, and ``state``. A row that
     is missing one of them is dropped, because a caller reading a default in its
-    place would report an invented state.
+    place would report an invented state. A row whose ``url`` is missing or blank
+    is dropped too: a blank URL is not a pull request link, and reporting it as
+    one would hand the caller an address that opens nothing.
     """
     argv = [
         gh_binary(),
@@ -335,12 +337,15 @@ def gh_pull_requests_for_branch(
         row = cast("dict[str, Any]", entry)
         number = row.get("number")
         state = row.get("state")
+        url = row.get("url")
         if not isinstance(number, int) or not isinstance(state, str):
+            continue
+        if not isinstance(url, str) or not url.strip():
             continue
         rows.append(
             {
                 "number": number,
-                "url": str(row.get("url") or ""),
+                "url": url.strip(),
                 "isDraft": bool(row.get("isDraft")),
                 "state": state,
             }

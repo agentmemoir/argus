@@ -7,8 +7,9 @@ knows, so every default here must work with no extra flags.
 
 Three outcomes, and the mode keeps them apart:
 
-* no pull request for the branch: create a draft, and report the number, URL,
-  draft flag, and state gh returned.
+* no pull request for the branch: create a draft, then read that pull request
+  back and report the number, URL, draft flag, and state the read returns. The
+  create prints a URL and nothing else, so the rest is not known until the read.
 * an open pull request for the branch: reuse it. The pipeline calls this on
   every tick, so a second call must never open a second draft for the same
   commits.
@@ -28,6 +29,7 @@ from argus.gitsync.gh import gh_create_draft_pull_request, gh_pull_requests_for_
 from argus.gitsync.git import (
     ConfigError,
     current_branch,
+    git,
     integration_branch,
     summarize,
 )
@@ -39,8 +41,8 @@ def resolve_branch(root: Path, phase: int | str | None, branch: str | None) -> s
 
     An explicit branch wins; then the phase's own branch, derived from its phases
     file; then the branch the checkout is on. Nothing is guessed: a phase with no
-    phases file, or a detached HEAD with no branch named, is a configuration
-    error naming what is missing, so a wrong call fails in seconds.
+    phases file, a checkout on no branch, or a checkout with no commit yet is a
+    configuration error naming what is missing, so a wrong call fails in seconds.
 
     Raises:
         ConfigError: No branch could be resolved.
@@ -58,9 +60,17 @@ def resolve_branch(root: Path, phase: int | str | None, branch: str | None) -> s
         return phase_branch(found.name)
     here = current_branch(root)
     if not here:
+        # An empty answer means one of two things, and they need different ways
+        # out: a checkout on no branch at all, or a checkout with no commit yet.
+        rc, _, _ = git(root, "rev-parse", "--verify", "HEAD")
+        if rc != 0:
+            raise ConfigError(
+                f"{root} has no commit yet, so there is no branch to open a pull "
+                "request from; make a commit, or pass --branch"
+            )
         raise ConfigError(
-            "no --branch, no --phase, and the checkout is on a detached HEAD; "
-            "pass --branch or --phase"
+            f"{root} is on a detached HEAD, so there is no branch to open a pull "
+            "request from; check out the branch, or pass --branch or --phase"
         )
     return here
 
@@ -83,10 +93,27 @@ def _text_from_file(path: str | Path | None, flag: str) -> str | None:
     return text
 
 
-def _number_from_url(url: str) -> int | None:
-    """The pull request number gh put at the end of its URL, when there is one."""
-    tail = url.rstrip("/").rsplit("/", 1)[-1]
-    return int(tail) if tail.isdigit() else None
+def _local_branch_missing(root: Path, branch: str) -> str | None:
+    """Why ``branch`` is not a local branch here, or None when it is one.
+
+    A typo would otherwise reach gh and come back as a create failure with no
+    way out in it, so the branch is checked before gh is asked anything.
+    """
+    rc, _, _ = git(root, "rev-parse", "--verify", f"refs/heads/{branch}")
+    if rc == 0:
+        return None
+    return (
+        f"--branch {branch!r} does not exist in {root}; create it, or pass a "
+        "branch this checkout has"
+    )
+
+
+def _blocked(branch: str, row: dict[str, Any], reasons: list[str]) -> dict[str, Any]:
+    """The mode's result for one blocked row, with the reasons recorded on it."""
+    row["blockers"] = reasons
+    out = _result(branch, [row])
+    out["state"] = "blocked"
+    return out
 
 
 def _result(branch: str, rows: list[dict[str, Any]]) -> dict[str, Any]:
@@ -134,6 +161,10 @@ def mode_open_pr(
     """
     root = Path(root).resolve()
     branch_name = resolve_branch(root, phase, branch)
+    if branch:
+        missing = _local_branch_missing(root, branch_name)
+        if missing is not None:
+            raise ConfigError(missing)
     title = _text_from_file(title_file, "--title-file")
     body = _text_from_file(body_file, "--body-file")
     row = _row(root)
@@ -142,10 +173,11 @@ def mode_open_pr(
     if found is None:
         # Could not read. Not the same as "no pull request exists", so nothing is
         # created on a guess.
-        row["blockers"] = [f"could not list pull requests for {branch_name!r}: {why}"]
-        out = _result(branch_name, [row])
-        out["state"] = "blocked"
-        return out
+        return _blocked(
+            branch_name,
+            row,
+            [f"could not list pull requests for {branch_name!r}: {why}"],
+        )
 
     open_rows = [item for item in found if item["state"] == "OPEN"]
     if open_rows:
@@ -169,13 +201,14 @@ def mode_open_pr(
             draft=bool(newest["isDraft"]),
             state=state,
         )
-        row["blockers"] = [
-            f"the newest pull request for {branch_name!r} is {state}, "
-            f"#{int(newest['number'])} {newest['url']}; not opening a duplicate"
-        ]
-        out = _result(branch_name, [row])
-        out["state"] = "blocked"
-        return out
+        return _blocked(
+            branch_name,
+            row,
+            [
+                f"the newest pull request for {branch_name!r} is {state}, "
+                f"#{int(newest['number'])} {newest['url']}; not opening a duplicate"
+            ],
+        )
 
     created, detail = gh_create_draft_pull_request(
         root,
@@ -185,22 +218,54 @@ def mode_open_pr(
         body=body,
     )
     if created is None:
-        row["blockers"] = [
-            f"gh could not create a draft pull request for {branch_name!r}: {detail}"
-        ]
-        out = _result(branch_name, [row])
-        out["state"] = "blocked"
-        return out
+        return _blocked(
+            branch_name,
+            row,
+            [f"gh could not create a draft pull request for {branch_name!r}: {detail}"],
+        )
     url = created.strip()
-    # gh printed the new pull request's URL and exited 0. It was asked for as a
-    # draft, so both of those are what gh reported, not what this mode hoped.
+    if not url:
+        # gh exited 0 and printed nothing. A create that named no pull request is
+        # not a created one, and the number cannot be borrowed from anywhere.
+        return _blocked(
+            branch_name,
+            row,
+            [
+                f"gh exited 0 for {branch_name!r} but printed no pull request URL, "
+                "so no pull request is confirmed; check the branch by hand"
+            ],
+        )
+    # gh printed the new pull request's URL. That URL is all it reports, so the
+    # number, draft flag, and state are read back from the pull request itself.
+    again, why = gh_pull_requests_for_branch(root, branch_name)
+    if again is None:
+        return _blocked(
+            branch_name,
+            row,
+            [
+                f"gh created {url} for {branch_name!r} but the pull request could "
+                f"not be read back: {why}; its number, draft flag, and state are "
+                "unknown"
+            ],
+        )
+    matched = [item for item in again if item["url"] == url]
+    if not matched:
+        return _blocked(
+            branch_name,
+            row,
+            [
+                f"gh printed {url} for {branch_name!r}, but the read of that branch "
+                "does not list it; the create is unconfirmed"
+            ],
+        )
+    newest = max(matched, key=lambda item: int(item["number"]))
     row.update(
         ok=True,
         action="created",
-        number=_number_from_url(url),
-        url=url,
-        draft=True,
-        state="OPEN",
+        number=int(newest["number"]),
+        url=str(newest["url"]),
+        draft=bool(newest["isDraft"]),
+        state=str(newest["state"]),
     )
     return _result(branch_name, [row])
 
