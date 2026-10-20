@@ -25,6 +25,9 @@ from argus.gitsync.gh_read import (
 from argus.gitsync.gh_read import (
     gh_pull_requests_for_branch as gh_pull_requests_for_branch,
 )
+from argus.gitsync.gh_read import (
+    gh_repository_is_fork as gh_repository_is_fork,
+)
 from argus.gitsync.gh_target import (
     repo_target as repo_target,
 )
@@ -52,5 +55,6 @@ __all__ = [
     "gh_pull_request_open",
     "gh_pull_request_state",
     "gh_pull_requests_for_branch",
+    "gh_repository_is_fork",
     "repo_target",
 ]

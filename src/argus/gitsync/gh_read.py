@@ -213,8 +213,47 @@ def gh_default_branch(root: Path) -> tuple[str | None, str]:
     return None, "gh reported no default branch"
 
 
+def gh_repository_is_fork(root: Path) -> tuple[bool | None, str]:
+    """Whether the checkout's GitHub repository is a fork, or why that is unknown.
+
+    A fork needs a different question than a branch of the base repository, and
+    this one gh answers in the checkout's own words. Returns ``True``/``False``
+    and an empty detail, or ``None`` and why gh could not say. ``None`` is not
+    ``False``: a gh that cannot answer has not said the checkout is not a fork.
+    """
+    argv = [gh_binary(), "repo", "view", "--json", "isFork"]
+    try:
+        done = subprocess.run(
+            argv, cwd=root, capture_output=True, text=True, timeout=GH_TIMEOUT_S
+        )
+    except FileNotFoundError:
+        return None, "gh is not installed"
+    except subprocess.TimeoutExpired:
+        return None, f"gh did not answer within {GH_TIMEOUT_S}s"
+    if done.returncode != 0:
+        return None, gh_exit_detail(done.returncode, "the fork read")
+    try:
+        raw = json.loads(done.stdout)
+    except ValueError:
+        return None, "gh did not return JSON"
+    if not isinstance(raw, dict):
+        return None, "gh returned JSON that is not an object"
+    is_fork = cast("dict[str, Any]", raw).get("isFork")
+    if isinstance(is_fork, bool):
+        return is_fork, ""
+    return None, "gh did not report isFork as true or false"
+
+
+# The list is per head branch, so this cap is the number of pull requests one
+# branch may carry. Fifty was reachable: a long-lived branch with many closed
+# attempts would drop its older rows, and a caller that read the truncated list
+# would open a duplicate. Two hundred is well past any branch here and still one
+# cheap answer.
+PR_LIST_LIMIT = 200
+
+
 def gh_pull_requests_for_branch(
-    root: Path, branch: str, limit: int = 50
+    root: Path, branch: str, limit: int = PR_LIST_LIMIT
 ) -> tuple[list[dict[str, Any]] | None, str]:
     """Every pull request whose head is ``branch``, newest first.
 

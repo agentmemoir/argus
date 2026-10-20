@@ -26,7 +26,6 @@ from argus.gitsync.git import ConfigError
 from argus.gitsync.mode_open_pr import resolve_branch
 from argus.gitsync.peek_ci_summary import (
     BUCKETS,
-    NEVER_RAN,
     blocker_reasons,
     bucket_counts,
     checks_state,
@@ -194,7 +193,7 @@ def mode_peek_ci(
     state = checks_state(rows, counts)
     row["checks"] = counts
     row["state"] = state
-    if state == "PASSING" and code in (0, NEVER_RAN):
+    if state == "PASSING" and code == 0:
         row["ok"] = True
         return _result(branch_name, row, code, rows)
     if state == "PASSING":

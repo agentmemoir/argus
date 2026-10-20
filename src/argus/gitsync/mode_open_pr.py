@@ -37,6 +37,7 @@ from argus.gitsync.git import (
     git,
 )
 from argus.gitsync.open_pr_base import resolve_base
+from argus.gitsync.open_pr_ready import fork_refusal, text_from_file, unpushed_refusal
 from argus.gitsync.paths import phase_branch
 
 
@@ -77,24 +78,6 @@ def resolve_branch(root: Path, phase: int | str | None, branch: str | None) -> s
             "request from; check out the branch, or pass --branch or --phase"
         )
     return here
-
-
-def _text_from_file(path: str | Path | None, flag: str) -> str | None:
-    """The text a caller put in a file, or None when no file was named.
-
-    Raises:
-        ConfigError: The file is missing or empty. Sending gh a title or body the
-            caller did not write would publish a pull request nobody asked for.
-    """
-    if path is None:
-        return None
-    source = Path(path)
-    if not source.is_file():
-        raise ConfigError(f"{flag} {str(source)!r} does not exist")
-    text = source.read_text(encoding="utf-8")
-    if not text.strip():
-        raise ConfigError(f"{flag} {str(source)!r} is empty")
-    return text
 
 
 def _local_branch_missing(root: Path, branch: str) -> str | None:
@@ -234,8 +217,13 @@ def mode_open_pr(
     missing = _local_branch_missing(root, branch_name)
     if missing is not None:
         raise ConfigError(missing)
-    title = _text_from_file(title_file, "--title-file")
-    body = _text_from_file(body_file, "--body-file")
+    title = text_from_file(title_file, "--title-file")
+    body = text_from_file(body_file, "--body-file")
+    # A fork checkout asks about the wrong repository, and an unpushed branch
+    # comes back from gh as a bare exit. Both are refused with a way out.
+    for refusal in (fork_refusal(root), unpushed_refusal(root, branch_name)):
+        if refusal is not None:
+            raise ConfigError(refusal)
     row = _row(root)
 
     found, why = gh_pull_requests_for_branch(root, branch_name)

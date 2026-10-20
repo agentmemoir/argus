@@ -12,9 +12,6 @@ BUCKETS = ("pass", "fail", "pending", "skipping", "cancel")
 MAX_NAMED = 5
 
 
-NEVER_RAN = -1
-
-
 def bucket_counts(rows: list[dict[str, Any]]) -> dict[str, int]:
     """One count per bucket gh reports, plus the number of rows."""
     counts: dict[str, int] = dict.fromkeys(BUCKETS, 0)
