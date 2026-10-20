@@ -284,8 +284,12 @@ def main() -> int:
         elif args.mode == "checkpoint":
             out = mode_checkpoint(args.root, args.paths)
         elif args.mode == "open-pr":
+            # As with peek-ci below, this branch sits before the generic
+            # --repo branch, so the flag is honoured here. Without it a caller
+            # who named a checkout got the configured root acted on, and a
+            # draft opened from the wrong one, with no error.
             out = mode_open_pr(
-                args.root,
+                Path(args.repo).resolve() if args.repo else args.root,
                 phase=args.phase,
                 branch=args.branch,
                 title_file=args.title_file,

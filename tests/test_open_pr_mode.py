@@ -298,6 +298,50 @@ def test_a_create_the_cli_cannot_confirm_exits_one(
     assert out["state"] == "BLOCKED"
 
 
+def test_open_pr_honours_repo_and_names_that_checkout(
+    workspace: Workspace,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """--repo names the checkout acted on, and the record must say which one.
+
+    The open-pr dispatch sits before the generic --repo branch, so a mode that
+    reads args.root there acts on the configured root while the caller named
+    another checkout, and opens a draft from the wrong one without an error.
+    """
+    monkeypatch.setattr(conventions, "configure_from_args", keep_settings)
+    workspace.answer(list=[], create=URL, reread=[CREATED])
+    other = workspace.root.parent / "other"
+    other.mkdir()
+    assert git(other, "init", "-q", "-b", "main")[0] == 0
+    (other / "product.txt").write_text("work\n")
+    assert git(other, "add", "-A")[0] == 0
+    assert (
+        git(
+            other,
+            "-c",
+            "user.email=test@example.com",
+            "-c",
+            "user.name=test",
+            "commit",
+            "-qm",
+            "work",
+        )[0]
+        == 0
+    )
+    assert git(other, "branch", BRANCH)[0] == 0
+
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["gitsync", "--mode", "open-pr", "--repo", str(other), "--branch", BRANCH],
+    )
+    assert main.main() == 0
+    out = json.loads(capsys.readouterr().out)
+    assert out["repos"][0]["repo"] == str(other.resolve())
+    assert out["repos"][0]["repo"] != str(workspace.root.resolve())
+
+
 def test_blocked_exits_one(
     workspace: Workspace, monkeypatch: pytest.MonkeyPatch
 ) -> None:
