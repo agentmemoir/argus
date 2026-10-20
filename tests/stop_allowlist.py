@@ -161,6 +161,7 @@ STOP_ALLOWLIST = r"""
     gitsync/mode_peek_ci.py	ok_false	fn:_row|"ok": False,#1
     gitsync/merge.py	blocked_call	fn:_merge|return blocked(#1
     gitsync/modes.py	ok_false	fn:mode_published|"ok": False,#1
+    gitsync/open_pr_base.py	raise_config	fn:resolve_base|raise ConfigError(#1
     gitsync/paths.py	raise_config	fn:_phase_file_parts|raise ConfigError(#1
     gitsync/paths.py	raise_config	fn:_phase_file_parts|raise ConfigError(f"phase file carries no behaviour: {phases_name!r}")#1
     gitsync/paths.py	raise_config	fn:group_branch|raise ConfigError("a group branch needs at least one member")#1

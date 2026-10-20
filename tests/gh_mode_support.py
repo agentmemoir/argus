@@ -21,6 +21,10 @@ BRANCH = "feature/cache-warm"
 URL = "https://github.com/example/argus/pull/11"
 # What the read after a create reports for the new pull request.
 CREATED = {"number": 11, "state": "OPEN", "isDraft": True, "url": URL}
+# What the stub answers for `gh repo view`: the base-branch read. A checkout in
+# this suite has no master and no origin/HEAD, so open-pr asks gh which branch
+# the repository defaults to.
+DEFAULT_REPO_VIEW = {"defaultBranchRef": {"name": "main"}}
 
 STUB_OPEN_PR = """#!__PYTHON__
 import json
@@ -84,7 +88,9 @@ class Workspace:
 
     def answer(self, **data: object) -> None:
         """Set what the stub gh answers next, over the file's own defaults."""
-        self.transport.write_text(json.dumps({**self.defaults, **data}))
+        self.transport.write_text(
+            json.dumps({"repo_view": DEFAULT_REPO_VIEW, **self.defaults, **data})
+        )
 
     def commands(self) -> list[list[str]]:
         if not self.calls.exists():
@@ -117,7 +123,7 @@ def build_workspace(
     path = exec_dir / "gh"
     transport = tmp_path / "transport.json"
     calls = tmp_path / "calls.jsonl"
-    transport.write_text(json.dumps(defaults))
+    transport.write_text(json.dumps({"repo_view": DEFAULT_REPO_VIEW, **defaults}))
     path.write_text(
         stub.replace("__PYTHON__", sys.executable)
         .replace("__TRANSPORT__", repr(str(transport)))
