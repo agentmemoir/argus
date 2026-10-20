@@ -87,6 +87,16 @@ STOP_ALLOWLIST = r"""
     driver/lib-driver-run.sh	return_nonzero	fn:claim_read_fields|IFS= read -r line <"$1" || return 1#1
     driver/lib-driver-run.sh	return_nonzero	fn:claim_read_fields|[ -s "$1" ] || return 1#1
     driver/lib-driver-run.sh	return_nonzero	fn:tmux_busy|return 1#1
+    driver/lib-driver-run.sh	return_nonzero	fn:run_session|session_claim_start_running "$number" || return 1#1
+    driver/lib-driver-session-claim.sh	return_nonzero	fn:session_claim_ensure|return 1#1
+    driver/lib-driver-session-claim.sh	return_nonzero	fn:session_claim_ensure|return 1#2
+    driver/lib-driver-session-claim.sh	return_nonzero	fn:session_claim_ensure|return 1#3
+    driver/lib-driver-session-claim.sh	return_nonzero	fn:session_claim_ensure|return 1#4
+    driver/lib-driver-session-claim.sh	return_nonzero	fn:session_claim_ensure|return 1#5
+    driver/lib-driver-session-claim.sh	return_nonzero	fn:session_claim_ensure|return 1#6
+    driver/lib-driver-session-claim.sh	return_nonzero	fn:session_claim_ensure|return 1#7
+    driver/lib-driver-session-claim.sh	return_nonzero	fn:session_claim_ensure|return 1#8
+    driver/lib-driver-session-claim.sh	return_nonzero	fn:session_claim_start_running|return 1#1
     driver/lib-driver-select-flow.sh	drive_rc_nonzero	fn:_drive_choose_selection|{ _DRIVE_RC=1; return 0; }#1
     driver/lib-driver-select-flow.sh	drive_rc_nonzero	fn:_drive_choose_selection|{ _DRIVE_RC=1; return 0; }#2
     driver/lib-driver-select-flow.sh	drive_rc_nonzero	fn:_drive_choose_selection|{ _DRIVE_RC=1; return 0; }#3
@@ -106,6 +116,7 @@ STOP_ALLOWLIST = r"""
     driver/phase-driver.sh	exit_nonzero	fn:<top>|[ "$#" -le 1 ] || { echo "usage: phase-driver.sh --resume [NUMBER]" >&2; exit 2; }#1
     driver/phase-driver.sh	exit_nonzero	fn:<top>|exit 2#1
     driver/phase-driver.sh	exit_nonzero	fn:<top>|exit 3#1
+    driver/phase-driver.sh	exit_nonzero	fn:<top>|session_claim_ensure "$2" "$3" || exit 1#1
     driver/phase-tmux-idle.sh	exit_nonzero	fn:<top>|CONFIG_OUT="$("$PYTHON" "$PKG_DIR/config/cli.py" "$@" --format shell)" || exit 2#1
     driver/phase-tmux-idle.sh	exit_nonzero	fn:<top>|exit 2#1
     driver/phase-tmux.sh	return_nonzero	fn:tmux_phase_window_alive|[ "$dead" = "1" ] && return 1#1

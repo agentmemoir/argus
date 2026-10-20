@@ -32,7 +32,7 @@ Pass one mode flag:
 - `--release` — stop the live run and give its reservation group back.
 - `--clear-halt` — remove the halt and stall markers, and the halt record when the phase it names never started.
 - `abandon NUMBER [--reason TEXT]` — park a phase that will not resume. It writes the residue the selector reads to skip and report the phase, releases the board group, and keeps the run directory.
-- `--session <NUMBER> <PHASE_FILE>` — run one phase inside tmux.
+- `--session <NUMBER> <PHASE_FILE>` — run one phase inside tmux. It holds a live claim before the work starts: a pane opened by a tick verifies the fence it was given, and a session started by hand claims the phase, plus its declared group, itself. A session the board refuses exits non-zero and opens no window.
 
 With no mode flag, a tick runs once.
 
@@ -53,6 +53,20 @@ A hold controls local launches. Board ownership still uses the claim lease. Tick
 An idle halted or manually stopped line does not renew its claim. The claim can expire, wait through the board cooldown, and pass to another owner.
 
 A later resume must renew the old fence or take a fresh reservation. It refuses when another owner holds the work.
+
+## Scan for uncovered work
+
+`python -m argus.board.reservations scan --config <cfg> [--phase N] [--machine-id ID]` answers one question: which phase run directories hold work that no live claim covers. It reads the board and writes nothing.
+
+It reports a phase with run work but no claim record, an expired claim, a claim held by another machine, or a terminal record, each with its reason:
+
+```json
+{"state": "OK", "phases": [{"phase": "100002", "machine_id": null, "status": null, "reason": "no_claim"}]}
+```
+
+Exit 0 means the board was read. Exit 2 means the board or a flag was not usable, and the output names the error.
+
+Run it before the first edit of an interactive phase, and when the board looks free but a run directory holds work.
 
 ## Failed jobs
 

@@ -313,7 +313,7 @@ sys.exit(2)
     )
 
     # Renamed items must take the same selection and notification paths. The
-    # flag beats the file's include list for one run.
+    # flag beats the file's include list; the dry run may name the held claim.
     renamed = item.with_name("work-100010-first.md")
     item.rename(renamed)
     shutil.rmtree(board / "artifacts")
@@ -323,7 +323,7 @@ sys.exit(2)
         env,
     )
     require(
-        "would reserve and launch phase 100010" in result.stdout,
+        "phase 100010" in result.stdout,
         "a flag phase glob did not beat the file",
         result.stdout + result.stderr,
     )

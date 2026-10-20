@@ -216,4 +216,9 @@ def _claim_one(
     return record
 
 
-__all__ = ["_claim_one", "_expire_records", "_publication_lock_stale"]
+__all__ = [
+    "_claim_one",
+    "_claim_window_passed",
+    "_expire_records",
+    "_publication_lock_stale",
+]

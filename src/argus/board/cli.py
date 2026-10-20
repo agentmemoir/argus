@@ -7,6 +7,7 @@ from collections.abc import Sequence
 from typing import Any, cast
 
 from argus import conventions
+from argus.board.cli_scan import add_scan_parser, check_scan_args, scan_command
 from argus.board.core import (
     ACTIVE_STATUSES,
     STATUSES,
@@ -196,6 +197,8 @@ def main(argv: list[str] | None = None) -> int:
     )
     sub.add_parser("self-test", help="run hermetic two-client checks")
 
+    add_scan_parser(sub, _add_store_args)
+
     args = parser.parse_args(argv)
     if not args.command:
         parser.error("a command is required")
@@ -208,6 +211,8 @@ def main(argv: list[str] | None = None) -> int:
         reservation_ids: list[str] | None = None
         if args.command == "show":
             machine_id, reservation_ids = _show_filters(args)
+        if args.command == "scan":
+            check_scan_args(args)
         if args.command == "reserve":
             result = store.reserve(
                 args.phase, args.machine_id, run_id=args.run_id, status=args.status
@@ -298,6 +303,8 @@ def main(argv: list[str] | None = None) -> int:
             )
         elif args.command == "expire-stale":
             result = store.expire_stale()
+        elif args.command == "scan":
+            result = scan_command(args, store)
         else:
             result, _commit = store.read()
         if args.command == "show":
@@ -306,7 +313,7 @@ def main(argv: list[str] | None = None) -> int:
             )
         _print_json(
             {"state": "OK", "reservation": result}
-            if args.command not in {"show"}
+            if args.command not in {"show", "scan"}
             else result
         )
         return 0
