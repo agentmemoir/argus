@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Any
 
 from argus.gitsync.gh import gh_pull_request_checks, gh_pull_requests_for_branch
-from argus.gitsync.git import ConfigError
+from argus.gitsync.git import ConfigError, gh_exit_detail
 from argus.gitsync.mode_open_pr import resolve_branch
 from argus.gitsync.peek_ci_summary import (
     BUCKETS,
@@ -104,15 +104,21 @@ def _result(
     row: dict[str, Any],
     code: int | None,
     rows: list[dict[str, Any]] | None = None,
+    detail: str | None = None,
 ) -> dict[str, Any]:
-    """The mode's result, in the shape every other mode returns."""
+    """The mode's result, in the shape every other mode returns.
+
+    ``detail`` is why gh gave no check rows, and it goes into the summary as
+    well as the blockers: the summary is the one line a record shows, so it
+    must not say "no check rows" while the reason sits somewhere else.
+    """
     return {
         "ok": bool(row["ok"]),
         "mode": "peek-ci",
         "branch": branch,
         "state": row["state"],
         "repos": [row],
-        "summary": summary_line(row, code, rows or []),
+        "summary": summary_line(row, code, rows or [], detail),
     }
 
 
@@ -152,7 +158,7 @@ def mode_peek_ci(
             row["blockers"] = [
                 f"could not list pull requests for {branch_name!r}: {why}"
             ]
-            return _result(branch_name, row, None)
+            return _result(branch_name, row, None, detail=why)
         open_rows = [item for item in found if item["state"] == "OPEN"]
         if not open_rows:
             if found:
@@ -181,7 +187,7 @@ def mode_peek_ci(
         row["blockers"] = [
             f"gh could not report checks for {target_label(number, url)}: {detail}"
         ]
-        return _result(branch_name, row, None if code < 0 else code)
+        return _result(branch_name, row, None if code < 0 else code, detail=detail)
 
     counts = bucket_counts(rows)
     state = checks_state(rows, counts)
@@ -194,7 +200,9 @@ def mode_peek_ci(
         # gh printed all-pass rows and did not exit 0. The rows and the code
         # disagree, so neither is trusted: the state is unknown, not passing.
         row["state"] = "unknown"
-        row["blockers"] = [f"gh exited {code} while every row said pass"]
+        row["blockers"] = [
+            f"{gh_exit_detail(code, 'the checks read')}; every row said pass"
+        ]
         return _result(branch_name, row, code, rows)
     row["blockers"] = blocker_reasons(rows, counts, code)
     return _result(branch_name, row, code, rows)

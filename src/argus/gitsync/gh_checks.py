@@ -7,7 +7,7 @@ import subprocess
 from pathlib import Path
 from typing import Any, cast
 
-from argus.gitsync.git import GH_TIMEOUT_S, gh_binary
+from argus.gitsync.git import GH_TIMEOUT_S, gh_binary, gh_exit_detail
 
 
 def _check_rows(text: str) -> list[dict[str, Any]] | None:
@@ -90,6 +90,10 @@ def gh_pull_request_checks(
         # here, but both are reported so the caller can tell them apart: a code
         # of 0 with no JSON is a different fault from a code of 1.
         if done.returncode:
-            return None, done.returncode, f"gh exited {done.returncode} with no checks"
-        return None, 0, "gh exited 0 without a check list"
+            return (
+                None,
+                done.returncode,
+                f"{gh_exit_detail(done.returncode, 'the checks read')} with no checks",
+            )
+        return None, 0, f"{gh_exit_detail(0, 'the checks read')} without a check list"
     return rows, done.returncode, ""

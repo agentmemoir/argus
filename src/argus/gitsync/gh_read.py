@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, cast
 
 from argus.gitsync.gh_target import repo_target
-from argus.gitsync.git import GH_TIMEOUT_S, gh_binary
+from argus.gitsync.git import GH_TIMEOUT_S, gh_binary, gh_exit_detail
 
 
 def _gh_pull_request_view(
@@ -49,8 +49,8 @@ def _gh_pull_request_view(
         return None, f"gh did not answer within {GH_TIMEOUT_S}s"
     if done.returncode != 0:
         # Exit status only, never the message. 1 is a general failure and 4 is
-        # "authentication required"; both mean the same thing here.
-        return None, f"gh exited {done.returncode}"
+        # "authentication required"; the words keep the two apart.
+        return None, gh_exit_detail(done.returncode, "the view")
     try:
         raw = json.loads(done.stdout)
     except ValueError:
@@ -159,7 +159,7 @@ def gh_pull_request_body(
     except subprocess.TimeoutExpired:
         return None, f"gh did not answer within {GH_TIMEOUT_S}s"
     if done.returncode != 0:
-        return None, f"gh exited {done.returncode}"
+        return None, gh_exit_detail(done.returncode, "the body read")
     try:
         raw = json.loads(done.stdout)
     except ValueError:
@@ -183,11 +183,21 @@ def gh_pull_requests_for_branch(
     branch whose work was already merged or closed, and would open a second one
     for the same commits.
 
-    Each row carries ``number``, ``url``, ``isDraft``, and ``state``. A row that
-    is missing one of them is dropped, because a caller reading a default in its
-    place would report an invented state. A row whose ``url`` is missing or blank
-    is dropped too: a blank URL is not a pull request link, and reporting it as
-    one would hand the caller an address that opens nothing.
+    Three answers, and they are three different facts:
+
+    * gh could not be asked: ``None`` and the reason.
+    * gh answered rows and at least one of them parsed: the rows, and an empty
+      detail. An empty row list here really does mean no pull request.
+    * gh answered with rows and not one of them had a usable number, url, and
+      state: ``None`` and a reason that names how many rows gh listed. That is
+      a failed read, not "no pull request": a caller that read it as the latter
+      would open a duplicate for commits that already have one.
+
+    Each row carries ``number``, ``url``, ``isDraft``, and ``state``. A row
+    missing a usable number, url, or state is dropped, because a caller reading
+    a default in its place would report an invented state. ``isDraft`` is a
+    real boolean or ``None``: gh gave that value or it did not, and the caller
+    decides whether it can report the draft state without it.
     """
     argv = [
         gh_binary(),
@@ -215,15 +225,16 @@ def gh_pull_requests_for_branch(
     except subprocess.TimeoutExpired:
         return None, f"gh did not answer within {GH_TIMEOUT_S}s"
     if done.returncode != 0:
-        return None, f"gh exited {done.returncode}"
+        return None, gh_exit_detail(done.returncode, "the list")
     try:
         parsed: object = json.loads(done.stdout)
     except ValueError:
         return None, "gh did not return JSON"
     if not isinstance(parsed, list):
         return None, "gh returned JSON that is not a list"
+    entries = cast("list[object]", parsed)
     rows: list[dict[str, Any]] = []
-    for entry in cast("list[object]", parsed):
+    for entry in entries:
         if not isinstance(entry, dict):
             continue
         row = cast("dict[str, Any]", entry)
@@ -234,12 +245,21 @@ def gh_pull_requests_for_branch(
             continue
         if not isinstance(url, str) or not url.strip():
             continue
+        draft = row.get("isDraft")
         rows.append(
             {
                 "number": number,
                 "url": url.strip(),
-                "isDraft": bool(row.get("isDraft")),
+                # Only a real boolean is a draft state. A missing flag, or the
+                # string "false", is not: reporting either as true or false
+                # would invent a value gh never gave.
+                "isDraft": draft if isinstance(draft, bool) else None,
                 "state": state,
             }
+        )
+    if not rows and entries:
+        return None, (
+            f"gh listed {len(entries)} pull request rows for {branch!r} and none "
+            "of them had a usable number, url, and state"
         )
     return rows, ""

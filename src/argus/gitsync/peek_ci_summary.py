@@ -4,6 +4,8 @@
 
 from typing import Any
 
+from argus.gitsync.git import gh_exit_detail
+
 BUCKETS = ("pass", "fail", "pending", "skipping", "cancel")
 
 
@@ -98,7 +100,8 @@ def blocker_reasons(
     total = counts["total"]
     if total == 0:
         return [
-            f"gh reported no check rows; an empty list is not a pass (gh exited {code})"
+            "gh reported no check rows; an empty list is not a pass "
+            f"({gh_exit_detail(code, 'the checks read')})"
         ]
     reasons: list[str] = []
     if counts["fail"]:
@@ -127,12 +130,17 @@ def blocker_reasons(
             f"{_shortened(_unknown_labels(rows))}; they are not passes"
         )
     if not reasons:
-        reasons.append(f"gh exited {code}, which is not a passing check list")
+        reasons.append(
+            f"{gh_exit_detail(code, 'the checks read')}, which is not a passing check list"
+        )
     return reasons
 
 
 def summary_line(
-    row: dict[str, Any], code: int | None, rows: list[dict[str, Any]]
+    row: dict[str, Any],
+    code: int | None,
+    rows: list[dict[str, Any]],
+    detail: str | None = None,
 ) -> str:
     """What ran, what did not, and what is unknown, in one line.
 
@@ -140,12 +148,23 @@ def summary_line(
     reader who sees the total alone cannot tell which check did not run. The
     same holds for a bucket this mode does not recognise: it is counted in the
     total, so it must be named, or the line would leave a row unexplained.
+
+    ``detail`` is why gh gave no check rows at all, when it gave none. It is
+    appended to this line as well as recorded in the row's blockers: a record
+    is read by its summary, and a summary that says only "no check rows" hides
+    the difference between a branch with no checks and a gh that never ran.
     """
     checks = row["checks"]
     total = checks["total"]
     parts = [f"{row['repo']}: {row['state']}"]
     if total == 0:
         parts.append("no check rows")
+        if detail:
+            # Why the rows are missing, in the one line a record shows. The
+            # reason sat only in a blocker, so a reader of the summary saw
+            # "no check rows" and could not tell a missing gh from a branch
+            # with no checks. The words are repeated here on purpose.
+            parts.append(detail)
     else:
         parts.append(f"{checks['pass']} of {total} pass")
         for bucket in ("fail", "pending", "skipping", "cancel"):
@@ -159,8 +178,9 @@ def summary_line(
             parts.append(
                 f"{unknown} unknown bucket ({_shortened(_unknown_labels(rows))})"
             )
-    if code is not None:
-        parts.append(f"gh exited {code}")
+    # A detail already carries the code's words, so it is not said twice.
+    if code is not None and not (total == 0 and detail):
+        parts.append(gh_exit_detail(code, "the checks read"))
     head = f"peek-ci sync {'ok' if row['ok'] else 'BLOCKED'}"
     return f"{head}: " + "; ".join(parts)
 

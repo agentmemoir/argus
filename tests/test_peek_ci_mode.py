@@ -210,7 +210,9 @@ def test_a_non_zero_exit_beside_all_pass_rows_is_not_a_pass(
     assert row["ok"] is False
     assert row["checks"]["pass"] == 1
     assert any(
-        "gh exited 8 while every row said pass" in reason for reason in row["blockers"]
+        "gh reported checks pending (gh exited 8)" in reason
+        and "every row said pass" in reason
+        for reason in row["blockers"]
     ), row["blockers"]
 
 
@@ -272,3 +274,40 @@ def test_a_closed_pull_request_has_no_checks_in_flight(workspace: Workspace) -> 
     assert out["repos"][0]["number"] == 9
     assert any("MERGED" in reason for reason in out["repos"][0]["blockers"])
     assert workspace.check_calls() == []
+
+
+def test_a_list_of_only_unreadable_rows_is_not_read_as_no_pull_request(
+    workspace: Workspace,
+) -> None:
+    # gh listed a row and none of its fields was usable. "No pull request" is a
+    # different fact, and reporting this answer as one would hide the failure.
+    workspace.answer(list=[{"number": "eleven", "state": None, "url": ""}])
+
+    out = mode_peek_ci(workspace.root, branch=BRANCH)
+
+    assert out["ok"] is False, out
+    blockers = out["repos"][0]["blockers"]
+    assert any("could not list pull requests" in reason for reason in blockers), (
+        blockers
+    )
+    assert not any("no pull request" in reason for reason in blockers)
+    assert workspace.check_calls() == []
+
+
+def test_the_summary_carries_the_reason_the_check_list_could_not_be_read(
+    workspace: Workspace,
+) -> None:
+    # The reason sat only in a blocker, so the one line a record shows said
+    # "no check rows" and hid a gh that never printed a list.
+    workspace.answer(list=open_pull_request(), checks=None, checks_exit=1)
+
+    out = mode_peek_ci(workspace.root, branch=BRANCH)
+
+    assert "no check rows" in out["summary"], out["summary"]
+    assert (
+        "without a check list" in out["summary"] or "with no checks" in out["summary"]
+    ), out["summary"]
+    blockers = out["repos"][0]["blockers"]
+    assert any("gh ran the checks read and failed" in reason for reason in blockers), (
+        blockers
+    )

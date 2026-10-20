@@ -29,9 +29,9 @@ from argus.gitsync.gh import gh_create_draft_pull_request, gh_pull_requests_for_
 from argus.gitsync.git import (
     ConfigError,
     current_branch,
+    gh_exit_detail,
     git,
     integration_branch,
-    summarize,
 )
 from argus.gitsync.paths import phase_branch
 
@@ -116,6 +116,52 @@ def _blocked(branch: str, row: dict[str, Any], reasons: list[str]) -> dict[str, 
     return out
 
 
+def _draft_or_reason(item: dict[str, Any]) -> tuple[bool | None, str | None]:
+    """The draft flag the read gave, or None and why it cannot be reported.
+
+    A missing flag is not ``false``, and the string ``"false"`` is not ``true``.
+    The mode reports the draft state it was asked for, so an unknown one is a
+    blocked result and never a default.
+    """
+    draft = item.get("isDraft")
+    if isinstance(draft, bool):
+        return draft, None
+    number = int(item["number"])
+    return None, (
+        f"gh did not report the draft flag for #{number} as true or false, so "
+        "its draft state is unknown; a default is not a state"
+    )
+
+
+def _draft_word(draft: object) -> str:
+    """The draft state in words, and ``unknown`` when gh did not report one."""
+    if isinstance(draft, bool):
+        return "draft" if draft else "not draft"
+    return "draft unknown"
+
+
+def _summary(rows: list[dict[str, Any]]) -> str:
+    """One line naming the pull request: its number, action, and draft state.
+
+    A reader of the record must be able to tell #11 from #12 and read the draft
+    state without opening the JSON row, so both are in this line. A blocked row
+    names its reasons instead.
+    """
+    parts: list[str] = []
+    for row in rows:
+        if row.get("ok"):
+            parts.append(
+                f"{row['repo']}: #{int(row['number'])} {row['action']}, "
+                f"{_draft_word(row['draft'])}"
+            )
+        else:
+            parts.append(
+                f"{row['repo']}: BLOCKED ({'; '.join(row.get('blockers', []))})"
+            )
+    head = f"open-pr sync {'ok' if all(row.get('ok') for row in rows) else 'BLOCKED'}"
+    return f"{head}: " + "; ".join(parts)
+
+
 def _result(branch: str, rows: list[dict[str, Any]]) -> dict[str, Any]:
     """The mode's result, in the shape every other mode returns."""
     ok = bool(rows) and all(bool(row.get("ok")) for row in rows)
@@ -124,7 +170,7 @@ def _result(branch: str, rows: list[dict[str, Any]]) -> dict[str, Any]:
         "mode": "open-pr",
         "branch": branch,
         "repos": rows,
-        "summary": summarize(rows, "open-pr"),
+        "summary": _summary(rows),
     }
 
 
@@ -182,33 +228,35 @@ def mode_open_pr(
     open_rows = [item for item in found if item["state"] == "OPEN"]
     if open_rows:
         newest = max(open_rows, key=lambda item: int(item["number"]))
+        draft, unknown = _draft_or_reason(newest)
         row.update(
-            ok=True,
-            action="reused",
             number=int(newest["number"]),
             url=newest["url"],
-            draft=bool(newest["isDraft"]),
+            draft=draft,
             state="OPEN",
         )
+        if unknown is not None:
+            return _blocked(branch_name, row, [unknown])
+        row.update(ok=True, action="reused")
         return _result(branch_name, [row])
 
     if found:
         newest = max(found, key=lambda item: int(item["number"]))
         state = str(newest["state"])
+        draft, unknown = _draft_or_reason(newest)
         row.update(
             number=int(newest["number"]),
             url=newest["url"],
-            draft=bool(newest["isDraft"]),
+            draft=draft,
             state=state,
         )
-        return _blocked(
-            branch_name,
-            row,
-            [
-                f"the newest pull request for {branch_name!r} is {state}, "
-                f"#{int(newest['number'])} {newest['url']}; not opening a duplicate"
-            ],
-        )
+        reasons = [
+            f"the newest pull request for {branch_name!r} is {state}, "
+            f"#{int(newest['number'])} {newest['url']}; not opening a duplicate"
+        ]
+        if unknown is not None:
+            reasons.append(unknown)
+        return _blocked(branch_name, row, reasons)
 
     created, detail = gh_create_draft_pull_request(
         root,
@@ -231,7 +279,8 @@ def mode_open_pr(
             branch_name,
             row,
             [
-                f"gh exited 0 for {branch_name!r} but printed no pull request URL, "
+                f"{gh_exit_detail(0, 'the create')} for {branch_name!r} but printed "
+                "no pull request URL, "
                 "so no pull request is confirmed; check the branch by hand"
             ],
         )
@@ -259,14 +308,16 @@ def mode_open_pr(
             ],
         )
     newest = max(matched, key=lambda item: int(item["number"]))
+    draft, unknown = _draft_or_reason(newest)
     row.update(
-        ok=True,
-        action="created",
         number=int(newest["number"]),
         url=str(newest["url"]),
-        draft=bool(newest["isDraft"]),
+        draft=draft,
         state=str(newest["state"]),
     )
+    if unknown is not None:
+        return _blocked(branch_name, row, [unknown])
+    row.update(ok=True, action="created")
     return _result(branch_name, [row])
 
 

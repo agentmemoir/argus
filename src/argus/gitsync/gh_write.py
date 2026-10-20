@@ -6,7 +6,7 @@ import subprocess
 from pathlib import Path
 
 from argus.gitsync.gh_target import repo_target
-from argus.gitsync.git import GH_TIMEOUT_S, gh_binary
+from argus.gitsync.git import GH_TIMEOUT_S, gh_binary, gh_exit_detail
 
 
 def gh_mark_pull_request_ready(
@@ -33,7 +33,7 @@ def gh_mark_pull_request_ready(
     except subprocess.TimeoutExpired:
         return False, f"gh did not answer within {GH_TIMEOUT_S}s"
     if done.returncode != 0:
-        return False, f"gh exited {done.returncode}"
+        return False, gh_exit_detail(done.returncode, "the ready call")
     return True, f"pull request {int(number)} is ready for review"
 
 
@@ -69,7 +69,7 @@ def gh_edit_pull_request_body(
     except subprocess.TimeoutExpired:
         return False, f"gh did not answer within {GH_TIMEOUT_S}s"
     if done.returncode != 0:
-        return False, f"gh exited {done.returncode}"
+        return False, gh_exit_detail(done.returncode, "the edit")
     return True, f"pull request {int(number)} body updated"
 
 
@@ -101,7 +101,7 @@ def gh_comment_pull_request(
     except subprocess.TimeoutExpired:
         return False, f"gh did not answer within {GH_TIMEOUT_S}s"
     if done.returncode != 0:
-        return False, f"gh exited {done.returncode}"
+        return False, gh_exit_detail(done.returncode, "the comment")
     return True, f"pull request {int(number)} comment posted"
 
 
@@ -145,5 +145,5 @@ def gh_create_draft_pull_request(
     except subprocess.TimeoutExpired:
         return None, f"gh did not answer within {GH_TIMEOUT_S}s"
     if done.returncode:
-        return None, f"gh exited {done.returncode}"
+        return None, gh_exit_detail(done.returncode, "the create")
     return done.stdout.strip(), ""
