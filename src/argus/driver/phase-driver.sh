@@ -20,7 +20,11 @@
 #   phase-driver.sh --session <N> <phase-file>   # one phase, run inside tmux
 #
 # The cron tick reserves the selected phase in the private coordination branch
-# before tmux starts (a fetch/push failure is fail-closed); `--session` starts no reservation and writes no claim.
+# before tmux starts (a fetch/push failure is fail-closed). `--session` holds a
+# live claim too: a pane the tick opened has its fence verified before the work
+# starts, and a session started by hand claims the phase and its declared group
+# itself. A session with no claim, or one the board refuses, exits non-zero and
+# opens no window.
 #
 # Cron runs the driver every few minutes. It does nothing while a phase is
 # running; while halted it settles publication only. Otherwise it starts the lowest
@@ -280,6 +284,10 @@ MERGE_CHECK_HEALTH="ok"
 case "${1:-}" in
   --session)
     [ "$#" -eq 3 ] || { echo "usage: phase-driver.sh --session <N> <phase-file>" >&2; exit 2; }
+    # One phase runs only under a live claim. A tick already holds one and passes
+    # its fence in the environment; a hand-started session takes one here. A
+    # refusal writes no claim and opens no window.
+    session_claim_ensure "$2" "$3" || exit 1
     run_session "$2" "$3"
     ;;
   --resume)

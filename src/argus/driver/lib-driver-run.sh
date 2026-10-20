@@ -224,6 +224,15 @@ except OSError:
   cd "$REPO"
   tmux_set_title "${work_kind:-phase} $number running"
   notify_phase "$rel" started
+  # The claim is held as `claimed` until the work starts, so a session that never
+  # launched leaves a claim the queue can take back. Mark it running here, with
+  # the fence the tick or the session gate put in the environment. The helper is
+  # only present when the driver's own files are sourced; a harness that calls
+  # run_session alone has no board fence to mark.
+  if [ -n "${CLIO_RESERVATION_ID:-}" ] \
+      && declare -F session_claim_start_running >/dev/null; then
+    session_claim_start_running "$number"
+  fi
   if [ "${CLIO_RESUME:-}" = 1 ]; then
     # The parent read the resume gate before it launched, and the state can
     # still move in between: another machine, or an operator, may have taken the

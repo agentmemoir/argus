@@ -5,6 +5,11 @@
 # Configuration: schema loading, path resolution, and startup for the Argus driver.
 # Sourced by phase-driver.sh; not executable on its own.
 #
+# The claim a one-phase `--session` run launches under lives beside this file, so
+# a hand-started session and a pane a tick opened take the same gate.
+# shellcheck disable=SC1091
+. "$ARGUS_DIR/lib-driver-session-claim.sh"
+
 phases_dir_is_local() {
   case "$(phases_dir)" in
     "$REPO"/*) return 0 ;;

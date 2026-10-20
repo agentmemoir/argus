@@ -32,7 +32,7 @@ Pass one mode flag:
 - `--release` — stop the live run and give its reservation group back.
 - `--clear-halt` — remove the halt and stall markers, and the halt record when the phase it names never started.
 - `abandon NUMBER [--reason TEXT]` — park a phase that will not resume. It writes the residue the selector reads to skip and report the phase, releases the board group, and keeps the run directory.
-- `--session <NUMBER> <PHASE_FILE>` — run one phase inside tmux.
+- `--session <NUMBER> <PHASE_FILE>` — run one phase inside tmux. It holds a live claim before the work starts: a pane opened by a tick verifies the fence it was given, and a session started by hand claims the phase, plus its declared group, itself. A session the board refuses exits non-zero and opens no window.
 
 With no mode flag, a tick runs once.
 
