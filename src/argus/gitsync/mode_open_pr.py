@@ -101,14 +101,20 @@ def _local_branch_missing(root: Path, branch: str) -> str | None:
     """Why ``branch`` is not a local branch here, or None when it is one.
 
     A typo would otherwise reach gh and come back as a create failure with no
-    way out in it, so the branch is checked before gh is asked anything.
+    way out in it, so the branch is checked before gh is asked anything. The
+    check holds for every source of the branch: an explicit ``--branch``, a
+    phase's own branch, and the branch the checkout is on. A phase whose branch
+    was never created is the case that reached gh and returned a bare failure.
+
+    One message for every source, naming the branch and the checkout, because a
+    reader should not have to learn two wordings to answer one question.
     """
     rc, _, _ = git(root, "rev-parse", "--verify", f"refs/heads/{branch}")
     if rc == 0:
         return None
     return (
-        f"--branch {branch!r} does not exist in {root}; create it, or pass a "
-        "branch this checkout has"
+        f"the branch {branch!r} is not a branch in {root}; create it, or pass "
+        "--branch for a branch this checkout has"
     )
 
 
@@ -222,10 +228,12 @@ def mode_open_pr(
     """
     root = Path(root).resolve()
     branch_name = resolve_branch(root, phase, branch)
-    if branch:
-        missing = _local_branch_missing(root, branch_name)
-        if missing is not None:
-            raise ConfigError(missing)
+    # Every source of the branch is checked against the checkout, not only an
+    # explicit --branch. A phase whose branch was never created used to reach
+    # gh and come back as a bare failure that named nothing.
+    missing = _local_branch_missing(root, branch_name)
+    if missing is not None:
+        raise ConfigError(missing)
     title = _text_from_file(title_file, "--title-file")
     body = _text_from_file(body_file, "--body-file")
     row = _row(root)

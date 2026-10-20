@@ -171,6 +171,9 @@ def test_a_phase_with_no_phases_file_is_refused(workspace: Workspace) -> None:
 
 def test_the_phase_file_names_the_branch(workspace: Workspace) -> None:
     (workspace.phases / "phase-100440-backup-archive-format.md").write_text("# x\n")
+    # The phase branch exists here: a phase whose branch was never created is
+    # refused before gh, and that case has its own test below.
+    assert git(workspace.root, "branch", "feature/backup-archive-format")[0] == 0
     workspace.answer(list=[], create=URL, reread=[CREATED])
 
     out = mode_open_pr(workspace.root, phase=100440)
@@ -179,8 +182,28 @@ def test_the_phase_file_names_the_branch(workspace: Workspace) -> None:
     assert out["ok"] is True, out
 
 
+def test_a_phase_whose_branch_was_never_created_is_refused_by_name(
+    workspace: Workspace,
+) -> None:
+    """The phase branch is checked against the checkout, as --branch already was.
+
+    A phase branch that was never created reached gh, which returned a bare
+    failure that named neither the branch nor the checkout, so a reader had
+    nothing to act on.
+    """
+    (workspace.phases / "phase-100440-backup-archive-format.md").write_text("# x\n")
+
+    with pytest.raises(ConfigError) as refused:
+        mode_open_pr(workspace.root, phase=100440)
+
+    assert "feature/backup-archive-format" in str(refused.value)
+    assert str(workspace.root) in str(refused.value)
+    assert workspace.commands() == []
+
+
 def test_an_explicit_branch_beats_the_phase_branch(workspace: Workspace) -> None:
     (workspace.phases / "phase-100440-backup-archive-format.md").write_text("# x\n")
+    assert git(workspace.root, "branch", "feature/backup-archive-format")[0] == 0
     workspace.answer(list=[], create=URL, reread=[CREATED])
 
     out = mode_open_pr(workspace.root, phase=100440, branch=BRANCH)
