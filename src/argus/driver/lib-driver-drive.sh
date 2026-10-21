@@ -181,8 +181,10 @@ _drive() {
   # The fence goes down with the claim, not at the launch. A tick that refuses
   # after this point, at the branch cut or the sync gate, still leaves the claim
   # releasable by `--release` instead of stranded on the board until its window
-  # closes.
-  record_claim "$number" "$reservation_id" "$reservation_generation"
+  # closes. A claim the board does not confirm is a refused fence: the tick
+  # stops here, before the branch cut and the launch, because a launch would
+  # run without an ownership fence.
+  record_claim "$number" "$reservation_id" "$reservation_generation" || return $?
 
   _drive_cut_branch || return $?
   [ -z "$_DRIVE_RC" ] || return "$_DRIVE_RC"
@@ -387,7 +389,19 @@ release() {
   local number="" claim_number="" reservation_id="" generation="" rc=0
   number="$(cat "$CURRENT" 2>/dev/null || true)"
   if [ -f "$CLAIM" ]; then
-    IFS=$'\t' read -r claim_number reservation_id generation <"$CLAIM" || true
+    # The claim is parsed by hand (claim_read_fields) because a raw IFS read
+    # collapses empty fields. An unreadable or incomplete claim is a broken
+    # fence: refusing the release here keeps a bad token from reaching the
+    # board, where it could hand the group to the wrong owner.
+    claim_read_fields "$CLAIM" || true
+    claim_number="$CLAIM_NUMBER"
+    reservation_id="$CLAIM_ID"
+    generation="$CLAIM_GEN"
+    if [ -z "$reservation_id" ] || [ -z "$generation" ]; then
+      log "release: the claim fence is unreadable or incomplete; refusing to release (see $CLAIM)"
+      exec 9>&- || true
+      return 1
+    fi
     [ -n "$claim_number" ] && number="${number:-$claim_number}"
   fi
   # The board is the authority for who may push. A stale or foreign fence must
@@ -396,8 +410,11 @@ release() {
   # nothing is pushed, and the group is not released.
   if [ -n "$reservation_id" ] && [ -n "$generation" ]; then
     if ! board_assert_owner "$number" "$reservation_id" "$generation"; then
+      # The lock is held on this refusal path, matching stop()'s contract:
+      # the lock is only dropped at the end of a successful or finalized run,
+      # so a caller wrapping this command still holds it and can inspect the
+      # state without racing another driver instance.
       log "release: the board does not confirm the fence for ${work_kind:-phase} $number; no checkpoint, no release (see $RUN_DIR/assert-owner-$number.json)"
-      exec 9>&- || true
       return 1
     fi
   fi
