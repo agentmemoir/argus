@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+import argus.gitsync.group_review as group_review
 from argus import conventions
 from argus.gitsync.git import git
 from argus.gitsync.modes import mode_published
@@ -81,3 +82,344 @@ def test_an_unreadable_reservation_fails_closed(tmp_path: Path) -> None:
     assert result["state"] == "COORDINATION_UNAVAILABLE", result
     assert not (run_dir / "publication.json").exists()
     assert git(nested, "rev-parse", "HEAD")[1] == before
+
+
+def test_group_ready_record_covers_every_member(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    ready_calls: list[tuple[object, ...]] = []
+    check_calls: list[tuple[object, ...]] = []
+    persist_calls: list[bool] = []
+
+    def marker(root: str | Path, phase: int) -> Path:
+        return Path(root) / "runs" / f"phase-{phase:06d}" / "group-pr-ready.json"
+
+    def checks(*args: object) -> tuple[list[dict[str, str]], int, str]:
+        check_calls.append(args)
+        return [{"bucket": "pass"}], 0, ""
+
+    def ready(*args: object) -> tuple[bool, str]:
+        attempt = marker(tmp_path, 100455)
+        assert json.loads(attempt.read_text())["version"] == 2
+        assert persist_calls == [True]
+        ready_calls.append(args)
+        return True, "ready"
+
+    def persist_attempt() -> dict[str, object]:
+        persist_calls.append(marker(tmp_path, 100455).is_file())
+        return {"ok": True}
+
+    def history(*_args: object) -> tuple[dict[str, object], str]:
+        if ready_calls:
+            return {
+                "state": "OPEN",
+                "is_draft": False,
+                "events": [{"type": "ReadyForReviewEvent", "created_at": "now"}],
+            }, ""
+        return {
+            "state": "OPEN",
+            "is_draft": True,
+            "events": [],
+        }, ""
+
+    monkeypatch.setattr(group_review, "_group_ready_marker", marker)
+    monkeypatch.setattr(group_review, "gh_pull_request_checks", checks)
+    monkeypatch.setattr(group_review, "gh_mark_pull_request_ready", ready)
+    monkeypatch.setattr(group_review, "gh_pull_request_stage_history", history)
+    members = ["100454", "100455"]
+    pull_request = "https://github.com/example-org/example-repo/pull/7"
+
+    first = group_review.mark_group_pull_request_ready(
+        tmp_path, 100455, members, [], pull_request, persist_attempt=persist_attempt
+    )
+    sibling = group_review.mark_group_pull_request_ready(
+        tmp_path, 100454, members, [], pull_request, persist_attempt=persist_attempt
+    )
+
+    assert first is not None and first["ok"] is True
+    assert sibling is not None and sibling["skipped"] is True
+    assert len(ready_calls) == 1
+    assert persist_calls == [True]
+    assert len(check_calls) == 1
+
+
+def _group_ready_retry_setup(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> tuple[Path, list[tuple[object, ...]]]:
+    def marker(_root: str | Path, phase: int) -> Path:
+        return tmp_path / "runs" / f"phase-{phase:06d}" / "group-pr-ready.json"
+
+    def checks(*_args: object) -> tuple[list[dict[str, str]], int, str]:
+        return [{"bucket": "pass"}], 0, ""
+
+    monkeypatch.setattr(
+        group_review,
+        "gh_pull_request_stage_history",
+        lambda *_args: ({"state": "OPEN", "is_draft": True, "events": []}, ""),
+    )
+
+    ready_calls: list[tuple[object, ...]] = []
+
+    def ready(*args: object) -> tuple[bool, str]:
+        ready_calls.append(args)
+        return True, "ready"
+
+    monkeypatch.setattr(group_review, "_group_ready_marker", marker)
+    monkeypatch.setattr(group_review, "gh_pull_request_checks", checks)
+    monkeypatch.setattr(group_review, "gh_mark_pull_request_ready", ready)
+    return marker(tmp_path, 100501), ready_calls
+
+
+def test_group_ready_marker_failure_prevents_remote_ready(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    marker, ready_calls = _group_ready_retry_setup(tmp_path, monkeypatch)
+    persist_calls: list[bool] = []
+
+    def fail_write(*_args: object) -> None:
+        raise OSError("disk full")
+
+    monkeypatch.setattr(group_review, "_write_group_ready_attempt", fail_write)
+    result = group_review.mark_group_pull_request_ready(
+        tmp_path,
+        100501,
+        ["100500", "100501"],
+        [],
+        "https://github.com/example-org/example-repo/pull/7",
+        persist_attempt=lambda: persist_calls.append(True) or {"ok": True},
+    )
+
+    assert result is not None and result["ok"] is False
+    assert "could not be written" in result["detail"]
+    assert not marker.exists()
+    assert persist_calls == []
+    assert ready_calls == []
+
+
+def test_group_ready_persistence_failure_prevents_remote_ready(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    marker, ready_calls = _group_ready_retry_setup(tmp_path, monkeypatch)
+    result = group_review.mark_group_pull_request_ready(
+        tmp_path,
+        100501,
+        ["100500", "100501"],
+        [],
+        "https://github.com/example-org/example-repo/pull/7",
+        persist_attempt=lambda: {"ok": False, "summary": "push failed"},
+    )
+
+    assert result is not None and result["ok"] is False
+    assert "push failed" in result["detail"]
+    assert marker.is_file()
+    assert ready_calls == []
+
+
+def test_group_ready_persistence_exception_prevents_remote_ready(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    marker, ready_calls = _group_ready_retry_setup(tmp_path, monkeypatch)
+
+    def fail_persist() -> dict[str, object]:
+        raise OSError("remote state unavailable")
+
+    result = group_review.mark_group_pull_request_ready(
+        tmp_path,
+        100501,
+        ["100500", "100501"],
+        [],
+        "https://github.com/example-org/example-repo/pull/7",
+        persist_attempt=fail_persist,
+    )
+
+    assert result is not None and result["ok"] is False
+    assert "remote state unavailable" in result["detail"]
+    assert marker.is_file()
+    assert ready_calls == []
+
+
+def test_group_ready_retry_stops_after_human_drafts_prior_ready(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    marker, ready_calls = _group_ready_retry_setup(tmp_path, monkeypatch)
+    marker.parent.mkdir(parents=True)
+    marker.write_text(
+        json.dumps(
+            {
+                "version": 2,
+                "pull_request": "https://github.com/example-org/example-repo/pull/7",
+                "attempted_at": "now",
+            }
+        )
+    )
+    monkeypatch.setattr(
+        group_review,
+        "gh_pull_request_stage_history",
+        lambda *_args: (
+            {
+                "state": "OPEN",
+                "is_draft": True,
+                "events": [
+                    {"type": "ReadyForReviewEvent", "created_at": "then"},
+                    {"type": "ConvertToDraftEvent", "created_at": "now"},
+                ],
+            },
+            "",
+        ),
+    )
+
+    result = group_review.mark_group_pull_request_ready(
+        tmp_path,
+        100501,
+        ["100500", "100501"],
+        [],
+        "https://github.com/example-org/example-repo/pull/7",
+        persist_attempt=lambda: {"ok": True},
+    )
+
+    assert result is not None and result["skipped"] is True
+    assert ready_calls == []
+
+
+def test_group_ready_markerless_retry_stops_after_human_drafts_prior_ready(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    marker, ready_calls = _group_ready_retry_setup(tmp_path, monkeypatch)
+    monkeypatch.setattr(
+        group_review,
+        "gh_pull_request_stage_history",
+        lambda *_args: (
+            {
+                "state": "OPEN",
+                "is_draft": True,
+                "events": [
+                    {"type": "ReadyForReviewEvent", "created_at": "then"},
+                    {"type": "ConvertToDraftEvent", "created_at": "now"},
+                ],
+            },
+            "",
+        ),
+    )
+
+    result = group_review.mark_group_pull_request_ready(
+        tmp_path,
+        100501,
+        ["100500", "100501"],
+        [],
+        "https://github.com/example-org/example-repo/pull/7",
+        persist_attempt=lambda: {"ok": True},
+    )
+
+    assert not marker.exists()
+    assert result is not None and result["skipped"] is True
+    assert ready_calls == []
+
+
+def test_group_ready_retry_stops_after_successful_prior_ready(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    marker, ready_calls = _group_ready_retry_setup(tmp_path, monkeypatch)
+    marker.parent.mkdir(parents=True)
+    marker.write_text(
+        json.dumps(
+            {
+                "version": 2,
+                "pull_request": "https://github.com/example-org/example-repo/pull/7",
+                "attempted_at": "now",
+            }
+        )
+    )
+    monkeypatch.setattr(
+        group_review,
+        "gh_pull_request_stage_history",
+        lambda *_args: (
+            {
+                "state": "OPEN",
+                "is_draft": False,
+                "events": [{"type": "ReadyForReviewEvent", "created_at": "then"}],
+            },
+            "",
+        ),
+    )
+
+    result = group_review.mark_group_pull_request_ready(
+        tmp_path,
+        100501,
+        ["100500", "100501"],
+        [],
+        "https://github.com/example-org/example-repo/pull/7",
+        persist_attempt=lambda: {"ok": True},
+    )
+
+    assert result is not None and result["skipped"] is True
+    assert ready_calls == []
+
+
+def test_group_ready_retry_uses_clear_draft_history(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    marker, ready_calls = _group_ready_retry_setup(tmp_path, monkeypatch)
+    marker.parent.mkdir(parents=True)
+    marker.write_text(
+        json.dumps(
+            {
+                "version": 2,
+                "pull_request": "https://github.com/example-org/example-repo/pull/7",
+                "attempted_at": "now",
+            }
+        )
+    )
+    monkeypatch.setattr(
+        group_review,
+        "gh_pull_request_stage_history",
+        lambda *_args: (
+            {"state": "OPEN", "is_draft": True, "events": []},
+            "",
+        ),
+    )
+
+    result = group_review.mark_group_pull_request_ready(
+        tmp_path,
+        100501,
+        ["100500", "100501"],
+        [],
+        "https://github.com/example-org/example-repo/pull/7",
+        persist_attempt=lambda: {"ok": True},
+    )
+
+    assert result is not None and result["ok"] is True
+    assert len(ready_calls) == 1
+
+
+def test_group_ready_retry_stops_when_history_is_unclear(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    marker, ready_calls = _group_ready_retry_setup(tmp_path, monkeypatch)
+    marker.parent.mkdir(parents=True)
+    marker.write_text(
+        json.dumps(
+            {
+                "version": 2,
+                "pull_request": "https://github.com/example-org/example-repo/pull/7",
+                "attempted_at": "now",
+            }
+        )
+    )
+    monkeypatch.setattr(
+        group_review,
+        "gh_pull_request_stage_history",
+        lambda *_args: (None, "GitHub did not answer"),
+    )
+
+    result = group_review.mark_group_pull_request_ready(
+        tmp_path,
+        100501,
+        ["100500", "100501"],
+        [],
+        "https://github.com/example-org/example-repo/pull/7",
+        persist_attempt=lambda: {"ok": True},
+    )
+
+    assert result is not None and result["ok"] is False
+    assert result["detail"] == "GitHub did not answer"
+    assert ready_calls == []

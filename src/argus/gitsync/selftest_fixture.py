@@ -177,12 +177,11 @@ class _StubGH:
         self.calls.append(argv)
         if isinstance(self.result, Exception):
             raise self.result
-        if callable(self.result):
-            self.result = self.result(argv)
+        result = self.result(argv) if callable(self.result) else self.result
         return types.SimpleNamespace(
-            returncode=self.result.get("returncode", 0),
-            stdout=self.result.get("stdout", ""),
-            stderr=self.result.get("stderr", ""),
+            returncode=result.get("returncode", 0),
+            stdout=result.get("stdout", ""),
+            stderr=result.get("stderr", ""),
         )
 
     def __enter__(self) -> "_StubGH":
@@ -206,6 +205,46 @@ def _gh_says(state: str, extra: str = "") -> dict[str, str]:
             }
         )
     }
+
+
+def _gh_group_ready_responses(
+    checks: dict[str, Any],
+) -> Callable[[Any], dict[str, Any]]:
+    """Answer history, checks, and ready calls without contacting GitHub."""
+    history = {
+        "stdout": json.dumps(
+            [
+                {
+                    "data": {
+                        "repository": {
+                            "pullRequest": {
+                                "state": "OPEN",
+                                "isDraft": True,
+                                "timelineItems": {
+                                    "nodes": [],
+                                    "pageInfo": {
+                                        "hasNextPage": False,
+                                        "endCursor": None,
+                                    },
+                                },
+                            }
+                        }
+                    }
+                }
+            ]
+        )
+    }
+
+    def respond(argv: Any) -> dict[str, Any]:
+        if argv[1:3] == ["api", "graphql"]:
+            return history
+        if argv[1:3] == ["pr", "checks"]:
+            return checks
+        if argv[1:3] == ["pr", "ready"]:
+            return {"returncode": 0}
+        return {"returncode": 1}
+
+    return respond
 
 
 def _write_group_phases(phases: Path, members: Sequence[int], behaviour: str) -> None:

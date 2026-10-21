@@ -10,6 +10,9 @@ This module stays the import path every caller already uses.
 from argus.gitsync.gh_checks import (
     gh_pull_request_checks as gh_pull_request_checks,
 )
+from argus.gitsync.gh_history import (
+    gh_pull_request_stage_history as gh_pull_request_stage_history,
+)
 from argus.gitsync.gh_read import (
     gh_default_branch as gh_default_branch,
 )
@@ -54,6 +57,7 @@ __all__ = [
     "gh_pull_request_checks",
     "gh_pull_request_open",
     "gh_pull_request_state",
+    "gh_pull_request_stage_history",
     "gh_pull_requests_for_branch",
     "gh_repository_is_fork",
     "repo_target",

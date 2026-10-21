@@ -18,6 +18,7 @@ from argus.gitsync.group_review import (
 from argus.gitsync.selftest_fixture import (
     BOARD_REL,
     _configure_self_test,
+    _gh_group_ready_responses,
     _gh_says,
     _StubGH,
 )
@@ -42,6 +43,11 @@ def _write_receipt(pub: Path, number: int, **fields: Any) -> None:
     (run_dir / "publication.json").write_text(
         json.dumps({"phase": f"{number:06d}", **fields}) + "\n"
     )
+
+
+def _persist_ready_attempt() -> dict[str, bool]:
+    """Keep the self-test remote boundary successful without real Git writes."""
+    return {"ok": True}
 
 
 def _open_question_checks(results: list[tuple[str, object, str]]) -> None:
@@ -207,23 +213,54 @@ def _pending_checks(pub: Path, results: list[tuple[str, object, str]]) -> None:
     results.append(
         (
             "the ready transition does nothing while a member is still to run",
-            mark_group_pull_request_ready(pub, 100030, pending, url) is None,
+            mark_group_pull_request_ready(
+                pub,
+                100030,
+                members,
+                pending,
+                url,
+                persist_attempt=_persist_ready_attempt,
+            )
+            is None,
             f"pending={pending}",
         )
     )
     results.append(
         (
             "the ready transition does nothing without a pull request to act on",
-            mark_group_pull_request_ready(pub, 100030, [], None) is None
-            and mark_group_pull_request_ready(pub, 100030, [], "not a url") is None,
+            mark_group_pull_request_ready(
+                pub,
+                100030,
+                members,
+                [],
+                None,
+                persist_attempt=_persist_ready_attempt,
+            )
+            is None
+            and mark_group_pull_request_ready(
+                pub,
+                100030,
+                members,
+                [],
+                "not a url",
+                persist_attempt=_persist_ready_attempt,
+            )
+            is None,
             "no pull request, no action",
         )
     )
     # The refusal check runs before any successful ready: once the ready-once
     # record stands, the same pull request is skipped without asking gh, so a
     # refusal after that record exists would never be seen.
-    with _StubGH({"returncode": 1}):
-        ready = mark_group_pull_request_ready(pub, 100030, [], url)
+    with _StubGH(_gh_group_ready_responses({"returncode": 1})):
+        ready = mark_group_pull_request_ready(
+            pub,
+            100030,
+            members,
+            [],
+            url,
+            persist_attempt=_persist_ready_attempt,
+        )
     results.append(
         (
             "a refused ready transition is reported as not ok",
@@ -243,8 +280,15 @@ def _pending_checks(pub: Path, results: list[tuple[str, object, str]]) -> None:
     )
     # gh returning zero rows is not "all checks pass": an empty report names no
     # passing check, so the ready is refused and the pull request stays draft.
-    with _StubGH({"returncode": 0, "stdout": "[]"}):
-        ready = mark_group_pull_request_ready(pub, 100030, [], url)
+    with _StubGH(_gh_group_ready_responses({"returncode": 0, "stdout": "[]"})):
+        ready = mark_group_pull_request_ready(
+            pub,
+            100030,
+            members,
+            [],
+            url,
+            persist_attempt=_persist_ready_attempt,
+        )
     results.append(
         (
             "an empty check report is a refusal, not a pass",
@@ -260,8 +304,15 @@ def _pending_checks(pub: Path, results: list[tuple[str, object, str]]) -> None:
             [{"bucket": "pass", "state": "success", "name": "ci", "link": ""}]
         ),
     }
-    with _StubGH(green):
-        ready = mark_group_pull_request_ready(pub, 100030, [], url)
+    with _StubGH(_gh_group_ready_responses(green)):
+        ready = mark_group_pull_request_ready(
+            pub,
+            100030,
+            members,
+            [],
+            url,
+            persist_attempt=_persist_ready_attempt,
+        )
     results.append(
         (
             "the last member marks the shared pull request ready",
@@ -280,9 +331,45 @@ def _pending_checks(pub: Path, results: list[tuple[str, object, str]]) -> None:
             f"marker={marker.read_text().strip() if marker.is_file() else 'absent'}",
         )
     )
-    skip = _StubGH({"returncode": 1})
+    prior_ready = {
+        "returncode": 0,
+        "stdout": json.dumps(
+            [
+                {
+                    "data": {
+                        "repository": {
+                            "pullRequest": {
+                                "state": "OPEN",
+                                "isDraft": False,
+                                "timelineItems": {
+                                    "nodes": [
+                                        {
+                                            "__typename": "ReadyForReviewEvent",
+                                            "createdAt": "2026-01-01T00:00:00Z",
+                                        }
+                                    ],
+                                    "pageInfo": {
+                                        "hasNextPage": False,
+                                        "endCursor": None,
+                                    },
+                                },
+                            }
+                        }
+                    }
+                }
+            ]
+        ),
+    }
+    skip = _StubGH(prior_ready)
     with skip:
-        ready = mark_group_pull_request_ready(pub, 100030, [], url)
+        ready = mark_group_pull_request_ready(
+            pub,
+            100030,
+            members,
+            [],
+            url,
+            persist_attempt=_persist_ready_attempt,
+        )
     results.append(
         (
             "a record naming the same pull request skips the ready",
@@ -293,6 +380,27 @@ def _pending_checks(pub: Path, results: list[tuple[str, object, str]]) -> None:
             f"ready={ready} calls={skip.calls}",
         )
     )
+    with _StubGH(prior_ready) as sibling_skip:
+        sibling_ready = mark_group_pull_request_ready(
+            pub,
+            100020,
+            members,
+            [],
+            url,
+            persist_attempt=_persist_ready_attempt,
+        )
+    results.append(
+        (
+            "a sibling publish sees the shared ready-once record",
+            isinstance(sibling_ready, dict)
+            and sibling_ready.get("ok") is True
+            and sibling_ready.get("skipped") is True
+            and not any(
+                argv[1:3] == ["pr", "ready"] for argv in sibling_skip.calls if argv
+            ),
+            f"ready={sibling_ready} calls={sibling_skip.calls}",
+        )
+    )
     other = "https://github.com/example-org/example-repo/pull/9"
     marker.write_text(
         json.dumps(
@@ -300,8 +408,15 @@ def _pending_checks(pub: Path, results: list[tuple[str, object, str]]) -> None:
         )
         + "\n"
     )
-    with _StubGH(green):
-        ready = mark_group_pull_request_ready(pub, 100030, [], url)
+    with _StubGH(_gh_group_ready_responses(green)):
+        ready = mark_group_pull_request_ready(
+            pub,
+            100030,
+            members,
+            [],
+            url,
+            persist_attempt=_persist_ready_attempt,
+        )
     results.append(
         (
             "a record naming another pull request re-evaluates the ready",
@@ -309,24 +424,6 @@ def _pending_checks(pub: Path, results: list[tuple[str, object, str]]) -> None:
             and ready.get("ok") is True
             and not ready.get("skipped")
             and json.loads(marker.read_text()).get("pull_request") == url,
-            f"ready={ready}",
-        )
-    )
-    run_dir = pub / BOARD_REL / "runs" / "phase-100030"
-    marker.unlink()
-    run_dir.chmod(0o500)
-    try:
-        with _StubGH(green):
-            ready = mark_group_pull_request_ready(pub, 100030, [], url)
-    finally:
-        run_dir.chmod(0o700)
-    results.append(
-        (
-            "a ready whose record write fails is reported as not ok",
-            isinstance(ready, dict)
-            and ready.get("ok") is False
-            and ready.get("ready_landed") is True
-            and ready.get("record_failed") is True,
             f"ready={ready}",
         )
     )

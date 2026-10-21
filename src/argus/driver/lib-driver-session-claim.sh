@@ -226,7 +226,7 @@ session_claim_ensure() {   # <number> <rel>
   CLIO_RESERVATION_ID="$id"
   CLIO_RESERVATION_GENERATION="$generation"
   export CLIO_RESERVATION_ID CLIO_RESERVATION_GENERATION
-  record_claim "$number" "$id" "$generation"
+  record_claim "$number" "$id" "$generation" || return $?
   return 0
 }
 

@@ -1,14 +1,18 @@
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
 # SPDX-License-Identifier: Apache-2.0
-"""The group's one pull request: reuse it while it is open, ready it when the group finishes."""
+"""The group's shared pull request and its ready transition."""
 
 import json
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from pathlib import Path
 from typing import Any, cast
 
 from argus.conventions import phase_run_dir
-from argus.gitsync.gh import gh_mark_pull_request_ready, gh_pull_request_open
+from argus.gitsync.gh import (
+    gh_mark_pull_request_ready,
+    gh_pull_request_open,
+    gh_pull_request_stage_history,
+)
 from argus.gitsync.gh_checks import gh_pull_request_checks
 from argus.gitsync.receipts import _phase_run_entries, phase_receipt, pull_request_ref
 
@@ -95,15 +99,91 @@ def _group_pending(root: str | Path, members: Iterable[Any], phase: int) -> list
 
 
 def _group_ready_marker(root: str | Path, phase: int) -> Path:
-    """The ready-once record for a group's shared pull request."""
+    """The ready-attempt record written beside one member's receipt."""
     return phase_run_dir(root, int(phase)) / "group-pr-ready.json"
+
+
+def _group_ready_markers(root: str | Path, members: Iterable[Any]) -> list[Path]:
+    """Every member path where a successful group ready may be recorded."""
+    return [_group_ready_marker(root, int(member)) for member in members]
+
+
+def _same_pull_request_attempt(
+    markers: Iterable[Path], pull_request: str
+) -> tuple[bool, bool, str]:
+    """Return whether this PR was attempted and whether an old record proves ready."""
+    for path in markers:
+        if not path.exists():
+            continue
+        try:
+            recorded = json.loads(path.read_text())
+        except (OSError, ValueError):
+            return False, False, "a group ready record could not be read"
+        if not isinstance(recorded, dict):
+            return False, False, "a group ready record is unclear"
+        data = cast("dict[str, Any]", recorded)
+        if data.get("pull_request") != pull_request:
+            continue
+        if data.get("version") == 1 and isinstance(data.get("ready_at"), str):
+            return True, True, "a prior ready record stands"
+        if data.get("version") == 2 and isinstance(data.get("attempted_at"), str):
+            return True, False, ""
+        return False, False, "a group ready record for this pull request is unclear"
+    return False, False, ""
+
+
+def _write_group_ready_attempt(marker: Path, pull_request: str) -> None:
+    """Persist the attempt before making the remote ready call."""
+    from argus.board.reservations import _now
+
+    marker.parent.mkdir(parents=True, exist_ok=True)
+    marker.write_text(
+        json.dumps(
+            {"version": 2, "pull_request": pull_request, "attempted_at": _now()},
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n"
+    )
+
+
+def _ready_retry_allowed(
+    stage: dict[str, Any] | None, detail: str
+) -> tuple[bool, bool, str]:
+    """Check complete GitHub history before a ready transition."""
+    if not isinstance(stage, dict):
+        return False, False, detail or "GitHub PR history is unavailable"
+    state, is_draft, events = (
+        stage.get("state"),
+        stage.get("is_draft"),
+        stage.get("events"),
+    )
+    if (
+        state not in {"OPEN", "CLOSED", "MERGED"}
+        or not isinstance(is_draft, bool)
+        or not isinstance(events, list)
+    ):
+        return False, False, "GitHub PR history is unclear"
+    if any(
+        isinstance(event, dict) and event.get("type") == "ReadyForReviewEvent"
+        for event in events
+    ):
+        return False, True, "GitHub history records a prior ready; no retry was made"
+    if events:
+        return False, False, "GitHub PR history has an unclear stage transition"
+    if state == "OPEN" and is_draft:
+        return True, False, ""
+    return False, False, "GitHub PR stage does not prove a safe ready retry"
 
 
 def mark_group_pull_request_ready(
     root: str | Path,
     phase: int,
+    members: Iterable[Any],
     pending: Iterable[Any],
     pull_request: str | None,
+    *,
+    persist_attempt: Callable[[], dict[str, Any]],
 ) -> dict[str, Any] | None:
     """The one place a group's shared pull request is marked ready for review.
 
@@ -117,41 +197,62 @@ def mark_group_pull_request_ready(
     only when gh reports at least one check and every one reads ``pass``, so a
     pull request that is not yet mergeable stays draft. An empty check report is
     a refusal too: gh returning zero rows is not ``all checks pass``, so a pull
-    request with no reported checks stays draft until checks are reported. The
-    ready-once record beside the receipt is
-    written on success and stands for every later run of this phase, so a human
-    who re-drafts the pull request is never overridden.
+    request with no reported checks stays draft until checks are reported. An
+    attempt record is written before the remote ready call. Every ready
+    transition checks GitHub's complete ready/draft history and stops if it is
+    unclear or records any earlier ready. GitHub has no atomic guard for this
+    transition.
 
     A failed transition is reported, never raised. The phase's commits are
     already on the branch and its receipt is written, so making the pull request
-    ready is the last step and its failure must not undo the publication. When
-    the ready lands but the record write fails, the result says so:
-    ``ready_landed`` is true and ``record_failed`` is true alongside ``ok``
-    false, so a rerun's re-ready is understood instead of looking like a bare
-    refusal.
+    ready is the last step and its failure must not undo the publication. If the
+    attempt record cannot be written or committed, the remote ready call is not
+    made. GitHub has no atomic guard for the ready transition.
     """
-    if list(pending) or not pull_request:
+    members = list(members)
+    if list(pending) or not pull_request or not members:
         return None
     ref = pull_request_ref(pull_request)
     if not ref:
         return None
     marker = _group_ready_marker(root, phase)
-    if marker.is_file():
-        try:
-            recorded = json.loads(marker.read_text())
-        except (OSError, ValueError):
-            recorded = None
-        if (
-            isinstance(recorded, dict)
-            and cast("dict[str, Any]", recorded).get("pull_request") == pull_request
-        ):
-            return {
-                "ok": True,
-                "phase": f"{int(phase):06d}",
-                "pull_request": pull_request,
-                "detail": "the ready-once record stands; a re-drafted pull request is never re-readied",
-                "skipped": True,
-            }
+    _attempted, prior_ready, record_detail = _same_pull_request_attempt(
+        _group_ready_markers(root, members), pull_request
+    )
+    if record_detail:
+        return {
+            "ok": False,
+            "phase": f"{int(phase):06d}",
+            "pull_request": pull_request,
+            "detail": record_detail,
+        }
+    if prior_ready:
+        return {
+            "ok": True,
+            "phase": f"{int(phase):06d}",
+            "pull_request": pull_request,
+            "detail": record_detail,
+            "skipped": True,
+        }
+    stage, history_detail = gh_pull_request_stage_history(
+        ref["number"], ref.get("owner"), ref.get("repo"), ref.get("host")
+    )
+    retry, prior_ready, history_detail = _ready_retry_allowed(stage, history_detail)
+    if prior_ready:
+        return {
+            "ok": True,
+            "phase": f"{int(phase):06d}",
+            "pull_request": pull_request,
+            "detail": history_detail,
+            "skipped": True,
+        }
+    if not retry:
+        return {
+            "ok": False,
+            "phase": f"{int(phase):06d}",
+            "pull_request": pull_request,
+            "detail": history_detail,
+        }
     rows, code, detail = gh_pull_request_checks(Path(root), ref["number"])
     # gh returning zero rows is not "all checks pass": an empty report names no
     # passing check, so the pull request stays draft until checks are reported.
@@ -168,42 +269,41 @@ def mark_group_pull_request_ready(
             "detail": detail
             or "the checks are not all green; the pull request stays draft",
         }
+    try:
+        _write_group_ready_attempt(marker, pull_request)
+    except OSError as exc:
+        return {
+            "ok": False,
+            "phase": f"{int(phase):06d}",
+            "pull_request": pull_request,
+            "detail": f"the ready attempt record could not be written: {exc}",
+        }
+    try:
+        persisted = persist_attempt()
+    except Exception as exc:  # noqa: BLE001 - normalize the persistence boundary
+        return {
+            "ok": False,
+            "phase": f"{int(phase):06d}",
+            "pull_request": pull_request,
+            "detail": f"the ready attempt record could not be committed: {exc}",
+        }
+    if not persisted.get("ok"):
+        return {
+            "ok": False,
+            "phase": f"{int(phase):06d}",
+            "pull_request": pull_request,
+            "detail": "the ready attempt record could not be committed: "
+            f"{persisted.get('blockers') or persisted.get('summary') or 'unknown error'}",
+        }
     ready, detail = gh_mark_pull_request_ready(
         ref["number"], ref.get("owner"), ref.get("repo"), ref.get("host")
     )
-    result = {
+    return {
         "ok": ready,
         "phase": f"{int(phase):06d}",
         "pull_request": pull_request,
         "detail": detail,
     }
-    if ready:
-        from argus.board.reservations import _now
-
-        try:
-            marker.parent.mkdir(parents=True, exist_ok=True)
-            marker.write_text(
-                json.dumps(
-                    {"version": 1, "pull_request": pull_request, "ready_at": _now()},
-                    indent=2,
-                    sort_keys=True,
-                )
-                + "\n"
-            )
-        except OSError as exc:
-            # The ordering matters for a rerun: the ready landed, so the pull
-            # request is non-draft, but the ready-once record is missing, so a
-            # rerun re-evaluates and re-readies. Reporting both states keeps a
-            # rerun's re-ready understood instead of looking like a failure.
-            return {
-                "ok": False,
-                "phase": f"{int(phase):06d}",
-                "pull_request": pull_request,
-                "detail": f"the ready-once record could not be written: {exc}",
-                "ready_landed": True,
-                "record_failed": True,
-            }
-    return result
 
 
 __all__ = [

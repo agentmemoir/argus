@@ -60,7 +60,9 @@ record_claim() {
         rm -f "$CLAIM"
       fi
     fi
-    return 0
+    printf 'argus: the board did not provide a full claim fence for phase %s; refusing to launch\n' \
+      "$number" >&2
+    return 1
   fi
   # The board is the authority: a pair that names no live reservation this
   # machine owns must not become the local fence, and a board that cannot

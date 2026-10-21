@@ -388,35 +388,40 @@ release() {
   driver_lock_wait || log "release: the driver lock is held by a running tick; releasing without it"
   local number="" claim_number="" reservation_id="" generation="" rc=0
   number="$(cat "$CURRENT" 2>/dev/null || true)"
-  if [ -f "$CLAIM" ]; then
-    # The claim is parsed by hand (claim_read_fields) because a raw IFS read
-    # collapses empty fields. An unreadable or incomplete claim is a broken
-    # fence: refusing the release here keeps a bad token from reaching the
-    # board, where it could hand the group to the wrong owner.
-    claim_read_fields "$CLAIM" || true
-    claim_number="$CLAIM_NUMBER"
-    reservation_id="$CLAIM_ID"
-    generation="$CLAIM_GEN"
-    if [ -z "$reservation_id" ] || [ -z "$generation" ]; then
-      log "release: the claim fence is unreadable or incomplete; refusing to release (see $CLAIM)"
-      exec 9>&- || true
-      return 1
-    fi
-    [ -n "$claim_number" ] && number="${number:-$claim_number}"
+  # The claim is parsed by hand (claim_read_fields) because a raw IFS read
+  # collapses empty fields. Missing, unreadable, incomplete, or phase-mismatched
+  # claims prove no ownership, so release refuses before it interrupts, pushes,
+  # or clears local state.
+  if ! claim_read_fields "$CLAIM"; then
+    log "release: no readable claim fence; refusing to release (see $CLAIM)"
+    exec 9>&- || true
+    return 1
+  fi
+  claim_number="$CLAIM_NUMBER"
+  reservation_id="$CLAIM_ID"
+  generation="$CLAIM_GEN"
+  if [ -z "$claim_number" ] || [ -z "$reservation_id" ] || [ -z "$generation" ]; then
+    log "release: the claim fence is incomplete; refusing to release (see $CLAIM)"
+    exec 9>&- || true
+    return 1
+  fi
+  number="${number:-$claim_number}"
+  if [ "$number" != "$claim_number" ]; then
+    log "release: current phase $number does not match claim phase $claim_number; refusing to release"
+    exec 9>&- || true
+    return 1
   fi
   # The board is the authority for who may push. A stale or foreign fence must
   # not checkpoint another owner's branch, so the fence is proved before the
   # first write, and an unconfirmed claim fails closed: nothing is interrupted,
   # nothing is pushed, and the group is not released.
-  if [ -n "$reservation_id" ] && [ -n "$generation" ]; then
-    if ! board_assert_owner "$number" "$reservation_id" "$generation"; then
-      # The lock is held on this refusal path, matching stop()'s contract:
-      # the lock is only dropped at the end of a successful or finalized run,
-      # so a caller wrapping this command still holds it and can inspect the
-      # state without racing another driver instance.
-      log "release: the board does not confirm the fence for ${work_kind:-phase} $number; no checkpoint, no release (see $RUN_DIR/assert-owner-$number.json)"
-      return 1
-    fi
+  if ! board_assert_owner "$number" "$reservation_id" "$generation"; then
+    # The lock is held on this refusal path, matching stop()'s contract:
+    # the lock is only dropped at the end of a successful or finalized run,
+    # so a caller wrapping this command still holds it and can inspect the
+    # state without racing another driver instance.
+    log "release: the board does not confirm the fence for ${work_kind:-phase} $number; no checkpoint, no release (see $RUN_DIR/assert-owner-$number.json)"
+    return 1
   fi
   # Written before the interrupt: the child's signal trap reads it and stops
   # without writing a halt marker. The parent removes it on every path.
