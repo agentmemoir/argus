@@ -6,11 +6,10 @@
 #
 selftest_case_recovery_sources() {
   # Own-claim recovery. This path had no coverage at all, which is how a
-  # `set -u` abort on an unset reservation_id shipped unnoticed: a plain
-  # --self-test skips coordination entirely. Three properties matter, so three
-  # cases. The stub replays the selection; the takeover reply carries the fence
-  # the board actually holds, and the fence handling and the launch are the real
-  # code.
+  # `set -u` abort on an unset reservation_id shipped unnoticed. The unstubbed
+  # self-test selector now claims after it selects; these cases instead replay
+  # a held claim and prove recovery. The takeover reply carries the fence the
+  # board actually holds, and the fence handling and the launch are the real code.
   rm -f "$HALT"
   old_stub_sleep="$DRIVER_STUB_SLEEP"
   DRIVER_STUB_RC=0; DRIVER_STUB_SLEEP=2; export DRIVER_STUB_RC DRIVER_STUB_SLEEP
@@ -144,11 +143,10 @@ selftest_case_recovery_sources() {
   # root with a repository-relative phase file. Prove the refusal.
   #
   # This runs through the --self-test branch, which asks the selector without
-  # --server and so never touches the shared board. It is therefore the right
-  # place to check the refusal and the wrong place to check that nothing was
-  # claimed: the strand fixture below is the case that does that, against a real
-  # board in a throwaway repository, because claiming is the damage this guard
-  # exists to prevent.
+  # --server. Its work preflight refuses the outside folder before the claim
+  # helper runs, so this is the right place to prove the refusal. The strand
+  # fixture below checks that lower-level refusals leave a real fixture board
+  # unchanged, because a claim is the damage those guards exist to prevent.
   #
   # The setting is forced either way rather than only when this machine already
   # has one: an unconfigured host is the case most deployments are in, and a

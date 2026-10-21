@@ -122,7 +122,9 @@ abandon_cmd() {   # <number> [--reason TEXT]
       fail)
         printf 'argus abandon: could not release the board group for %s\n' "$number" >&2
         exit 1 ;;
-      renew|reserve)
+      # These successful fence stubs also stand in for the board release in
+      # self-tests; no fixture board claim was written for them.
+      assert|renew|reserve)
         rm -f "$CLAIM" ;;
       *)
         if ! "$PYTHON" "$ARGUS/board/reservations.py" release-group \

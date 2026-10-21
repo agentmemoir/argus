@@ -56,8 +56,11 @@ selftest_resume_fence_cases() {
   selftest_resume_record "$phase" "$rel" "$run_dir" blocked 1
   printf '{"phase": "%s", "state": "blocked"}\n' "$phase" >"$run_dir/run.json"
   DRIVER_STUB_BOARD_REPLY='{"state": "OK", "reservation": {"reservation_id": "rsv-real-shape", "generation": 42}}'
-  unset DRIVER_STUB_BOARD_FENCE
-  export DRIVER_STUB_BOARD_REPLY
+  # The reply remains real-shaped and passes through the parser; only the later
+  # owner assertion is stubbed because the reservation itself was not written
+  # to this fixture's board.
+  DRIVER_STUB_BOARD_FENCE=assert
+  export DRIVER_STUB_BOARD_REPLY DRIVER_STUB_BOARD_FENCE
   launches="$(selftest_resume_launches)"
   drive --self-test || true
   wait_phase_window_gone

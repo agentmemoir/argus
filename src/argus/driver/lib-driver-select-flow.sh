@@ -10,13 +10,21 @@ _drive_choose_selection() {
   # answers without one cannot run under a group an earlier call left behind.
   group_take_selection ""
   if [ "${1:-}" = "--self-test" ] && [ -z "${DRIVER_STUB_COORDINATION:-}" ]; then
+    # The self-test uses the legacy selector output, which has no reservation
+    # fields. Keep that selector for fixture isolation, then obtain the same
+    # board fence every launch needs before recording or opening the session.
+    local CLIO_RESERVATION_ID="" CLIO_RESERVATION_GENERATION=""
     out="$(selector_run)" || rc=$?
     if [ "$rc" -ne 0 ]; then
       log "no uncompleted ${work_kind:-phase} (next_phase rc=$rc)"
       { _DRIVE_RC=0; return 0; }
     fi
     number="${out%%$'\t'*}"; rel="${out#*$'\t'}"
-    reservation_id=""; reservation_generation=""
+    if ! session_claim_ensure "$number" "$rel"; then
+      return 1
+    fi
+    reservation_id="$CLIO_RESERVATION_ID"
+    reservation_generation="$CLIO_RESERVATION_GENERATION"
     return 0
   fi
 

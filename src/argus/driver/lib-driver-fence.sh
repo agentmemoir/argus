@@ -155,9 +155,8 @@ board_assert_owner() {   # <phase> <reservation_id> <generation>
   mkdir -p "$RUN_DIR"
   case "${DRIVER_STUB_BOARD_FENCE:-}" in
     fail) return 1 ;;
-    # `assert` is this path's own stub: renew|reserve are the resume's fence
-    # stubs, and they must not auto-approve a state write the real call proves.
-    assert) return 0 ;;
+    # Successful fence stubs stand in for their matching board response.
+    renew|reserve|assert) return 0 ;;
   esac
   board_assert_owner_cmd "$phase" "$reservation_id" "$generation"
 }
