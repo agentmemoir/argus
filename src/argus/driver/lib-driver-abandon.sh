@@ -92,23 +92,24 @@ abandon_cmd() {   # <number> [--reason TEXT]
   state="$(phase_state "$number" "${rel:-}")"
 
   local fence_id="" fence_gen=""
-  if claim_read_fields "$CLAIM"; then
-    fence_id="$CLAIM_ID"
-    fence_gen="$CLAIM_GEN"
-    if [ "$CLAIM_NUMBER" != "$number" ]; then
-      fence_id=""; fence_gen=""
-    fi
-  fi
   # The residue is a state write, and the board is the authority: a fence the
   # board does not confirm must not park a phase another machine is running.
   # An unreachable board fails closed, so the residue is written only after
-  # the fence is proved.
-  if [ -n "$fence_id" ] && [ -n "$fence_gen" ]; then
-    if ! board_assert_owner "$number" "$fence_id" "$fence_gen"; then
-      printf 'argus abandon: the board does not confirm the fence for %s; not abandoning (see %s/assert-owner-%s.json)\n' \
-        "$number" "$RUN_DIR" "$number" >&2
-      exit 1
-    fi
+  # the fence is proved. An unreadable or phase-mismatched claim proves
+  # nothing about who owns the phase, so it is a hard refusal: writing the
+  # residue without it would park a phase the board may have given away.
+  if ! claim_read_fields "$CLAIM" || [ "$CLAIM_NUMBER" != "$number" ] \
+      || [ -z "$CLAIM_ID" ] || [ -z "$CLAIM_GEN" ]; then
+    printf 'argus abandon: no readable claim for %s at %s; not abandoning (the claim must name this phase with a full fence)\n' \
+      "$number" "$CLAIM" >&2
+    exit 1
+  fi
+  fence_id="$CLAIM_ID"
+  fence_gen="$CLAIM_GEN"
+  if ! board_assert_owner "$number" "$fence_id" "$fence_gen"; then
+    printf 'argus abandon: the board does not confirm the fence for %s; not abandoning (see %s/assert-owner-%s.json)\n' \
+      "$number" "$RUN_DIR" "$number" >&2
+    exit 1
   fi
   # The rename is done in Python, not with `mv`, for the same reason the halt
   # record's is: the installed-command test declares the commands the driver may
