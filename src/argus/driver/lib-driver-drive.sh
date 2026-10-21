@@ -184,7 +184,10 @@ _drive() {
   # closes. A claim the board does not confirm is a refused fence: the tick
   # stops here, before the branch cut and the launch, because a launch would
   # run without an ownership fence.
-  record_claim "$number" "$reservation_id" "$reservation_generation" || return $?
+  #
+  # Both shapes of that fence are written, because the tick's own fenced steps
+  # read the file and only this shell reads the claim; see record_claim_fence.
+  record_claim_fence "$number" "$reservation_id" "$reservation_generation" || return $?
 
   _drive_cut_branch || return $?
   [ -z "$_DRIVE_RC" ] || return "$_DRIVE_RC"

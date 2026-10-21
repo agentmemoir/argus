@@ -117,6 +117,54 @@ resume_fence_reserve() {   # <phase>
   return 0
 }
 
+# Record the claim and the reservation file it proves, in that order.
+#
+# One call, because the two are one fact in two shapes. `record_claim` writes the
+# shell's own claim file, which only this driver reads; every fenced write path
+# reads `runs/<phase>/reservation.json` and asks the board whether that machine,
+# reservation id and generation still own the phase. A tick that recorded only
+# the shell copy would hold the phase and prove nothing to the steps it is about
+# to call: its own tidy, branch, clean and checkpoint steps would refuse it, and
+# the refusal would name a fence the tick believes it has.
+#
+# The claim is written first and its refusal is returned unchanged: a claim the
+# board did not confirm must not leave a reservation file behind that a later
+# tick would read as ownership.
+#
+#   $1 the phase   $2 the reservation id   $3 the generation
+record_claim_fence() {
+  record_claim "$1" "$2" "$3" || return $?
+  record_phase_reservation "$1" "$2" "$3"
+}
+
+# Write the confirmed claim where the fenced write paths read it.
+#
+# Best effort, and silent when the run folder cannot be named: a fence that is
+# missing is refused loudly by the path that reads it, and a claim is not
+# something this write may take back. A write that fails where the folder could
+# be named is said out loud, because it is the difference between a fence that is
+# there and one that only looks as though it is.
+#
+# The values are the ones the board has just confirmed, and the ids and the
+# generation are checked to be the shapes that cannot break the JSON. Anything
+# else writes nothing: a half-written reservation file would be read as a fence.
+#
+#   $1 the phase   $2 the reservation id   $3 the generation
+record_phase_reservation() {
+  local phase="$1" reservation_id="$2" generation="$3" dir="" file=""
+  case "$phase" in ''|*[!0-9]*) return 0 ;; esac
+  case "$generation" in ''|*[!0-9]*) return 0 ;; esac
+  [ -n "$reservation_id" ] || return 0
+  dir="$(phase_run_dir "$phase" "" 2>/dev/null)" || return 0
+  [ -n "$dir" ] || return 0
+  file="$dir/reservation.json"
+  mkdir -p "$dir" 2>/dev/null || true
+  if ! printf '{\n  "phase": "%s",\n  "machine_id": "%s",\n  "reservation_id": "%s",\n  "generation": %s\n}\n' \
+      "$phase" "${PHASE_MACHINE_ID:-}" "$reservation_id" "$generation" >"$file" 2>/dev/null; then
+    log "claim: could not write the reservation file for ${work_kind:-phase} $phase (see $file); the fence reads nothing"
+  fi
+}
+
 # Verify the three-part fence against the board before a state write.
 #
 # The claim file alone proves nothing: an expired, released, or taken-over

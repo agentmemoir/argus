@@ -185,8 +185,10 @@ _drive_resume() {   # [<number>]
   # The board is the authority: a claim it does not confirm is a refused fence,
   # and a launch under it would run with no ownership fence. The refusal stops
   # the resume here, before the stage read and the launch, and the reason is
-  # logged by record_claim and recorded for the operator.
-  if ! record_claim "$number" "$reservation_id" "$reservation_generation"; then
+  # logged by record_claim and recorded for the operator. The reservation file
+  # the resume's own branch step reads is written with the claim; see
+  # record_claim_fence.
+  if ! record_claim_fence "$number" "$reservation_id" "$reservation_generation"; then
     resume_refuse "$target" "the claim fence was refused for phase $number; no launch (see the driver log)"
     return 1
   fi

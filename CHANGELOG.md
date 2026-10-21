@@ -4,6 +4,8 @@ Notable changes to this project are documented here. The format follows [Keep a 
 
 ## [Unreleased]
 
+- The driver writes the phase reservation file the write fences read, from the same board-confirmed claim it records in the shell claim file.
+
 - The group gate's check read names the pull request's own repository and host on the `gh` call: `gh pr checks` now receives `--repo [HOST/]OWNER/REPO` from the receipt's `owner`, `repo`, and `host`, the same triple the stage-history read already used. Without it gh answered about the repository of the run directory, so a run directory outside a checkout, or on a different repository, read another repository's checks and reported them as this group's. ([#168](https://github.com/agentmemoir/argus/pull/168))
 
 - `--release` drops the driver lock on every return path, the board's refusal included. That one path kept fd 9 open and with it the flock, so the operator's next driver command in the same shell was refused by a lock nothing else held. The operator commands (`stop`, `release`, and the phase-window wait they share) move to `lib-driver-control.sh`, one file per responsibility, and the tick file stays under the executable size limit. ([#168](https://github.com/agentmemoir/argus/pull/168))

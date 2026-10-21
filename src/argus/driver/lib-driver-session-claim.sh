@@ -226,7 +226,9 @@ session_claim_ensure() {   # <number> <rel>
   CLIO_RESERVATION_ID="$id"
   CLIO_RESERVATION_GENERATION="$generation"
   export CLIO_RESERVATION_ID CLIO_RESERVATION_GENERATION
-  record_claim "$number" "$id" "$generation" || return $?
+  # The claim and the reservation file it proves, so the launch this prepares
+  # leaves the same fence behind that a tick's launch does.
+  record_claim_fence "$number" "$id" "$generation" || return $?
   return 0
 }
 
