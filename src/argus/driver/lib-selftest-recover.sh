@@ -148,15 +148,59 @@ selftest_recover_leftovers() {
           "$pid" "$leftover" >&2
         continue
       fi
-      # A socket inside the fixture can only belong to the fixture, so its server
-      # goes with it. This is the path a recordless fixture takes, and the one a
-      # recorded fixture takes once its sessions are confirmed gone.
-      case "$socket" in
-        "$leftover"/*)
-          env -u TMUX -u TMUX_PANE TMUX_TMPDIR="$socket" "$tmux_bin" kill-server >/dev/null 2>&1 || true
-          ;;
-      esac
+      # No `kill-server` here, on purpose. The sessions this run owns are already
+      # stopped above, by name and by this run's own pid, and a server exits by
+      # itself when its last session goes; ending the server instead would end
+      # every session in a socket directory, and a socket directory is not proof
+      # that this suite started the server in it. A caller may name one base for
+      # several runs (`ARGUS_SELFTEST_BASES`, the fault harness), and a base that
+      # is named is a base whose other sessions, and whose server, belong to
+      # someone else. The one process this sweep may signal is a session whose
+      # name carries the dead run's pid.
       rm -rf "$leftover" 2>/dev/null || true
     done
   done < <(selftest_fixture_bases)
+}
+
+# Signal a pid this run started, and refuse every other pid.
+#
+# It lives here, beside the leftover sweep, because both answer one question: is
+# this process one this run started? The sweep asks it before stopping a session,
+# and this asks it before sending a signal a pid file named. Neither may act on a
+# number alone.
+#
+# The cases read a pid out of a file the driver wrote and then kill it, which is
+# a `kill -9` aimed at whatever process holds that number when the line runs. A
+# pid file is a number written some seconds ago: the phase it named may have
+# exited, and the kernel is free to have handed the number to something else in
+# the meantime. On this machine that something else can be the tmux server, and
+# killing a tmux server ends every session on it, including sessions this suite
+# never made and does not own. The self-test's own `kill -9` therefore has to be
+# scoped the same way its tmux commands are: by provenance, checked at kill time.
+#
+# The provenance is the process's own command line. A phase this suite launched
+# runs the driver out of the fixture (`bash <fixture>/board-data/argus/driver/
+# phase-driver.sh --session ...`), so a live process whose arguments name this
+# run's fixture is this run's phase, and nothing else is touched. An empty,
+# unreadable, non-numeric, already-dead or unrelated pid is left alone, and a
+# refusal is said out loud: silently skipping the kill is how a leaked stub goes
+# unnoticed.
+#
+#   $1  the pid to signal
+selftest_kill_own_stub() {
+  local pid="$1" args="" own=""
+  case "$pid" in
+    ''|*[!0-9]*) return 0 ;;
+  esac
+  [ "$pid" != "$$" ] && [ "$pid" != "$PPID" ] || return 0
+  kill -0 "$pid" 2>/dev/null || return 0
+  args="$(ps -p "$pid" -o args= 2>/dev/null || true)"
+  for own in "${ARGUS_DIR:-}" "${REPO:-}"; do
+    case "$own:$args" in
+      :*) continue ;;
+      "$own":*"$own"*) kill -9 "$pid" 2>/dev/null || true; return 0 ;;
+    esac
+  done
+  printf 'self-test: not killing pid %s, which is not this run'\''s phase (args: %s)\n' \
+    "$pid" "${args:-unreadable}" >&2
 }

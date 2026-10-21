@@ -116,8 +116,8 @@ selftest_case_merge_orphan() {
   RECOVER_OWN_CLAIM=0; export RECOVER_OWN_CLAIM
   DRIVER_STUB_SLEEP="$old_stub_sleep"; export DRIVER_STUB_SLEEP
   sleep 0.3
-  [ -f "$PIDFILE" ] && kill -9 "$(cat "$PIDFILE")" 2>/dev/null || true
-  [ -n "$orphan_pid" ] && kill -9 "$orphan_pid" 2>/dev/null || true
+  selftest_kill_own_stub "$(cat "$PIDFILE" 2>/dev/null || true)"
+  selftest_kill_own_stub "$orphan_pid"
   rm -f "$orphan_release" "$orphan_ready"
 
   # A session outlives every phase, so it is created once and reused forever.
