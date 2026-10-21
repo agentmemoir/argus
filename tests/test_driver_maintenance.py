@@ -4,93 +4,13 @@
 
 import copy
 import json
-import os
 import subprocess
-import sys
 from pathlib import Path
 
 import pytest
 
 from config_fixture import BASE, PHASES_LOCAL, write
-
-DRIVER = Path(__file__).resolve().parents[1] / "src/argus/driver"
-
-
-def shell(tmp_path: Path, body: str) -> str:
-    script = """
-set -euo pipefail
-for name in lib-driver-drive lib-driver-select lib-driver-group lib-driver-resume \
-    lib-driver-select-flow lib-driver-issues lib-driver-config lib-driver-run; do
-  . "$TEST_DRIVER/$name.sh"
-done
-if [ -f "$TEST_DRIVER/lib-driver-maintenance.sh" ]; then
-  . "$TEST_DRIVER/lib-driver-maintenance.sh"
-fi
-PYTHON="$TEST_PYTHON"
-ARGUS="$TEST_DRIVER/.."
-REPO="$TEST_ROOT"; RUN_DIR="$TEST_ROOT"
-HALT="$RUN_DIR/halted"; HALT_RECORD="$RUN_DIR/halted.json"
-CLAIM="$RUN_DIR/claim"; CURRENT="$RUN_DIR/current"
-PIDFILE="$RUN_DIR/pid"; STALL="$RUN_DIR/stall"; LOCK="$RUN_DIR/lock"
-GROUPFILE="$RUN_DIR/group"; GROUPBRANCH="$RUN_DIR/group-branch"
-DRY_RUN=0; MERGE_CHECK_MAX=5; work_kind=phase; WORK_SOURCE=phases
-ARGUS_CONFIG_ARGS=(--config fixture.json); GITSYNC_KIND_ARGS=(); WORK_SOURCE_FLAGS=()
-PHASE_MACHINE_ID=fixture; SESSION=fixture
-log() { printf '%s\\n' "$*" >>"$RUN_DIR/events"; }
-log_changed() { shift; log "$*"; }
-ts() { printf fixture-time; }
-notify() { :; }
-tmux_busy() { return 1; }
-tmux_phase_window_alive() { return 1; }
-tmux_session_exists() { return 1; }
-tmux_set_title() { :; }
-claim_renew() { :; }
-prune() { :; }
-repair_due() { return 1; }
-work_preflight() { return 0; }
-_drive_choose_selection() { log SELECT; _DRIVE_RC=0; }
-_drive_cut_branch() { log BRANCH; }
-_drive_launch() { log LAUNCH; }
-tidy_published_checkout() { log TIDY; }
-pending_review_snapshot() {
-  printf '{"awaiting_review":[{"phase":"100010","branch":"feature/fixture","pull_request":"https://example.test/pull/1"}]}'
-}
-gate_group_pull_request() { log GATE; }
-watch_signals_pull_request() { log SIGNALS; }
-python_transport() {
-  case "$1" in
-    */gitsync/main.py)
-      if [ "$PUBLICATION" = merged ]; then
-        log PUBLISH
-        printf '{"state":"PUBLISHED"}'
-      else
-        printf '{"state":"BLOCKED"}'
-      fi
-      ;;
-    *) "$TEST_PYTHON" "$@" ;;
-  esac
-}
-PYTHON=python_transport
-PUBLICATION=open
-"""
-    result = subprocess.run(
-        ["bash", "-c", script + body],
-        cwd=tmp_path,
-        env={
-            "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
-            "TEST_DRIVER": str(DRIVER),
-            "TEST_ROOT": str(tmp_path),
-            "TEST_PYTHON": sys.executable,
-        },
-        stdin=subprocess.DEVNULL,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        timeout=20,
-        check=False,
-    )
-    assert result.returncode == 0, result.stderr
-    return result.stdout
+from driver_maintenance_support import DRIVER, shell
 
 
 @pytest.mark.parametrize("publication", ["open", "merged"])
@@ -119,100 +39,6 @@ def test_merge_check_only_does_not_select(tmp_path: Path) -> None:
     events = (tmp_path / "events").read_text().splitlines()
     assert any(event.startswith("merge check:") for event in events)
     assert not {"SELECT", "BRANCH", "LAUNCH"}.intersection(events)
-
-
-def test_record_claim_refuses_when_the_board_did_not_return_a_fence(
-    tmp_path: Path,
-) -> None:
-    output = shell(
-        tmp_path,
-        'rc=0; record_claim 100020 "" "" || rc=$?; printf "claim_rc=%s\\n" "$rc"\n',
-    )
-    assert "claim_rc=1" in output
-    assert not (tmp_path / "claim").exists()
-
-
-def test_record_claim_refuses_a_foreign_fence(tmp_path: Path) -> None:
-    output = shell(
-        tmp_path,
-        "board_assert_owner() { log ASSERT; return 1; }\n"
-        "rc=0; record_claim 100020 rsv-foreign 7 || rc=$?\n"
-        "printf 'claim_rc=%s\\n' \"$rc\"\n",
-    )
-    assert "claim_rc=1" in output
-    assert "ASSERT" in (tmp_path / "events").read_text().splitlines()
-    assert not (tmp_path / "claim").exists()
-
-
-def test_session_claim_ensure_refuses_a_failed_record_claim(tmp_path: Path) -> None:
-    output = shell(
-        tmp_path,
-        '. "$TEST_DRIVER/lib-driver-session-claim.sh"\n'
-        "python_transport() { return 0; }\n"
-        "PYTHON=python_transport\n"
-        "PHASE_MACHINE_ID=fixture\n"
-        "CLIO_RESERVATION_ID=rsv-fixture\n"
-        "CLIO_RESERVATION_GENERATION=7\n"
-        "record_claim() { log RECORD_CLAIM_FAILED; return 1; }\n"
-        "run_session() { log LAUNCH; }\n"
-        "rc=0; session_claim_ensure 100020 fixture.yml || rc=$?\n"
-        "printf 'session_rc=%s\\n' \"$rc\"\n"
-        'if [ "$rc" -eq 0 ]; then run_session 100020 fixture.yml; fi\n',
-    )
-    assert "session_rc=1" in output
-    assert "LAUNCH" not in (tmp_path / "events").read_text().splitlines()
-
-
-def test_abandon_refuses_a_foreign_fence_before_writing_residue(
-    tmp_path: Path,
-) -> None:
-    output = shell(
-        tmp_path,
-        '. "$TEST_DRIVER/lib-driver-abandon.sh"\n'
-        'mkdir -p "$RUN_DIR/phase-100020"\n'
-        'phase_run_dir() { printf "%s\\n" "$RUN_DIR/phase-100020"; }\n'
-        "resume_phase_file_of() { printf fixture.yml; }\n"
-        "phase_state() { printf running; }\n"
-        "tmux_busy() { return 1; }\n"
-        "driver_orphan_check() { return 0; }\n"
-        "driver_lock_take() { :; }\n"
-        "board_assert_owner() { log ASSERT; return 1; }\n"
-        'printf "100020\\trsv-foreign\\t7\\n" >"$CLAIM"\n'
-        'rc=0; (abandon_cmd 100020) >"$RUN_DIR/abandon-output" 2>&1 || rc=$?\n'
-        'printf "abandon_rc=%s\\n" "$rc"\n',
-    )
-    assert "abandon_rc=1" in output
-    assert "ASSERT" in (tmp_path / "events").read_text().splitlines()
-    assert not (tmp_path / "phase-100020" / "abandoned.json").exists()
-    assert (tmp_path / "claim").is_file()
-
-
-def test_release_refuses_when_the_claim_fence_is_missing(tmp_path: Path) -> None:
-    output = shell(
-        tmp_path,
-        "driver_lock_wait() { :; }\n"
-        "rc=0; release || rc=$?\n"
-        "printf 'release_rc=%s\\n' \"$rc\"\n",
-    )
-    assert "release_rc=1" in output
-    assert not (tmp_path / "release-checkpoint.json").exists()
-
-
-def test_release_refuses_a_foreign_fence_before_checkpoint(tmp_path: Path) -> None:
-    body = (
-        "printf '100020\\n' >\"$CURRENT\"\n"
-        "printf '100020\\trsv-foreign\\t7\\n' >\"$CLAIM\"\n"
-        "driver_lock_wait() { :; }\n"
-        "board_assert_owner() { log ASSERT; return 1; }\n"
-        "rc=0; release || rc=$?\n"
-        "printf 'release_rc=%s\\n' \"$rc\"\n"
-    )
-    output = shell(tmp_path, body)
-    assert "release_rc=1" in output
-    assert "ASSERT" in (tmp_path / "events").read_text().splitlines()
-    assert not (tmp_path / "release-checkpoint.json").exists()
-    assert (tmp_path / "claim").is_file()
-    assert (tmp_path / "current").is_file()
 
 
 def test_stop_blocks_own_claim_after_halt_marker_is_cleared(tmp_path: Path) -> None:
@@ -347,6 +173,12 @@ def test_abandon_clears_manual_stop_after_group_release(
 . "$TEST_DRIVER/lib-driver-run.sh"
 . "$TEST_DRIVER/lib-driver-halt-record.sh"
 . "$TEST_DRIVER/lib-driver-abandon.sh"
+python_transport() {
+  case "$1" in
+    */board/reservations.py) return 0 ;;
+    *) "$TEST_PYTHON" "$@" ;;
+  esac
+}
 resume_phase_file_of() { printf phase-100020-fixture.md; }
 phase_run_dir() { printf '%s' "$RUN_DIR"; }
 phase_state() { printf blocked; }
