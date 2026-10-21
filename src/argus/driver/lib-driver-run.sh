@@ -48,7 +48,18 @@ terminal_state_of_file() {
 record_claim() {
   local number="$1" reservation_id="${2:-}" generation="${3:-}"
   if [ -z "$reservation_id" ] || [ -z "$generation" ]; then
-    rm -f "$CLAIM"
+    # An empty pair proves nothing about the board: the caller may have failed
+    # to read a live claim, and deleting the file would strand that fence on
+    # the board until its window closes. The claim file is removed only when it
+    # provably holds no releasable fence (missing, empty, or missing fields);
+    # a claim with a full pair is left alone, so a live fence is never lost to
+    # a transient selection failure.
+    if [ -s "$CLAIM" ]; then
+      claim_read_fields "$CLAIM" || true
+      if [ -z "$CLAIM_ID" ] || [ -z "$CLAIM_GEN" ]; then
+        rm -f "$CLAIM"
+      fi
+    fi
     return 0
   fi
   # The board is the authority: a pair that names no live reservation this
