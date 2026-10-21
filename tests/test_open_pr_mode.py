@@ -40,11 +40,11 @@ def workspace(
 
 
 def test_creates_a_draft_and_reports_what_the_read_back_says(
-    workspace: Workspace,
+    workspace: Workspace, body_file: Path
 ) -> None:
     workspace.answer(list=[], create=URL, reread=[CREATED])
 
-    out = mode_open_pr(workspace.root, branch=BRANCH)
+    out = mode_open_pr(workspace.root, branch=BRANCH, body_file=body_file)
 
     assert out["ok"] is True, out
     assert out["mode"] == "open-pr"
@@ -68,10 +68,12 @@ def test_creates_a_draft_and_reports_what_the_read_back_says(
     assert len(reads) == 2, reads
 
 
-def test_a_create_that_prints_no_url_is_blocked(workspace: Workspace) -> None:
+def test_a_create_that_prints_no_url_is_blocked(
+    workspace: Workspace, body_file: Path
+) -> None:
     workspace.answer(list=[], create="")
 
-    out = mode_open_pr(workspace.root, branch=BRANCH)
+    out = mode_open_pr(workspace.root, branch=BRANCH, body_file=body_file)
 
     assert out["ok"] is False, out
     assert out["state"] == "BLOCKED"
@@ -83,10 +85,12 @@ def test_a_create_that_prints_no_url_is_blocked(workspace: Workspace) -> None:
     assert any("no pull request URL" in reason for reason in row["blockers"])
 
 
-def test_a_create_that_cannot_be_read_back_is_blocked(workspace: Workspace) -> None:
+def test_a_create_that_cannot_be_read_back_is_blocked(
+    workspace: Workspace, body_file: Path
+) -> None:
     workspace.answer(list=[], create=URL, reread=[])
 
-    out = mode_open_pr(workspace.root, branch=BRANCH)
+    out = mode_open_pr(workspace.root, branch=BRANCH, body_file=body_file)
 
     assert out["ok"] is False, out
     assert out["state"] == "BLOCKED"
@@ -95,10 +99,12 @@ def test_a_create_that_cannot_be_read_back_is_blocked(workspace: Workspace) -> N
     assert any(URL in reason for reason in row["blockers"])
 
 
-def test_a_failed_read_is_blocked_and_creates_nothing(workspace: Workspace) -> None:
+def test_a_failed_read_is_blocked_and_creates_nothing(
+    workspace: Workspace, body_file: Path
+) -> None:
     workspace.answer(list_exit=1)
 
-    out = mode_open_pr(workspace.root, branch=BRANCH)
+    out = mode_open_pr(workspace.root, branch=BRANCH, body_file=body_file)
 
     assert out["ok"] is False, out
     assert out["state"] == "BLOCKED"
@@ -107,10 +113,12 @@ def test_a_failed_read_is_blocked_and_creates_nothing(workspace: Workspace) -> N
     assert [call for call in workspace.commands() if call[:2] == ["pr", "create"]] == []
 
 
-def test_a_failed_create_is_blocked_and_claims_nothing(workspace: Workspace) -> None:
+def test_a_failed_create_is_blocked_and_claims_nothing(
+    workspace: Workspace, body_file: Path
+) -> None:
     workspace.answer(list=[], create=URL, create_exit=1)
 
-    out = mode_open_pr(workspace.root, branch=BRANCH)
+    out = mode_open_pr(workspace.root, branch=BRANCH, body_file=body_file)
 
     assert out["ok"] is False, out
     assert out["state"] == "BLOCKED"
@@ -123,6 +131,7 @@ def test_a_failed_create_is_blocked_and_claims_nothing(workspace: Workspace) -> 
 
 def test_reuses_the_open_pull_request_and_creates_nothing(
     workspace: Workspace,
+    body_file: Path,
 ) -> None:
     workspace.answer(
         list=[
@@ -131,7 +140,7 @@ def test_reuses_the_open_pull_request_and_creates_nothing(
         ]
     )
 
-    out = mode_open_pr(workspace.root, branch=BRANCH)
+    out = mode_open_pr(workspace.root, branch=BRANCH, body_file=body_file)
 
     assert out["ok"] is True, out
     row = out["repos"][0]
@@ -145,13 +154,13 @@ def test_reuses_the_open_pull_request_and_creates_nothing(
 
 @pytest.mark.parametrize("state", ["CLOSED", "MERGED"])
 def test_a_closed_or_merged_pull_request_blocks_a_duplicate(
-    workspace: Workspace, state: str
+    workspace: Workspace, body_file: Path, state: str
 ) -> None:
     workspace.answer(
         list=[{"number": 9, "state": state, "isDraft": False, "url": "u/9"}]
     )
 
-    out = mode_open_pr(workspace.root, branch=BRANCH)
+    out = mode_open_pr(workspace.root, branch=BRANCH, body_file=body_file)
 
     assert out["ok"] is False, out
     assert out["state"] == "BLOCKED"
@@ -169,14 +178,14 @@ def test_a_phase_with_no_phases_file_is_refused(workspace: Workspace) -> None:
     assert workspace.commands() == []
 
 
-def test_the_phase_file_names_the_branch(workspace: Workspace) -> None:
+def test_the_phase_file_names_the_branch(workspace: Workspace, body_file: Path) -> None:
     (workspace.phases / "phase-100440-backup-archive-format.md").write_text("# x\n")
     # The phase branch exists here: a phase whose branch was never created is
     # refused before gh, and that case has its own test below.
     assert git(workspace.root, "branch", "feature/backup-archive-format")[0] == 0
     workspace.answer(list=[], create=URL, reread=[CREATED])
 
-    out = mode_open_pr(workspace.root, phase=100440)
+    out = mode_open_pr(workspace.root, phase=100440, body_file=body_file)
 
     assert out["branch"] == "feature/backup-archive-format"
     assert out["ok"] is True, out
@@ -201,23 +210,26 @@ def test_a_phase_whose_branch_was_never_created_is_refused_by_name(
     assert workspace.commands() == []
 
 
-def test_an_explicit_branch_beats_the_phase_branch(workspace: Workspace) -> None:
+def test_an_explicit_branch_beats_the_phase_branch(
+    workspace: Workspace, body_file: Path
+) -> None:
     (workspace.phases / "phase-100440-backup-archive-format.md").write_text("# x\n")
     assert git(workspace.root, "branch", "feature/backup-archive-format")[0] == 0
     workspace.answer(list=[], create=URL, reread=[CREATED])
 
-    out = mode_open_pr(workspace.root, phase=100440, branch=BRANCH)
+    out = mode_open_pr(workspace.root, phase=100440, branch=BRANCH, body_file=body_file)
 
     assert out["branch"] == BRANCH
 
 
 def test_the_current_branch_is_used_when_neither_flag_is_given(
     workspace: Workspace,
+    body_file: Path,
 ) -> None:
     assert git(workspace.root, "checkout", "-q", BRANCH)[0] == 0
     workspace.answer(list=[], create=URL, reread=[CREATED])
 
-    out = mode_open_pr(workspace.root)
+    out = mode_open_pr(workspace.root, body_file=body_file)
 
     assert out["branch"] == BRANCH
     assert out["ok"] is True, out
@@ -261,6 +273,7 @@ def test_a_branch_this_checkout_lacks_is_refused_before_gh(
 
 def test_a_pull_request_row_with_a_blank_url_is_not_reported(
     workspace: Workspace,
+    body_file: Path,
 ) -> None:
     workspace.answer(
         list=[
@@ -270,7 +283,7 @@ def test_a_pull_request_row_with_a_blank_url_is_not_reported(
         ]
     )
 
-    out = mode_open_pr(workspace.root, branch=BRANCH)
+    out = mode_open_pr(workspace.root, branch=BRANCH, body_file=body_file)
 
     assert out["ok"] is True, out
     row = out["repos"][0]

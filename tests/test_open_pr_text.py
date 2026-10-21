@@ -47,12 +47,14 @@ def _creates(workspace: Workspace) -> list[list[str]]:
     return [call for call in workspace.commands() if call[:2] == ["pr", "create"]]
 
 
-def test_a_title_file_reaches_the_create(workspace: Workspace) -> None:
+def test_a_title_file_reaches_the_create(workspace: Workspace, body_file: Path) -> None:
     title_file = workspace.transport.parent / "title.md"
     title_file.write_text("warm the cache on boot\n", encoding="utf-8")
     workspace.answer(list=[], create=URL, reread=[CREATED])
 
-    out = mode_open_pr(workspace.root, branch=BRANCH, title_file=title_file)
+    out = mode_open_pr(
+        workspace.root, branch=BRANCH, title_file=title_file, body_file=body_file
+    )
 
     assert out["ok"] is True, out
     creates = _creates(workspace)
@@ -93,4 +95,13 @@ def test_a_blank_body_file_is_refused_before_gh(workspace: Workspace) -> None:
 
     assert "--body-file" in str(refused.value)
     assert "empty" in str(refused.value)
+    assert _creates(workspace) == []
+
+
+def test_no_body_file_is_refused_before_gh(workspace: Workspace) -> None:
+    with pytest.raises(ConfigError) as refused:
+        mode_open_pr(workspace.root, branch=BRANCH)
+
+    assert "--body-file" in str(refused.value)
+    assert "required" in str(refused.value)
     assert _creates(workspace) == []
