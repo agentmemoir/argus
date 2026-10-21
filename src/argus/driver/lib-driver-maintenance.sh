@@ -25,9 +25,46 @@ print(json.dumps({"awaiting_review": reviews}))
 PY
 }
 
+# Retry every complete group's shared ready, on every tick, whatever state the
+# phase's own receipt is in.
+#
+# The publish step readies the group's one pull request on the tick its last
+# member publishes, and the check run that follows that push has almost always
+# not finished by then. This is the retry, and it is per tick because the tick is
+# the retry: no counter, no timer, and no local ready record. It sweeps every
+# receipt rather than the ones waiting on a merge, so a receipt that already
+# reads published still gets its pull request readied when its checks finish
+# later. The once-only guard is GitHub's own ready/draft timeline, read inside
+# the mode, so a pull request a person put back in draft is never re-readied.
+#
+# It cannot stop the line and never gates a launch: a group that is held or
+# still waiting is logged and the next tick asks again.
+reconcile_group_ready() {
+  local state=""
+  # The self-test has no receipts, board or network.
+  [ -z "${DRIVER_STUB_COORDINATION:-}" ] || return 0
+  mkdir -p "$RUN_DIR"
+  "$PYTHON" "$ARGUS/gitsync/main.py" "${ARGUS_CONFIG_ARGS[@]}" --root "$REPO" \
+    --mode ready >"$RUN_DIR/group-ready.json" 2>/dev/null || true
+  state="$(selection_value state <"$RUN_DIR/group-ready.json" 2>/dev/null || true)"
+  case "$state" in
+    READY)
+      log "a group's shared pull request is ready; its checks passed"
+      ;;
+    HELD)
+      log_changed group-ready "group ready: a group pull request is held; the next tick retries"
+      ;;
+  esac
+  return 0
+}
+
 reconcile_pending_reviews() {
   PENDING_PUBLISHED=0
   [ "${WORK_SOURCE:-phases}" != issues ] || return 0
+  # Before the receipts are read, and independent of them. A receipt that
+  # settles this tick leaves the pending list for ever, so a ready retry placed
+  # after this filter would run for one tick and then stop.
+  reconcile_group_ready
   local pending
   if [ -n "${DRIVER_STUB_COORDINATION:-}" ]; then
     # The self-test has no real receipts, board or network.

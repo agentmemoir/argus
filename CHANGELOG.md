@@ -4,6 +4,10 @@ Notable changes to this project are documented here. The format follows [Keep a 
 
 ## [Unreleased]
 
+- A reservation group's shared draft pull request is readied by a later tick, not only by the publish that completes the group. The new `gitsync --mode ready` sweeps every phase receipt on every driver tick and retries the ready, so a group whose checks were still running when it published is readied once they pass instead of staying in draft for ever. It runs for a receipt that already reads `published`, which the old per-phase retry could not reach: `--mode published` only runs for a phase waiting on a merge, and the receipt settles on that same tick. ([#166](https://github.com/agentmemoir/argus/issues/166))
+
+- The ready sweep writes no phase state, holds no claim, and never changes a published or merge verdict. The transition is once per pull request and GitHub's own ready/draft timeline is the guard: any ready event skips the retry, so a person who re-drafts the pull request is never overridden, and a pending or empty check report takes no transition.
+
 - Phase state and publication writes read the board fence before they write. `gitsync --mode published` verifies the phase's reservation with `assert_owner` before the receipt is marked published and returns `FENCED` on a mismatch; `--release` proves the fence before the checkpoint push and the group release; `abandon` proves the fence before the residue is written; and `record_claim` refuses a pair the board does not confirm as a live claim. A board that cannot answer fails closed on every path. ([#164](https://github.com/agentmemoir/argus/issues/164))
 
 - The last member of a reservation group makes the shared draft pull request ready for review. The publish step readies the shared pull request once every member has published, gated on the pull request's checks all passing, and records a ready-once record beside the receipt, so a rerun never overrides a human who re-drafted the pull request. ([#166](https://github.com/agentmemoir/argus/issues/166))

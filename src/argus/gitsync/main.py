@@ -100,7 +100,7 @@ from argus.gitsync.mode_branch import mode_branch
 from argus.gitsync.mode_clean import mode_checkpoint, mode_clean
 from argus.gitsync.mode_open_pr import mode_open_pr
 from argus.gitsync.mode_peek_ci import mode_peek_ci
-from argus.gitsync.modes import mode_published, mode_tidy, result_exit_code
+from argus.gitsync.modes import mode_published, mode_ready, mode_tidy, result_exit_code
 from argus.gitsync.pr_signal_reply import mode_signal_reply
 from argus.gitsync.pr_signals import mode_signals
 from argus.gitsync.publish_phase import publish_phase
@@ -130,6 +130,7 @@ def main() -> int:
             "publish",
             "branch",
             "published",
+            "ready",
             "resync",
             "tidy",
             "clean",
@@ -144,10 +145,10 @@ def main() -> int:
         "fast-forward; publish: claim-check and push a phase's "
         "branch; branch: put the public checkout on the phase "
         "branch; published: confirm a human merged the pull "
-        "request, mark the phase published, and return the "
-        "public checkout to the integration branch; resync: "
-        "merge the integration branch into the phase branch, "
-        "leaving a conflict for the agent to finish; tidy: "
+        "request and mark the phase published; ready: sweep "
+        "every group receipt once and ready its pull request "
+        "when its checks pass; resync: merge the integration "
+        "branch into the phase branch for the agent; tidy: "
         "return a checkout to the integration branch when the "
         "phase it is on is already recorded as published; "
         "clean: commit and push leftover private run state, "
@@ -157,10 +158,9 @@ def main() -> int:
         "signals: read the phase's pull request alerts and review "
         "comments and record what changed; signal-reply: reply to "
         "or react to one recorded review comment, for --comment; "
-        "open-pr: open a draft pull request for the branch, or reuse "
-        "the one already open for it; peek-ci: read a pull "
-        "request's checks once and report whether every row passed, "
-        "without waiting",
+        "open-pr: open a draft pull request for the branch or reuse "
+        "the open one; peek-ci: read a pull request's checks once "
+        "and report whether every row passed, without waiting",
     )
     ap.add_argument(
         "--phase",
@@ -270,6 +270,8 @@ def main() -> int:
             if args.phase is None:
                 raise ConfigError("--phase is required with --mode published")
             out = mode_published(args.root, args.phase)
+        elif args.mode == "ready":
+            out = mode_ready(args.root)
         elif args.mode == "signals":
             if args.phase is None:
                 raise ConfigError("--phase is required with --mode signals")

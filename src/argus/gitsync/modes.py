@@ -13,8 +13,10 @@ from argus.gitsync.group_publication import (
     _load_phase_reservation,
     _member_published,
 )
+from argus.gitsync.group_review import _group_pending, mark_group_pull_request_ready
 from argus.gitsync.publish import mark_phase_published
-from argus.gitsync.receipts import phase_receipt
+from argus.gitsync.receipts import _phase_run_entries, phase_receipt
+from argus.gitsync.runstate import commit_leftover_run_state
 from argus.gitsync.tidy import return_to_integration, tidy_published_checkout
 
 
@@ -22,6 +24,110 @@ def result_exit_code(out: dict[str, Any]) -> int:
     if out.get("state") in {"COORDINATION_UNAVAILABLE", "CONFIG_ERROR"}:
         return 2
     return 0 if out.get("ok") else 1
+
+
+def _ready_one(
+    root: Path, phase: int, receipt: dict[str, Any]
+) -> dict[str, Any] | None:
+    """Try to ready one phase's group pull request, and say what happened.
+
+    ``None`` when the receipt names no group or no pull request: there is
+    nothing here to ready, and saying so would fill every tick's log with the
+    phases that never had a group.
+
+    The once-only guard is GitHub's own ready history, read inside
+    ``mark_group_pull_request_ready``: a pull request with any ready event is
+    skipped, so a person who re-drafted it is not overridden by a later tick,
+    and a retry that finds no ready event and green checks takes the transition
+    exactly once. There is no local ready record on this path and none is
+    needed: the tick is the retry, so a tick that could not ready the pull
+    request simply tries again next tick.
+    """
+    members = list(receipt.get("group") or [])
+    pull_request = receipt.get("pull_request")
+    if not members or not pull_request:
+        return None
+    pending = _group_pending(root, members, phase)
+    if pending:
+        return {
+            "ok": True,
+            "phase": f"{phase:06d}",
+            "state": "WAITING",
+            "pull_request": pull_request,
+            "pending": pending,
+            "detail": f"{len(pending)} member(s) of this group have not published",
+        }
+    try:
+        ready = mark_group_pull_request_ready(
+            root,
+            phase,
+            members,
+            pending,
+            pull_request,
+            persist_attempt=lambda: commit_leftover_run_state(
+                root,
+                "pipeline: record shared pull request ready attempt "
+                f"for phase {phase:06d}",
+                phase=phase,
+            ),
+        )
+    except Exception as exc:  # noqa: BLE001 - a ready fault must not stop the sweep
+        return {
+            "phase": f"{phase:06d}",
+            "state": "HELD",
+            "pull_request": pull_request,
+            "detail": f"the group ready could not run: {exc}",
+        }
+    if ready is None:
+        return None
+    return dict(ready, state="READY" if ready.get("ok") else "HELD")
+
+
+def mode_ready(root: str | Path) -> dict[str, Any]:
+    """Sweep every group receipt once and ready its pull request when it can.
+
+    The last member of a reservation group makes the group's one pull request
+    ready, but only once every check on it reads pass, and the check run that
+    follows a push has almost always not finished when the publish happens. That
+    first attempt therefore usually finds the checks still running. This mode is
+    the retry: it runs on every driver tick and looks at every phase's receipt,
+    whatever state that receipt is in, so a group whose checks finish later than
+    its publish tick is still readied. It replaces the per-phase ``published``
+    retry, which only ran while a receipt said ``awaiting_review`` and so gave
+    the checks one tick to finish.
+
+    It is a sweep, not a fence, and it writes no phase state. It never touches a
+    receipt, never changes the published or merge verdict, and never holds a
+    claim: the ready transition is guarded by GitHub's own ready/draft timeline,
+    which is what makes running it without a claim safe. Requiring a live claim
+    would mean the normal end state — the merge done, the claim released, the
+    receipt settled — is the one state in which the retry cannot run.
+
+    The only write is the existing ready-attempt record inside the phase's run
+    directory, committed with the same helper the publish step uses so the
+    checkout is left clean for the next phase. A record that cannot be committed
+    refuses that phase's ready for this tick and says so; the next tick retries.
+    """
+    root = Path(root).resolve()
+    results: list[dict[str, Any]] = []
+    for number, _entry in _phase_run_entries(root):
+        receipt = phase_receipt(root, number)
+        if not isinstance(receipt, dict):
+            continue
+        one = _ready_one(root, number, receipt)
+        if one is not None:
+            results.append(one)
+    ok = all(one.get("state") != "HELD" for one in results)
+    states = {str(one.get("state")) for one in results}
+    if "READY" in states:
+        state = "READY"
+    elif "HELD" in states:
+        state = "HELD"
+    elif states:
+        state = "WAITING"
+    else:
+        state = "IDLE"
+    return {"ok": ok, "mode": "ready", "state": state, "results": results}
 
 
 def mode_published(root: str | Path, phase: int | str) -> dict[str, Any]:
