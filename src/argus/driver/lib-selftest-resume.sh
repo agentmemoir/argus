@@ -12,11 +12,13 @@
 # Write a halt record the way the driver writes one, then clear the marker, which
 # is what an operator does before the next tick resumes. Using the driver's own
 # writer keeps a case from spelling the schema out and from drifting from it.
-selftest_resume_record() {   # <phase> <rel> <run_dir> <state> <rc>
+selftest_resume_record() {   # <phase> <rel> <run_dir> <state> <rc> [reservation_id] [generation]
   printf 'phase %s rc=%s state=%s at fixture\n' "$1" "$5" "$4" >"$HALT"
   # A halt leaves its claim beside the run, and the record keeps that fence so a
-  # resume renews it instead of taking a new one.
-  printf '%s\trsv-fixture\t7\n' "$1" >"$CLAIM"
+  # resume renews it instead of taking a new one. A case that made a real board
+  # claim passes its pair, because record_claim reads this file back and the
+  # board refuses a pair it did not issue.
+  printf '%s\t%s\t%s\n' "$1" "${6:-rsv-fixture}" "${7:-7}" >"$CLAIM"
   halt_record_write "$1" "$2" "$3" "$4" "$5" rc
   rm -f "$HALT"
 }
@@ -256,7 +258,7 @@ selftest_case_group_resume() {
   local group_root="$tmp/group-resume-root" group_base="$tmp/group-resume-base"
   local group_config="$tmp/group-resume-config.json"
   local group_branch="feature/group-cache-warm" member_branch="feature/cache-read"
-  local rel="" run_dir="" head="" rc=0
+  local rel="" run_dir="" head="" rc=0 rid="" gen=""
   local old_coordination="${DRIVER_STUB_COORDINATION:-}" old_sleep="$DRIVER_STUB_SLEEP"
   if ! selftest_group_begin group-resume "$group_root" "$group_base" "$group_config"; then
     echo "FAIL: the group-resume case could not build its own checkout"
@@ -318,7 +320,17 @@ selftest_case_group_resume() {
   run_dir="$(phase_run_dir 100030 "$rel")"
   mkdir -p "$run_dir"
   printf '{"phase": "100030", "state": "blocked"}\n' >"$run_dir/run.json"
-  selftest_resume_record 100030 "$rel" "$run_dir" blocked 1
+  # The halt record must name the same board-confirmed pair the branch fence
+  # read, because record_claim reads this file back and the board refuses a
+  # pair it did not issue.
+  rid="$("$PYTHON" -c 'import json,sys; print(json.load(open(sys.argv[1]))["reservation_id"])' "$run_dir/reservation.json")" || rid=""
+  gen="$("$PYTHON" -c 'import json,sys; print(json.load(open(sys.argv[1]))["generation"])' "$run_dir/reservation.json")" || gen=""
+  if [ -z "$rid" ] || [ -z "$gen" ]; then
+    echo "FAIL: the group-resume case lost the reservation fence"
+    fail=1
+  else
+    selftest_resume_record 100030 "$rel" "$run_dir" blocked 1 "$rid" "$gen"
+  fi
   drive || true
 
   # The launch has to have happened, or the two checks below would pass on a
