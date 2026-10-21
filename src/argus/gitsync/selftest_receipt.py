@@ -168,6 +168,29 @@ def _group_publication_check(base: Path) -> tuple[bool, str]:
             "pr list": _listing(),
             "pr checks": _checks("pass"),
             "pr ready": {},
+            "api graphql": {
+                "stdout": json.dumps(
+                    [
+                        {
+                            "data": {
+                                "repository": {
+                                    "pullRequest": {
+                                        "state": "OPEN",
+                                        "isDraft": True,
+                                        "timelineItems": {
+                                            "nodes": [],
+                                            "pageInfo": {
+                                                "hasNextPage": False,
+                                                "endCursor": None,
+                                            },
+                                        },
+                                    }
+                                }
+                            }
+                        }
+                    ]
+                )
+            },
         }
         with _RoutedGH(green):
             second = publish_phase(pub, 100030, pull_request=url)

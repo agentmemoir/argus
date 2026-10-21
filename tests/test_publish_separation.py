@@ -3,6 +3,7 @@
 """Publication checks the Git destinations before it pushes anything."""
 
 import json
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -20,6 +21,15 @@ def git_settings(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         conventions, "_settings", {"commands.git": "git", "commands.gh": "gh"}
     )
+
+
+def _history_response(
+    stage: dict[str, object] | None, detail: str = ""
+) -> Callable[..., tuple[dict[str, object] | None, str]]:
+    def read(*_args: object) -> tuple[dict[str, object] | None, str]:
+        return stage, detail
+
+    return read
 
 
 def test_separate_destinations_publish(tmp_path: Path) -> None:
@@ -155,7 +165,7 @@ def _group_ready_retry_setup(
     monkeypatch.setattr(
         group_review,
         "gh_pull_request_stage_history",
-        lambda *_args: ({"state": "OPEN", "is_draft": True, "events": []}, ""),
+        _history_response({"state": "OPEN", "is_draft": True, "events": []}),
     )
 
     ready_calls: list[tuple[object, ...]] = []
@@ -255,7 +265,7 @@ def test_group_ready_retry_stops_after_human_drafts_prior_ready(
     monkeypatch.setattr(
         group_review,
         "gh_pull_request_stage_history",
-        lambda *_args: (
+        _history_response(
             {
                 "state": "OPEN",
                 "is_draft": True,
@@ -263,8 +273,7 @@ def test_group_ready_retry_stops_after_human_drafts_prior_ready(
                     {"type": "ReadyForReviewEvent", "created_at": "then"},
                     {"type": "ConvertToDraftEvent", "created_at": "now"},
                 ],
-            },
-            "",
+            }
         ),
     )
 
@@ -288,7 +297,7 @@ def test_group_ready_markerless_retry_stops_after_human_drafts_prior_ready(
     monkeypatch.setattr(
         group_review,
         "gh_pull_request_stage_history",
-        lambda *_args: (
+        _history_response(
             {
                 "state": "OPEN",
                 "is_draft": True,
@@ -296,8 +305,7 @@ def test_group_ready_markerless_retry_stops_after_human_drafts_prior_ready(
                     {"type": "ReadyForReviewEvent", "created_at": "then"},
                     {"type": "ConvertToDraftEvent", "created_at": "now"},
                 ],
-            },
-            "",
+            }
         ),
     )
 
@@ -332,13 +340,12 @@ def test_group_ready_retry_stops_after_successful_prior_ready(
     monkeypatch.setattr(
         group_review,
         "gh_pull_request_stage_history",
-        lambda *_args: (
+        _history_response(
             {
                 "state": "OPEN",
                 "is_draft": False,
                 "events": [{"type": "ReadyForReviewEvent", "created_at": "then"}],
-            },
-            "",
+            }
         ),
     )
 
@@ -372,10 +379,7 @@ def test_group_ready_retry_uses_clear_draft_history(
     monkeypatch.setattr(
         group_review,
         "gh_pull_request_stage_history",
-        lambda *_args: (
-            {"state": "OPEN", "is_draft": True, "events": []},
-            "",
-        ),
+        _history_response({"state": "OPEN", "is_draft": True, "events": []}),
     )
 
     result = group_review.mark_group_pull_request_ready(
@@ -408,7 +412,7 @@ def test_group_ready_retry_stops_when_history_is_unclear(
     monkeypatch.setattr(
         group_review,
         "gh_pull_request_stage_history",
-        lambda *_args: (None, "GitHub did not answer"),
+        _history_response(None, "GitHub did not answer"),
     )
 
     result = group_review.mark_group_pull_request_ready(

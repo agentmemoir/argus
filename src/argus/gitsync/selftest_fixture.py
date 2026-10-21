@@ -207,7 +207,7 @@ def _gh_says(state: str, extra: str = "") -> dict[str, str]:
     }
 
 
-def _gh_group_ready_responses(
+def gh_group_ready_responses(
     checks: dict[str, Any],
 ) -> Callable[[Any], dict[str, Any]]:
     """Answer history, checks, and ready calls without contacting GitHub."""

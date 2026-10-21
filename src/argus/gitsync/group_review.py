@@ -164,12 +164,16 @@ def _ready_retry_allowed(
         or not isinstance(events, list)
     ):
         return False, False, "GitHub PR history is unclear"
-    if any(
-        isinstance(event, dict) and event.get("type") == "ReadyForReviewEvent"
-        for event in events
-    ):
+    stage_events = cast(list[object], events)
+    has_ready_event = False
+    for raw_event in stage_events:
+        event = cast(dict[str, Any], raw_event) if isinstance(raw_event, dict) else None
+        if event is not None and event.get("type") == "ReadyForReviewEvent":
+            has_ready_event = True
+            break
+    if has_ready_event:
         return False, True, "GitHub history records a prior ready; no retry was made"
-    if events:
+    if stage_events:
         return False, False, "GitHub PR history has an unclear stage transition"
     if state == "OPEN" and is_draft:
         return True, False, ""

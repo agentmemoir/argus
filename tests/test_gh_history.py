@@ -13,7 +13,9 @@ import argus.gitsync.gh_history as gh_history
 def test_stage_history_reader_requires_every_timeline_page(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    def page(nodes: list[dict[str, str]], has_next: bool, cursor: str | None) -> dict:
+    def page(
+        nodes: list[dict[str, str]], has_next: bool, cursor: str | None
+    ) -> dict[str, object]:
         return {
             "data": {
                 "repository": {

@@ -18,9 +18,9 @@ from argus.gitsync.group_review import (
 from argus.gitsync.selftest_fixture import (
     BOARD_REL,
     _configure_self_test,
-    _gh_group_ready_responses,
     _gh_says,
     _StubGH,
+    gh_group_ready_responses,
 )
 
 
@@ -252,7 +252,7 @@ def _pending_checks(pub: Path, results: list[tuple[str, object, str]]) -> None:
     # The refusal check runs before any successful ready: once the ready-once
     # record stands, the same pull request is skipped without asking gh, so a
     # refusal after that record exists would never be seen.
-    with _StubGH(_gh_group_ready_responses({"returncode": 1})):
+    with _StubGH(gh_group_ready_responses({"returncode": 1})):
         ready = mark_group_pull_request_ready(
             pub,
             100030,
@@ -280,7 +280,7 @@ def _pending_checks(pub: Path, results: list[tuple[str, object, str]]) -> None:
     )
     # gh returning zero rows is not "all checks pass": an empty report names no
     # passing check, so the ready is refused and the pull request stays draft.
-    with _StubGH(_gh_group_ready_responses({"returncode": 0, "stdout": "[]"})):
+    with _StubGH(gh_group_ready_responses({"returncode": 0, "stdout": "[]"})):
         ready = mark_group_pull_request_ready(
             pub,
             100030,
@@ -304,7 +304,7 @@ def _pending_checks(pub: Path, results: list[tuple[str, object, str]]) -> None:
             [{"bucket": "pass", "state": "success", "name": "ci", "link": ""}]
         ),
     }
-    with _StubGH(_gh_group_ready_responses(green)):
+    with _StubGH(gh_group_ready_responses(green)):
         ready = mark_group_pull_request_ready(
             pub,
             100030,
@@ -408,7 +408,7 @@ def _pending_checks(pub: Path, results: list[tuple[str, object, str]]) -> None:
         )
         + "\n"
     )
-    with _StubGH(_gh_group_ready_responses(green)):
+    with _StubGH(gh_group_ready_responses(green)):
         ready = mark_group_pull_request_ready(
             pub,
             100030,
