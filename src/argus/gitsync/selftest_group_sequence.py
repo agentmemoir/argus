@@ -7,7 +7,8 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from argus.gitsync.group_review import _group_pending, update_group_pull_request
+from argus.gitsync.group_body import update_group_pull_request
+from argus.gitsync.group_review import _group_pending
 from argus.gitsync.selftest_fixture import BOARD_REL
 from argus.gitsync.selftest_group_review import _receipt_fixture, _write_receipt
 

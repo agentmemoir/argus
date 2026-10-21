@@ -12,7 +12,7 @@ from argus.gitsync.gh import (
     gh_edit_pull_request_body,
     gh_pull_request_body,
 )
-from argus.gitsync.group_review import (
+from argus.gitsync.group_body import (
     _group_task_labels,
     _tidy_group_body,
     _update_body_checklist,
