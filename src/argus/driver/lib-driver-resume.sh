@@ -182,7 +182,14 @@ _drive_resume() {   # [<number>]
 
   reservation_id="$RESUME_RESERVATION_ID"
   reservation_generation="$RESUME_RESERVATION_GENERATION"
-  record_claim "$number" "$reservation_id" "$reservation_generation"
+  # The board is the authority: a claim it does not confirm is a refused fence,
+  # and a launch under it would run with no ownership fence. The refusal stops
+  # the resume here, before the stage read and the launch, and the reason is
+  # logged by record_claim and recorded for the operator.
+  if ! record_claim "$number" "$reservation_id" "$reservation_generation"; then
+    resume_refuse "$target" "the claim fence was refused for phase $number; no launch (see the driver log)"
+    return 1
+  fi
 
   # Read the stage before the launch: the child starts inside `_drive_launch` and
   # can advance `resume.json` before this line is written, and the stage logged
