@@ -31,17 +31,13 @@ Every member records the group's single pull request in its receipt, and a membe
 
 ## The Group Gate
 
-The group gate runs when a member publishes, and again on every tick that finds a published member waiting for its pull request to merge (`--mode gate --phase NUMBER` runs it by hand). It does two things.
+A group's shared pull request stays in draft until the group is done. When a member publishes, the publish step checks whether any member is still to publish; once every member has published, the last one asks GitHub whether the shared pull request's checks all pass, and only then marks it ready for review.
 
-First, it merges the open pull requests whose base is the group branch, so a fix for a bug an earlier member left reaches the branch before the next member starts. A pull request is merged only when it is ready for review, comes from this repository and not from a fork, is mergeable, has no review requesting changes, and has passing checks.
-
-The merge is pinned to the head those checks were read for and never uses administrator rights. Any other pull request stays open, and the result names it with the reason.
-
-Second, once every member has published, the publish step makes the shared pull request ready for review, but only when the checks on it all pass. A pull request whose checks are failing, still running, or not reported yet stays in draft, and the result says which.
+The transition is gated on the checks: gh must report at least one check, and every reported check must read pass. A pull request whose checks are failing, still running, or not reported at all stays in draft, and the result says which.
 
 The transition happens once: a ready-once record is written beside the last member's receipt, so a person who sets the pull request back to draft is not undone on a later run.
 
-The result is the `group_gate` object in the publication output: `state` (`WAITING` while a member is still to publish, `HELD`, or `READY`), the `reasons` it is held, and `fix_pull_requests` with the numbers merged and the pull requests held. The driver logs a changed answer once, not on every tick.
+A failed transition is reported, never raised, because the phase's commits are already on the branch and its receipt is written. When the ready lands but the record write fails, the result says both: the pull request is non-draft, and the record is missing, so a rerun re-readies it.
 
 ## Issue Work
 
