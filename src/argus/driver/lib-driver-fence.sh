@@ -149,10 +149,15 @@ board_assert_owner_cmd() {   # <phase> <reservation_id> <generation>
 board_assert_owner() {   # <phase> <reservation_id> <generation>
   local phase="$1" reservation_id="$2" generation="$3"
   [ -n "$reservation_id" ] && [ -n "$generation" ] || return 1
+  # The phase names the run state and the board key; a non-number here would
+  # read a path or a key the board does not own, so the fence is refused.
+  [[ $phase =~ ^[0-9]+$ ]] || return 1
   mkdir -p "$RUN_DIR"
   case "${DRIVER_STUB_BOARD_FENCE:-}" in
     fail) return 1 ;;
-    renew|reserve) return 0 ;;
+    # `assert` is this path's own stub: renew|reserve are the resume's fence
+    # stubs, and they must not auto-approve a state write the real call proves.
+    assert) return 0 ;;
   esac
   board_assert_owner_cmd "$phase" "$reservation_id" "$generation"
 }

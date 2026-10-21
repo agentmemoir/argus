@@ -71,7 +71,11 @@
 #   DRIVER_STUB_RC=<n>    skip glide; pretend it exited with rc <n>
 #   DRIVER_STUB_SLEEP=<s> how long the stub "works" (default 2)
 #   DRIVER_RUN_DIR=<dir>  isolate runtime state (used by --self-test)
-#   DRIVER_STUB_BOARD_FENCE=<renew|reserve|fail>  the resume's board fence
+#   DRIVER_STUB_BOARD_FENCE=<assert|renew|reserve|fail>  the board fence stub:
+#     assert  the assert-owner proof answers "confirmed" without the board
+#     renew   the resume's renewal answers "renewed"
+#     reserve the resume's fresh reservation answers "granted"
+#     fail    the board refuses every fence call
 set -euo pipefail
 
 # Parse the mode flags before reading the configuration file. The four layout
