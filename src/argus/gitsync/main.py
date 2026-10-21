@@ -222,7 +222,9 @@ def main() -> int:
     ap.add_argument(
         "--body-file",
         default=None,
-        help="file holding the body for --mode open-pr; empty when it is not given",
+        help="file holding the body for --mode open-pr, where it is required: a "
+        "draft opened with an empty body can be published before a later pass "
+        "fills it",
     )
     ap.add_argument(
         "--pull-request",

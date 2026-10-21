@@ -169,6 +169,7 @@ STOP_ALLOWLIST = r"""
     gitsync/mode_open_pr.py	ok_false	fn:_row|"ok": False,#1
     gitsync/mode_open_pr.py	raise_config	fn:mode_open_pr|raise ConfigError(missing)#1
     gitsync/mode_open_pr.py	raise_config	fn:mode_open_pr|raise ConfigError(refusal)#1
+    gitsync/mode_open_pr.py	raise_config	fn:mode_open_pr|raise ConfigError(#1
     gitsync/mode_peek_ci.py	raise_config	fn:_target_from|raise ConfigError(f"--pull-request {text!r} is not a pull request number or URL")#1
     gitsync/mode_peek_ci.py	ok_false	fn:_row|"ok": False,#1
     gitsync/merge.py	blocked_call	fn:_merge|return blocked(#1

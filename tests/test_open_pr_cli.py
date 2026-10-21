@@ -51,6 +51,7 @@ def workspace(
 
 def test_the_cli_accepts_open_pr_and_reports_config_error(
     workspace: Workspace,
+    body_file: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
@@ -58,7 +59,17 @@ def test_the_cli_accepts_open_pr_and_reports_config_error(
     workspace.answer(list=[], create=URL, reread=[CREATED])
 
     monkeypatch.setattr(
-        sys, "argv", ["gitsync", "--mode", "open-pr", "--branch", BRANCH]
+        sys,
+        "argv",
+        [
+            "gitsync",
+            "--mode",
+            "open-pr",
+            "--branch",
+            BRANCH,
+            "--body-file",
+            str(body_file),
+        ],
     )
     assert main.main() == 0
     out = json.loads(capsys.readouterr().out)
@@ -76,15 +87,47 @@ def test_the_cli_accepts_open_pr_and_reports_config_error(
     assert workspace.commands() == []
 
 
+def test_open_pr_without_a_body_file_is_refused_before_the_create(
+    workspace: Workspace,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(conventions, "configure_from_args", keep_settings)
+    # The list answers with no rows, so the mode reaches the create it refuses.
+    workspace.answer(list=[])
+    monkeypatch.setattr(
+        sys, "argv", ["gitsync", "--mode", "open-pr", "--branch", BRANCH]
+    )
+
+    assert main.main() == 2
+
+    refused = json.loads(capsys.readouterr().out)
+    assert refused["state"] == "CONFIG_ERROR"
+    assert "--body-file" in refused["error"]
+    creates = [call for call in workspace.commands() if call[:2] == ["pr", "create"]]
+    assert creates == []
+
+
 def test_a_create_the_cli_cannot_confirm_exits_one(
     workspace: Workspace,
+    body_file: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     monkeypatch.setattr(conventions, "configure_from_args", keep_settings)
     workspace.answer(list=[], create="")
     monkeypatch.setattr(
-        sys, "argv", ["gitsync", "--mode", "open-pr", "--branch", BRANCH]
+        sys,
+        "argv",
+        [
+            "gitsync",
+            "--mode",
+            "open-pr",
+            "--branch",
+            BRANCH,
+            "--body-file",
+            str(body_file),
+        ],
     )
 
     assert main.main() == 1
@@ -95,6 +138,7 @@ def test_a_create_the_cli_cannot_confirm_exits_one(
 
 def test_open_pr_honours_repo_and_names_that_checkout(
     workspace: Workspace,
+    body_file: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
@@ -129,7 +173,17 @@ def test_open_pr_honours_repo_and_names_that_checkout(
     monkeypatch.setattr(
         sys,
         "argv",
-        ["gitsync", "--mode", "open-pr", "--repo", str(other), "--branch", BRANCH],
+        [
+            "gitsync",
+            "--mode",
+            "open-pr",
+            "--repo",
+            str(other),
+            "--branch",
+            BRANCH,
+            "--body-file",
+            str(body_file),
+        ],
     )
     assert main.main() == 0
     out = json.loads(capsys.readouterr().out)
@@ -138,14 +192,26 @@ def test_open_pr_honours_repo_and_names_that_checkout(
 
 
 def test_blocked_exits_one(
-    workspace: Workspace, monkeypatch: pytest.MonkeyPatch
+    workspace: Workspace,
+    body_file: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     workspace.answer(
         list=[{"number": 9, "state": "MERGED", "isDraft": False, "url": "u/9"}]
     )
     monkeypatch.setattr(conventions, "configure_from_args", keep_settings)
     monkeypatch.setattr(
-        sys, "argv", ["gitsync", "--mode", "open-pr", "--branch", BRANCH]
+        sys,
+        "argv",
+        [
+            "gitsync",
+            "--mode",
+            "open-pr",
+            "--branch",
+            BRANCH,
+            "--body-file",
+            str(body_file),
+        ],
     )
 
     assert main.main() == 1
@@ -179,12 +245,12 @@ def _create_call(workspace: Workspace) -> list[str]:
 
 
 def test_an_explicit_base_is_used_and_nothing_is_asked_for_one(
-    workspace: Workspace,
+    workspace: Workspace, body_file: Path
 ) -> None:
     """`--base` wins over every other source, so it is the way out of a stop."""
     workspace.answer(list=[], create=URL, reread=[CREATED])
 
-    out = mode_open_pr(workspace.root, branch=BRANCH, base="trunk")
+    out = mode_open_pr(workspace.root, branch=BRANCH, body_file=body_file, base="trunk")
 
     assert out["ok"] is True, out
     create = _create_call(workspace)
@@ -200,7 +266,7 @@ def test_an_explicit_base_is_used_and_nothing_is_asked_for_one(
 
 
 def test_the_base_falls_back_to_gh_when_the_checkout_cannot_name_one(
-    workspace: Workspace,
+    workspace: Workspace, body_file: Path
 ) -> None:
     """The checkout here has no master and no origin/HEAD, which is the fault.
 
@@ -215,7 +281,7 @@ def test_the_base_falls_back_to_gh_when_the_checkout_cannot_name_one(
         repo_view={"defaultBranchRef": {"name": "release"}},
     )
 
-    out = mode_open_pr(workspace.root, branch=BRANCH)
+    out = mode_open_pr(workspace.root, branch=BRANCH, body_file=body_file)
 
     assert out["ok"] is True, out
     create = _create_call(workspace)
@@ -223,13 +289,13 @@ def test_the_base_falls_back_to_gh_when_the_checkout_cannot_name_one(
 
 
 def test_a_base_no_source_can_name_blocks_and_names_the_flag(
-    workspace: Workspace,
+    workspace: Workspace, body_file: Path
 ) -> None:
     """A guess here is a bare gh exit on a real host, so the mode refuses first."""
     workspace.answer(list=[], create=URL, reread=[CREATED], repo_view_exit=1)
 
     with pytest.raises(ConfigError) as refused:
-        mode_open_pr(workspace.root, branch=BRANCH)
+        mode_open_pr(workspace.root, branch=BRANCH, body_file=body_file)
 
     assert "--base" in str(refused.value)
     assert BRANCH not in str(refused.value)

@@ -4,6 +4,8 @@ Notable changes to this project are documented here. The format follows [Keep a 
 
 ## [Unreleased]
 
+- `gitsync --mode open-pr` refuses to create a draft pull request without `--body-file`, so a draft is never opened with an empty body that could be published before a later pass filled it; reusing an open pull request needs no body file, and the title still defaults to the branch name. ([#167](https://github.com/agentmemoir/argus/issues/167))
+
 - `python -m argus.board.reservations scan` reports each phase whose run directory holds `run.json`, `resume.json`, or a `session-*.log` but whose claim is missing, expired, held by another machine, or terminal. It is a read-only board read that writes nothing, takes optional `--phase` and `--machine-id`, and exits 2 when the board is unreadable.
 
 - `--session` runs one phase only under a live claim, or not at all. A pane a tick opened has the fence it was given verified against the board before the work starts; a session started by hand resolves the phase's declared group and claims it, or reserves the phase alone, and refuses with one actionable line on a conflict, a cooldown, a stale fence, or an unreachable board. The run is written to the claim file, so `--release`, `--stop`, `abandon`, and `--resume` read it unchanged, and the claim is marked `running` immediately before the launch. An empty machine id is refused. ([#163](https://github.com/agentmemoir/argus/issues/163))
