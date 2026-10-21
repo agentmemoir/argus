@@ -72,6 +72,39 @@ def _init_remote(tmp: Path, name: str) -> tuple[Path, Path]:
     return remote, work
 
 
+def _reserve_phase(
+    pub: str | Path,
+    phase: int,
+    machine_id: str = "server-01",
+    sync: str | Path | None = None,
+) -> dict[str, Any]:
+    """Claim ``phase`` on the board and write the run state's reservation file.
+
+    Every write path now reads ``runs/<phase>/reservation.json`` and asks the
+    board whether this machine still owns the phase before its first write, so
+    a fixture that drives one of those paths without a claim exercises the
+    refusal instead of the work. The claim is made here through the same store
+    and the same file the engine's own ``record_claim`` writes, rather than by
+    any test-only exemption: the fence under test is the production one.
+
+    ``sync`` names the board checkout to fast-forward onto the commit the claim
+    just pushed. A claim is a push to the board branch, so a fixture that goes
+    on to commit there would otherwise be one commit behind its remote and have
+    its own push rejected.
+    """
+    from argus.board.reservations import ReservationStore, save_reservation_file
+
+    store: Any = ReservationStore(pub, branch="main")
+    reservation = cast("dict[str, Any]", store.reserve(phase, machine_id))
+    run_dir = conventions.phase_run_dir(pub, phase)
+    run_dir.mkdir(parents=True, exist_ok=True)
+    save_reservation_file(run_dir / "reservation.json", reservation)
+    if sync is not None:
+        git(sync, "fetch", "-q", "origin")
+        git(sync, "merge", "-q", "--ff-only", "origin/main")
+    return reservation
+
+
 def _remote_commit(remote: Path, tmp: Path, name: str, content: str = "two\n") -> None:
     """Push one commit to the remote from a throwaway clone."""
     other = tmp / f"other-{name}"
@@ -266,5 +299,6 @@ __all__ = [
     "_init_remote",
     "_local_commit",
     "_remote_commit",
+    "_reserve_phase",
     "_write_group_phases",
 ]

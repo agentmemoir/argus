@@ -14,25 +14,42 @@
 
 stop() {
   mkdir -p "$RUN_DIR"
+  # The lock first, then the ownership proof, and only then a write. The halt
+  # marker used to go first so a stop stopped the line even when the lock was
+  # busy; that ordering let any machine write the marker and the manual-stop
+  # hold, including one whose claim expired or was taken over. The proof is
+  # therefore read before either file exists: a bad, empty, unreadable, or
+  # mismatched fence writes neither one and refuses.
+  driver_lock_wait || log "stop: the driver lock is held by a running tick; proving the fence anyway"
+  if ! claim_read_fields "$CLAIM" || [ -z "$CLAIM_NUMBER" ] \
+      || [ -z "$CLAIM_ID" ] || [ -z "$CLAIM_GEN" ]; then
+    log "stop: no readable claim fence; refusing to stop and writing no halt marker (see $CLAIM)"
+    exec 9>&- || true
+    return 1
+  fi
+  # The board is the authority for who may stop this run: a claim file alone
+  # proves nothing, because an expired, released, or taken-over reservation
+  # still reads live to the machine that held it once. A board that cannot
+  # answer fails closed, so nothing is written and the operator retries.
+  if ! board_assert_owner "$CLAIM_NUMBER" "$CLAIM_ID" "$CLAIM_GEN"; then
+    log "stop: the board does not confirm the fence for ${work_kind:-phase} $CLAIM_NUMBER; refusing to stop and writing no halt marker (see $RUN_DIR/assert-owner-$CLAIM_NUMBER.json)"
+    exec 9>&- || true
+    return 1
+  fi
   printf 'stopped by operator at %s\n' "$(ts)" >"$HALT"
-  # The halt goes first, so the stop stops the line even when the lock is busy;
-  # losing the lock leaves the halt marker doing its job.
-  driver_lock_wait || log "stop: the driver lock is held by a running tick; the halt marker still stops the line"
   local stopped_phase=""
   # A stale current file alone has no recoverable claim. Holding it would
   # strand an idle stop, because neither resume nor release could consume it.
-  if claim_read_fields "$CLAIM" && [ -n "$CLAIM_ID" ] && [ -n "$CLAIM_GEN" ]; then
-    stopped_phase="$CLAIM_NUMBER"
-    # The live window names the phase actually running; the claim file can be a
-    # stale record from an earlier run. Prefer the live phase when it is a
-    # number, so a resume targets what was stopped and not what was recorded.
-    local live_phase
-    live_phase="$(cat "$CURRENT" 2>/dev/null || true)"
-    case "$live_phase" in
-      ""|*[!0-9]*) ;;
-      *) stopped_phase="$live_phase" ;;
-    esac
-  fi
+  stopped_phase="$CLAIM_NUMBER"
+  # The live window names the phase actually running; the claim file can be a
+  # stale record from an earlier run. Prefer the live phase when it is a
+  # number, so a resume targets what was stopped and not what was recorded.
+  local live_phase
+  live_phase="$(cat "$CURRENT" 2>/dev/null || true)"
+  case "$live_phase" in
+    ""|*[!0-9]*) ;;
+    *) stopped_phase="$live_phase" ;;
+  esac
   [ -z "$stopped_phase" ] || printf '%s\n' "$stopped_phase" >"$RUN_DIR/stopped-claim"
   # Ctrl-C must reach the phase window. Targeting the session would send it to
   # whichever window is current, which may be the idle status display.
@@ -117,9 +134,14 @@ release() {
   # failure is logged, never a halt. gitsync_clean lands the private run state;
   # the checkpoint lands the public checkout's unfinished work on the branch the
   # next owner resumes from, which is the handoff the requirement promises.
+  local checkpoint_args=(--mode checkpoint)
+  # The phase is named so the checkpoint re-proves the same fence the release
+  # just read, immediately before it stages and pushes. The handoff is the one
+  # write that must never land under a claim this machine no longer holds.
+  [ -z "$number" ] || checkpoint_args+=(--phase "$number")
   "$PYTHON" "$ARGUS/gitsync/main.py" "${ARGUS_CONFIG_ARGS[@]}" --root "$REPO" \
     "${GITSYNC_KIND_ARGS[@]+"${GITSYNC_KIND_ARGS[@]}"}" \
-    --mode checkpoint >"$RUN_DIR/release-checkpoint.json" 2>/dev/null \
+    "${checkpoint_args[@]}" >"$RUN_DIR/release-checkpoint.json" 2>/dev/null \
     || log "release: could not push the work in progress; the next owner starts from what is already on the branch (see $RUN_DIR/release-checkpoint.json)"
   [ -z "$number" ] || gitsync_clean "$number"
   # The operator asked to release, so the local manual-stop hold goes whatever

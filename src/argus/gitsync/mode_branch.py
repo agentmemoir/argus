@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from argus.gitsync.branch import branch_phase_checkouts
+from argus.gitsync.fence import phase_fence
 from argus.gitsync.git import git, integration_branch, summarize
 from argus.gitsync.paths import (
     assert_group_branch_unique,
@@ -37,9 +38,17 @@ def mode_branch(
     derive a name from, so its branch is derived from its lowest member and
     checked for collisions like any other branch name.
 
+    The board fence is read before either checkout is touched. A branch cut for
+    a phase this machine no longer owns would put the next phase's commits on
+    another owner's branch, and the collision scan below cannot see that: it
+    reads the phases folder, not the board.
+
     Returns the mode's result dict.
     """
     root = Path(root).resolve()
+    refusal = phase_fence(root, phase, "branch")
+    if refusal is not None:
+        return refusal
     # The branch no longer carries the phase number, so the behaviour is the
     # only thing separating two phases' branches. A duplicate is refused here,
     # before either checkout is touched.

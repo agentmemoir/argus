@@ -9,7 +9,12 @@ from argus.gitsync.branch import ensure_phase_branch
 from argus.gitsync.git import ConfigError, current_branch, git
 from argus.gitsync.mode_branch import mode_branch
 from argus.gitsync.paths import assert_phase_branch_unique, phase_branch_for
-from argus.gitsync.selftest_fixture import BOARD_REL, _configure_self_test, _init_remote
+from argus.gitsync.selftest_fixture import (
+    BOARD_REL,
+    _configure_self_test,
+    _init_remote,
+    _reserve_phase,
+)
 
 
 def _phase_branch_checks(base: Path) -> list[tuple[str, object, str]]:
@@ -232,12 +237,19 @@ def _phase_branch_name_checks(base: Path) -> list[tuple[str, object, str]]:
     # The folder the phases were chosen from is the folder that has to be
     # scanned. Reading the derived one instead would leave a collision inside a
     # configured folder unseen, which is the exact failure this check refuses.
-    named = base / "branch-name-named"
+    named = _init_remote(base, "branch-name-named")[1]
+    # The mode reads the board fence before it touches either checkout, so the
+    # fixture needs a board that can answer and a real claim for the phase, not
+    # only a folder of phase files. Without them the mode would return the
+    # fence refusal and never reach the collision warning this check is about.
+    _, named_board = _init_remote(named, "board")
+    _configure_self_test(named, named_board, phases=Path(BOARD_REL) / "phases")
     (named / BOARD_REL / "phases").mkdir(parents=True)
     elsewhere = named / "other-phases"
     elsewhere.mkdir()
     (elsewhere / name).write_text("x\n")
     (elsewhere / clash_name).write_text("x\n")
+    _reserve_phase(named, 100440)
     same_name_only_in_derived: dict[str, Any] = assert_phase_branch_unique(
         named, 100440, name, elsewhere
     )

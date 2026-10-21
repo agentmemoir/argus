@@ -230,7 +230,7 @@ _drive_cut_branch() {
     # the step is idempotent, and each place covers a case the other does not.
     # A tidy that cannot preserve its work is the narrow lost-work stop. A
     # preserved, degraded, or clean tidy returns 0 and the launch continues.
-    tidy_published_checkout || { _DRIVE_RC=1; return 0; }
+    tidy_published_checkout "$number" || { _DRIVE_RC=1; return 0; }
     # The exit code is captured by running the command and reading $? straight
     # after. Putting it behind `if ! cmd; then rc=$?` cannot work: the `!`
     # resets $? to 0 before the body runs, so the guard below saw success even

@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from argus.conventions import board_repo, runs_dir
+from argus.gitsync.fence import phase_fence
 from argus.gitsync.git import is_git_repo, summarize
 from argus.gitsync.group_publication import (
     _group_all_published,
@@ -240,9 +241,23 @@ def mode_published(root: str | Path, phase: int | str) -> dict[str, Any]:
     }
 
 
-def mode_tidy(root: str | Path) -> dict[str, Any]:
-    """Return a checkout sitting on a published phase branch to master."""
+def mode_tidy(root: str | Path, phase: int | str | None = None) -> dict[str, Any]:
+    """Return a checkout sitting on a published phase branch to master.
+
+    ``phase`` is optional because tidy has two callers. The pre-selection call
+    in ``lib-driver-select.sh`` runs before a phase is selected, so it has no
+    phase to name and stays unfenced; it is read-only checking in the sense that
+    matters, because it refuses a dirty tree rather than moving a checkout that
+    would lose work. The call from ``_drive_cut_branch`` knows the phase and
+    passes it, and then the board fence is read before either checkout moves: a
+    phase branch this machine no longer owns must not be cut away under an owner
+    that still needs it.
+    """
     root = Path(root).resolve()
+    if phase is not None:
+        refusal = phase_fence(root, phase, "tidy")
+        if refusal is not None:
+            return refusal
     repos: list[dict[str, Any]] = [tidy_published_checkout(root)]
     nested = board_repo(root)
     if nested is not None and is_git_repo(nested):

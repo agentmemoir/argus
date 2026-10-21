@@ -14,7 +14,7 @@ from argus.gitsync.paths import phase_branch_for
 from argus.gitsync.publish_phase import publish_phase
 from argus.gitsync.receipts import _head_carried_locally, phase_receipt
 from argus.gitsync.review import open_predecessor
-from argus.gitsync.selftest_fixture import _gh_says, _StubGH
+from argus.gitsync.selftest_fixture import _gh_says, _reserve_phase, _StubGH
 from argus.gitsync.selftest_publish import _publish_fixture
 from argus.gitsync.selftest_tree_proof import _tree_proof_checks as _tree_proof_checks
 
@@ -48,12 +48,9 @@ def _stale_receipt_checks(base: Path) -> list[tuple[str, object, str]]:
     old_branch = conventions.setting("board.branch")
     conventions.override({"board.branch": "main"})
     try:
-        from argus.board.reservations import ReservationStore, save_reservation_file
-
         # The fixture takes 100484 for its own coordination board, so the two
         # phases under test are 100485 and 100486.
         pub, nested, _run = _publish_fixture(base, "stale-receipt", 100484)
-        store: Any = ReservationStore(pub, branch="main")
         base_branch: str = integration_branch(pub)
         first = phase_branch_for(100485, "phase-100485-stale-receipt.md")
         second = phase_branch_for(100486, "phase-100486-after-stale.md")
@@ -67,16 +64,16 @@ def _stale_receipt_checks(base: Path) -> list[tuple[str, object, str]]:
 
         # Phase one runs to completion and publishes. The run finishing is what
         # makes the selector treat it as done, so this is the state that has to
-        # be built before the merge, not after.
+        # be built before the merge, not after. --mode branch proves the board
+        # fence before the cut, so the phase is really claimed first, exactly as
+        # the runner claims it, and the claim is on the branch before the run
+        # state that follows is pushed on top of it.
+        _reserve_phase(pub, 100485, sync=nested)
         mode_branch(pub, 100485, "phase-100485-stale-receipt.md")
         (pub / "first.txt").write_text("phase one\n")
         git(pub, "add", "first.txt")
         git(pub, "commit", "-q", "-m", "phase 100485: the first change")
         rd = nested / "runs" / "phase-100485"
-        rd.mkdir(parents=True, exist_ok=True)
-        save_reservation_file(
-            rd / "reservation.json", store.reserve(100485, "server-01")
-        )
         (rd / "run.json").write_text('{"state":"completed"}\n')
         git(nested, "add", "-A")
         git(nested, "commit", "-q", "-m", "run state 100485")
@@ -166,6 +163,9 @@ def _stale_receipt_checks(base: Path) -> list[tuple[str, object, str]]:
                 f"predecessor={open_predecessor(pub, 100486)}",
             )
         )
+        # --mode branch proves the board fence before the cut, so the next phase
+        # carries a real claim on this fixture's own board before it is launched.
+        _reserve_phase(pub, 100486, sync=nested)
         two: dict[str, Any] = mode_branch(pub, 100486, "phase-100486-after-stale.md")
         results.append(
             (
@@ -198,20 +198,16 @@ def _stale_receipt_checks(base: Path) -> list[tuple[str, object, str]]:
         git(nested3, "add", "-A")
         git(nested3, "commit", "-q", "-m", "phases")
         git(nested3, "push", "-q", "origin", integration_branch(nested3))
+        # --mode branch proves the board fence before the cut, so this fixture's
+        # phase is claimed on this fixture's own board first. The store built for
+        # the first fixture points at different checkouts, which is why the claim
+        # goes through the shared helper rather than that store.
+        _reserve_phase(pub3, 100613, sync=nested3)
         mode_branch(pub3, 100613, "phase-100613-stale-no-gh.md")
         (pub3 / "landed.txt").write_text("already on master\n")
         git(pub3, "add", "landed.txt")
         git(pub3, "commit", "-q", "-m", "phase 100613: the change")
         rd3 = nested3 / "runs" / "phase-100613"
-        rd3.mkdir(parents=True, exist_ok=True)
-        # This fixture has its own remotes, so it needs its own board. The store
-        # built for the first fixture points at different checkouts, and a
-        # reservation written through it lands nowhere this phase can publish
-        # from — which shows up as a publish that silently writes no receipt.
-        store3: Any = ReservationStore(pub3, branch="main")
-        save_reservation_file(
-            rd3 / "reservation.json", store3.reserve(100613, "server-01")
-        )
         (rd3 / "run.json").write_text('{"state":"completed"}\n')
         git(nested3, "add", "-A")
         git(nested3, "commit", "-q", "-m", "run state 100613")
@@ -251,6 +247,8 @@ def _stale_receipt_checks(base: Path) -> list[tuple[str, object, str]]:
                 f"predecessor={open_predecessor(pub3, 100614)}",
             )
         )
+        # The launch is fenced too, so the last phase is claimed before the cut.
+        _reserve_phase(pub3, 100614, sync=nested3)
         three: dict[str, Any] = mode_branch(pub3, 100614, "phase-100614-after-no-gh.md")
         results.append(
             (

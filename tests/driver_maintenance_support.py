@@ -39,6 +39,9 @@ tmux_phase_window_alive() { return 1; }
 tmux_session_exists() { return 1; }
 tmux_set_title() { :; }
 claim_renew() { :; }
+# The shell harness has no board. A test that asserts a fence refusal overrides
+# this with its own stub; every other stop in these cases is an owned one.
+board_assert_owner() { return 0; }
 prune() { :; }
 repair_due() { return 1; }
 work_preflight() { return 0; }

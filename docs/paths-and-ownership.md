@@ -21,6 +21,32 @@ git push origin refs/heads/BOARD--argus-backup:refs/heads/BOARD
 
 Verify the restored board reads as initialized: run the board reader (`python -m argus.board.reservations show`) and confirm it prints the coordination state. A board whose state file was lost instead fails with `coordination state file was deleted from an initialized board`.
 
+## Write Paths And Their Fence
+
+Every path that writes reads the board fence before its first write, and a fence that does not hold writes nothing. The fence is the phase's own `reservation.json` (`machine_id`, `reservation_id`, `generation`) proved with `ReservationStore.assert_owner` through one helper, `argus.gitsync.fence.phase_fence`; the answer is `FENCED` when the board says this machine, reservation, or generation is not the owner, and `COORDINATION_UNAVAILABLE` when the reservation cannot be read or the board cannot answer. Both are refusals: the command exits non-zero and the file, the ref, and the board are exactly as they were.
+
+| Path | First write | Reads the board today | Exemption or refusal rule |
+|---|---|---|---|
+| `gitsync --mode published` | the phase receipt | yes, before the write | Fenced. `FENCED` or `COORDINATION_UNAVAILABLE`, exit 2 or 1, no receipt |
+| `--release` | the checkpoint push | yes, before the interrupt and the push | Fenced. A missing, incomplete, or mismatched claim refuses; no checkpoint, no release |
+| `abandon` | `abandoned.json` residue | yes, before the residue | Fenced. A foreign fence leaves the claim intact and writes no residue |
+| `record_claim` | the claim file | yes, before the claim | Fenced. A pair the board does not confirm writes no claim |
+| `--stop` | `$HALT`, then `stopped-claim` | yes, before both files | Fenced. A bad, empty, unreadable, or mismatched fence writes neither file and exits 1 |
+| `gitsync --mode tidy --phase N` | the checkout move | yes, before either checkout moves | Fenced when a phase is named |
+| `gitsync --mode tidy` (pre-sync) | the checkout move | no | Exempt: it runs before a phase is selected, so there is no phase to name. It still refuses a dirty tree, so it never moves a checkout that would lose work |
+| `gitsync --mode clean --phase N` | the run-state commit and push | yes, before the commit | Fenced. `FENCED` writes no commit and pushes nothing |
+| `gitsync --mode clean` (whole sweep) | each planned phase's run-state commit | yes, per planned phase | Fenced per phase. A terminal receipt is exempt; a phase whose fence does not hold is skipped and named, and the sweep continues |
+| `gitsync --mode checkpoint --phase N` | the commit and push | yes, before the stage | Fenced when a phase is named; `release`, its only production caller, always names one |
+| `gitsync --mode branch` | the branch cut | yes, before either checkout is touched | Fenced. A refusal creates no branch and leaves both refs where they were |
+
+`--mode published`, `--release`, `abandon`, and `record_claim` were already fenced; `--stop`, `--mode tidy` with a phase, `--mode clean` (one phase and the whole sweep), `--mode checkpoint` with a phase, and `--mode branch` are fenced as of the same change.
+
+The whole-tree `--mode clean` sweep has no single owner, so it proves the fence per planned phase rather than refusing the sweep. A phase whose receipt reads `published` is exempt by construction: its run is recorded as finished, nothing the sweep lands can change that verdict, and a released claim is the ordinary end state. Every other phase must prove the fence; one that cannot is skipped with its phase number and reason in the result's `skipped` array and the summary, and the other phases still land. A hard fail would strand post-merge run state that the next phase's publish then refuses on.
+
+The pre-selection `--mode tidy` call is the one write path with no phase, because it runs before a phase is selected. It stays unfenced and keeps its own guard: it refuses a dirty tree, a phase that is not published, and a missing integration branch, so it cannot move a checkout that would lose work. The call from the branch cut knows the phase and passes it, and that call is fenced.
+
+A stop with no provable fence writes neither the halt marker nor the manual-stop hold. That is deliberate: the marker is what holds the line, and a machine whose claim expired or was taken over must not write it. `kill-session` and a hand-written halt marker remain the operator's last resort when no fence holds.
+
 ## Reservation Groups
 
 A phase document may declare a reservation group: several phases one owner runs as one unit. The whole group is claimed in one board write under one reservation id, its members run one per tick on one branch, and one pull request covers them all, while each member keeps its own receipt under its own run directory.

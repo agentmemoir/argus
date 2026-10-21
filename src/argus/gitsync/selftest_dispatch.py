@@ -13,6 +13,7 @@ from argus.gitsync.modes import mode_published, mode_tidy
 from argus.gitsync.paths import phase_branch_for
 from argus.gitsync.publish_phase import publish_phase
 from argus.gitsync.receipts import phase_receipt
+from argus.gitsync.selftest_fixture import _reserve_phase
 from argus.gitsync.selftest_publish import _publish_fixture
 from argus.gitsync.sync import mode_resync
 from argus.gitsync.tidy import tidy_published_checkout
@@ -80,6 +81,9 @@ def _tidy_and_dispatch_checks(base: Path) -> list[tuple[str, object, str]]:
         # number, so the test asks for the same branch the mode will create
         # rather than naming one and hoping they agree.
         second = phase_branch_for(100457, "phase-100457-dispatch-next.md")
+        # --mode branch reads the board fence before the cut, so each phase this
+        # case launches is really claimed on the fixture's own board first.
+        _reserve_phase(pub2, 100457, sync=nested2)
         good = mode_branch(pub2, 100457, "phase-100457-dispatch-next")
         results.append(
             (
@@ -122,6 +126,7 @@ def _tidy_and_dispatch_checks(base: Path) -> list[tuple[str, object, str]]:
         git(pub2, "checkout", "-q", second)
         git(pub2, "branch", "-D", second)
         git(pub2, "checkout", "-q", "main")
+        _reserve_phase(pub2, 100458, sync=nested2)
         refusal = mode_branch(pub2, 100458, "phase-100458-dispatch-after.md")
         results.append(
             (

@@ -112,7 +112,15 @@ _drive --merge-check-only
 
 
 def test_idle_stop_does_not_hold_stale_current_file(tmp_path: Path) -> None:
-    shell(tmp_path, 'printf "100020\\n" >"$CURRENT"\nstop\nrm "$HALT"\n_drive\n')
+    # A current file with no claim proves nothing, so the stop refuses before it
+    # writes anything and the stale current file never becomes a hold.
+    output = shell(
+        tmp_path,
+        'printf "100020\\n" >"$CURRENT"\nrc=0; stop || rc=$?\n'
+        'printf "stop_rc=%s\\n" "$rc"\n_drive\n',
+    )
+    assert "stop_rc=1" in output
+    assert not (tmp_path / "halted").exists()
     assert not (tmp_path / "stopped-claim").exists()
     assert "SELECT" in (tmp_path / "events").read_text().splitlines()
 
@@ -173,6 +181,9 @@ def test_abandon_clears_manual_stop_after_group_release(
 . "$TEST_DRIVER/lib-driver-run.sh"
 . "$TEST_DRIVER/lib-driver-halt-record.sh"
 . "$TEST_DRIVER/lib-driver-abandon.sh"
+# The stub, so DRIVER_STUB_BOARD_FENCE below decides this case; the harness
+# stub would make the refused-fence half pass for the wrong reason.
+board_assert_owner() { [ "${DRIVER_STUB_BOARD_FENCE:-}" != fail ] || return 1; }
 python_transport() {
   case "$1" in
     */board/reservations.py) return 0 ;;

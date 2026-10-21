@@ -293,9 +293,9 @@ def main() -> int:
         elif args.mode == "resync":
             out = mode_resync(args.root)
         elif args.mode == "tidy":
-            out = mode_tidy(args.root)
+            out = mode_tidy(args.root, args.phase)
         elif args.mode == "checkpoint":
-            out = mode_checkpoint(args.root, args.paths)
+            out = mode_checkpoint(args.root, args.paths, args.phase)
         elif args.mode == "open-pr":
             # As with peek-ci below, this branch sits before the generic
             # --repo branch, so the flag is honoured here. Without it a caller
