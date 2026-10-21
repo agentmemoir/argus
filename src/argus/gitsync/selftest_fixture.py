@@ -77,6 +77,8 @@ def _reserve_phase(
     phase: int,
     machine_id: str = "server-01",
     sync: str | Path | None = None,
+    *,
+    branch: str = "main",
 ) -> dict[str, Any]:
     """Claim ``phase`` on the board and write the run state's reservation file.
 
@@ -91,10 +93,17 @@ def _reserve_phase(
     just pushed. A claim is a push to the board branch, so a fixture that goes
     on to commit there would otherwise be one commit behind its remote and have
     its own push rejected.
+
+    ``branch`` is the board's own branch, and it is a parameter rather than a
+    constant because a caller that reads the board through a configuration file
+    must claim on the branch that file names. A fixture claiming on ``main``
+    while its board is written on another branch leaves a reservation the
+    driver's own ``assert_owner`` cannot find, which reads exactly like a
+    foreign fence.
     """
     from argus.board.reservations import ReservationStore, save_reservation_file
 
-    store: Any = ReservationStore(pub, branch="main")
+    store: Any = ReservationStore(pub, branch=branch)
     reservation = cast("dict[str, Any]", store.reserve(phase, machine_id))
     run_dir = conventions.phase_run_dir(pub, phase)
     run_dir.mkdir(parents=True, exist_ok=True)

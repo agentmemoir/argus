@@ -302,3 +302,49 @@ def test_branch_fence_passes_when_the_fence_matches(
     root = _repo(tmp_path, monkeypatch)
     _claim(root, monkeypatch)
     assert phase_fence(root, PHASE, "branch") is None
+
+
+# --- the fixture claim the group-resume case was missing -------------------
+
+
+class _RecordingBoard(_Board):
+    """The fence board above, plus a claim that names the branch it wrote on."""
+
+    branches: list[str | None] = []
+
+    def __init__(self, *_a: object, branch: str | None = None, **_k: object) -> None:
+        self.branches.append(branch)
+
+    def reserve(self, phase: int, machine_id: str) -> dict[str, object]:
+        return {
+            "phase": f"{int(phase):06d}",
+            "machine_id": machine_id,
+            "reservation_id": "rsv-fixture",
+            "generation": 2,
+        }
+
+
+def test_reserve_phase_writes_the_reservation_the_branch_fence_reads(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A claimed phase passes the fence; the same phase with no file refuses.
+
+    The group-resume case cut the group's branch with no claim behind it, so the
+    fence refused with COORDINATION_UNAVAILABLE and every later check failed on
+    a branch that was never cut.
+    """
+    from argus.gitsync.selftest_fixture import _reserve_phase
+
+    root = _repo(tmp_path, monkeypatch)
+    _RecordingBoard.branches = []
+    monkeypatch.setattr("argus.board.reservations.ReservationStore", _RecordingBoard)
+    _reserve_phase(root, 100030, machine_id="argus-selftest", branch="fixture-claims")
+
+    written = _run(root, 100030) / "reservation.json"
+    assert json.loads(written.read_text())["reservation_id"] == "rsv-fixture"
+    assert _RecordingBoard.branches == ["fixture-claims"]
+    assert phase_fence(root, 100030, "branch") is None
+    written.unlink()
+    refused = phase_fence(root, 100030, "branch") or {}
+    assert refused.get("state") == "COORDINATION_UNAVAILABLE"
+    assert refused.get("phase") == "100030"
