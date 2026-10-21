@@ -5,7 +5,7 @@
 import json
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from argus.conventions import phase_run_dir
 from argus.gitsync.gh import gh_mark_pull_request_ready, gh_pull_request_open
@@ -141,7 +141,10 @@ def mark_group_pull_request_ready(
             recorded = json.loads(marker.read_text())
         except (OSError, ValueError):
             recorded = None
-        if isinstance(recorded, dict) and recorded.get("pull_request") == pull_request:
+        if (
+            isinstance(recorded, dict)
+            and cast("dict[str, Any]", recorded).get("pull_request") == pull_request
+        ):
             return {
                 "ok": True,
                 "phase": f"{int(phase):06d}",

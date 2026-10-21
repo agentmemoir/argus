@@ -181,7 +181,10 @@ def _group_publication_check(base: Path) -> tuple[bool, str]:
         # green: the transition is recorded in the result, and the ready-once
         # record stands, so a rerun of this phase never re-readies it.
         ready = second.get("pull_request_ready")
-        if not isinstance(ready, dict) or ready.get("ok") is not True:
+        if (
+            not isinstance(ready, dict)
+            or cast("dict[str, Any]", ready).get("ok") is not True
+        ):
             return False, f"the shared pull request was not made ready: {ready}"
         receipts = {
             number: cast("dict[str, Any]", phase_receipt(pub, number))
