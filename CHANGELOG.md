@@ -4,7 +4,7 @@ Notable changes to this project are documented here. The format follows [Keep a 
 
 ## [Unreleased]
 
-- `gitsync --mode open-pr` refuses with a `CONFIG_ERROR` naming `--body-file` when no body file is given, so a draft pull request is never opened with an empty body, which could be published before a later pass filled it; the title still defaults to the branch name. ([#167](https://github.com/agentmemoir/argus/issues/167))
+- `gitsync --mode open-pr` refuses to create a draft pull request without `--body-file`, so a draft is never opened with an empty body that could be published before a later pass filled it; reusing an open pull request needs no body file, and the title still defaults to the branch name. ([#167](https://github.com/agentmemoir/argus/issues/167))
 
 - `python -m argus.board.reservations scan` reports each phase whose run directory holds `run.json`, `resume.json`, or a `session-*.log` but whose claim is missing, expired, held by another machine, or terminal. It is a read-only board read that writes nothing, takes optional `--phase` and `--machine-id`, and exits 2 when the board is unreadable.
 

@@ -98,7 +98,7 @@ def test_a_blank_body_file_is_refused_before_gh(workspace: Workspace) -> None:
     assert _creates(workspace) == []
 
 
-def test_no_body_file_is_refused_before_gh(workspace: Workspace) -> None:
+def test_no_body_file_is_refused_before_the_create(workspace: Workspace) -> None:
     with pytest.raises(ConfigError) as refused:
         mode_open_pr(workspace.root, branch=BRANCH)
 

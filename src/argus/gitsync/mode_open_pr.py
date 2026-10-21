@@ -2,8 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """One draft pull request for a branch: create it, or reuse the one that exists.
 
-A phase pipeline asks for this mode with no arguments but the branch it already
-knows, so every default here must work with no extra flags.
+A phase pipeline asks for this mode with no arguments but the branch it already knows, so every default here must work with no extra flags: reusing an open pull request takes no body file, and only a create needs ``--body-file``.
 
 Three outcomes, and the mode keeps them apart:
 
@@ -196,7 +195,7 @@ def mode_open_pr(
 ) -> dict[str, Any]:
     """Open a draft pull request for a branch, or reuse the one that exists.
 
-    The title defaults to the branch name, and the body has no default because ``--body-file`` is required: a draft opened with an empty body can be published before a later pass fills it. ``title_file`` and ``body_file`` let a caller supply its own text, and a file that is missing or empty is refused rather than quietly replaced by the default.
+    The title defaults to the branch name. ``--body-file`` is required only when a draft has to be created: a draft opened with an empty body can be published before a later pass fills it, and a reused pull request is never written to, so the reuse path needs no body file. ``title_file`` and ``body_file`` let a caller supply its own text, and a file that is missing or empty is refused rather than quietly replaced by the default.
 
     ``base`` names the branch to open into. When it is not given, the base is
     resolved from the checkout and then from gh, and a base neither can name is
@@ -216,11 +215,6 @@ def mode_open_pr(
         raise ConfigError(missing)
     title = text_from_file(title_file, "--title-file")
     body = text_from_file(body_file, "--body-file")
-    if body is None:
-        raise ConfigError(
-            "--body-file is required for --mode open-pr: a draft pull request is "
-            "never opened with an empty body; pass the pull request prose in a file"
-        )
     # A fork checkout asks about the wrong repository, and an unpushed branch
     # comes back from gh as a bare exit. Both are refused with a way out.
     for refusal in (fork_refusal(root), unpushed_refusal(root, branch_name)):
@@ -271,6 +265,12 @@ def mode_open_pr(
             reasons.append(unknown)
         return _blocked(branch_name, row, reasons)
 
+    # Only the create sends the body, so the refusal for a missing one sits here.
+    if body is None:
+        raise ConfigError(
+            "--body-file is required for --mode open-pr: a draft pull request is "
+            "never opened with an empty body; pass the pull request prose in a file"
+        )
     created, detail = gh_create_draft_pull_request(
         root,
         branch_name,

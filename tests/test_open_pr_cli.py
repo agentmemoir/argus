@@ -87,12 +87,14 @@ def test_the_cli_accepts_open_pr_and_reports_config_error(
     assert workspace.commands() == []
 
 
-def test_open_pr_without_a_body_file_exits_two_with_a_config_error(
+def test_open_pr_without_a_body_file_is_refused_before_the_create(
     workspace: Workspace,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     monkeypatch.setattr(conventions, "configure_from_args", keep_settings)
+    # The list answers with no rows, so the mode reaches the create it refuses.
+    workspace.answer(list=[])
     monkeypatch.setattr(
         sys, "argv", ["gitsync", "--mode", "open-pr", "--branch", BRANCH]
     )

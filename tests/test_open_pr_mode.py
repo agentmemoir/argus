@@ -152,6 +152,18 @@ def test_reuses_the_open_pull_request_and_creates_nothing(
     assert [call for call in workspace.commands() if call[:2] == ["pr", "create"]] == []
 
 
+def test_the_reuse_path_needs_no_body_file(workspace: Workspace) -> None:
+    workspace.answer(
+        list=[{"number": 7, "state": "OPEN", "isDraft": True, "url": "u/7"}]
+    )
+
+    out = mode_open_pr(workspace.root, branch=BRANCH)
+
+    assert out["ok"] is True, out
+    assert out["repos"][0]["action"] == "reused"
+    assert [call for call in workspace.commands() if call[:2] == ["pr", "create"]] == []
+
+
 @pytest.mark.parametrize("state", ["CLOSED", "MERGED"])
 def test_a_closed_or_merged_pull_request_blocks_a_duplicate(
     workspace: Workspace, body_file: Path, state: str
