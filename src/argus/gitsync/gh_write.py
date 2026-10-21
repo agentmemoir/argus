@@ -110,15 +110,14 @@ def gh_create_draft_pull_request(
     root: Path,
     branch: str,
     base: str,
+    body: str,
     title: str | None = None,
-    body: str | None = None,
 ) -> tuple[str | None, str]:
     """Create a draft pull request from ``branch`` into ``base``.
 
-    The title defaults to the branch name and the body to the empty string, so
-    a caller that passes neither gets exactly what this function always did.
-    Returns gh's own output, which is the new pull request's URL, or ``None``
-    and why gh could not create it.
+    The title defaults to the branch name and the body is required, so a caller
+    cannot open a draft with an empty one. Returns gh's own output, which is the
+    new pull request's URL, or ``None`` and why gh could not create it.
     """
     try:
         done = subprocess.run(
@@ -134,7 +133,7 @@ def gh_create_draft_pull_request(
                 "--title",
                 branch if title is None else title,
                 "--body",
-                "" if body is None else body,
+                body,
             ],
             cwd=root,
             capture_output=True,
