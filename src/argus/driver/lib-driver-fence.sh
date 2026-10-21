@@ -112,5 +112,28 @@ resume_fence_reserve() {   # <phase>
   return 0
 }
 
+# Verify the three-part fence against the board before a state write.
+#
+# The claim file alone proves nothing: an expired, released, or taken-over
+# reservation still looks live to a machine that held it once. The board is
+# the authority, and a board that cannot answer fails closed: the write is
+# refused rather than made on an unverified fence. Returns 0 only when the
+# board confirms the fence.
+board_assert_owner() {   # <phase> <reservation_id> <generation>
+  local phase="$1" reservation_id="$2" generation="$3"
+  [ -n "$reservation_id" ] && [ -n "$generation" ] || return 1
+  mkdir -p "$RUN_DIR"
+  case "${DRIVER_STUB_BOARD_FENCE:-}" in
+    fail) return 1 ;;
+    renew|reserve) return 0 ;;
+  esac
+  "$PYTHON" "$ARGUS/board/reservations.py" assert-owner \
+    "${ARGUS_CONFIG_ARGS[@]}" "${BOARD_KIND_ARGS[@]+"${BOARD_KIND_ARGS[@]}"}" \
+    --repo-root "$REPO" --machine-id "$PHASE_MACHINE_ID" \
+    --phase "$phase" --reservation-id "$reservation_id" \
+    --generation "$generation" \
+    >"$RUN_DIR/assert-owner-$phase.json" 2>&1
+}
+
 # The launch path for a phase number, in the repo-relative shape the selector
 # reports, so `--session N <file>` receives what it always receives.

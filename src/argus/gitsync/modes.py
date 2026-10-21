@@ -8,7 +8,11 @@ from typing import Any
 
 from argus.conventions import board_repo, runs_dir
 from argus.gitsync.git import is_git_repo, summarize
-from argus.gitsync.group_publication import _group_all_published, _member_published
+from argus.gitsync.group_publication import (
+    _group_all_published,
+    _load_phase_reservation,
+    _member_published,
+)
 from argus.gitsync.publish import mark_phase_published
 from argus.gitsync.receipts import phase_receipt
 from argus.gitsync.tidy import return_to_integration, tidy_published_checkout
@@ -23,7 +27,11 @@ def result_exit_code(out: dict[str, Any]) -> int:
 def mode_published(root: str | Path, phase: int | str) -> dict[str, Any]:
     """Confirm a human merged the phase, mark it published, and tidy up.
 
-    Order matters. The receipt is only written after the merge is verified, and
+    Order matters. The board fence is read before anything is written: a
+    machine whose claim expired, was released, or was taken over must not mark
+    the phase published, and a board that cannot answer fails closed, so the
+    write is refused and the next tick retries. The receipt is only written
+    after the merge is verified, and
     the checkout only moves after the receipt says the phase is done. Doing
     either first would let a phase look finished while its code is still
     unreviewed.
@@ -35,6 +43,35 @@ def mode_published(root: str | Path, phase: int | str) -> dict[str, Any]:
     removed it.
     """
     root = Path(root).resolve()
+    try:
+        from argus.board.reservations import ReservationFenced, ReservationStore
+    except Exception as exc:  # noqa: BLE001 - normalize boundary errors
+        return {
+            "ok": False,
+            "mode": "published",
+            "state": "COORDINATION_UNAVAILABLE",
+            "error": str(exc),
+            "phase": f"{int(phase):06d}",
+        }
+    try:
+        reservation = _load_phase_reservation(root, int(phase))
+        ReservationStore(root).assert_owner(reservation)
+    except ReservationFenced as exc:
+        return {
+            "ok": False,
+            "mode": "published",
+            "state": "FENCED",
+            "error": str(exc),
+            "phase": f"{int(phase):06d}",
+        }
+    except Exception as exc:  # noqa: BLE001 - fail closed, never write
+        return {
+            "ok": False,
+            "mode": "published",
+            "state": "COORDINATION_UNAVAILABLE",
+            "error": str(exc),
+            "phase": f"{int(phase):06d}",
+        }
     marked = mark_phase_published(root, phase)
     if marked.get("action") == "no-publish-evidence":
         # There is nothing to mark yet. The phase keeps waiting; the next tick

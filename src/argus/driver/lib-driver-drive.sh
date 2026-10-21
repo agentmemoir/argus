@@ -390,6 +390,17 @@ release() {
     IFS=$'\t' read -r claim_number reservation_id generation <"$CLAIM" || true
     [ -n "$claim_number" ] && number="${number:-$claim_number}"
   fi
+  # The board is the authority for who may push. A stale or foreign fence must
+  # not checkpoint another owner's branch, so the fence is proved before the
+  # first write, and an unconfirmed claim fails closed: nothing is interrupted,
+  # nothing is pushed, and the group is not released.
+  if [ -n "$reservation_id" ] && [ -n "$generation" ]; then
+    if ! board_assert_owner "$number" "$reservation_id" "$generation"; then
+      log "release: the board does not confirm the fence for ${work_kind:-phase} $number; no checkpoint, no release (see $RUN_DIR/assert-owner-$number.json)"
+      exec 9>&- || true
+      return 1
+    fi
+  fi
   # Written before the interrupt: the child's signal trap reads it and stops
   # without writing a halt marker. The parent removes it on every path.
   : >"$RELEASE"

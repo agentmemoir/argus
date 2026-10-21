@@ -91,6 +91,17 @@ abandon_cmd() {   # <number> [--reason TEXT]
       fence_id=""; fence_gen=""
     fi
   fi
+  # The residue is a state write, and the board is the authority: a fence the
+  # board does not confirm must not park a phase another machine is running.
+  # An unreachable board fails closed, so the residue is written only after
+  # the fence is proved.
+  if [ -n "$fence_id" ] && [ -n "$fence_gen" ]; then
+    if ! board_assert_owner "$number" "$fence_id" "$fence_gen"; then
+      printf 'argus abandon: the board does not confirm the fence for %s; not abandoning (see %s/assert-owner-%s.json)\n' \
+        "$number" "$RUN_DIR" "$number" >&2
+      exit 1
+    fi
+  fi
   # The rename is done in Python, not with `mv`, for the same reason the halt
   # record's is: the installed-command test declares the commands the driver may
   # use, and `mv` is not one of them.

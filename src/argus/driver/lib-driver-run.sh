@@ -51,6 +51,14 @@ record_claim() {
     rm -f "$CLAIM"
     return 0
   fi
+  # The board is the authority: a pair that names no live reservation this
+  # machine owns must not become the local fence, and a board that cannot
+  # answer fails closed. The claim file is written only on a confirmed fence.
+  if ! board_assert_owner "$number" "$reservation_id" "$generation"; then
+    printf 'argus: the board does not confirm the claim for phase %s; the fence is refused (see %s/assert-owner-%s.json)\n' \
+      "$number" "$RUN_DIR" "$number" >&2
+    return 1
+  fi
   # A hand-started --session writes the claim before run_session creates the
   # run directory, so the write makes the folder it needs. The tick path has
   # the folder already; mkdir -p answers both.
