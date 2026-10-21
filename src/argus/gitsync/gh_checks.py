@@ -25,6 +25,9 @@ def _check_rows(text: str) -> list[dict[str, Any]] | None:
         return None
     if not isinstance(parsed, list):
         return None
+    # An empty JSON list is a fact gh reported, not a fault: a pull request
+    # with no checks at all prints ``[]``. The caller refuses it, because zero
+    # rows is not ``all checks pass``, but it must reach the caller as ``[]``.
     rows: list[dict[str, Any]] = []
     for entry in cast("list[object]", parsed):
         if not isinstance(entry, dict):

@@ -121,8 +121,11 @@ def mark_group_pull_request_ready(
     pull request is recorded, or its URL cannot name a pull request to act on.
 
     The transition is gated on the pull request's checks: the ready is recorded
-    only when every check gh reports reads ``pass``, so a pull request that is
-    not yet mergeable stays draft. The ready-once record beside the receipt is
+    only when gh reports at least one check and every one reads ``pass``, so a
+    pull request that is not yet mergeable stays draft. An empty check report is
+    a refusal too: gh returning zero rows is not ``all checks pass``, so a pull
+    request with no reported checks stays draft until checks are reported. The
+    ready-once record beside the receipt is
     written on success and stands for every later run of this phase, so a human
     who re-drafts the pull request is never overridden.
 
@@ -150,9 +153,12 @@ def mark_group_pull_request_ready(
                 "skipped": True,
             }
     rows, code, detail = gh_pull_request_checks(Path(root), ref["number"])
+    # gh returning zero rows is not "all checks pass": an empty report names no
+    # passing check, so the pull request stays draft until checks are reported.
     if (
         rows is None
         or code != 0
+        or not rows
         or any(str(row.get("bucket") or "") != "pass" for row in rows)
     ):
         return {

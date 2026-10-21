@@ -241,6 +241,19 @@ def _pending_checks(pub: Path, results: list[tuple[str, object, str]]) -> None:
             f"marker exists={marker.exists()}",
         )
     )
+    # gh returning zero rows is not "all checks pass": an empty report names no
+    # passing check, so the ready is refused and the pull request stays draft.
+    with _StubGH({"returncode": 0, "stdout": "[]"}):
+        ready = mark_group_pull_request_ready(pub, 100030, [], url)
+    results.append(
+        (
+            "an empty check report is a refusal, not a pass",
+            isinstance(ready, dict)
+            and ready.get("ok") is False
+            and not marker.exists(),
+            f"ready={ready}",
+        )
+    )
     green = {
         "returncode": 0,
         "stdout": json.dumps(
