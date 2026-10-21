@@ -28,6 +28,7 @@ from argus.exec_tempdir import exec_tempdir
 from argus.gitsync.main import main
 from argus.gitsync.modes import mode_ready
 from argus.gitsync.selftest_publish import _publish_fixture
+from gh_mode_support import keep_settings
 
 PHASE = 100501
 SIBLING = 100500
@@ -260,7 +261,7 @@ def test_the_cli_runs_the_sweep_through_the_real_argument_parser(
     monkeypatch.setattr(sys, "argv", ["argus", "--root", str(pub), "--mode", "ready"])
     # This case is about the parser and the dispatch, not the config loader: the
     # fixture configured this process in memory and there is no file to read.
-    monkeypatch.setattr(conventions, "configure_from_args", lambda _args: None)
+    monkeypatch.setattr(conventions, "configure_from_args", keep_settings)
 
     code = main()
 
