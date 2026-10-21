@@ -84,30 +84,19 @@ def test_an_unreadable_reservation_fails_closed(tmp_path: Path) -> None:
     assert git(nested, "rev-parse", "HEAD")[1] == before
 
 
-def test_group_ready_record_covers_every_member(
+def test_group_ready_history_covers_every_member(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     ready_calls: list[tuple[object, ...]] = []
     check_calls: list[tuple[object, ...]] = []
-    persist_calls: list[bool] = []
-
-    def marker(root: str | Path, phase: int) -> Path:
-        return Path(root) / "runs" / f"phase-{phase:06d}" / "group-pr-ready.json"
 
     def checks(*args: object) -> tuple[list[dict[str, str]], int, str]:
         check_calls.append(args)
         return [{"bucket": "pass"}], 0, ""
 
     def ready(*args: object) -> tuple[bool, str]:
-        attempt = marker(tmp_path, 100455)
-        assert json.loads(attempt.read_text())["version"] == 2
-        assert persist_calls == [True]
         ready_calls.append(args)
         return True, "ready"
-
-    def persist_attempt() -> dict[str, object]:
-        persist_calls.append(marker(tmp_path, 100455).is_file())
-        return {"ok": True}
 
     def history(*_args: object) -> tuple[dict[str, object], str]:
         if ready_calls:
@@ -122,7 +111,6 @@ def test_group_ready_record_covers_every_member(
             "events": [],
         }, ""
 
-    monkeypatch.setattr(group_review, "_group_ready_marker", marker)
     monkeypatch.setattr(group_review, "gh_pull_request_checks", checks)
     monkeypatch.setattr(group_review, "gh_mark_pull_request_ready", ready)
     monkeypatch.setattr(group_review, "gh_pull_request_stage_history", history)
@@ -130,14 +118,14 @@ def test_group_ready_record_covers_every_member(
     pull_request = "https://github.com/example-org/example-repo/pull/7"
 
     first = group_review.mark_group_pull_request_ready(
-        tmp_path, 100455, members, [], pull_request, persist_attempt=persist_attempt
+        tmp_path, 100455, members, [], pull_request
     )
     sibling = group_review.mark_group_pull_request_ready(
-        tmp_path, 100454, members, [], pull_request, persist_attempt=persist_attempt
+        tmp_path, 100454, members, [], pull_request
     )
 
     assert first is not None and first["ok"] is True
     assert sibling is not None and sibling["skipped"] is True
     assert len(ready_calls) == 1
-    assert persist_calls == [True]
     assert len(check_calls) == 1
+    assert not (tmp_path / "runs").exists(), "the ready wrote a local record"

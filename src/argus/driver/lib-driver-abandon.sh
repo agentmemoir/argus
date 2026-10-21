@@ -39,8 +39,9 @@ os.replace(sys.argv[1], sys.argv[10])
 PY
 }
 
-# Park the phase, write the residue, release the board group, keep the run
-# directory. The marker is left alone, so the line still says it is stopped.
+# Release the board group, then park the phase by writing the residue, and keep
+# the run directory. The marker is left alone, so the line still says it is
+# stopped.
 # The fence helper is sourced here because abandon runs from the installed
 # command as well as the driver, where phase-driver.sh has not sourced it yet.
 # shellcheck source=lib-driver-fence.sh
@@ -111,12 +112,15 @@ abandon_cmd() {   # <number> [--reason TEXT]
       "$number" "$RUN_DIR" "$number" >&2
     exit 1
   fi
-  # The rename is done in Python, not with `mv`, for the same reason the halt
-  # record's is: the installed-command test declares the commands the driver may
-  # use, and `mv` is not one of them.
-  abandon_residue_write "$number" "$rel" "$run_dir" "$state" "$reason" \
-    "$fence_id" "$fence_gen"
-
+  # The release comes before the residue, and a release that fails stops here,
+  # so exactly one of two states is left behind: released and parked, or owned
+  # and unparked. The other order would park a phase the board still gives this
+  # machine, which is a phase no owner will run and no other machine may take.
+  # There is deliberately no compensating write: an unpark after a failed
+  # release can itself fail, and would leave exactly the state this order
+  # avoids. The rename is done in Python, not with `mv`, for the same reason the
+  # halt record's is: the installed-command test declares the commands the
+  # driver may use, and `mv` is not one of them.
   if [ -n "$fence_id" ] && [ -n "$fence_gen" ]; then
     case "${DRIVER_STUB_BOARD_FENCE:-}" in
       fail)
@@ -132,13 +136,16 @@ abandon_cmd() {   # <number> [--reason TEXT]
             --repo-root "$REPO" --machine-id "$PHASE_MACHINE_ID" \
             --reservation-id "$fence_id" --generation "$fence_gen" \
             >"$run_dir/release.json" 2>&1; then
-          printf 'argus abandon: could not release the board group for %s (see %s/release.json)\n' \
+          printf 'argus abandon: could not release the board group for %s; nothing was parked (see %s/release.json)\n' \
             "$number" "$run_dir" >&2
           exit 1
         fi
         rm -f "$CLAIM" ;;
     esac
   fi
+
+  abandon_residue_write "$number" "$rel" "$run_dir" "$state" "$reason" \
+    "$fence_id" "$fence_gen"
 
   if halt_record_read "$HALT_RECORD" && [ "$HALT_REC_PHASE" = "$number" ]; then
     rm -f "$HALT_RECORD"

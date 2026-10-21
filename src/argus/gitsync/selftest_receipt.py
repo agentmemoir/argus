@@ -201,8 +201,9 @@ def _group_publication_check(base: Path) -> tuple[bool, str]:
         if second.get("group_pending") != []:
             return False, f"the last member reported members left to run: {second}"
         # The last member readies the shared pull request once its checks are
-        # green: the transition is recorded in the result, and the ready-once
-        # record stands, so a rerun of this phase never re-readies it.
+        # green: the transition is recorded in the result, and GitHub's own
+        # ready event is the once-guard, so a rerun of this phase never
+        # re-readies it.
         ready = second.get("pull_request_ready")
         if (
             not isinstance(ready, dict)

@@ -17,7 +17,6 @@ from argus.gitsync.group_publication import (
 from argus.gitsync.group_review import _group_pending, mark_group_pull_request_ready
 from argus.gitsync.publish import mark_phase_published
 from argus.gitsync.receipts import _phase_run_entries, phase_receipt
-from argus.gitsync.runstate import commit_leftover_run_state
 from argus.gitsync.tidy import return_to_integration, tidy_published_checkout
 
 
@@ -65,12 +64,6 @@ def _ready_one(
             members,
             pending,
             pull_request,
-            persist_attempt=lambda: commit_leftover_run_state(
-                root,
-                "pipeline: record shared pull request ready attempt "
-                f"for phase {phase:06d}",
-                phase=phase,
-            ),
         )
     except Exception as exc:  # noqa: BLE001 - a ready fault must not stop the sweep
         return {
@@ -97,17 +90,13 @@ def mode_ready(root: str | Path) -> dict[str, Any]:
     retry, which only ran while a receipt said ``awaiting_review`` and so gave
     the checks one tick to finish.
 
-    It is a sweep, not a fence, and it writes no phase state. It never touches a
-    receipt, never changes the published or merge verdict, and never holds a
-    claim: the ready transition is guarded by GitHub's own ready/draft timeline,
-    which is what makes running it without a claim safe. Requiring a live claim
-    would mean the normal end state — the merge done, the claim released, the
-    receipt settled — is the one state in which the retry cannot run.
-
-    The only write is the existing ready-attempt record inside the phase's run
-    directory, committed with the same helper the publish step uses so the
-    checkout is left clean for the next phase. A record that cannot be committed
-    refuses that phase's ready for this tick and says so; the next tick retries.
+    It is a sweep, not a fence, and it writes nothing at all. It never touches a
+    receipt, never changes the published or merge verdict, never commits run
+    state, and never holds a claim: the ready transition is guarded by GitHub's
+    own ready/draft timeline, which is what makes running it without a claim
+    safe. Requiring a live claim would mean the normal end state — the merge
+    done, the claim released, the receipt settled — is the one state in which
+    the retry cannot run.
     """
     root = Path(root).resolve()
     results: list[dict[str, Any]] = []

@@ -23,8 +23,3 @@ def write_receipt(pub: Path, number: int, **fields: Any) -> None:
     (run_dir / "publication.json").write_text(
         json.dumps({"phase": f"{number:06d}", **fields}) + "\n"
     )
-
-
-def persist_ready_attempt() -> dict[str, bool]:
-    """Keep self-tests from crossing the real persistence boundary."""
-    return {"ok": True}

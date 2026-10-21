@@ -5,19 +5,21 @@
 import json
 import shutil
 from pathlib import Path
+from typing import Any
 
 from argus.gitsync.group_review import _group_pending, mark_group_pull_request_ready
+from argus.gitsync.modes import mode_ready
 from argus.gitsync.selftest_fixture import (
     BOARD_REL,
     _StubGH,
     gh_group_ready_responses,
 )
-from argus.gitsync.selftest_group_fixtures import (
-    persist_ready_attempt as _persist_ready_attempt,
-)
-from argus.gitsync.selftest_group_fixtures import (
-    write_receipt as _write_receipt,
-)
+from argus.gitsync.selftest_group_fixtures import write_receipt as _write_receipt
+
+
+def _ready_calls(calls: list[Any]) -> int:
+    """How many ``gh pr ready`` calls a stub recorded."""
+    return sum(1 for argv in calls if list(argv[1:3]) == ["pr", "ready"])
 
 
 def pending_checks(pub: Path, results: list[tuple[str, object, str]]) -> None:
@@ -47,54 +49,21 @@ def pending_checks(pub: Path, results: list[tuple[str, object, str]]) -> None:
     results.append(
         (
             "the ready transition does nothing while a member is still to run",
-            mark_group_pull_request_ready(
-                pub,
-                100030,
-                members,
-                pending,
-                url,
-                persist_attempt=_persist_ready_attempt,
-            )
-            is None,
+            mark_group_pull_request_ready(pub, 100030, members, pending, url) is None,
             f"pending={pending}",
         )
     )
     results.append(
         (
             "the ready transition does nothing without a pull request to act on",
-            mark_group_pull_request_ready(
-                pub,
-                100030,
-                members,
-                [],
-                None,
-                persist_attempt=_persist_ready_attempt,
-            )
-            is None
-            and mark_group_pull_request_ready(
-                pub,
-                100030,
-                members,
-                [],
-                "not a url",
-                persist_attempt=_persist_ready_attempt,
-            )
+            mark_group_pull_request_ready(pub, 100030, members, [], None) is None
+            and mark_group_pull_request_ready(pub, 100030, members, [], "not a url")
             is None,
             "no pull request, no action",
         )
     )
-    # The refusal check runs before any successful ready: once the ready-once
-    # record stands, the same pull request is skipped without asking gh, so a
-    # refusal after that record exists would never be seen.
     with _StubGH(gh_group_ready_responses({"returncode": 1})):
-        ready = mark_group_pull_request_ready(
-            pub,
-            100030,
-            members,
-            [],
-            url,
-            persist_attempt=_persist_ready_attempt,
-        )
+        ready = mark_group_pull_request_ready(pub, 100030, members, [], url)
     results.append(
         (
             "a refused ready transition is reported as not ok",
@@ -104,31 +73,14 @@ def pending_checks(pub: Path, results: list[tuple[str, object, str]]) -> None:
             f"ready={ready}",
         )
     )
-    marker = pub / BOARD_REL / "runs" / "phase-100030" / "group-pr-ready.json"
-    results.append(
-        (
-            "a refused ready writes no ready-once record",
-            not marker.exists(),
-            f"marker exists={marker.exists()}",
-        )
-    )
     # gh returning zero rows is not "all checks pass": an empty report names no
     # passing check, so the ready is refused and the pull request stays draft.
     with _StubGH(gh_group_ready_responses({"returncode": 0, "stdout": "[]"})):
-        ready = mark_group_pull_request_ready(
-            pub,
-            100030,
-            members,
-            [],
-            url,
-            persist_attempt=_persist_ready_attempt,
-        )
+        ready = mark_group_pull_request_ready(pub, 100030, members, [], url)
     results.append(
         (
             "an empty check report is a refusal, not a pass",
-            isinstance(ready, dict)
-            and ready.get("ok") is False
-            and not marker.exists(),
+            isinstance(ready, dict) and ready.get("ok") is False,
             f"ready={ready}",
         )
     )
@@ -139,14 +91,7 @@ def pending_checks(pub: Path, results: list[tuple[str, object, str]]) -> None:
         ),
     }
     with _StubGH(gh_group_ready_responses(green)):
-        ready = mark_group_pull_request_ready(
-            pub,
-            100030,
-            members,
-            [],
-            url,
-            persist_attempt=_persist_ready_attempt,
-        )
+        ready = mark_group_pull_request_ready(pub, 100030, members, [], url)
     results.append(
         (
             "the last member marks the shared pull request ready",
@@ -157,16 +102,30 @@ def pending_checks(pub: Path, results: list[tuple[str, object, str]]) -> None:
             f"ready={ready}",
         )
     )
-    results.append(
-        (
-            "a successful ready writes the ready-once record beside the receipt",
-            marker.is_file()
-            and json.loads(marker.read_text()).get("pull_request") == url,
-            f"marker={marker.read_text().strip() if marker.is_file() else 'absent'}",
+    draft = {
+        "stdout": json.dumps(
+            [
+                {
+                    "data": {
+                        "repository": {
+                            "pullRequest": {
+                                "state": "OPEN",
+                                "isDraft": True,
+                                "timelineItems": {
+                                    "nodes": [],
+                                    "pageInfo": {
+                                        "hasNextPage": False,
+                                        "endCursor": None,
+                                    },
+                                },
+                            }
+                        }
+                    }
+                }
+            ]
         )
-    )
+    }
     prior_ready = {
-        "returncode": 0,
         "stdout": json.dumps(
             [
                 {
@@ -192,72 +151,79 @@ def pending_checks(pub: Path, results: list[tuple[str, object, str]]) -> None:
                     }
                 }
             ]
-        ),
-    }
-    skip = _StubGH(prior_ready)
-    with skip:
-        ready = mark_group_pull_request_ready(
-            pub,
-            100030,
-            members,
-            [],
-            url,
-            persist_attempt=_persist_ready_attempt,
         )
+    }
+    settle = _StubGH(prior_ready)
+    with settle:
+        ready = mark_group_pull_request_ready(pub, 100030, members, [], url)
     results.append(
         (
-            "a record naming the same pull request skips the ready",
+            "a ready GitHub already recorded skips the transition",
             isinstance(ready, dict)
             and ready.get("ok") is True
             and ready.get("skipped") is True
-            and not any(argv[1:3] == ["pr", "ready"] for argv in skip.calls if argv),
-            f"ready={ready} calls={skip.calls}",
+            and _ready_calls(settle.calls) == 0,
+            f"ready={ready} calls={settle.calls}",
         )
     )
-    with _StubGH(prior_ready) as sibling_skip:
-        sibling_ready = mark_group_pull_request_ready(
+    # The per-tick sweep is the retry: it walks every receipt, the settled ones
+    # included, and takes the transition at most once per pull request because
+    # GitHub's own ready/draft timeline is the guard. The stub records the ready
+    # it was asked for, so the second tick sees the history GitHub would hold.
+    state = {"ready": False}
+
+    def sweep_gh(argv: Any) -> dict[str, Any]:
+        if list(argv[1:3]) == ["pr", "ready"]:
+            state["ready"] = True
+            return {"returncode": 0}
+        if list(argv[1:3]) == ["api", "graphql"]:
+            return prior_ready if state["ready"] else draft
+        if list(argv[1:3]) == ["pr", "checks"]:
+            return green
+        return {"returncode": 1}
+
+    for member in members:
+        _write_receipt(
             pub,
-            100020,
-            members,
-            [],
-            url,
-            persist_attempt=_persist_ready_attempt,
+            int(member),
+            state="published",
+            branch="b",
+            group=list(members),
+            pull_request=url,
         )
+    tick = _StubGH(sweep_gh)
+    with tick:
+        swept = mode_ready(pub)
     results.append(
         (
-            "a sibling publish sees the shared ready-once record",
-            isinstance(sibling_ready, dict)
-            and sibling_ready.get("ok") is True
-            and sibling_ready.get("skipped") is True
-            and not any(
-                argv[1:3] == ["pr", "ready"] for argv in sibling_skip.calls if argv
+            "the ready sweep readies a settled group's pull request",
+            swept.get("state") == "READY"
+            and swept.get("ok") is True
+            and _ready_calls(tick.calls) == 1,
+            f"swept={swept} calls={tick.calls}",
+        )
+    )
+    later = _StubGH(sweep_gh)
+    with later:
+        again = mode_ready(pub)
+    results.append(
+        (
+            "a later sweep takes no second ready and says why",
+            again.get("state") == "READY"
+            and _ready_calls(later.calls) == 0
+            and all(
+                one.get("skipped") is True
+                for one in again["results"]
+                if one.get("state") == "READY"
             ),
-            f"ready={sibling_ready} calls={sibling_skip.calls}",
+            f"again={again} calls={later.calls}",
         )
     )
-    other = "https://github.com/example-org/example-repo/pull/9"
-    marker.write_text(
-        json.dumps(
-            {"version": 1, "pull_request": other, "ready_at": "2026-01-01T00:00:00Z"}
-        )
-        + "\n"
-    )
-    with _StubGH(gh_group_ready_responses(green)):
-        ready = mark_group_pull_request_ready(
-            pub,
-            100030,
-            members,
-            [],
-            url,
-            persist_attempt=_persist_ready_attempt,
-        )
+    run_dir = pub / BOARD_REL / "runs" / "phase-100030"
     results.append(
         (
-            "a record naming another pull request re-evaluates the ready",
-            isinstance(ready, dict)
-            and ready.get("ok") is True
-            and not ready.get("skipped")
-            and json.loads(marker.read_text()).get("pull_request") == url,
-            f"ready={ready}",
+            "the sweep writes no ready record of its own",
+            sorted(path.name for path in run_dir.iterdir()) == ["publication.json"],
+            f"run dir holds={sorted(path.name for path in run_dir.iterdir())}",
         )
     )

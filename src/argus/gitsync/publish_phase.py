@@ -278,10 +278,10 @@ def publish_phase(
                             f"may show an open checkbox or a missing comment; "
                             f"read the pull request body before merging."
                         )
-                # The last member writes and commits an attempt record before
-                # asking GitHub to ready the shared pull request. A retry checks
-                # the complete GitHub stage history and stops after any prior
-                # ready event, including one followed by a human draft change.
+                # The last member asks GitHub to ready the shared pull request.
+                # The retry checks the complete GitHub stage history and stops
+                # after any prior ready event, including one followed by a human
+                # draft change; no local ready record exists on this path.
                 if not pending:
                     ready = mark_group_pull_request_ready(
                         root,
@@ -289,12 +289,6 @@ def publish_phase(
                         members,
                         pending,
                         receipt.get("pull_request"),
-                        persist_attempt=lambda: commit_leftover_run_state(
-                            root,
-                            "pipeline: record shared pull request ready attempt "
-                            f"for phase {phase:06d}",
-                            phase=phase,
-                        ),
                     )
                     if ready is not None:
                         outcome["pull_request_ready"] = ready

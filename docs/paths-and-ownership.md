@@ -29,8 +29,9 @@ Every path that writes reads the board fence before its first write, and a fence
 |---|---|---|---|
 | `gitsync --mode published` | the phase receipt | yes, before the write | Fenced. `FENCED` or `COORDINATION_UNAVAILABLE`, exit 2 or 1, no receipt |
 | `--release` | the checkpoint push | yes, before the interrupt and the push | Fenced. A missing, incomplete, or mismatched claim refuses; no checkpoint, no release |
-| `abandon` | `abandoned.json` residue | yes, before the residue | Fenced. A foreign fence leaves the claim intact and writes no residue |
+| `abandon` | `abandoned.json` residue | yes, before the residue | Fenced. A foreign fence leaves the claim intact and writes no residue. The board group is released **before** the residue is written, so a release that fails parks nothing and leaves the claim as it was: the one state either way is released and parked, or owned and unparked |
 | `record_claim` | the claim file | yes, before the claim | Fenced. A pair the board does not confirm writes no claim |
+| `gitsync --mode ready` | nothing | no board read; it reads GitHub's ready/draft timeline | Exempt: it is a sweep that writes no file, no ref, and no receipt, holds no claim, and changes no verdict. The transition it takes is guarded by GitHub's own timeline |
 | `--stop` | `$HALT`, then `stopped-claim` | yes, before both files | Fenced. A bad, empty, unreadable, or mismatched fence writes neither file and exits 1 |
 | `gitsync --mode tidy --phase N` | the checkout move | yes, before either checkout moves | Fenced when a phase is named |
 | `gitsync --mode tidy` (pre-sync) | the checkout move | no | Exempt: it runs before a phase is selected, so there is no phase to name. It still refuses a dirty tree, so it never moves a checkout that would lose work |
@@ -39,7 +40,11 @@ Every path that writes reads the board fence before its first write, and a fence
 | `gitsync --mode checkpoint --phase N` | the commit and push | yes, before the stage | Fenced when a phase is named; `release`, its only production caller, always names one |
 | `gitsync --mode branch` | the branch cut | yes, before either checkout is touched | Fenced. A refusal creates no branch and leaves both refs where they were |
 
-`--mode published`, `--release`, `abandon`, and `record_claim` were already fenced; `--stop`, `--mode tidy` with a phase, `--mode clean` (one phase and the whole sweep), `--mode checkpoint` with a phase, and `--mode branch` are fenced as of the same change.
+`--mode published`, `--release`, `abandon`, and `record_claim` were already fenced; `--stop`, `--mode tidy` with a phase, `--mode clean` (one phase and the whole sweep), `--mode checkpoint` with a phase, and `--mode branch` are fenced as of the same change. `gitsync --mode ready` is the one path that writes nothing, so there is nothing for a fence to protect.
+
+Every row above has a test that drives the real writer and asserts the refusal wrote nothing: `tests/test_driver_write_fences.py` for `stop`, `tidy` (with a phase and the pre-sync exemption), `clean` (one phase and the sweep), `checkpoint`, and `branch`, one negative and one positive case each; `tests/test_driver_abandon_rollback.py` for the `abandon` ordering, with a failing and a succeeding board release; `tests/test_driver_release_lock.py` for `--release`'s lock, `tests/test_driver_claim_fencing.py` for `record_claim`, `tests/test_publish_separation.py` for `--mode published`, and `tests/test_group_ready_tick.py` for the `--mode ready` sweep on the real run directory.
+
+`abandon` releases the board group before it writes the residue, and stops there when the release fails. That order is what makes the outcome one of two states rather than three: released and parked, or still owned and unparked. Writing the residue first would leave a parked phase whose claim this machine still holds, which no owner will run and no other machine may take; an unpark written after a failed release would be a second write that can itself fail, so there is none.
 
 The whole-tree `--mode clean` sweep has no single owner, so it proves the fence per planned phase rather than refusing the sweep. A phase whose receipt reads `published` is exempt by construction: its run is recorded as finished, nothing the sweep lands can change that verdict, and a released claim is the ordinary end state. Every other phase must prove the fence; one that cannot is skipped with its phase number and reason in the result's `skipped` array and the summary, and the other phases still land. A hard fail would strand post-merge run state that the next phase's publish then refuses on.
 
@@ -65,7 +70,7 @@ The check read names the pull request's own `[HOST/]OWNER/REPO` on the `gh pr ch
 
 The ready is retried on every driver tick by `gitsync --mode ready`, which sweeps every phase receipt rather than the phases waiting on a merge, so it keeps retrying until the pull request is readied or the timeline shows a prior ready, whatever state the phase's own receipt is in. A receipt that already reads `published` is the case that matters: it leaves the pending list, so a retry placed on the `--mode published` path would run once and never again. The sweep writes no phase state, holds no claim, and never changes the published or merge verdict.
 
-The transition happens once: GitHub's own ready/draft timeline is the once-guard. A pull request whose timeline holds any ready event is skipped, so a person who sets it back to draft is not undone on a later tick, and no local record is consulted.
+The transition happens once: GitHub's own ready/draft timeline is the once-guard. A pull request whose timeline holds any ready event is skipped, so a person who sets it back to draft is not undone on a later tick, and no local record is consulted. The ready-once record an earlier revision wrote beside the receipt is gone: no production writer ever emitted a version a reader accepted, the version-2 attempt it did write was discarded, and the timeline already answers the question, so the sweep carries no local state at all.
 
 A failed transition is reported, never raised, because the phase's commits are already on the branch and its receipt is written. The failure is named in the sweep's result and the next tick tries again; a person is not put on the critical path to notice it.
 
