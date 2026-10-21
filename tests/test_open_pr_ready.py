@@ -49,6 +49,7 @@ def _creates(workspace: Workspace) -> list[list[str]]:
 
 def test_a_fork_checkout_is_refused_by_name_with_a_way_out(
     workspace: Workspace,
+    body_file: Path,
 ) -> None:
     workspace.answer(
         repo_view={"defaultBranchRef": {"name": "main"}, "isFork": True},
@@ -57,7 +58,7 @@ def test_a_fork_checkout_is_refused_by_name_with_a_way_out(
     )
 
     with pytest.raises(ConfigError) as refused:
-        mode_open_pr(workspace.root, branch=BRANCH)
+        mode_open_pr(workspace.root, branch=BRANCH, body_file=body_file)
 
     reason = str(refused.value)
     assert "fork" in reason
@@ -68,6 +69,7 @@ def test_a_fork_checkout_is_refused_by_name_with_a_way_out(
 
 def test_a_branch_the_remote_never_saw_is_refused_by_name(
     workspace: Workspace,
+    body_file: Path,
 ) -> None:
     assert (
         git(workspace.root, "remote", "add", "origin", "https://example.test/r.git")[0]
@@ -75,7 +77,7 @@ def test_a_branch_the_remote_never_saw_is_refused_by_name(
     )
 
     with pytest.raises(ConfigError) as refused:
-        mode_open_pr(workspace.root, branch=BRANCH)
+        mode_open_pr(workspace.root, branch=BRANCH, body_file=body_file)
 
     reason = str(refused.value)
     assert BRANCH in reason
@@ -84,7 +86,9 @@ def test_a_branch_the_remote_never_saw_is_refused_by_name(
     assert _creates(workspace) == []
 
 
-def test_a_branch_the_remote_has_is_not_refused(workspace: Workspace) -> None:
+def test_a_branch_the_remote_has_is_not_refused(
+    workspace: Workspace, body_file: Path
+) -> None:
     assert (
         git(workspace.root, "remote", "add", "origin", "https://example.test/r.git")[0]
         == 0
@@ -96,7 +100,7 @@ def test_a_branch_the_remote_has_is_not_refused(workspace: Workspace) -> None:
     )
     workspace.answer(list=[], create=URL, reread=[CREATED])
 
-    out = mode_open_pr(workspace.root, branch=BRANCH)
+    out = mode_open_pr(workspace.root, branch=BRANCH, body_file=body_file)
 
     assert out["ok"] is True, out
     assert len(_creates(workspace)) == 1

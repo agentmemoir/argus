@@ -38,13 +38,14 @@ def workspace(
 
 def test_a_list_of_only_unreadable_rows_blocks_and_creates_nothing(
     workspace: Workspace,
+    body_file: Path,
 ) -> None:
     # gh answered one row with no usable number, url, or state. Read as "no pull
     # request", that answer would open a duplicate draft for commits that
     # already have one, so it is a failed read and nothing is created.
     workspace.answer(list=[{"number": "eleven", "state": "OPEN", "url": ""}])
 
-    out = mode_open_pr(workspace.root, branch=BRANCH)
+    out = mode_open_pr(workspace.root, branch=BRANCH, body_file=body_file)
 
     assert out["ok"] is False, out
     assert out["state"] == "BLOCKED"
@@ -61,10 +62,11 @@ def test_a_list_of_only_unreadable_rows_blocks_and_creates_nothing(
 
 def test_a_row_with_no_draft_flag_blocks_and_reports_no_draft_state(
     workspace: Workspace,
+    body_file: Path,
 ) -> None:
     workspace.answer(list=[{"number": 11, "state": "OPEN", "url": URL}])
 
-    out = mode_open_pr(workspace.root, branch=BRANCH)
+    out = mode_open_pr(workspace.root, branch=BRANCH, body_file=body_file)
 
     assert out["ok"] is False, out
     assert out["state"] == "BLOCKED"
@@ -77,12 +79,14 @@ def test_a_row_with_no_draft_flag_blocks_and_reports_no_draft_state(
     assert [call for call in workspace.commands() if call[:2] == ["pr", "create"]] == []
 
 
-def test_the_string_false_is_not_a_draft_flag(workspace: Workspace) -> None:
+def test_the_string_false_is_not_a_draft_flag(
+    workspace: Workspace, body_file: Path
+) -> None:
     workspace.answer(
         list=[{"number": 11, "state": "OPEN", "isDraft": "false", "url": URL}]
     )
 
-    out = mode_open_pr(workspace.root, branch=BRANCH)
+    out = mode_open_pr(workspace.root, branch=BRANCH, body_file=body_file)
 
     assert out["ok"] is False, out
     row = out["repos"][0]
@@ -93,10 +97,11 @@ def test_the_string_false_is_not_a_draft_flag(workspace: Workspace) -> None:
 
 def test_a_missing_credential_is_named_not_reported_as_a_number(
     workspace: Workspace,
+    body_file: Path,
 ) -> None:
     workspace.answer(list_exit=4)
 
-    out = mode_open_pr(workspace.root, branch=BRANCH)
+    out = mode_open_pr(workspace.root, branch=BRANCH, body_file=body_file)
 
     blockers = out["repos"][0]["blockers"]
     assert any(
@@ -105,10 +110,10 @@ def test_a_missing_credential_is_named_not_reported_as_a_number(
     ), blockers
 
 
-def test_a_failed_create_names_the_step(workspace: Workspace) -> None:
+def test_a_failed_create_names_the_step(workspace: Workspace, body_file: Path) -> None:
     workspace.answer(list=[], create=URL, create_exit=1)
 
-    out = mode_open_pr(workspace.root, branch=BRANCH)
+    out = mode_open_pr(workspace.root, branch=BRANCH, body_file=body_file)
 
     blockers = out["repos"][0]["blockers"]
     assert any(
@@ -118,10 +123,11 @@ def test_a_failed_create_names_the_step(workspace: Workspace) -> None:
 
 def test_the_summary_names_the_pull_request_action_and_draft_state(
     workspace: Workspace,
+    body_file: Path,
 ) -> None:
     workspace.answer(list=[], create=URL, reread=[CREATED])
 
-    out = mode_open_pr(workspace.root, branch=BRANCH)
+    out = mode_open_pr(workspace.root, branch=BRANCH, body_file=body_file)
 
     row = out["repos"][0]
     assert row["number"] == 11 and row["action"] == "created" and row["draft"] is True

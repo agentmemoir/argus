@@ -25,3 +25,11 @@ def exec_dir() -> Iterator[Path]:
     """A directory the host will run a stub from, removed with the test."""
     with exec_tempdir(purpose="an executable test stub") as directory:
         yield Path(directory)
+
+
+@pytest.fixture
+def body_file(tmp_path: Path) -> Path:
+    """A body file with prose in it: `--body-file` is required for `--mode open-pr`."""
+    path = tmp_path / "body.md"
+    path.write_text("The pull request prose.\n", encoding="utf-8")
+    return path

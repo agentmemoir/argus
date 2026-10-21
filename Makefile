@@ -47,12 +47,16 @@ typecheck-strict:
 
 # No Python file may exceed the line limit, comments and blank lines included.
 # Nothing is exempt: a split removes its file here in the same change.
+# A row counts as a file only when its first field is all digits, so a summary
+# row a `wc` wrapper adds (one whose first field is not a number) is skipped
+# rather than counted as an over-limit file; the `total` row is skipped too.
 lines:
 	@printf 'checking every Python file against the %s-line limit\n' '$(LINE_LIMIT)'
 	@files=$$(find src tests -name '*.py' -type f 2>/dev/null); \
 	if [ -z "$$files" ]; then printf 'no Python files found\n'; exit 1; fi; \
 	printf '%s\n' "$$files" | xargs wc -l | awk -v lim=$(LINE_LIMIT) -v exempt='$(LINE_EXEMPT)' \
 		'BEGIN { n = split(exempt, parts, " "); for (i = 1; i <= n; i++) if (parts[i] != "") skip[parts[i]] = 1 } \
+		 $$1 !~ /^[0-9]+$$/ { next } \
 		 $$NF == "total" { next } \
 		 $$1 > lim { if ($$2 in skip) { printf "exempt for now: %s\n", $$2; next } \
 			over = over $$0 "\n"; count++ } \
@@ -135,6 +139,7 @@ self-test:
 	$(RUN) pytest -q tests/test_config_overlay.py tests/test_idle_watcher.py tests/test_idle_tick_log.py tests/test_checkpoint_empty_stage.py tests/test_notify_target.py tests/test_selection_blocked.py tests/test_estimate.py
 	$(RUN) pytest -q tests/test_config_issues.py tests/test_issue_board.py tests/test_issue_driver.py tests/test_issue_publication.py tests/test_issue_publication_cli.py tests/test_issue_publication_fixture.py tests/test_issue_publication_tidy.py tests/test_issue_tick.py tests/test_issues_boundary.py tests/test_issues_cases.py tests/test_issues_lifecycle.py tests/test_issues_selection.py
 	$(RUN) pytest -q tests/test_pr_signal_reply.py tests/test_pr_signal_guard.py tests/test_pr_signal_trust.py tests/test_pr_signals.py
+	$(RUN) pytest -q tests/test_gh_write.py
 
 # The published folder must carry no identifier: no home path, no numeric
 # account or channel id, and no notification default or literal that is not a
