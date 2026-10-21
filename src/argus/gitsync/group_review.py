@@ -257,7 +257,9 @@ def mark_group_pull_request_ready(
             "pull_request": pull_request,
             "detail": history_detail,
         }
-    rows, code, detail = gh_pull_request_checks(Path(root), ref["number"])
+    rows, code, detail = gh_pull_request_checks(
+        Path(root), ref["number"], ref.get("owner"), ref.get("repo"), ref.get("host")
+    )
     # gh returning zero rows is not "all checks pass": an empty report names no
     # passing check, so the pull request stays draft until checks are reported.
     if (

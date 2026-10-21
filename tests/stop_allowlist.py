@@ -40,9 +40,9 @@ STOP_ALLOWLIST = r"""
     driver/lib-driver-drive.sh	return_nonzero	fn:_drive|reconcile_pending_reviews || return 1#1
     driver/lib-driver-drive.sh	return_nonzero	fn:_drive|return 1#1
     driver/lib-driver-drive.sh	drive_rc_nonzero	fn:_drive_cut_branch|tidy_published_checkout || { _DRIVE_RC=1; return 0; }#1
-    driver/lib-driver-drive.sh	halt_marker	fn:stop|printf 'stopped by operator at %s\n' "$(ts)" >"$HALT"#1
-    driver/lib-driver-drive.sh	return_nonzero	fn:release|return 1#1
-    driver/lib-driver-drive.sh	return_nonzero	fn:release|return 1#2
+    driver/lib-driver-control.sh	halt_marker	fn:stop|printf 'stopped by operator at %s\n' "$(ts)" >"$HALT"#1
+    driver/lib-driver-control.sh	return_nonzero	fn:release|return 1#1
+    driver/lib-driver-control.sh	return_nonzero	fn:release|return 1#2
     driver/lib-driver-dryrun.sh	drive_rc_zero_refusal	fn:_drive_dry_run|{ _DRIVE_RC=0; return 0; }#1
     driver/lib-driver-dryrun.sh	drive_rc_zero_refusal	fn:_drive_dry_run|{ _DRIVE_RC=0; return 0; }#2
     driver/lib-driver-dryrun.sh	drive_rc_zero_refusal	fn:_drive_dry_run|{ _DRIVE_RC=0; return 0; }#3
@@ -52,6 +52,7 @@ STOP_ALLOWLIST = r"""
     driver/lib-driver-fence.sh	return_nonzero	fn:resume_fence_reserve|return 1 ;;#1
     driver/lib-driver-fence.sh	return_nonzero	fn:resume_fence_reserve|return 1#1
     driver/lib-driver-fence.sh	return_nonzero	fn:resume_fence_reserve|return 1#2
+    driver/lib-driver-fence.sh	return_nonzero	fn:board_assert_owner_bounded|return 124#1
     driver/lib-driver-fence.sh	return_nonzero	fn:board_assert_owner|[ -n "$reservation_id" ] && [ -n "$generation" ] || return 1#1
     driver/lib-driver-fence.sh	return_nonzero	fn:board_assert_owner|[[ $phase =~ ^[0-9]+$ ]] || return 1#1
     driver/lib-driver-fence.sh	return_nonzero	fn:board_assert_owner|fail) return 1 ;;#1

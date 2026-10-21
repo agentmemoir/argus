@@ -35,6 +35,8 @@ A group's shared pull request stays in draft until the group is done. When a mem
 
 The transition is gated on the checks: gh must report at least one check, and every reported check must read pass. A pull request whose checks are failing, still running, or not reported at all stays in draft, and the result says which.
 
+The check read names the pull request's own `[HOST/]OWNER/REPO` on the `gh pr checks` call, so a run directory outside a checkout, or one on a different repository, cannot read another repository's checks and report them as this group's.
+
 The ready is retried on every driver tick by `gitsync --mode ready`, which sweeps every phase receipt rather than the phases waiting on a merge, so it keeps retrying until the pull request is readied or the timeline shows a prior ready, whatever state the phase's own receipt is in. A receipt that already reads `published` is the case that matters: it leaves the pending list, so a retry placed on the `--mode published` path would run once and never again. The sweep writes no phase state, holds no claim, and never changes the published or merge verdict.
 
 The transition happens once: GitHub's own ready/draft timeline is the once-guard. A pull request whose timeline holds any ready event is skipped, so a person who sets it back to draft is not undone on a later tick, and no local record is consulted.

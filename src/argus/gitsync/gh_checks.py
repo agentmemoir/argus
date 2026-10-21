@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, cast
 
 from argus.gitsync.gh_exit import gh_exit_detail
+from argus.gitsync.gh_target import repo_target
 from argus.gitsync.git import GH_TIMEOUT_S, gh_binary
 
 
@@ -45,9 +46,21 @@ def _check_rows(text: str) -> list[dict[str, Any]] | None:
 
 
 def gh_pull_request_checks(
-    root: Path, target: int | str
+    root: Path,
+    target: int | str,
+    owner: str | None = None,
+    repo: str | None = None,
+    host: str | None = None,
 ) -> tuple[list[dict[str, Any]] | None, int, str]:
     """Every check gh reports for one pull request, and gh's own exit code.
+
+    ``owner``/``repo``/``host`` name the pull request's repository, in the same
+    order as ``gh_pull_request_stage_history``. Without them gh answers about the
+    repository of ``root``, which is wrong whenever the run directory sits
+    outside a checkout or on a different repository than the pull request. The
+    host travels inside the one ``--repo [HOST/]OWNER/REPO`` argument: it is the
+    only host-bearing flag ``gh pr checks`` accepts, so a second ``--hostname``
+    would be rejected by the command itself.
 
     ``target`` is a pull request number or URL. Returns the rows, the exit code
     gh returned, and a detail. The rows and the code are returned together so a
@@ -75,6 +88,8 @@ def gh_pull_request_checks(
         "--json",
         "bucket,state,name,link",
     ]
+    if owner and repo:
+        argv.extend(["--repo", repo_target(owner, repo, host)])
     try:
         done = subprocess.run(
             argv,

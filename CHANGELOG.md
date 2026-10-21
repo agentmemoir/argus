@@ -4,6 +4,12 @@ Notable changes to this project are documented here. The format follows [Keep a 
 
 ## [Unreleased]
 
+- The group gate's check read names the pull request's own repository and host on the `gh` call: `gh pr checks` now receives `--repo [HOST/]OWNER/REPO` from the receipt's `owner`, `repo`, and `host`, the same triple the stage-history read already used. Without it gh answered about the repository of the run directory, so a run directory outside a checkout, or on a different repository, read another repository's checks and reported them as this group's. ([#168](https://github.com/agentmemoir/argus/pull/168))
+
+- `--release` drops the driver lock on every return path, the board's refusal included. That one path kept fd 9 open and with it the flock, so the operator's next driver command in the same shell was refused by a lock nothing else held. The operator commands (`stop`, `release`, and the phase-window wait they share) move to `lib-driver-control.sh`, one file per responsibility, and the tick file stays under the executable size limit. ([#168](https://github.com/agentmemoir/argus/pull/168))
+
+- The board fence is bounded on a host with neither `timeout` nor `gtimeout`. The assert-owner call runs in the background, its pid is polled every 0.2s without a busy spin, and it is sent SIGTERM then SIGKILL after `ARGUS_FENCE_TIMEOUT_S` seconds (20 by default, the value the timer path always used). A timeout is a refusal, exactly as a timer's kill is, so a hung board can no longer hold the driver lock for ever. ([#168](https://github.com/agentmemoir/argus/pull/168))
+
 - A reservation group's shared draft pull request is readied by a later tick, not only by the publish that completes the group. The new `gitsync --mode ready` sweeps every phase receipt on every driver tick and retries the ready, so a group whose checks were still running when it published is readied once they pass instead of staying in draft for ever. It runs for a receipt that already reads `published`, which the old per-phase retry could not reach: `--mode published` only runs for a phase waiting on a merge, and the receipt settles on that same tick. ([#166](https://github.com/agentmemoir/argus/issues/166))
 
 - The ready sweep writes no phase state, holds no claim, and never changes a published or merge verdict. The transition is once per pull request and GitHub's own ready/draft timeline is the guard: any ready event skips the retry, so a person who re-drafts the pull request is never overridden, and a pending or empty check report takes no transition.

@@ -8,6 +8,11 @@
 # one works it, so the fence is renewed from the halt or taken fresh, and any
 # conflict fails closed with the board own answer carried into the refusal.
 
+# The bound on one board call, in seconds. It is the argument this file has
+# always given `timeout`, so a host with a timer behaves exactly as before; the
+# override exists for the test that proves the portable bound below.
+ARGUS_FENCE_TIMEOUT_S="${ARGUS_FENCE_TIMEOUT_S:-20}"
+
 resume_reservation_field() {   # <field>  (JSON on stdin)
   # `-c`, not a heredoc: a heredoc is the program itself, so `sys.stdin` would
   # be the program text and the piped reply would never be read.
@@ -130,20 +135,53 @@ board_assert_owner_cmd() {   # <phase> <reservation_id> <generation>
     timeout_cmd="gtimeout"
   fi
   if [ -n "$timeout_cmd" ]; then
-    "$timeout_cmd" 20 "$PYTHON" "$ARGUS/board/reservations.py" assert-owner \
+    "$timeout_cmd" "$ARGUS_FENCE_TIMEOUT_S" "$PYTHON" "$ARGUS/board/reservations.py" assert-owner \
       "${ARGUS_CONFIG_ARGS[@]}" "${BOARD_KIND_ARGS[@]+"${BOARD_KIND_ARGS[@]}"}" \
       --repo-root "$REPO" --machine-id "$PHASE_MACHINE_ID" \
       --phase "$1" --reservation-id "$2" \
       --generation "$3" \
       >"$RUN_DIR/assert-owner-$1.json" 2>&1
-  else
-    "$PYTHON" "$ARGUS/board/reservations.py" assert-owner \
-      "${ARGUS_CONFIG_ARGS[@]}" "${BOARD_KIND_ARGS[@]+"${BOARD_KIND_ARGS[@]}"}" \
-      --repo-root "$REPO" --machine-id "$PHASE_MACHINE_ID" \
-      --phase "$1" --reservation-id "$2" \
-      --generation "$3" \
-      >"$RUN_DIR/assert-owner-$1.json" 2>&1
+    return
   fi
+  board_assert_owner_bounded "$@"
+}
+
+# The portable bound, for a host with no `timeout` and no `gtimeout`.
+#
+# The board call runs in the background so its pid can be polled without a busy
+# spin; the child's stdout and stderr still land in the same file and its own
+# status is still returned, so the normal path is unchanged. A child still alive
+# after ARGUS_FENCE_TIMEOUT_S is sent SIGTERM, re-checked briefly, then killed,
+# and the call refuses. No path returns with the child alive.
+board_assert_owner_bounded() {   # <phase> <reservation_id> <generation>
+  local out="$RUN_DIR/assert-owner-$1.json" pid="" ticks=0 limit=0 grace=0
+  limit=$((ARGUS_FENCE_TIMEOUT_S * 5))
+  "$PYTHON" "$ARGUS/board/reservations.py" assert-owner \
+    "${ARGUS_CONFIG_ARGS[@]}" "${BOARD_KIND_ARGS[@]+"${BOARD_KIND_ARGS[@]}"}" \
+    --repo-root "$REPO" --machine-id "$PHASE_MACHINE_ID" \
+    --phase "$1" --reservation-id "$2" \
+    --generation "$3" \
+    >"$out" 2>&1 &
+  pid=$!
+  while kill -0 "$pid" 2>/dev/null; do
+    if [ "$ticks" -ge "$limit" ]; then
+      kill -TERM "$pid" 2>/dev/null || true
+      # A short re-check, not a second bound: the usual case is that the child
+      # dies at once, and one that ignores SIGTERM is killed outright.
+      while kill -0 "$pid" 2>/dev/null && [ "$grace" -lt 5 ]; do
+        sleep 0.2
+        grace=$((grace + 1))
+      done
+      kill -KILL "$pid" 2>/dev/null || true
+      wait "$pid" 2>/dev/null || true
+      printf 'the board did not answer within %ss; the fence is unproved\n' \
+        "$ARGUS_FENCE_TIMEOUT_S" >>"$out"
+      return 124
+    fi
+    sleep 0.2
+    ticks=$((ticks + 1))
+  done
+  wait "$pid"
 }
 
 board_assert_owner() {   # <phase> <reservation_id> <generation>

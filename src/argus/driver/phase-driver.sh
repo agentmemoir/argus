@@ -156,7 +156,7 @@ for helper in \
   phase-tmux.sh lib-stat.sh \
   lib-driver-config.sh lib-driver-log.sh lib-driver-notify.sh \
   lib-driver-run.sh lib-driver-job.sh lib-driver-select.sh lib-driver-check.sh \
-  lib-driver-drive.sh lib-driver-dryrun.sh lib-driver-select-flow.sh \
+  lib-driver-drive.sh lib-driver-control.sh lib-driver-dryrun.sh lib-driver-select-flow.sh \
   lib-driver-select-stub.sh lib-driver-select-real.sh lib-driver-maintenance.sh lib-driver-launch.sh \
   lib-driver-halt-record.sh lib-driver-fence.sh \
   lib-driver-resume.sh lib-driver-abandon.sh lib-driver-estimate.sh \
@@ -205,6 +205,9 @@ done
 # The tick: reserve, branch, and launch.
 # shellcheck disable=SC1091
 . "$ARGUS_DIR/lib-driver-drive.sh"
+# The operator commands that end a run: stop, release, and the window wait.
+# shellcheck disable=SC1091
+. "$ARGUS_DIR/lib-driver-control.sh"
 # shellcheck disable=SC1091
 . "$ARGUS_DIR/lib-driver-dryrun.sh"
 # shellcheck disable=SC1091
