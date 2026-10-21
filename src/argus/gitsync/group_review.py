@@ -137,13 +137,18 @@ def mark_group_pull_request_ready(
         return None
     marker = _group_ready_marker(root, phase)
     if marker.is_file():
-        return {
-            "ok": True,
-            "phase": f"{int(phase):06d}",
-            "pull_request": pull_request,
-            "detail": "the ready-once record stands; a re-drafted pull request is never re-readied",
-            "skipped": True,
-        }
+        try:
+            recorded = json.loads(marker.read_text())
+        except (OSError, ValueError):
+            recorded = None
+        if isinstance(recorded, dict) and recorded.get("pull_request") == pull_request:
+            return {
+                "ok": True,
+                "phase": f"{int(phase):06d}",
+                "pull_request": pull_request,
+                "detail": "the ready-once record stands; a re-drafted pull request is never re-readied",
+                "skipped": True,
+            }
     rows, code, detail = gh_pull_request_checks(Path(root), ref["number"])
     if (
         rows is None
@@ -179,11 +184,13 @@ def mark_group_pull_request_ready(
                 )
                 + "\n"
             )
-        except OSError:
-            # The record could not be written. The ready itself landed; a
-            # rerun would find gh idempotent, and the gap is reported by the
-            # caller's dirt check rather than hidden here.
-            pass
+        except OSError as exc:
+            return {
+                "ok": False,
+                "phase": f"{int(phase):06d}",
+                "pull_request": pull_request,
+                "detail": f"the ready-once record could not be written: {exc}",
+            }
     return result
 
 
