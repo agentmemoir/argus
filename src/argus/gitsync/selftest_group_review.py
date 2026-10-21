@@ -323,7 +323,10 @@ def _pending_checks(pub: Path, results: list[tuple[str, object, str]]) -> None:
     results.append(
         (
             "a ready whose record write fails is reported as not ok",
-            isinstance(ready, dict) and ready.get("ok") is False,
+            isinstance(ready, dict)
+            and ready.get("ok") is False
+            and ready.get("ready_landed") is True
+            and ready.get("record_failed") is True,
             f"ready={ready}",
         )
     )

@@ -131,7 +131,11 @@ def mark_group_pull_request_ready(
 
     A failed transition is reported, never raised. The phase's commits are
     already on the branch and its receipt is written, so making the pull request
-    ready is the last step and its failure must not undo the publication.
+    ready is the last step and its failure must not undo the publication. When
+    the ready lands but the record write fails, the result says so:
+    ``ready_landed`` is true and ``record_failed`` is true alongside ``ok``
+    false, so a rerun's re-ready is understood instead of looking like a bare
+    refusal.
     """
     if list(pending) or not pull_request:
         return None
@@ -191,11 +195,17 @@ def mark_group_pull_request_ready(
                 + "\n"
             )
         except OSError as exc:
+            # The ordering matters for a rerun: the ready landed, so the pull
+            # request is non-draft, but the ready-once record is missing, so a
+            # rerun re-evaluates and re-readies. Reporting both states keeps a
+            # rerun's re-ready understood instead of looking like a failure.
             return {
                 "ok": False,
                 "phase": f"{int(phase):06d}",
                 "pull_request": pull_request,
                 "detail": f"the ready-once record could not be written: {exc}",
+                "ready_landed": True,
+                "record_failed": True,
             }
     return result
 
