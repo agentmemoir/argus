@@ -37,9 +37,9 @@ First, it merges the open pull requests whose base is the group branch, so a fix
 
 The merge is pinned to the head those checks were read for and never uses administrator rights. Any other pull request stays open, and the result names it with the reason.
 
-Second, once every member has published, it makes the shared pull request ready for review, but only when the checks on it all pass. A pull request whose checks are failing, still running, or not reported yet stays in draft, and the result says which.
+Second, once every member has published, the publish step makes the shared pull request ready for review, but only when the checks on it all pass. A pull request whose checks are failing, still running, or not reported yet stays in draft, and the result says which.
 
-A fix merged by the same run holds it too, because the merge moves the head the checks judge. The transition happens once, so a person who sets the pull request back to draft is not undone on the next tick.
+The transition happens once: a ready-once record is written beside the last member's receipt, so a person who sets the pull request back to draft is not undone on a later run.
 
 The result is the `group_gate` object in the publication output: `state` (`WAITING` while a member is still to publish, `HELD`, or `READY`), the `reasons` it is held, and `fix_pull_requests` with the numbers merged and the pull requests held. The driver logs a changed answer once, not on every tick.
 

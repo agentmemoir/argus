@@ -19,7 +19,11 @@ from argus.gitsync.group_publication import (
     _push_one,
     _write_publication_receipt,
 )
-from argus.gitsync.group_review import _group_pending, update_group_pull_request
+from argus.gitsync.group_review import (
+    _group_pending,
+    mark_group_pull_request_ready,
+    update_group_pull_request,
+)
 from argus.gitsync.review import open_predecessor
 from argus.gitsync.runstate import (
     commit_leftover_run_state,
@@ -274,6 +278,29 @@ def publish_phase(
                             f"may show an open checkbox or a missing comment; "
                             f"read the pull request body before merging."
                         )
+                # The last member readies the shared pull request once its
+                # checks are green. The ready-once record is written beside the
+                # receipt, so a rerun of this phase never overrides a human who
+                # re-drafted the pull request, and the record itself is
+                # committed as run state, so it is never dirt.
+                if not pending:
+                    ready = mark_group_pull_request_ready(
+                        root, phase, pending, receipt.get("pull_request")
+                    )
+                    if ready is not None:
+                        outcome["pull_request_ready"] = ready
+                        if ready.get("ok") and not ready.get("skipped"):
+                            committed = commit_leftover_run_state(
+                                root,
+                                "pipeline: record the shared pull request ready "
+                                f"for phase {phase:06d}",
+                                phase=phase,
+                            )
+                            if not committed.get("ok"):
+                                outcome["pull_request_ready_warning"] = (
+                                    "the ready-once record could not be committed: "
+                                    f"{committed.get('blockers') or committed.get('summary')}"
+                                )
             outcome["repos"] = results
             outcome["summary"] = summarize(
                 [

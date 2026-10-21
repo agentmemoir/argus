@@ -207,20 +207,27 @@ def _pending_checks(pub: Path, results: list[tuple[str, object, str]]) -> None:
     results.append(
         (
             "the ready transition does nothing while a member is still to run",
-            mark_group_pull_request_ready(100030, pending, url) is None,
+            mark_group_pull_request_ready(pub, 100030, pending, url) is None,
             f"pending={pending}",
         )
     )
     results.append(
         (
             "the ready transition does nothing without a pull request to act on",
-            mark_group_pull_request_ready(100030, [], None) is None
-            and mark_group_pull_request_ready(100030, [], "not a url") is None,
+            mark_group_pull_request_ready(pub, 100030, [], None) is None
+            and mark_group_pull_request_ready(pub, 100030, [], "not a url") is None,
             "no pull request, no action",
         )
     )
-    with _StubGH({"returncode": 0, "stdout": ""}):
-        ready = mark_group_pull_request_ready(100030, [], url)
+    with _StubGH(
+        {
+            "returncode": 0,
+            "stdout": json.dumps(
+                [{"bucket": "pass", "state": "success", "name": "ci", "link": ""}]
+            ),
+        }
+    ):
+        ready = mark_group_pull_request_ready(pub, 100030, [], url)
     results.append(
         (
             "the last member marks the shared pull request ready",
@@ -232,7 +239,7 @@ def _pending_checks(pub: Path, results: list[tuple[str, object, str]]) -> None:
         )
     )
     with _StubGH({"returncode": 1}):
-        ready = mark_group_pull_request_ready(100030, [], url)
+        ready = mark_group_pull_request_ready(pub, 100030, [], url)
     results.append(
         (
             "a refused ready transition is reported as not ok",

@@ -2,10 +2,12 @@
 # SPDX-License-Identifier: Apache-2.0
 """The group's one pull request: reuse it while it is open, ready it when the group finishes."""
 
+import json
 from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
+from argus.conventions import phase_run_dir
 from argus.gitsync.gh import (
     gh_comment_pull_request,
     gh_edit_pull_request_body,
@@ -13,6 +15,7 @@ from argus.gitsync.gh import (
     gh_pull_request_body,
     gh_pull_request_open,
 )
+from argus.gitsync.gh_checks import gh_pull_request_checks
 from argus.gitsync.gh_gate import gh_pull_request_comment_bodies
 from argus.gitsync.receipts import _phase_run_entries, phase_receipt, pull_request_ref
 
@@ -98,8 +101,16 @@ def _group_pending(root: str | Path, members: Iterable[Any], phase: int) -> list
     return pending
 
 
+def _group_ready_marker(root: str | Path, phase: int) -> Path:
+    """The ready-once record for a group's shared pull request."""
+    return phase_run_dir(root, int(phase)) / "group-pr-ready.json"
+
+
 def mark_group_pull_request_ready(
-    phase: int, pending: Iterable[Any], pull_request: str | None
+    root: str | Path,
+    phase: int,
+    pending: Iterable[Any],
+    pull_request: str | None,
 ) -> dict[str, Any] | None:
     """The one place a group's shared pull request is marked ready for review.
 
@@ -108,6 +119,12 @@ def mark_group_pull_request_ready(
     to publish, so a shared pull request is made ready exactly once. Returns the
     gh result, or None when there is nothing to do: a member is still to run, no
     pull request is recorded, or its URL cannot name a pull request to act on.
+
+    The transition is gated on the pull request's checks: the ready is recorded
+    only when every check gh reports reads ``pass``, so a pull request that is
+    not yet mergeable stays draft. The ready-once record beside the receipt is
+    written on success and stands for every later run of this phase, so a human
+    who re-drafts the pull request is never overridden.
 
     A failed transition is reported, never raised. The phase's commits are
     already on the branch and its receipt is written, so making the pull request
@@ -118,15 +135,56 @@ def mark_group_pull_request_ready(
     ref = pull_request_ref(pull_request)
     if not ref:
         return None
+    marker = _group_ready_marker(root, phase)
+    if marker.is_file():
+        return {
+            "ok": True,
+            "phase": f"{int(phase):06d}",
+            "pull_request": pull_request,
+            "detail": "the ready-once record stands; a re-drafted pull request is never re-readied",
+            "skipped": True,
+        }
+    rows, code, detail = gh_pull_request_checks(Path(root), ref["number"])
+    if (
+        rows is None
+        or code != 0
+        or any(str(row.get("bucket") or "") != "pass" for row in rows)
+    ):
+        return {
+            "ok": False,
+            "phase": f"{int(phase):06d}",
+            "pull_request": pull_request,
+            "detail": detail
+            or "the checks are not all green; the pull request stays draft",
+        }
     ready, detail = gh_mark_pull_request_ready(
         ref["number"], ref.get("owner"), ref.get("repo"), ref.get("host")
     )
-    return {
+    result = {
         "ok": ready,
         "phase": f"{int(phase):06d}",
         "pull_request": pull_request,
         "detail": detail,
     }
+    if ready:
+        from argus.board.reservations import _now
+
+        try:
+            marker.parent.mkdir(parents=True, exist_ok=True)
+            marker.write_text(
+                json.dumps(
+                    {"version": 1, "pull_request": pull_request, "ready_at": _now()},
+                    indent=2,
+                    sort_keys=True,
+                )
+                + "\n"
+            )
+        except OSError:
+            # The record could not be written. The ready itself landed; a
+            # rerun would find gh idempotent, and the gap is reported by the
+            # caller's dirt check rather than hidden here.
+            pass
+    return result
 
 
 def _normalize_label(label: str) -> str:

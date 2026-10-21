@@ -177,9 +177,12 @@ def _group_publication_check(base: Path) -> tuple[bool, str]:
             return False, f"the group's last member was not reported as last: {second}"
         if second.get("group_pending") != []:
             return False, f"the last member reported members left to run: {second}"
-        # The publish step no longer runs the group gate, so the pull-request
-        # `READY` transition is not recorded here; `release_group_pull_request`
-        # and `--mode ready` are exercised by the group-gate self-test.
+        # The last member readies the shared pull request once its checks are
+        # green: the transition is recorded in the result, and the ready-once
+        # record stands, so a rerun of this phase never re-readies it.
+        ready = second.get("pull_request_ready")
+        if not isinstance(ready, dict) or ready.get("ok") is not True:
+            return False, f"the shared pull request was not made ready: {ready}"
         receipts = {
             number: cast("dict[str, Any]", phase_receipt(pub, number))
             for number in (100020, 100030)
