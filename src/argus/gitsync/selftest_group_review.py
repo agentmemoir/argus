@@ -219,14 +219,35 @@ def _pending_checks(pub: Path, results: list[tuple[str, object, str]]) -> None:
             "no pull request, no action",
         )
     )
-    with _StubGH(
-        {
-            "returncode": 0,
-            "stdout": json.dumps(
-                [{"bucket": "pass", "state": "success", "name": "ci", "link": ""}]
-            ),
-        }
-    ):
+    # The refusal check runs before any successful ready: once the ready-once
+    # record stands, the same pull request is skipped without asking gh, so a
+    # refusal after that record exists would never be seen.
+    with _StubGH({"returncode": 1}):
+        ready = mark_group_pull_request_ready(pub, 100030, [], url)
+    results.append(
+        (
+            "a refused ready transition is reported as not ok",
+            isinstance(ready, dict)
+            and ready.get("ok") is False
+            and not ready.get("skipped"),
+            f"ready={ready}",
+        )
+    )
+    marker = pub / BOARD_REL / "runs" / "phase-100030" / "group-pr-ready.json"
+    results.append(
+        (
+            "a refused ready writes no ready-once record",
+            not marker.exists(),
+            f"marker exists={marker.exists()}",
+        )
+    )
+    green = {
+        "returncode": 0,
+        "stdout": json.dumps(
+            [{"bucket": "pass", "state": "success", "name": "ci", "link": ""}]
+        ),
+    }
+    with _StubGH(green):
         ready = mark_group_pull_request_ready(pub, 100030, [], url)
     results.append(
         (
@@ -238,11 +259,57 @@ def _pending_checks(pub: Path, results: list[tuple[str, object, str]]) -> None:
             f"ready={ready}",
         )
     )
-    with _StubGH({"returncode": 1}):
+    results.append(
+        (
+            "a successful ready writes the ready-once record beside the receipt",
+            marker.is_file()
+            and json.loads(marker.read_text()).get("pull_request") == url,
+            f"marker={marker.read_text().strip() if marker.is_file() else 'absent'}",
+        )
+    )
+    skip = _StubGH({"returncode": 1})
+    with skip:
         ready = mark_group_pull_request_ready(pub, 100030, [], url)
     results.append(
         (
-            "a refused ready transition is reported as not ok",
+            "a record naming the same pull request skips the ready",
+            isinstance(ready, dict)
+            and ready.get("ok") is True
+            and ready.get("skipped") is True
+            and not any(argv[1:3] == ["pr", "ready"] for argv in skip.calls if argv),
+            f"ready={ready} calls={skip.calls}",
+        )
+    )
+    other = "https://github.com/example-org/example-repo/pull/9"
+    marker.write_text(
+        json.dumps(
+            {"version": 1, "pull_request": other, "ready_at": "2026-01-01T00:00:00Z"}
+        )
+        + "\n"
+    )
+    with _StubGH(green):
+        ready = mark_group_pull_request_ready(pub, 100030, [], url)
+    results.append(
+        (
+            "a record naming another pull request re-evaluates the ready",
+            isinstance(ready, dict)
+            and ready.get("ok") is True
+            and not ready.get("skipped")
+            and json.loads(marker.read_text()).get("pull_request") == url,
+            f"ready={ready}",
+        )
+    )
+    run_dir = pub / BOARD_REL / "runs" / "phase-100030"
+    marker.unlink()
+    run_dir.chmod(0o500)
+    try:
+        with _StubGH(green):
+            ready = mark_group_pull_request_ready(pub, 100030, [], url)
+    finally:
+        run_dir.chmod(0o700)
+    results.append(
+        (
+            "a ready whose record write fails is reported as not ok",
             isinstance(ready, dict) and ready.get("ok") is False,
             f"ready={ready}",
         )
