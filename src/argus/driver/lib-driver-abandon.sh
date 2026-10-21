@@ -41,6 +41,14 @@ PY
 
 # Park the phase, write the residue, release the board group, keep the run
 # directory. The marker is left alone, so the line still says it is stopped.
+# The fence helper is sourced here because abandon runs from the installed
+# command as well as the driver, where phase-driver.sh has not sourced it yet.
+# shellcheck source=lib-driver-fence.sh
+if ! declare -F board_assert_owner >/dev/null 2>&1; then
+  _abandon_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  # shellcheck disable=SC1091
+  . "$_abandon_dir/lib-driver-fence.sh"
+fi
 abandon_cmd() {   # <number> [--reason TEXT]
   local number="${1:-}" reason="" rel="" run_dir="" state=""
   shift || true
