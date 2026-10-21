@@ -119,6 +119,33 @@ resume_fence_reserve() {   # <phase>
 # the authority, and a board that cannot answer fails closed: the write is
 # refused rather than made on an unverified fence. Returns 0 only when the
 # board confirms the fence.
+# Run the board assert-owner call under a bounded timeout, so a hung board
+# cannot hold the driver lock (fd 9) forever. Any non-zero status (including a
+# timeout kill) is a refusal: the caller must treat the fence as unproved.
+board_assert_owner_cmd() {   # <phase> <reservation_id> <generation>
+  local timeout_cmd=""
+  if command -v timeout >/dev/null 2>&1; then
+    timeout_cmd="timeout"
+  elif command -v gtimeout >/dev/null 2>&1; then
+    timeout_cmd="gtimeout"
+  fi
+  if [ -n "$timeout_cmd" ]; then
+    "$timeout_cmd" 20 "$PYTHON" "$ARGUS/board/reservations.py" assert-owner \
+      "${ARGUS_CONFIG_ARGS[@]}" "${BOARD_KIND_ARGS[@]+"${BOARD_KIND_ARGS[@]}"}" \
+      --repo-root "$REPO" --machine-id "$PHASE_MACHINE_ID" \
+      --phase "$1" --reservation-id "$2" \
+      --generation "$3" \
+      >"$RUN_DIR/assert-owner-$1.json" 2>&1
+  else
+    "$PYTHON" "$ARGUS/board/reservations.py" assert-owner \
+      "${ARGUS_CONFIG_ARGS[@]}" "${BOARD_KIND_ARGS[@]+"${BOARD_KIND_ARGS[@]}"}" \
+      --repo-root "$REPO" --machine-id "$PHASE_MACHINE_ID" \
+      --phase "$1" --reservation-id "$2" \
+      --generation "$3" \
+      >"$RUN_DIR/assert-owner-$1.json" 2>&1
+  fi
+}
+
 board_assert_owner() {   # <phase> <reservation_id> <generation>
   local phase="$1" reservation_id="$2" generation="$3"
   [ -n "$reservation_id" ] && [ -n "$generation" ] || return 1
@@ -127,12 +154,7 @@ board_assert_owner() {   # <phase> <reservation_id> <generation>
     fail) return 1 ;;
     renew|reserve) return 0 ;;
   esac
-  "$PYTHON" "$ARGUS/board/reservations.py" assert-owner \
-    "${ARGUS_CONFIG_ARGS[@]}" "${BOARD_KIND_ARGS[@]+"${BOARD_KIND_ARGS[@]}"}" \
-    --repo-root "$REPO" --machine-id "$PHASE_MACHINE_ID" \
-    --phase "$phase" --reservation-id "$reservation_id" \
-    --generation "$generation" \
-    >"$RUN_DIR/assert-owner-$phase.json" 2>&1
+  board_assert_owner_cmd "$phase" "$reservation_id" "$generation"
 }
 
 # The launch path for a phase number, in the repo-relative shape the selector
