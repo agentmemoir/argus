@@ -16,8 +16,9 @@ STOP_ALLOWLIST = r"""
     driver/lib-driver-abandon.sh	exit_nonzero	fn:abandon_cmd|driver_orphan_check || { printf 'argus abandon: a phase run is alive with no window (orphaned); not abandoning\n' >&2; exit 1; }#1
     driver/lib-driver-abandon.sh	exit_nonzero	fn:abandon_cmd|exit 1#2
     driver/lib-driver-abandon.sh	exit_nonzero	fn:abandon_cmd|exit 1#3
-    driver/lib-driver-abandon.sh	exit_nonzero	fn:abandon_cmd|exit 1 ;;#1
     driver/lib-driver-abandon.sh	exit_nonzero	fn:abandon_cmd|exit 1#4
+    driver/lib-driver-abandon.sh	exit_nonzero	fn:abandon_cmd|exit 1 ;;#1
+    driver/lib-driver-abandon.sh	exit_nonzero	fn:abandon_cmd|exit 1#5
     driver/lib-driver-check.sh	return_nonzero	fn:check|return 1#1
     driver/lib-driver-check.sh	return_nonzero	fn:check|return 1#2
     driver/lib-driver-config.sh	return_nonzero	fn:phases_dir_is_local|*) return 1 ;;#1
@@ -41,6 +42,7 @@ STOP_ALLOWLIST = r"""
     driver/lib-driver-drive.sh	drive_rc_nonzero	fn:_drive_cut_branch|tidy_published_checkout || { _DRIVE_RC=1; return 0; }#1
     driver/lib-driver-drive.sh	halt_marker	fn:stop|printf 'stopped by operator at %s\n' "$(ts)" >"$HALT"#1
     driver/lib-driver-drive.sh	return_nonzero	fn:release|return 1#1
+    driver/lib-driver-drive.sh	return_nonzero	fn:release|return 1#2
     driver/lib-driver-dryrun.sh	drive_rc_zero_refusal	fn:_drive_dry_run|{ _DRIVE_RC=0; return 0; }#1
     driver/lib-driver-dryrun.sh	drive_rc_zero_refusal	fn:_drive_dry_run|{ _DRIVE_RC=0; return 0; }#2
     driver/lib-driver-dryrun.sh	drive_rc_zero_refusal	fn:_drive_dry_run|{ _DRIVE_RC=0; return 0; }#3
@@ -51,6 +53,7 @@ STOP_ALLOWLIST = r"""
     driver/lib-driver-fence.sh	return_nonzero	fn:resume_fence_reserve|return 1#1
     driver/lib-driver-fence.sh	return_nonzero	fn:resume_fence_reserve|return 1#2
     driver/lib-driver-fence.sh	return_nonzero	fn:board_assert_owner|[ -n "$reservation_id" ] && [ -n "$generation" ] || return 1#1
+    driver/lib-driver-fence.sh	return_nonzero	fn:board_assert_owner|[[ $phase =~ ^[0-9]+$ ]] || return 1#1
     driver/lib-driver-fence.sh	return_nonzero	fn:board_assert_owner|fail) return 1 ;;#1
     driver/lib-driver-group.sh	return_nonzero	fn:group_take_declared|return 1#1
     driver/lib-driver-halt-record.sh	return_nonzero	fn:halt_record_read|)" || return 1#1
@@ -78,8 +81,10 @@ STOP_ALLOWLIST = r"""
     driver/lib-driver-resume.sh	return_nonzero	fn:_drive_resume|return 1#4
     driver/lib-driver-resume.sh	resume_refuse	fn:_drive_resume|resume_refuse "$target" "$RESUME_REFUSAL"#2
     driver/lib-driver-resume.sh	return_nonzero	fn:_drive_resume|return 1#5
-    driver/lib-driver-resume.sh	resume_refuse	fn:_drive_resume|resume_refuse "$target" "the launch failed; see $RUN_DIR/driver.log"#1
+    driver/lib-driver-resume.sh	resume_refuse	fn:_drive_resume|resume_refuse "$target" "the claim fence was refused for phase $number; no launch (see the driver log)"#1
     driver/lib-driver-resume.sh	return_nonzero	fn:_drive_resume|return 1#6
+    driver/lib-driver-resume.sh	resume_refuse	fn:_drive_resume|resume_refuse "$target" "the launch failed; see $RUN_DIR/driver.log"#1
+    driver/lib-driver-resume.sh	return_nonzero	fn:_drive_resume|return 1#7
     driver/lib-driver-resume.sh	exit_nonzero	fn:resume_cmd|exit 2 ;;#1
     driver/lib-driver-resume.sh	exit_nonzero	fn:resume_cmd|driver_lock_take || { printf 'argus: another driver instance holds the lock; try again\n' >&2; exit 1; }#1
     driver/lib-driver-resume.sh	exit_nonzero	fn:resume_cmd|exit 1#1
@@ -143,6 +148,7 @@ STOP_ALLOWLIST = r"""
     gitsync/group_publication.py	blocked_call	fn:_push_one|return blocked({"repo": str(repo)}, why)#1
     gitsync/group_publication.py	blocked_call	fn:_push_one|return blocked(#1
     gitsync/group_review.py	ok_false	fn:mark_group_pull_request_ready|"ok": False,#1
+    gitsync/group_review.py	ok_false	fn:mark_group_pull_request_ready|"ok": False,#2
     gitsync/group_review.py	ok_false	fn:update_group_pull_request|"ok": False,#1
     gitsync/issue_modes.py	raise_config	fn:mode_issue_branch|raise ConfigError("branch task filename differs from the frozen issue task")#1
     gitsync/issue_modes.py	ok_false	fn:issue_mode|"ok": False,#1
