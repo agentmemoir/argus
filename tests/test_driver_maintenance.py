@@ -265,7 +265,9 @@ DRIVER_STUB_BOARD_FENCE=BOARD_RESULT
     assert (tmp_path / "stopped-claim").exists() is not release_ok
     assert (tmp_path / "halted").exists()
     if release_ok:
-        assert json.loads((tmp_path / "abandoned.json").read_text())["phase"] == "100020"
+        assert (
+            json.loads((tmp_path / "abandoned.json").read_text())["phase"] == "100020"
+        )
     else:
         # A refused fence means no residue write: the phase is not parked.
         assert not (tmp_path / "abandoned.json").exists()
