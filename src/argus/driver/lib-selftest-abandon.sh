@@ -12,7 +12,7 @@ selftest_case_abandon() {
   rel="$(resume_phase_file_of "$phase")" || rel=""
   run_dir="$(phase_run_dir "$phase" "$rel")"
   old_fence="${DRIVER_STUB_BOARD_FENCE:-}"
-  DRIVER_STUB_BOARD_FENCE=renew
+  DRIVER_STUB_BOARD_FENCE=assert
   export DRIVER_STUB_BOARD_FENCE
   wait_phase_window_gone
   rm -f "$HALT" "$HALT_RECORD" "$CLAIM" "$run_dir/abandoned.json"

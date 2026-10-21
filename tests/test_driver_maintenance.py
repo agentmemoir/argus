@@ -260,7 +260,7 @@ printf '100020\\trsv-fixture\\t2\\n' >"$CLAIM"
 stop
 DRIVER_STUB_BOARD_FENCE=BOARD_RESULT
 (abandon_cmd 100020) || true
-""".replace("BOARD_RESULT", "renew" if release_ok else "fail"),
+""".replace("BOARD_RESULT", "assert" if release_ok else "fail"),
     )
     assert (tmp_path / "stopped-claim").exists() is not release_ok
     assert (tmp_path / "halted").exists()
