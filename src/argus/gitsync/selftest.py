@@ -52,7 +52,7 @@ def self_test_checks() -> list[dict[str, Any]]:
             "driver.runs": BOARD_REL / "runs",
             "driver.include": ["phase-*.md"],
             "driver.exclude": [],
-            "machine.id": "self-test",
+            "machine.id": "server-01",
             "commands.git": "git",
             "commands.gh": "gh",
             "board.repo": BOARD_REL,

@@ -187,7 +187,9 @@ _drive() {
   #
   # Both shapes of that fence are written, because the tick's own fenced steps
   # read the file and only this shell reads the claim; see record_claim_fence.
-  record_claim_fence "$number" "$reservation_id" "$reservation_generation" || return $?
+  record_claim_fence "$number" "$reservation_id" "$reservation_generation" || {
+    rc=$?; release_refused_claim "$number" "$reservation_id" "$reservation_generation"; return "$rc"
+  }
 
   _drive_cut_branch || return $?
   [ -z "$_DRIVE_RC" ] || return "$_DRIVE_RC"
