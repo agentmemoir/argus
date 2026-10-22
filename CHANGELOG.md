@@ -4,6 +4,8 @@ Notable changes to this project are documented here. The format follows [Keep a 
 
 ## [Unreleased]
 
+- A whole-tree `gitsync --mode clean` that skips every phase now reports not ok and exits 1. A sweep that lands at least one phase still succeeds, and its summary names each skipped phase with its phase number, state, and reason. ([#164](https://github.com/agentmemoir/argus/issues/164))
+
 - The tick stops with no launch when `gitsync --mode branch` refuses on the phase fence (FENCED or COORDINATION_UNAVAILABLE), instead of launching on the branch the checkout already has. Every other branch failure is still a repair. ([#164](https://github.com/agentmemoir/argus/issues/164))
 
 - The driver writes the phase reservation file the write fences read, from the same board-confirmed claim it records in the shell claim file.
@@ -24,7 +26,7 @@ Notable changes to this project are documented here. The format follows [Keep a 
 
 - `gitsync --mode tidy` accepts `--phase` and proves the fence before it moves a checkout, and `--mode branch` proves it before the branch cut. The pre-selection tidy call has no phase to name, so it stays unfenced and keeps its dirty-tree refusal; only the branch cut's call, which knows the phase, passes it. ([#164](https://github.com/agentmemoir/argus/issues/164))
 
-- `gitsync --mode clean` proves the fence before its run-state commit and push, and `--mode checkpoint` proves it before it stages or commits. The fresh-start sweep that runs with no phase has no single owner, so it proves the fence per planned phase: a phase whose receipt is terminal is exempt, a phase whose fence holds is landed, and a phase whose fence does not hold is skipped with its phase number and reason in the result rather than failing the sweep. ([#164](https://github.com/agentmemoir/argus/issues/164))
+- `gitsync --mode clean` proves the fence before its run-state commit and push, and `--mode checkpoint` proves it before it stages or commits. The fresh-start sweep that runs with no phase has no single owner, so it proves the fence per planned phase: a phase whose receipt is terminal is exempt, a phase whose fence holds is landed, and a phase whose fence does not hold is skipped, and the result names it with its phase number and reason. A sweep that skips every phase now fails; a sweep that lands at least one phase still succeeds. ([#164](https://github.com/agentmemoir/argus/issues/164))
 
 - Every one of those fences returns `FENCED` on a mismatch and `COORDINATION_UNAVAILABLE` when the reservation cannot be read or the board cannot answer, through the one helper `argus.gitsync.fence.phase_fence`, and every refusal writes nothing. ([#164](https://github.com/agentmemoir/argus/issues/164))
 

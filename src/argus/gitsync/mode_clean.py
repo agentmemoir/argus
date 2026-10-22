@@ -158,7 +158,9 @@ def mode_clean(root: str | Path, phase: int | str | None = None) -> dict[str, An
                 results.append(landed)
             if held is not None:
                 skipped.append(held)
-        ok = all(res.get("ok") for res in results)
+        # A sweep that landed nothing left every phase's leftovers dirty, so an
+        # empty result is a failure, not a vacuous success.
+        ok = bool(results) and all(res.get("ok") for res in results)
         out: dict[str, Any] = {
             "ok": ok,
             "mode": "clean",
@@ -171,7 +173,11 @@ def mode_clean(root: str | Path, phase: int | str | None = None) -> dict[str, An
             out["state"] = "PARTIAL"
             out["summary"] = (
                 f"{out['summary']}; {len(skipped)} phase(s) skipped for an "
-                "unproven fence: " + ", ".join(str(one["phase"]) for one in skipped)
+                "unproven fence: "
+                + ", ".join(
+                    f"{one['phase']} ({one['state']}: {one['error']})"
+                    for one in skipped
+                )
             )
         return out
     pathspec = _phase_run_pathspec(phase, root)
