@@ -6,7 +6,9 @@ The issue source reads one repository and uses the shared board for claims. It k
 
 See [the example configuration](../examples/issue-config.jsonc). Create a separate board checkout and the configured run and task folders before starting the driver. Keep the task folder inside that board checkout.
 
-Configure a pipeline with the input names in `number-input` and `file-input`. [The example pipeline](../examples/project/issue-pipeline.yaml) shows those inputs; add review, publication, and report steps for real work.
+Configure a pipeline with the input names in `number-input` and `file-input`. [The example pipeline](../examples/project/issue-pipeline.yaml) has one step that does the fix, its review, and its publication.
+
+A `post_step` hook publishes issue work the same way as phase work. After each step, it runs `gitsync --kind issue --mode checkpoint`, which commits leftovers as a `wip:` commit and pushes them. Then it runs `gitsync --kind issue --mode open-pr --body-file FILE`, which opens or reuses the draft pull request for the issue branch and reads its draft state back. Both modes first check that this machine still holds the issue claim.
 
 Run `argus --config SETTINGS --check`, then `argus --config SETTINGS --dry-run`. Both read the backlog without taking a claim or writing a task file.
 
