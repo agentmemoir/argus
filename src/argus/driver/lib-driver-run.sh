@@ -226,6 +226,24 @@ if unreadable:
   return 0
 }
 
+# A failed issue run gives its board claim back, so the claim label alone holds
+# the issue: removing the label lets Argus retry, and work that completed,
+# published, or was rejected stays retained on the board (decision 9).
+# ISSUE_CLAIM_HELD=1 tells the notice that the claim is still held (belief 4).
+release_failed_issue() {
+  ISSUE_CLAIM_HELD=0
+  [ "${work_kind:-phase}" = issue ] || return 0
+  ISSUE_CLAIM_HELD=1
+  if [ -z "${CLIO_RESERVATION_ID:-}" ] || [ -z "${CLIO_RESERVATION_GENERATION:-}" ]; then
+    log "claim: no board token for failed issue $1; the claim waits for its expiry"
+    return 0
+  fi
+  CLAIM_RELEASED=0
+  release_refused_claim "$1" "$CLIO_RESERVATION_ID" "$CLIO_RESERVATION_GENERATION" failed
+  [ "$CLAIM_RELEASED" = 1 ] && ISSUE_CLAIM_HELD=0
+  return 0
+}
+
 # Record an exhausted remedy loop and continue the line.
 #
 # Exhausting the approver's rounds is a fact about the budget, not a verdict on
@@ -247,6 +265,7 @@ handle_escalation() {
   # Land the record and release the claim before saying so, so a person reading
   # the notification finds the evidence where it points.
   gitsync_clean "$number"
+  release_failed_issue "$number"
   tmux_set_title "${work_kind:-phase} $number escalated"
   notify_phase "$rel" escalated
   return 0
@@ -444,10 +463,11 @@ print(f"{step}: {reason}" if step and reason else (reason or step))' \
     130) tmux_set_title "HALTED ${work_kind:-phase} $number (interrupted)"
          notify_phase "$rel" interrupted "the process received an interrupt signal" ;;
     *)   if [ "$job_failed" = 1 ] || [ "${work_kind:-phase}" = issue ]; then
-           # Record the failure so the operator can see it, keep the claim, and
-           # let the line continue. The claim resumes through its own expiry
-           # windows plus the cooldown.
+           # Record the failure so the operator can see it and let the line
+           # continue. A phase keeps its claim, which resumes through its own
+           # expiry windows plus the cooldown; an issue gives its claim back.
            failure_residue_write "$number" "$rel" "$state" "$rc" "$(job_retries)"
+           release_failed_issue "$number"
            log "job-failed: ${work_kind:-phase} $number rc=$rc state=${state:-unknown}; retries exhausted, recorded as failed; continuing"
            tmux_set_title "${work_kind:-phase} $number failed"
            notify_phase "$rel" failed "" "$rc"

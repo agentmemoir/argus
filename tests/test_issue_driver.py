@@ -246,3 +246,50 @@ def test_selection_log_names_only_nonzero_skip_reasons(tmp_path: Path) -> None:
         line for line in log.splitlines() if line.endswith("issues skipped: claimed=2")
     ]
     assert "issues skipped: claimed=2" in log
+
+
+@pytest.mark.parametrize("event", ["failed", "escalated"])
+def test_issue_failure_notice_names_label_and_issue(event: str, tmp_path: Path) -> None:
+    message = format_notification(
+        "issue-000023-fix-api.md",
+        event,
+        kind="issue",
+        run_json=tmp_path / "run.json",
+        claim_label="accepted",
+    )
+    assert "Remove the `accepted` label from issue #23 to let Argus retry." in message
+    assert "phase" not in message
+
+
+@pytest.mark.parametrize("kind", ["issue", "phase"])
+def test_failed_issue_run_returns_its_claim(kind: str, tmp_path: Path) -> None:
+    driver = Path(__file__).resolve().parents[1] / "src/argus/driver"
+    script = f"""
+. "{driver}/lib-driver-fence.sh"
+. "{driver}/lib-driver-run.sh"
+log() {{ printf '%s\\n' "$*" >>"{tmp_path}/log"; }}
+fake_python() {{ printf '%s ' "$@" >"{tmp_path}/call"; }}
+PYTHON=fake_python ARGUS=/argus REPO=/repo RUN_DIR="{tmp_path}" CLAIM="{tmp_path}/claim"
+PHASE_MACHINE_ID=m1 CLIO_RESERVATION_ID=r1 CLIO_RESERVATION_GENERATION=4
+ARGUS_CONFIG_ARGS=() BOARD_KIND_ARGS=(--issues) work_kind={kind}
+release_failed_issue 23
+"""
+    subprocess.run(["bash", "-c", script], check=True, timeout=30)
+    call = tmp_path / "call"
+    if kind == "phase":
+        assert not call.exists()
+        return
+    assert call.read_text().split() == [
+        "/argus/board/reservations.py",
+        "release-group",
+        "--issues",
+        "--repo-root",
+        "/repo",
+        "--machine-id",
+        "m1",
+        "--reservation-id",
+        "r1",
+        "--generation",
+        "4",
+    ]
+    assert "returned the failed issue 23" in (tmp_path / "log").read_text()

@@ -4,6 +4,8 @@ Notable changes to this project are documented here. The format follows [Keep a 
 
 ## [Unreleased]
 
+- A failed or escalated issue run now gives its board claim back and keeps the claim label. Its Needs You notice says: remove the label from issue #N to let Argus retry. While the label is there and no board record holds the issue, it is skipped; once a person removes the label, a later tick can pick the issue again. If the release fails, the notice says the claim could not be given back, and the issue is picked again after the claim expires and its cooldown passes, even with the label. Completed, rejected, and accepted issues stay blocked. ([#203](https://github.com/agentmemoir/argus/issues/203))
+
 - `gitsync --mode open-pr` and `--mode peek-ci` use a pull request for the branch only when its head branch is in this repository and has the same name. A row with a missing value is not used.
 - The running guide says two drivers must not share one checkout, and how to give each its own clone, run folder, state folder, and tmux session. The issues guide says the default `trusted-associations` trusts an organization member on the next read, and how to drop `MEMBER`. ([#199](https://github.com/agentmemoir/argus/issues/199), [#200](https://github.com/agentmemoir/argus/issues/200))
 
