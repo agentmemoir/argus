@@ -130,7 +130,10 @@ def test_issue_pull_requests_reads_only_recorded_branches(
             {"number": 60, "url": "https://g/o/r/pull/60", "state": "CLOSED"},
         ], ""
 
-    monkeypatch.setattr(repair_cli.conventions, "runs_dir", lambda _r: runs)
+    def runs_dir(_root: object) -> Path:
+        return runs
+
+    monkeypatch.setattr(repair_cli.conventions, "runs_dir", runs_dir)
     monkeypatch.setattr(repair_cli, "issue_scope", scope)
     monkeypatch.setattr(repair_cli, "gh_pull_requests_for_branch", listed)
     rows = repair_cli.issue_pull_requests(tmp_path)

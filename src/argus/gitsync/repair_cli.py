@@ -124,11 +124,11 @@ def issue_pull_requests(root: str | Path) -> list[dict[str, object]]:
         if found is None:
             print(f"repair: issue {number}: pull requests unread", file=sys.stderr)
             continue
-        rows += [
-            {"issue": number, "branch": branch, "pull_request": pr["url"]}
-            for pr in found
-            if pr["state"] == "OPEN"
-        ]
+        for pr in found:
+            if pr["state"] == "OPEN":
+                rows.append(
+                    {"issue": number, "branch": branch, "pull_request": pr["url"]}
+                )
     return rows
 
 
