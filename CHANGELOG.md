@@ -4,6 +4,8 @@ Notable changes to this project are documented here. The format follows [Keep a 
 
 ## [Unreleased]
 
+- The tick stops with no launch when `gitsync --mode branch` refuses on the phase fence (FENCED or COORDINATION_UNAVAILABLE), instead of launching on the branch the checkout already has. Every other branch failure is still a repair. ([#164](https://github.com/agentmemoir/argus/issues/164))
+
 - The driver writes the phase reservation file the write fences read, from the same board-confirmed claim it records in the shell claim file.
 
 - The group gate's check read names the pull request's own repository and host on the `gh` call: `gh pr checks` now receives `--repo [HOST/]OWNER/REPO` from the receipt's `owner`, `repo`, and `host`, the same triple the stage-history read already used. Without it gh answered about the repository of the run directory, so a run directory outside a checkout, or on a different repository, read another repository's checks and reported them as this group's. ([#168](https://github.com/agentmemoir/argus/pull/168))

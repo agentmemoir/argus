@@ -254,8 +254,19 @@ _drive_cut_branch() {
       --phases-directory "$(phases_dir)" \
       "${GROUP_ARGS[@]+"${GROUP_ARGS[@]}"}" \
       >"$RUN_DIR/phase-branch.json" 2>/dev/null
-    local branch_rc=$?
+    local branch_rc=$? branch_state
     if [ "$branch_rc" -ne 0 ]; then
+      # A fence refusal is not a branch failure. The board does not confirm
+      # this machine owns the phase, so a launch would run another owner's
+      # work. The claim file stays, so --release can still return it.
+      branch_state="$(selection_value state <"$RUN_DIR/phase-branch.json")"
+      case "$branch_state" in
+        FENCED|COORDINATION_UNAVAILABLE)
+          log "${work_kind:-phase} $number: the $branch_state fence refused the branch cut; no launch (see $RUN_DIR/phase-branch.json)"
+          _DRIVE_RC=1
+          return 0
+          ;;
+      esac
       # A branch cut that fails is a repair: launch on the branch the checkout
       # already has and retry the cut next tick. The phase branch is published
       # by the finalize push, which reports a real failure there.
