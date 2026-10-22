@@ -4,6 +4,7 @@ Notable changes to this project are documented here. The format follows [Keep a 
 
 ## [Unreleased]
 
+- A tick starts a CI repair round before new work when a phase pull request that waits on review has a failed check. The round runs `repair.pipeline` in the phase window, inside its own temporary git worktree on the pull request branch, so the main checkout never moves. The session pushes the run's commit to that branch without force and removes the worktree; the next tick removes a worktree a crash left behind. A round counts only after its launch, and after `repair.attempts` rounds a still-red check sends one notice. ([#196](https://github.com/agentmemoir/argus/issues/196))
 - The configuration accepts `repair.pipeline`, `repair.attempts`, and `repair.wait` for the CI repair round, and passes them to the driver as `REPAIR_*` variables. With no `repair` object, the defaults are `repair.yaml` beside `pipeline`, 3 attempts, and 600 seconds. A `repair` object no longer warns as stale. ([#195](https://github.com/agentmemoir/argus/issues/195))
 
 - A tick that cannot save or prove its selected claim returns that reservation to the queue. It keeps another machine's replacement claim and records a refused cleanup. ([#183](https://github.com/agentmemoir/argus/issues/183))

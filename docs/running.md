@@ -72,6 +72,12 @@ Run it before the first edit of an interactive phase, and when the board looks f
 
 A glide job that fails is retried with capped exponential backoff and full jitter, then recorded as `failed.json` beside the phase's run directory; the selector skips that phase, so the line continues to the next job instead of halting. `ARGUS_JOB_RETRIES` sets the retry count, 3 by default, so a job is tried 4 times. A failure that exhausts its retries sends a `failed` notification naming the residue.
 
+## CI repair rounds
+
+Each tick, before new work, the driver reads the checks of every phase pull request that waits on review. A pull request with a failed check gets a repair round: one run of `repair.pipeline` in the phase window, so one active run stays the rule. The tick that starts a round starts no new work. A round is counted only after its window opened, so a launch that fails is tried again on the next tick and uses no round. Rounds start now, after `repair.wait` seconds, and after twice that; after `repair.attempts` rounds a check that is still red sends one notice. A checks read that fails is logged and tried again on the next tick.
+
+A round runs in its own git worktree, `repair-worktree-<pr>` in the driver state folder, detached at the fetched pull request branch. The main checkout never moves. When the driver's runs folder is inside the checkout, the worktree gets a link to that folder's top directory, so the pipeline's run folder and the files it reads there resolve; Git must ignore that link, or the round does not start and a notice says why. When the run made a commit, the session pushes it to the pull request branch, never with force, so a branch that moved rejects the push. The session then removes the worktree. A worktree that a crash left behind is removed on the next tick; a notice names it first when it held edits or commits that were not pushed. `--merge-check-only` starts no round, and neither does a halted line or an unreadable `repair.pipeline`. Pull requests from `issues` work are not read yet.
+
 ## The Configuration File
 
 `--config` names the file. Without the flag, Argus uses `config.json` in the current folder when it is there. `--self-test` reads no file.

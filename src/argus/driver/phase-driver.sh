@@ -137,7 +137,6 @@ ARGUS_CONFIG_VARS=(
   TMUX_REFRESH BOARD_REPO BOARD_FILE BOARD_BRANCH BOARD_BACKUP_BRANCH BOARD_REMOTE
   HERMES_PROFILE_NAME DISCORD_CHANNEL NOTIFY_DISABLED DISCORD_FALLBACK_CHANNEL
   HEARTBEAT_URL REPAIR_PIPELINE REPAIR_ATTEMPTS REPAIR_WAIT
-  REPAIR_VERIFY REPAIR_VERIFY_TIMEOUT REPAIR_STALE_AFTER
 )
 
 # Argus's own shell helpers, sourced from beside this file. The folder is
@@ -157,7 +156,7 @@ for helper in \
   lib-driver-config.sh lib-driver-log.sh lib-driver-notify.sh \
   lib-driver-run.sh lib-driver-job.sh lib-driver-select.sh lib-driver-check.sh \
   lib-driver-drive.sh lib-driver-control.sh lib-driver-dryrun.sh lib-driver-select-flow.sh \
-  lib-driver-select-stub.sh lib-driver-select-real.sh lib-driver-maintenance.sh lib-driver-launch.sh \
+  lib-driver-select-stub.sh lib-driver-select-real.sh lib-driver-maintenance.sh lib-driver-repair.sh lib-driver-launch.sh \
   lib-driver-halt-record.sh lib-driver-fence.sh \
   lib-driver-resume.sh lib-driver-abandon.sh lib-driver-estimate.sh \
   lib-selftest.sh lib-selftest-launch.sh lib-selftest-flow.sh \
@@ -196,6 +195,9 @@ done
 # shellcheck disable=SC1091
 . "$ARGUS_DIR/lib-driver-select.sh"
 . "$ARGUS_DIR/lib-driver-maintenance.sh"
+# CI repair rounds for pull requests that wait on review.
+# shellcheck disable=SC1091
+. "$ARGUS_DIR/lib-driver-repair.sh"
 # The reservation group: its member array, its one branch, and its renewal.
 # shellcheck disable=SC1091
 . "$ARGUS_DIR/lib-driver-group.sh"
@@ -297,6 +299,10 @@ case "${1:-}" in
     session_claim_ensure "$2" "$3" || exit 1
     run_session "$2" "$3"
     ;;
+  --repair-session)
+    [ "$#" -eq 4 ] || { echo "usage: phase-driver.sh --repair-session <id> <task-file> <branch>" >&2; exit 2; }
+    run_repair_session "$2" "$3" "$4"
+    ;;
   --resume)
     shift
     [ "$#" -le 1 ] || { echo "usage: phase-driver.sh --resume [NUMBER]" >&2; exit 2; }
@@ -309,7 +315,8 @@ case "${1:-}" in
     ;;
   --clear-halt) clear_halt_cmd ;;
   --check)     check ;;
-  --merge-check-only) drive --merge-check-only ;;
+  # A merge check launches nothing, so it starts no repair round either.
+  --merge-check-only) REPAIR_PIPELINE="" drive --merge-check-only ;;
   --self-test) driver_self_test ;;
   --stop)      stop ;;
   --release)   release ;;

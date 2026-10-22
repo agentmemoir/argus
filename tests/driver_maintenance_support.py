@@ -14,7 +14,8 @@ def shell(tmp_path: Path, body: str) -> str:
     script = """
 set -euo pipefail
 for name in lib-driver-drive lib-driver-control lib-driver-select lib-driver-group lib-driver-resume \
-    lib-driver-select-flow lib-driver-issues lib-driver-config lib-driver-run lib-driver-fence; do
+    lib-driver-select-flow lib-driver-issues lib-driver-config lib-driver-run lib-driver-fence \
+    lib-driver-repair; do
   . "$TEST_DRIVER/$name.sh"
 done
 if [ -f "$TEST_DRIVER/lib-driver-maintenance.sh" ]; then

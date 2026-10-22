@@ -88,6 +88,8 @@ reconcile_pending_reviews() {
   if [ "$PENDING_PUBLISHED" -gt 0 ]; then
     log "$PENDING_PUBLISHED phase(s) moved to published; no new work this tick"
   fi
+  # Red CI on a waiting pull request is repaired before any new work.
+  repair_tick "$pending"
   # A prior pass may have recorded the merge before its checkout cleanup
   # failed. Published receipts leave the pending list, so retry tidy each pass.
   if [ -z "${DRIVER_STUB_COORDINATION:-}" ]; then
