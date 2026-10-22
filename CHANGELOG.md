@@ -4,7 +4,11 @@ Notable changes to this project are documented here. The format follows [Keep a 
 
 ## [Unreleased]
 
-- A failed run-state commit or push reports the git step and its exit code, `commit of run state failed (git exit 128): git has no user identity` included, instead of copying git's stderr. That stderr names the local user and machine as `'<user>@<host>.(none)'` when no identity is set, which SECURITY.md rule 4 forbids storing. The "nothing to commit" case is still read from stderr and still reports nothing to do. ([#175](https://github.com/agentmemoir/argus/issues/175))
+- Every stored gitsync failure reason is now built as `<step> failed (git exit <rc>)`, plus one fixed sentence when git's own text names a cause a reader can act on, such as `git has no user identity`. No reason copies git's stderr any more, because that text carries the local user name and machine name as `'<user>@<host>.(none)'` when a checkout has no identity and SECURITY.md rule 4 forbids storing a machine name. `ok`, `action`, and every exit code are unchanged, so a degradation is still a repair the next tick retries, and the `nothing to commit` no-op still reads git's text without storing it. ([#175](https://github.com/agentmemoir/argus/issues/175))
+
+- A degraded gitsync result no longer reads like a clean one. `summarize()` prints a `DEGRADED` head for a line that continued and names what was deferred, with `continued` in place of the action and the first line of the warning after it, cut to one line's length; a blocked result still outranks a degraded one, and a clean result still prints `ok`. ([#172](https://github.com/agentmemoir/argus/issues/172))
+
+- The driver logs what a clean gitsync result file reported, not only its exit code. It writes one line per skipped phase with the phase, its state, and the reason, and one continued-in-a-degraded-state line for a warning, and it writes nothing for a missing, empty, unreadable, or malformed file. Both clean calls still return 0 on every path, so the lines change what the operator can read and never what the tick does next. ([#174](https://github.com/agentmemoir/argus/issues/174))
 
 - A resume stops with no launch when the board fence refuses the branch cut, and the resume now cuts the branch after it renews or takes its fence and records its claim. A group declaration the resume cannot read is still refused before the fence, so that refusal takes no reservation. Every other branch failure is still a repair.
 
