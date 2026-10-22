@@ -104,3 +104,42 @@ def test_failed_job_log_is_saved_and_its_tail_named(
         [],
         None,
     )
+
+
+def test_issue_pull_requests_reads_only_recorded_branches(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+) -> None:
+    runs = tmp_path / "runs"
+    for name in ("issue-7", "issue-8", "issue-9", "issue-x"):
+        (runs / name).mkdir(parents=True)
+    tasks = {7: "tasks/issue-7-fix-ci.md", 9: "tasks/issue-9-docs.md"}
+
+    def scope(_root: object, number: int) -> tuple[Path, list[str]]:
+        if number not in tasks:
+            raise repair_cli.ConfigError("current issue has no valid frozen task")
+        return tmp_path, [f"runs/issue-{number}", tasks[number]]
+
+    def listed(_root: Path, branch: str) -> tuple[list[dict[str, Any]] | None, str]:
+        if branch == "issue/9-docs":
+            return None, "gh secret detail"
+        assert branch == "issue/7-fix-ci"
+        return [
+            {"number": 70, "url": "https://g/o/r/pull/70", "state": "OPEN"},
+            {"number": 60, "url": "https://g/o/r/pull/60", "state": "CLOSED"},
+        ], ""
+
+    monkeypatch.setattr(repair_cli.conventions, "runs_dir", lambda _r: runs)
+    monkeypatch.setattr(repair_cli, "issue_scope", scope)
+    monkeypatch.setattr(repair_cli, "gh_pull_requests_for_branch", listed)
+    rows = repair_cli.issue_pull_requests(tmp_path)
+    assert rows == [
+        {
+            "issue": 7,
+            "branch": "issue/7-fix-ci",
+            "pull_request": "https://g/o/r/pull/70",
+        }
+    ]
+    err = capsys.readouterr().err
+    assert "issue 9" in err and "secret" not in err

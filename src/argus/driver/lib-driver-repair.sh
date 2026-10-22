@@ -12,6 +12,23 @@
 # branch only (never force) and removes the worktree when it ends. A worktree
 # that a crash left behind is removed on the next tick.
 
+# The open pull requests of `issues` work, in the pending-review shape. Only
+# branches that an issue run folder records are read (gitsync/repair_cli.py).
+issue_review_snapshot() {
+  "$PYTHON" - "$ARGUS" "$REPO" "${ARGUS_CONFIG_ARGS[@]}" <<'PY'
+import json
+import sys
+
+sys.path.insert(0, sys.argv[1])
+import _bootstrap
+from argus import conventions
+from argus.gitsync.repair_cli import issue_pull_requests
+
+conventions.configure_from_cli(sys.argv[3:])
+print(json.dumps({"awaiting_review": issue_pull_requests(sys.argv[2])}))
+PY
+}
+
 repair_worktree() { printf '%s/repair-worktree-%s' "$RUN_DIR" "$1"; }
 
 # Remove one repair worktree. Edits or commits that never reached the remote are
@@ -145,7 +162,8 @@ run_repair_session() {
   if ! cd "$wt"; then
     log "repair $key: its worktree is missing; the round ran nothing"
   else
-    "$CMD_GLIDE" run --pipeline "$REPAIR_PIPELINE" \
+    # The pipeline's hooks read the configuration file this driver loaded.
+    ARGUS_CONFIG_FILE="$ARGUS_CONFIG_FILE" "$CMD_GLIDE" run --pipeline "$REPAIR_PIPELINE" \
       --input "repair_id=$key" --input "repair_task=$task" || rc=$?
     if [ "$rc" -ne 0 ]; then
       log "repair $key: the run ended with rc=$rc and pushed nothing"

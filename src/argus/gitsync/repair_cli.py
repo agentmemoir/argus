@@ -13,6 +13,10 @@ use up a round or lead to a false escalation.
 
 A checks read that fails exits 3 and changes nothing: an unread pull request
 is not a green one.
+
+``issue_pull_requests`` lists the open pull requests of ``issues`` work for the
+driver's tick. It reads only branches that Argus recorded in an issue run
+folder, so a pull request on any other branch is never repaired.
 """
 
 from __future__ import annotations
@@ -31,9 +35,12 @@ if not __package__:
         _bootstrap as _bootstrap,  # noqa: F401 - register the source package
     )
 from argus import conventions
+from argus.board.core import CoordinationError
 from argus.gitsync import repair_round
 from argus.gitsync.gh_checks import gh_pull_request_checks
-from argus.gitsync.git import GH_TIMEOUT_S, gh_binary
+from argus.gitsync.gh_read import gh_pull_requests_for_branch
+from argus.gitsync.git import GH_TIMEOUT_S, ConfigError, gh_binary
+from argus.gitsync.issue_paths import issue_branch, issue_scope
 
 # A GitHub Actions job link: the repository and the job id are all gh needs.
 _JOB_LINK = re.compile(r"https://([^/]+)/([^/]+/[^/]+)/actions/runs/\d+/job/(\d+)")
@@ -93,6 +100,36 @@ def save_failed_log(
         path.write_text(done.stdout, encoding="utf-8")
         return done.stdout.splitlines()[-TAIL_LINES:], str(path)
     return [], None
+
+
+def issue_pull_requests(root: str | Path) -> list[dict[str, object]]:
+    """One row per open pull request on a recorded issue branch.
+
+    The branch comes from the issue run folder: the claim's reservation and
+    the frozen task it names, the same proof the issue checkpoint uses. A
+    folder without that proof is skipped. A gh read that fails is named on
+    stderr by issue number only and skipped; the next tick reads it again.
+    """
+    rows: list[dict[str, object]] = []
+    for run_dir in sorted(conventions.runs_dir(root).glob("issue-*")):
+        match = re.fullmatch(r"issue-([0-9]+)", run_dir.name)
+        if match is None or not run_dir.is_dir():
+            continue
+        number = int(match.group(1))
+        try:
+            branch = issue_branch(number, issue_scope(root, number)[1][1])
+        except (ConfigError, CoordinationError):
+            continue
+        found, _why = gh_pull_requests_for_branch(Path(root), branch)
+        if found is None:
+            print(f"repair: issue {number}: pull requests unread", file=sys.stderr)
+            continue
+        rows += [
+            {"issue": number, "branch": branch, "pull_request": pr["url"]}
+            for pr in found
+            if pr["state"] == "OPEN"
+        ]
+    return rows
 
 
 def run(args: argparse.Namespace, now: float) -> tuple[int, dict[str, object]]:

@@ -87,7 +87,41 @@ PY
     echo "FAIL: repair: expected one escalation notice and no worktree"; cat "$notes"; bad=1
   fi
 
+  selftest_repair_issue_pr || bad=1
+
   git -C "$REPO" push -q origin --delete "$branch" || true
   rm -f "$stub" "$cfg" "$notes" "$REPAIR_PIPELINE" "$RUN_DIR"/repair-77.*
+  return "$bad"
+}
+
+# One `issues` pull request: the issues tick lists it, starts one round, and the
+# round's glide sees the configuration file only through the driver's launch.
+selftest_repair_issue_pr() {
+  local bad=0 pr=https://github.com/acme/widget/pull/78 branch=issue/78-fix-ci glide seen
+  git -C "$REPO" push -q origin "HEAD:refs/heads/$branch" || return 1
+  issue_review_snapshot() {
+    printf '{"awaiting_review":[{"issue":78,"branch":"%s","pull_request":"%s"}]}\n' "$branch" "$pr"
+  }
+  WORK_SOURCE=issues
+  reconcile_pending_reviews
+  if [ "$PENDING_PUBLISHED" = 1 ] && [ -d "$(repair_worktree 78)" ] \
+      && grep -q '"attempts": \[[0-9]' "$RUN_DIR/repair-78.json"; then
+    echo "ok: repair: an issue pull request on a recorded branch starts one counted round"
+  else
+    echo "FAIL: repair: the issues tick did not start a round for the issue pull request"; bad=1
+  fi
+  glide="$RUN_DIR/repair-glide"; seen="$RUN_DIR/repair-glide-env"
+  printf '#!/bin/sh\nprintf "%%s\\n" "$ARGUS_CONFIG_FILE" >"%s"\nexit 1\n' "$seen" >"$glide"
+  chmod 700 "$glide"
+  ( export -n ARGUS_CONFIG_FILE; CMD_GLIDE="$glide"; PIDFILE="$RUN_DIR/repair-pid"
+    run_repair_session 78 "$RUN_DIR/repair-78.md" "$branch" ) >/dev/null 2>&1
+  if [ -n "$ARGUS_CONFIG_FILE" ] && [ "$(cat "$seen" 2>/dev/null)" = "$ARGUS_CONFIG_FILE" ] \
+      && [ ! -e "$(repair_worktree 78)" ]; then
+    echo "ok: repair: the round's glide gets ARGUS_CONFIG_FILE and the worktree is removed"
+  else
+    echo "FAIL: repair: glide saw '$(cat "$seen" 2>/dev/null)', not '$ARGUS_CONFIG_FILE'"; bad=1
+  fi
+  git -C "$REPO" push -q origin --delete "$branch" || true
+  rm -f "$glide" "$seen" "$RUN_DIR"/repair-78.* "$RUN_DIR/repair-pid"
   return "$bad"
 }
