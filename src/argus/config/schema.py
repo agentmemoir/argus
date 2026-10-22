@@ -97,6 +97,12 @@ SCHEMA = (
     Field("issues.list-limit", "int", "optional"),
     Field("issues.timeout", "int", "optional"),
     Field("issues.claim-attempts", "int", "optional"),
+    # The CI repair round: the one-step pipeline that fixes red checks on an
+    # open driver pull request, how many rounds run, and the seconds added
+    # before each later round. Defaults apply when the keys are absent.
+    Field("repair.pipeline", "path", "optional"),
+    Field("repair.attempts", "int", "optional"),
+    Field("repair.wait", "int", "optional"),
     Field("estimate.factors-file", "path", "optional"),
     Field("estimate.ideal-days", "str", "optional"),
 )
@@ -152,6 +158,9 @@ SHELL_VARS = {
     "notify.disabled": "NOTIFY_DISABLED",
     "notify.fallback": "DISCORD_FALLBACK_CHANNEL",
     "notify.heartbeat": "HEARTBEAT_URL",
+    "repair.pipeline": "REPAIR_PIPELINE",
+    "repair.attempts": "REPAIR_ATTEMPTS",
+    "repair.wait": "REPAIR_WAIT",
     "estimate.factors-file": "ESTIMATE_FACTORS_FILE",
     "estimate.ideal-days": "ESTIMATE_IDEAL_DAYS",
 }
@@ -176,6 +185,12 @@ ISSUES_DEFAULTS: dict[str, object] = {
     "issues.claim-attempts": 3,
 }
 
+# Three rounds: now, after 10 minutes, after 20 minutes. Then Needs You.
+REPAIR_DEFAULTS: dict[str, object] = {
+    "repair.attempts": 3,
+    "repair.wait": 600,
+}
+
 # The four flag overrides: flag name -> (dotted key, wrap scalar in a list).
 # Repeated --phase-glob flags replace the file's include list with that list.
 _OVERRIDES = {
@@ -195,6 +210,7 @@ _OBJECT_KEYS = (
     "runstate",
     "notify",
     "issues",
+    "repair",
     "estimate",
 )
 
@@ -210,6 +226,7 @@ __all__ = [
     "Field",
     "SCHEMA",
     "SHELL_VARS",
+    "REPAIR_DEFAULTS",
     "_OBJECT_KEYS",
     "_OVERRIDES",
     "_REPORT_KEY",

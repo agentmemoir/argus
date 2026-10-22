@@ -4,6 +4,8 @@ Notable changes to this project are documented here. The format follows [Keep a 
 
 ## [Unreleased]
 
+- The configuration accepts `repair.pipeline`, `repair.attempts`, and `repair.wait` for the CI repair round, and passes them to the driver as `REPAIR_*` variables. With no `repair` object, the defaults are `repair.yaml` beside `pipeline`, 3 attempts, and 600 seconds. A `repair` object no longer warns as stale. ([#195](https://github.com/agentmemoir/argus/issues/195))
+
 - Single-phase and whole-tree `gitsync --mode clean` land a phase's run state when its reservation file is missing and the board shows no live claim. A published receipt also needs that board proof when the reservation is missing. A live claim, an unavailable board, or a malformed or unreadable reservation file still blocks that recovery. ([#173](https://github.com/agentmemoir/argus/issues/173))
 
 - CI runs the whole test suite in the affected-checks job, so a test in any file can fail the build. A guard test fails if the workflow narrows back to a hand-written file list that misses a test file. ([#170](https://github.com/agentmemoir/argus/issues/170))
