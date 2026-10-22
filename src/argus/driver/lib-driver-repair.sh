@@ -54,8 +54,16 @@ repair_worktree_add() {
       top="${WF#"$REPO"/}"; top="${top%%/*}"
       if [ ! -e "$wt/$top" ]; then
         ln -s "$REPO/$top" "$wt/$top"
+        # A rule such as `private/` matches the folder but not a link of that
+        # name. When the checkout ignores the folder, the link is ignored too,
+        # through the shared info/exclude, which Git never commits.
+        if ! "$CMD_GIT" -C "$wt" check-ignore -q "$top" \
+            && "$CMD_GIT" -C "$REPO" check-ignore -q "$top"; then
+          printf '/%s\n' "$top" >>"$("$CMD_GIT" -C "$REPO" rev-parse --path-format=absolute --git-path info/exclude)"
+        fi
         if ! "$CMD_GIT" -C "$wt" check-ignore -q "$top"; then
           notify "Repair $key did not start: Git does not ignore '$top' in the checkout, so its link could be committed."
+          rm -f "$wt/$top"
           repair_worktree_remove "$wt"
           return 1
         fi
