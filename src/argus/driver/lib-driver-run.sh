@@ -168,11 +168,11 @@ on_stop() {
 # and the read stops at the ceiling, so the size of the file cannot decide how
 # long the tick waits.
 #
-# The warning is git's own stderr, which spans lines, so it is flattened and cut
-# the way every other free-text reason in this driver is. The reader prints one
-# tab-separated record per fact, with each field already flattened to one line,
-# because the loop below reads one record per line and a raw newline in the
-# warning would otherwise be read as the start of a second record.
+# A warning is a first-party sentence now, not git's own stderr, so it carries no
+# newline of its own. Flattening and the ceiling stay anyway, as defence: the
+# loop below reads one record per line, and no result file may block a tick or
+# flood the log. Each field is flattened for that reason, so a newline inside one
+# could never be read as the start of a second record.
 gitsync_log_result() {
   local file="$1" label="$2" kind first second third
   [ -f "$file" ] || return 0

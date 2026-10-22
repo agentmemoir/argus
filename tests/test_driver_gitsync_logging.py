@@ -28,6 +28,7 @@ set -euo pipefail
 for name in lib-driver-log lib-driver-run; do
   . "$TEST_DRIVER/$name.sh"
 done
+ts() { printf fixture-time; }
 PYTHON="$TEST_PYTHON"
 ARGUS="$TEST_ROOT/argus"; REPO="$TEST_ROOT/root"
 RUN_DIR="$TEST_ROOT/root/run"; LOG="$RUN_DIR/events"
@@ -113,6 +114,10 @@ def test_two_skipped_entries_each_get_one_log_line(tmp_path: Path) -> None:
     assert "FENCED" in skipped[0]
     assert "100021" in skipped[1]
     assert "cannot read coordination state" in skipped[1]
+    assert skipped[0] == (
+        "fixture-time leftover run state skipped phase 100020 (FENCED): "
+        "phase 100020 is held by a live claim of another machine"
+    )
     # `detail` repeats the phase and the state, so it is not on the line.
     assert not any("was not landed" in line for line in lines), lines
 
@@ -140,6 +145,14 @@ def test_a_warning_on_an_ok_result_logs_one_degraded_line(
     assert len(lines) == 1, lines
     assert "continued in a degraded state" in lines[0]
     assert "commit of run state failed" in lines[0]
+    label = (
+        "phase 100020 closing run state" if call == "clean" else "leftover run state"
+    )
+    assert lines[0] == (
+        f"fixture-time {label} continued in a degraded state: commit of run state "
+        "failed: Author identity unknown *** Please tell me who you are. fatal: "
+        "unable to auto-detect email address; the next tick retries"
+    )
 
 
 @pytest.mark.parametrize("call", ["clean", "land"])
