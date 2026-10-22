@@ -1,15 +1,36 @@
+# Example issue pipeline: one step carries the whole issue workflow.
+#
+# Argus passes this file to the configured `glide` command with the inputs named
+# by `issues.number-input` and `issues.file-input`. A step's `stage` path
+# resolves relative to this file's own directory.
 version: 1
-run_dir: board/runs/issue-{issue_number:06d}
+description: A worked example of an Argus-managed issue pipeline.
+
+run_dir: "runs/issue-{issue_number:06d}"
+
+hooks:
+  # After each step, the project's hook runs gitsync with `--kind issue`:
+  # `--mode checkpoint` commits and pushes leftovers as a `wip:` commit, then
+  # `--mode open-pr --body-file <run_dir>/pr-body.md` opens or reuses the draft
+  # pull request and reads its draft state back. The hook must exit 0, because
+  # glide treats a failed post_step hook as fatal; it records each result in
+  # the run directory instead.
+  post_step: ["python3", "scripts/post_step.py"]
+
 inputs:
-  issue_number: {type: int, required: true}
-  issue_file: {required: true}
-start: implement
+  issue_number: {type: int, required: true, description: "The GitHub issue number"}
+  issue_file: {type: str, required: true, description: "The frozen task file"}
+
+start: work
 ends: [completed, blocked]
+
 steps:
-  implement:
+  work:
     stage: issue-stage.md
+    record_as: Developer
     bindings:
       ISSUE_NUMBER: "{issue_number}"
       ISSUE_FILE: "{issue_file}"
-      LOG_PATH: "{run_dir}/implement-task-r{round}.log"
+      REPORT_DIR: "{run_dir}"
+      LOG_PATH: "{run_dir}/{agent}-task-r{round}.log"
     end: completed
