@@ -30,6 +30,7 @@ from argus.gitsync.issue_paths import (
 )
 from argus.gitsync.issue_runstate import mode_issue_clean
 from argus.gitsync.issue_tidy import mode_issue_tidy
+from argus.gitsync.mode_open_pr import mode_open_pr
 from argus.gitsync.publish_issue import publish_issue
 from argus.gitsync.sync import sync_all
 
@@ -63,19 +64,34 @@ def mode_issue_branch(
     }
 
 
-def mode_issue_checkpoint(root: str | Path) -> dict[str, Any]:
-    root = Path(root).resolve()
-    private, _tasks = private_layout(root)
+def _owned_issue_branch(root: Path) -> tuple[str, ReservationStore, Any] | None:
+    """The checked-out issue branch, after this worker proves it holds the claim."""
     branch = current_branch(root)
     if not branch.startswith("issue/"):
-        return degraded({"repo": str(root)}, "checkpoint needs an issue branch")
+        return None
     number = issue_number(branch.split("/", 1)[1].split("-", 1)[0])
     reservation = load_issue_reservation(root, number)
     store = ReservationStore(root, issues=True)
     store.assert_owner(reservation)
+    if branch != issue_branch(number, issue_scope(root, number)[1][1]):
+        raise ConfigError("checked-out branch is not the claimed issue branch")
+    return branch, store, reservation
+
+
+def mode_issue_checkpoint(root: str | Path) -> dict[str, Any]:
+    root = Path(root).resolve()
+    private, _tasks = private_layout(root)
+    owned = _owned_issue_branch(root)
+    if owned is None:
+        return degraded({"repo": str(root)}, "checkpoint needs an issue branch")
+    branch, store, reservation = owned
     args = ["add", "-A", "--", "."]
+    # git refuses a pathspec that names an ignored tree, so the exclude is
+    # added only when no ignore rule already keeps the private checkout out.
     if private.is_relative_to(root):
-        args.append(f":(exclude,literal){private.relative_to(root).as_posix()}")
+        inner = private.relative_to(root).as_posix()
+        if git(root, "check-ignore", "-q", "--", inner)[0] != 0:
+            args.append(f":(exclude,literal){inner}")
     rc, out, err = git(root, *args)
     if rc != 0:
         return degraded(
@@ -86,7 +102,7 @@ def mode_issue_checkpoint(root: str | Path) -> dict[str, Any]:
         return degraded({"repo": str(root)}, "cannot read the issue index")
     if staged:
         rc, out, err = git(
-            root, "commit", "-q", "-m", f"checkpoint: work in progress on {branch}"
+            root, "commit", "-q", "-m", f"wip: work in progress on {branch}"
         )
         if rc != 0:
             return degraded(
@@ -94,6 +110,22 @@ def mode_issue_checkpoint(root: str | Path) -> dict[str, Any]:
             )
     store.assert_owner(reservation)
     return _push_one(root)
+
+
+def mode_issue_open_pr(
+    root: str | Path,
+    title_file: str | Path | None = None,
+    body_file: str | Path | None = None,
+    base: str | None = None,
+) -> dict[str, Any]:
+    """Open or reuse the issue branch's draft, with the phase path's readback."""
+    root = Path(root).resolve()
+    owned = _owned_issue_branch(root)
+    if owned is None:
+        return degraded({"repo": str(root)}, "open-pr needs an issue branch")
+    return mode_open_pr(
+        root, branch=owned[0], title_file=title_file, body_file=body_file, base=base
+    )
 
 
 def issue_mode(args: Namespace) -> dict[str, Any] | None:
@@ -138,6 +170,13 @@ def _issue_mode(args: Namespace) -> dict[str, Any] | None:
         return mode_issue_tidy(args.root)
     if args.mode == "checkpoint":
         return mode_issue_checkpoint(args.root)
+    if args.mode == "open-pr":
+        return mode_issue_open_pr(
+            args.root,
+            title_file=args.title_file,
+            body_file=args.body_file,
+            base=args.base,
+        )
     if args.mode == "published":
         raise ConfigError(
             "issue completion is read from GitHub; published mode is phase-only"
