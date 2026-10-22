@@ -151,6 +151,7 @@ def test_clean_without_reservation_lands_only_unheld_phase(
 @pytest.mark.parametrize(
     ("records", "state"),
     [
+        ({KEY: record(status="claimed")}, "FENCED"),
         ({KEY: record()}, "FENCED"),
         ({KEY: record(machine_id="server-02")}, "FENCED"),
         ({KEY: record(heartbeat_at="unreadable")}, "FENCED"),
