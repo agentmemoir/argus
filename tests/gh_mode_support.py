@@ -38,9 +38,18 @@ seen = log.read_text().splitlines() if log.exists() else []
 reads = sum(1 for item in seen if json.loads(item)[:2] == ["pr", "list"])
 with log.open("a", encoding="utf-8") as handle:
     handle.write(json.dumps(call) + "\\n")
+# Real gh answers every field --json asks for. A row a test leaves without a
+# head is this repository's branch; a hostile row sets both fields itself.
+def heads(rows):
+    head = call[call.index("--head") + 1]
+    for row in rows:
+        if isinstance(row, dict):
+            row.setdefault("headRefName", head)
+            row.setdefault("isCrossRepository", False)
+    return rows
 if call[:2] == ["pr", "list"]:
     later = transport.get("reread")
-    print(json.dumps(later if reads and later is not None else (transport.get("list") or [])))
+    print(json.dumps(heads(later if reads and later is not None else (transport.get("list") or []))))
     raise SystemExit(int(transport.get("list_exit", 0)))
 elif call[:2] == ["pr", "create"]:
     print(transport.get("create") or "")
@@ -64,8 +73,17 @@ transport = json.loads(Path(__TRANSPORT__).read_text())
 call = sys.argv[1:]
 with Path(__CALLS__).open("a", encoding="utf-8") as log:
     log.write(json.dumps(call) + "\\n")
+# Real gh answers every field --json asks for. A row a test leaves without a
+# head is this repository's branch; a hostile row sets both fields itself.
+def heads(rows):
+    head = call[call.index("--head") + 1]
+    for row in rows:
+        if isinstance(row, dict):
+            row.setdefault("headRefName", head)
+            row.setdefault("isCrossRepository", False)
+    return rows
 if call[:2] == ["pr", "list"]:
-    print(json.dumps(transport.get("list") or []))
+    print(json.dumps(heads(transport.get("list") or [])))
 elif call[:2] == ["pr", "checks"]:
     rows = transport.get("checks")
     if rows is not None:

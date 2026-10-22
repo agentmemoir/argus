@@ -255,7 +255,7 @@ PR_LIST_LIMIT = 200
 def gh_pull_requests_for_branch(
     root: Path, branch: str, limit: int = PR_LIST_LIMIT
 ) -> tuple[list[dict[str, Any]] | None, str]:
-    """Every pull request whose head is ``branch``, newest first.
+    """Every pull request whose head is this repository's ``branch``, newest first.
 
     Returns the rows and an empty detail, or ``None`` and the reason gh could
     not answer. Every state is asked for, not only the open ones: a caller that
@@ -290,7 +290,7 @@ def gh_pull_requests_for_branch(
         "--limit",
         str(int(limit)),
         "--json",
-        "number,url,isDraft,state",
+        "number,url,isDraft,state,headRefName,isCrossRepository",
     ]
     try:
         done = subprocess.run(
@@ -314,10 +314,15 @@ def gh_pull_requests_for_branch(
         return None, "gh returned JSON that is not a list"
     entries = cast("list[object]", parsed)
     rows: list[dict[str, Any]] = []
+    foreign = 0
     for entry in entries:
         if not isinstance(entry, dict):
             continue
         row = cast("dict[str, Any]", entry)
+        cross, head = row.get("isCrossRepository"), row.get("headRefName")
+        if cross is not False or head != branch:  # --head matches the name only
+            foreign += 1
+            continue
         number = row.get("number")
         state = row.get("state")
         url = row.get("url")
@@ -337,7 +342,7 @@ def gh_pull_requests_for_branch(
                 "state": state,
             }
         )
-    if not rows and entries:
+    if not rows and len(entries) > foreign:
         return None, (
             f"gh listed {len(entries)} pull request rows for {branch!r} and none "
             "of them had a usable number, url, and state"

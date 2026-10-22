@@ -132,3 +132,53 @@ def test_the_summary_names_the_pull_request_action_and_draft_state(
     row = out["repos"][0]
     assert row["number"] == 11 and row["action"] == "created" and row["draft"] is True
     assert "#11 created, draft" in out["summary"], out["summary"]
+
+
+def test_a_fork_or_other_branch_pull_request_is_never_reused(
+    workspace: Workspace,
+    body_file: Path,
+) -> None:
+    # gh pr list --head matches the branch name only. A fork's pull request with
+    # the same branch name, or a row for another head, is outsider text: open-pr
+    # must not report it as this branch's pull request.
+    fork = "https://github.com/example/argus/pull/12"
+    other = "https://github.com/example/argus/pull/13"
+    workspace.answer(
+        list=[
+            {
+                "number": 12,
+                "state": "OPEN",
+                "isDraft": True,
+                "url": fork,
+                "isCrossRepository": True,
+                "headRefName": BRANCH,
+            },
+            {
+                "number": 13,
+                "state": "MERGED",
+                "isDraft": False,
+                "url": other,
+                "headRefName": "other/branch",
+            },
+        ],
+        reread=[
+            CREATED,
+            {
+                "number": 12,
+                "state": "OPEN",
+                "isDraft": True,
+                "url": fork,
+                "isCrossRepository": True,
+                "headRefName": BRANCH,
+            },
+        ],
+    )
+
+    out = mode_open_pr(workspace.root, branch=BRANCH, body_file=body_file)
+
+    assert out["ok"] is True, out
+    row = out["repos"][0]
+    assert row["action"] == "created"
+    assert row["url"] == URL
+    assert row["number"] == 11
+    assert len([c for c in workspace.commands() if c[:2] == ["pr", "create"]]) == 1
