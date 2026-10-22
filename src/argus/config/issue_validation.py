@@ -107,6 +107,12 @@ def validate_issues(values: dict[str, object]) -> None:
             raise ConfigError(f"missing required key '{key}' for preference '{name}'")
         if key in values and not _text(values[key]):
             raise ConfigError(f"invalid value for key '{key}': expected non-empty text")
+    label = values["issues.claim-label"]
+    # gh splits a label argument on commas, so a comma would name two labels.
+    if not _text(label) or "," in cast("str", label):
+        raise ConfigError(
+            "invalid value for key 'issues.claim-label': expected one label name"
+        )
     _validate_groups(values)
     for name in (
         "max-comments",

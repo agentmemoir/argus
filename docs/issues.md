@@ -24,7 +24,7 @@ A group with `cardinality: one` must match exactly one configured label. A `many
 
 `category` filters by one label and chooses the newest survivor. `search` uses GitHub's best-match order. `category` and `search` can also filter other preferences.
 
-Numeric issue order breaks ties. Blocked, claimed, and escalated work is skipped and counted. An issue whose job failed and left its claim is skipped too, so the line continues to another issue while the failed claim waits to resume on its own.
+Numeric issue order breaks ties. Blocked, claimed, and escalated work is skipped and counted. An issue that carries the claim label (`claim-label`, default `accepted`) is skipped and counted as `claim_label`, so a person can keep an issue by adding the label. When the board holds or has expired a claim on that issue, the board decides instead: a held claim resumes, and an expired claim can be claimed again. An issue whose job failed and left its claim is skipped too, so the line continues to another issue while the failed claim waits to resume on its own.
 
 ## Settings
 
@@ -49,5 +49,6 @@ Numeric issue order breaks ties. Blocked, claimed, and escalated work is skipped
 | `list-limit` | Candidate limit; defaults to 200. |
 | `timeout` | Bound per GitHub call in seconds; defaults to 30. |
 | `claim-attempts` | Claim attempts after races; defaults to 3. |
+| `claim-label` | The one label that marks a claimed issue; defaults to `accepted`. It is not the board status `accepted`. |
 
 `machine.settings-file` names an optional JSONC overlay.

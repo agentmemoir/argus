@@ -35,6 +35,7 @@ def test_issue_schema_matches_complete_key_set() -> None:
         "list-limit",
         "timeout",
         "claim-attempts",
+        "claim-label",
     }
     actual = {
         field.key.removeprefix("issues.")
@@ -58,6 +59,7 @@ def test_issue_optional_defaults_are_visible_only_on_issue_machines(
     assert config.get("issues.list-limit") == 200
     assert config.get("issues.timeout") == 30
     assert config.get("issues.claim-attempts") == 3
+    assert config.get("issues.claim-label") == "accepted"
     assert config.source("issues.preference") == "file"
     assert config.get("issues.task-dir") == tmp_path / "project/runs/issue-tasks"
     phases = cfgmod.load(write(tmp_path, json.dumps(BASE)))
@@ -199,6 +201,9 @@ def test_difficulty_labels_and_order_must_match(tmp_path: Path) -> None:
         ("list-limit", -1),
         ("timeout", 0),
         ("claim-attempts", 0),
+        ("claim-label", ""),
+        ("claim-label", "accepted,bug"),
+        ("claim-label", "accepted\nforged"),
         ("trusted-authors", [""]),
         ("comment-trust", {"authors": [1]}),
         ("comment-trust", {"unknown": []}),

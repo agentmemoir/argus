@@ -97,6 +97,7 @@ SCHEMA = (
     Field("issues.list-limit", "int", "optional"),
     Field("issues.timeout", "int", "optional"),
     Field("issues.claim-attempts", "int", "optional"),
+    Field("issues.claim-label", "str", "optional"),
     Field("estimate.factors-file", "path", "optional"),
     Field("estimate.ideal-days", "str", "optional"),
 )
@@ -174,6 +175,7 @@ ISSUES_DEFAULTS: dict[str, object] = {
     "issues.list-limit": 200,
     "issues.timeout": 30,
     "issues.claim-attempts": 3,
+    "issues.claim-label": "accepted",
 }
 
 # The four flag overrides: flag name -> (dotted key, wrap scalar in a list).

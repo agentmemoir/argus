@@ -4,6 +4,8 @@ Notable changes to this project are documented here. The format follows [Keep a 
 
 ## [Unreleased]
 
+- Issue selection skips an open issue that carries the claim label, set by `issues.claim-label` with the default `accepted`. A person can keep an issue by adding the label. A held or expired board claim still decides for its own issue. The skip counters gain `claim_label`. ([#186](https://github.com/agentmemoir/argus/issues/186))
+
 - A tick that cannot save or prove its selected claim returns that reservation to the queue. It keeps another machine's replacement claim and records a refused cleanup. ([#183](https://github.com/agentmemoir/argus/issues/183))
 
 - Release repairs a missing or stale phase reservation from its proved claim before saving partial work. It keeps the claim when that file cannot be saved. Issue claims leave phase reservation files unchanged. ([#183](https://github.com/agentmemoir/argus/issues/183))
