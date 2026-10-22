@@ -4,6 +4,8 @@ Notable changes to this project are documented here. The format follows [Keep a 
 
 ## [Unreleased]
 
+- `abandon` and `resume` are tested against a real local board and the real `assert_owner` fence. Under another machine's fence, each refuses and leaves the claim and the board unchanged; under this machine's fence, abandon parks the phase and resume passes the fence check.
+
 - `argus abandon` stages the residue before it releases the board group. A residue write that fails stops the command with the claim held and nothing released, so the same command can run again. ([#164](https://github.com/agentmemoir/argus/issues/164))
 
 - A whole-tree `gitsync --mode clean` that skips every phase now reports not ok and exits 1. A sweep that lands at least one phase still succeeds, and its summary names each skipped phase with its phase number, state, and reason. ([#164](https://github.com/agentmemoir/argus/issues/164))
