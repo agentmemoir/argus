@@ -59,6 +59,29 @@ if ! declare -F board_assert_owner >/dev/null 2>&1; then
   # shellcheck disable=SC1091
   . "$_abandon_dir/lib-driver-fence.sh"
 fi
+# Print the board's reason that no live claim covers this phase, or nothing
+# when one does. It is the board's own read-only `scan`, asked from this
+# machine, so `other_owner` means another machine holds a live claim. Any
+# failure to ask or to read the answer returns non-zero: the board did not
+# answer, which is never the same as "no claim".
+abandon_board_reason() {   # <number>
+  local out=""
+  case "${DRIVER_STUB_BOARD_FENCE:-}" in fail) return 1 ;; esac
+  out="$("$PYTHON" "$ARGUS/board/reservations.py" scan \
+    "${ARGUS_CONFIG_ARGS[@]}" "${BOARD_KIND_ARGS[@]+"${BOARD_KIND_ARGS[@]}"}" \
+    --repo-root "$REPO" --phase "$1" --machine-id "$PHASE_MACHINE_ID" \
+    2>"$RUN_DIR/abandon-scan-$1.err")" || return 1
+  printf '%s' "$out" | "$PYTHON" -c '
+import json, sys
+data = json.load(sys.stdin)
+if data["state"] != "OK":
+    sys.exit(1)
+for found in data["phases"]:
+    if int(found["phase"]) == int(sys.argv[1]):
+        print(found["reason"])
+' "$1"
+}
+
 abandon_cmd() {   # <number> [--reason TEXT]
   local number="${1:-}" reason="" rel="" run_dir="" state=""
   shift || true
@@ -101,25 +124,35 @@ abandon_cmd() {   # <number> [--reason TEXT]
   fi
   state="$(phase_state "$number" "${rel:-}")"
 
-  local fence_id="" fence_gen=""
-  # The residue is a state write, and the board is the authority: a fence the
-  # board does not confirm must not park a phase another machine is running.
-  # An unreachable board fails closed, so the residue is written only after
-  # the fence is proved. An unreadable or phase-mismatched claim proves
-  # nothing about who owns the phase, so it is a hard refusal: writing the
-  # residue without it would park a phase the board may have given away.
-  if ! claim_read_fields "$CLAIM" || [ "$CLAIM_NUMBER" != "$number" ] \
-      || [ -z "$CLAIM_ID" ] || [ -z "$CLAIM_GEN" ]; then
-    printf 'argus abandon: no readable claim for %s at %s; not abandoning (the claim must name this phase with a full fence)\n' \
-      "$number" "$CLAIM" >&2
-    exit 1
+  local fence_id="" fence_gen="" claimed=0 release=1 reason_on_board=""
+  # The residue is a state write, and the board is the authority. A fence this
+  # machine still holds is proved and released below. With no such fence, the
+  # board's own scan decides: a phase no other machine holds live (no record,
+  # an expired or terminal one, or this machine's own stale claim) has nothing
+  # left to release and is parked; a live claim by another machine, or a board
+  # that cannot answer, refuses and writes nothing, so a later rerun can work.
+  if claim_read_fields "$CLAIM" && [ "$CLAIM_NUMBER" = "$number" ] \
+      && [ -n "$CLAIM_ID" ] && [ -n "$CLAIM_GEN" ]; then
+    claimed=1
+    fence_id="$CLAIM_ID"
+    fence_gen="$CLAIM_GEN"
   fi
-  fence_id="$CLAIM_ID"
-  fence_gen="$CLAIM_GEN"
-  if ! board_assert_owner "$number" "$fence_id" "$fence_gen"; then
-    printf 'argus abandon: the board does not confirm the fence for %s; not abandoning (see %s/assert-owner-%s.json)\n' \
-      "$number" "$RUN_DIR" "$number" >&2
-    exit 1
+  if [ "$claimed" = 0 ] || ! board_assert_owner "$number" "$fence_id" "$fence_gen"; then
+    if ! reason_on_board="$(abandon_board_reason "$number")"; then
+      printf 'argus abandon: could not ask the board who holds %s; not abandoning (see %s/abandon-scan-%s.err)\n' \
+        "$number" "$RUN_DIR" "$number" >&2
+      exit 1
+    fi
+    case "$reason_on_board" in
+      no_claim|expired|terminal) release=0 ;;
+      other_owner)
+        printf 'argus abandon: another machine holds a live claim on %s; not abandoning\n' "$number" >&2
+        exit 1 ;;
+      *)
+        printf 'argus abandon: the board does not confirm the fence for %s; not abandoning (see %s/assert-owner-%s.json)\n' \
+          "$number" "$RUN_DIR" "$number" >&2
+        exit 1 ;;
+    esac
   fi
   # The residue is staged first: a write that fails stops here with the claim
   # held and nothing released, so the same command can run again. A write after
@@ -140,7 +173,7 @@ abandon_cmd() {   # <number> [--reason TEXT]
   # rename is done in Python, not with `mv`, for the same reason the halt
   # record's is: the installed-command test declares the commands the driver
   # may use, and `mv` is not one of them.
-  case "${DRIVER_STUB_BOARD_FENCE:-}" in
+  [ "$release" = 0 ] || case "${DRIVER_STUB_BOARD_FENCE:-}" in
     fail)
       rm -f "$run_dir/abandoned.json.pending"
       printf 'argus abandon: could not release the board group for %s\n' "$number" >&2
@@ -164,11 +197,11 @@ abandon_cmd() {   # <number> [--reason TEXT]
   # release is a failure, never an abandon, and the staged residue is kept as
   # the record of it.
   if ! abandon_residue_commit "$run_dir"; then
-    printf 'argus abandon: released the board group for %s but could not park it; the staged residue is %s/abandoned.json.pending\n' \
+    printf 'argus abandon: the board no longer holds %s for this machine, but it could not be parked; the staged residue is %s/abandoned.json.pending, and the same command finishes it\n' \
       "$number" "$run_dir" >&2
     exit 1
   fi
-  rm -f "$CLAIM"
+  [ "$claimed" = 0 ] || rm -f "$CLAIM"
 
   if halt_record_read "$HALT_RECORD" && [ "$HALT_REC_PHASE" = "$number" ]; then
     rm -f "$HALT_RECORD"
