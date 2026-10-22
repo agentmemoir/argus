@@ -124,18 +124,9 @@ def issue_pull_requests(root: str | Path) -> list[dict[str, object]]:
         if found is None:
             print(f"repair: issue {number}: pull requests unread", file=sys.stderr)
             continue
+        # gh_pull_requests_for_branch is the one filter: it keeps only this
+        # repository's rows on the branch, so a fork's checks and logs never arrive.
         for pr in found:
-            # Fail closed: a fork's checks and logs are outsider text.
-            if (
-                pr.get("isCrossRepository") is not False
-                or pr.get("headRefName") != branch
-            ):
-                print(
-                    f"repair: issue {number}: ignored {pr['url']}: not this "
-                    f"repository's branch {branch}",
-                    file=sys.stderr,
-                )
-                continue
             if pr["state"] == "OPEN":
                 rows.append(
                     {"issue": number, "branch": branch, "pull_request": pr["url"]}

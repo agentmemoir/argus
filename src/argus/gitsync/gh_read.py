@@ -4,6 +4,7 @@
 
 import json
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any, cast
 
@@ -271,20 +272,26 @@ def gh_pull_requests_for_branch(
     entries = cast("list[object]", parsed)
     rows: list[dict[str, Any]] = []
     foreign = 0
+    dropped: list[str] = []
     for entry in entries:
         if not isinstance(entry, dict):
+            dropped.append("a row that is not an object")
             continue
         row = cast("dict[str, Any]", entry)
+        number = row.get("number")
+        label = f"#{number}" if isinstance(number, int) else "a row without a number"
         cross, head = row.get("isCrossRepository"), row.get("headRefName")
         if cross is not False or head != branch:  # --head matches the name only
             foreign += 1
+            dropped.append(f"{label} is not from this repository's branch")
             continue
-        number = row.get("number")
         state = row.get("state")
         url = row.get("url")
         if not isinstance(number, int) or not isinstance(state, str):
+            dropped.append(f"{label} has no usable number or state")
             continue
         if not isinstance(url, str) or not url.strip():
+            dropped.append(f"{label} has no usable url")
             continue
         draft = row.get("isDraft")
         rows.append(
@@ -296,11 +303,18 @@ def gh_pull_requests_for_branch(
                 # would invent a value gh never gave.
                 "isDraft": draft if isinstance(draft, bool) else None,
                 "state": state,
-                # gh --head matches the branch name only, so a fork's pull
-                # request can be listed too; callers check both values.
+                # Every kept row is this repository's branch, checked above.
                 "headRefName": row.get("headRefName"),
                 "isCrossRepository": row.get("isCrossRepository"),
             }
+        )
+    if dropped:
+        # One line, so a log shows why a row is missing. It names the branch,
+        # the pull request numbers, and the reason; never a url or a remote name.
+        print(
+            f"gh pull request list for {branch!r} dropped {len(dropped)} row(s): "
+            + "; ".join(dropped),
+            file=sys.stderr,
         )
     if not rows and len(entries) > foreign:
         return None, (

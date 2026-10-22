@@ -191,7 +191,10 @@ def test_issue_pull_requests_ignore_a_fork_pull_request_on_the_recorded_branch(
     monkeypatch.setattr(repair_cli.conventions, "runs_dir", runs_dir)
     monkeypatch.setattr(repair_cli, "issue_scope", scope)
     rows = repair_cli.issue_pull_requests(tmp_path)
+    # Only the same-repository row is returned as awaiting review. The fork row and
+    # the other-branch row are dropped by the shared helper, and no repair-* file
+    # (task or round record) is written for them.
     assert [row["pull_request"] for row in rows] == ["https://g/o/r/pull/70"]
-    err = capsys.readouterr().err
-    assert "pull/90" in err and "pull/91" in err
     assert not list(tmp_path.rglob("repair-*"))
+    err = capsys.readouterr().err
+    assert "dropped 2 row(s)" in err and "#90" in err and "#91" in err
