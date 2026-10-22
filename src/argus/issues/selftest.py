@@ -69,6 +69,7 @@ def _checks(repo: Path) -> None:
         "issues.preference": "newest",
         "issues.label-groups": groups,
         "issues.difficulty-order": ["difficulty:easy"],
+        "issues.claim-label": "accepted",
         "issues.task-dir": repo / "tasks",
         "issues.max-text-bytes": 12,
     }
