@@ -37,6 +37,10 @@ def make_repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     root = tmp_path / "repo"
     root.mkdir()
     git(root, "init", "-q", "-b", "main")
+    # The modes commit with plain git, so the checkout carries its own identity;
+    # a CI runner has no global one.
+    git(root, "config", "user.email", "fixture@example.invalid")
+    git(root, "config", "user.name", "fixture")
     (root / "README").write_text("fixture\n")
     git(root, "add", "-A")
     git(root, "commit", "-qm", "fixture")

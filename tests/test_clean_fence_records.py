@@ -81,7 +81,8 @@ def test_clean_lands_when_no_other_machine_holds_the_group(
     out = mode_clean(root) if sweep else mode_clean(root, PHASE)
     assert out["ok"] is True, out["summary"]
     assert "skipped" not in out
-    assert head_sha(root) != before
+    # The summary carries the commit's own error, so a failed land says why.
+    assert head_sha(root) != before, str(out["repos"])
     assert git(root, "rev-parse", "origin/main").strip() == head_sha(root)
     assert git(root, "status", "--porcelain") == ""
 
