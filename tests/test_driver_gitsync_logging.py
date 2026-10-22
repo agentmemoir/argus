@@ -124,9 +124,17 @@ def test_failed_sweep_keeps_existing_line_and_returns_zero(tmp_path: Path) -> No
     )
 
 
-def test_malformed_result_file_logs_nothing_and_returns_zero(
-    tmp_path: Path,
-) -> None:
+def test_unreadable_result_is_logged_and_rc_stays_zero(tmp_path: Path) -> None:
     stdout, lines = _run(tmp_path, "{not json")
     assert "land_rc=0" in stdout
-    assert not [line for line in lines if "skipped phase" in line]
+    expected = (
+        f"could not read the clean sweep result at "
+        f"{tmp_path / 'runs' / 'run-state-leftovers.json'}; skipped phases are unknown"
+    )
+    assert any(line.endswith(expected) for line in lines)
+
+
+def test_empty_result_file_is_logged_as_unreadable(tmp_path: Path) -> None:
+    stdout, lines = _run(tmp_path, "")
+    assert "land_rc=0" in stdout
+    assert any(line.endswith("skipped phases are unknown") for line in lines)

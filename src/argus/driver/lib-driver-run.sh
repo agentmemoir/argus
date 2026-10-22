@@ -187,16 +187,31 @@ gitsync_land_leftovers() {
   # so the exit code cannot carry a skip. Say each one; never change the rc.
   "$PYTHON" -c 'import json,sys
 try:
-    data = json.load(open(sys.argv[1]))
+    with open(sys.argv[1], encoding="utf-8") as handle:
+        data = json.load(handle)
 except (OSError, ValueError):
-    data = {}
-skipped = data.get("skipped") if isinstance(data, dict) else None
-for one in skipped if isinstance(skipped, list) else []:
-    if isinstance(one, dict):
-        print(*(" ".join(str(one.get(k, "")).split()) for k in ("phase", "state", "error")), sep="\t")' \
+    data = None
+unreadable = not isinstance(data, dict)
+if not unreadable:
+    skipped = data.get("skipped")
+    if data.get("state") == "PARTIAL" and (not isinstance(skipped, list) or not skipped):
+        unreadable = True
+    elif skipped is not None and not isinstance(skipped, list):
+        unreadable = True
+    elif isinstance(skipped, list):
+        for one in skipped:
+            if not isinstance(one, dict):
+                unreadable = True
+                continue
+            print("skip", *(" ".join(str(one.get(k, "")).split()) for k in ("phase", "state", "error")), sep="\t")
+if unreadable:
+    print("unreadable")' \
     "$RUN_DIR/run-state-leftovers.json" 2>/dev/null |
-    while IFS=$'\t' read -r phase state reason; do
-      log_changed "leftovers-skipped-$phase" "leftover run state skipped phase $phase ($state): $reason"
+    while IFS=$'\t' read -r kind first second third; do
+      case "$kind" in
+        skip) log_changed "leftovers-skipped-$first" "leftover run state skipped phase $first ($second): $third" ;;
+        unreadable) log_changed "leftovers-unreadable" "could not read the clean sweep result at $RUN_DIR/run-state-leftovers.json; skipped phases are unknown" ;;
+      esac
     done || true
   return 0
 }
