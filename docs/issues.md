@@ -32,6 +32,8 @@ After the fresh read and the trust check, Argus reserves the issue on the board 
 
 Removing the label does not always let Argus pick the issue again. Argus picks it again only when the board has no record for it, or when its expired claim has passed the cooldown. A held claim is left to the board, even without the label. Argus does not pick again an issue whose board record is completed, rejected, or accepted. On this machine, an issue whose job failed and left its claim is skipped too, so the line continues to another issue while the failed claim waits to resume on its own.
 
+A red check on an open issue pull request gets a CI repair round before new work, as for a phase pull request. Only the branch an issue run folder records is read, and only a pull request from this repository: a fork pull request with the same branch name is ignored. See [CI repair rounds](running.md#ci-repair-rounds).
+
 ## Settings
 
 | Key under `issues` | Value |

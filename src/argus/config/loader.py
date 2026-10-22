@@ -22,6 +22,7 @@ from argus.config.schema import (
     _OVERRIDES,
     _REPORT_KEY,
     ISSUES_DEFAULTS,
+    REPAIR_DEFAULTS,
     SCHEMA,
     Field,
 )
@@ -82,7 +83,6 @@ _LEGACY_KEYS: dict[str, str] = {
     "roadmap-dir": "set 'phases.directory' to the work-item folder, and "
     "'phases.repo', 'phases.branch', 'phases.remote' with it",
     "phases-dir": "set 'phases.directory' to the work-item folder",
-    "repair": "remove it: Argus runs no repair loop",
 }
 
 # Objects whose children are host data, not schema keys.
@@ -181,6 +181,9 @@ def _build(
         for key, default in ISSUES_DEFAULTS.items():
             supplied.setdefault(key, (copy.deepcopy(default), "default"))
 
+    for key, default in REPAIR_DEFAULTS.items():
+        supplied.setdefault(key, (default, "default"))
+
     for flag, value in overrides.items():
         if value is None:
             continue
@@ -208,6 +211,17 @@ def _build(
             sources[key] = source
         elif required:
             raise ConfigError(f"missing required key '{field.key}'")
+    # The repair pipeline sits beside the work pipeline unless the file names it.
+    if "repair.pipeline" not in values:
+        values["repair.pipeline"] = Path(str(values["pipeline"])).parent / "repair.yaml"
+        sources["repair.pipeline"] = "default"
+    # A zero or negative count would end the round before it starts, or run it
+    # early; refuse it here, before any work, and name the key.
+    for key, least in (("repair.attempts", 1), ("repair.wait", 0)):
+        if cast("int", values[key]) < least:
+            raise ConfigError(
+                f"invalid value for key '{key}': must be at least {least}"
+            )
     if issues is not None:
         validate_trust(issues)
     if provider == "issues":

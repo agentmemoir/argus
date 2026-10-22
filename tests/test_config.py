@@ -166,15 +166,6 @@ def test_legacy_roadmap_dir_warns_naming_both_and_continues():
         )
 
 
-def test_removed_repair_key_warns_and_continues():
-    with tempfile.TemporaryDirectory() as tmp:
-        document = copy.deepcopy(BASE)
-        document["repair"] = {"attempts": 2}
-        path = write(tmp, json.dumps(document))
-        _config, text = _load_with_stderr(path)
-        check("repair" in text and "no repair loop" in text, text)
-
-
 def test_unknown_key_warns_and_continues():
     with tempfile.TemporaryDirectory() as tmp:
         document = copy.deepcopy(BASE)
@@ -301,7 +292,6 @@ TESTS = (
         "legacy roadmap-dir",
         test_legacy_roadmap_dir_warns_naming_both_and_continues,
     ),
-    ("removed repair key", test_removed_repair_key_warns_and_continues),
     ("unknown keys", test_unknown_key_warns_and_continues),
     ("unacceptable value", test_an_unacceptable_value_still_stops_and_names_it),
     ("phases object required", test_phase_source_without_a_phases_object_is_refused),
