@@ -2,6 +2,9 @@
 # SPDX-License-Identifier: Apache-2.0
 """A checkpoint with nothing staged pushes what the branch has, and never runs a commit."""
 
+import getpass
+import os
+import socket
 from pathlib import Path
 
 import pytest
@@ -9,6 +12,7 @@ import pytest
 from argus import conventions
 from argus.gitsync import mode_clean
 from argus.gitsync.branch import ensure_phase_branch
+from argus.gitsync.git import summarize
 from argus.gitsync.mode_clean import mode_checkpoint
 from argus.gitsync.selftest_fixture import BOARD_REL, _configure_self_test, _init_remote
 
@@ -96,8 +100,35 @@ def test_an_unreadable_stage_is_reported(
     calls = _spy_git(monkeypatch, {"diff": (128, "", "fatal: index is locked")})
     result = mode_checkpoint(pub)
     assert result["ok"] is True
-    assert "could not read the staged changes" in result["warning"]
+    assert "read of the staged changes failed (git exit 128)" in result["warning"]
+    # git's own text carries a path and can carry a machine name, so it is read
+    # for the known cause and dropped, never stored in the warning.
+    assert "index is locked" not in result["warning"]
     assert not [c for c in calls if c[:1] in (("commit",), ("push",))]
+
+
+def test_a_checkpoint_commit_without_an_identity_names_no_user_or_host(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pub = _phase_clone(tmp_path)
+    (pub / "unfinished.txt").write_text("half a phase\n", encoding="utf-8")
+    # git writes the local user and machine name into its own stderr when it
+    # cannot find an identity, so this is the failure the warning must report
+    # without copying. The fixture sets the identity locally, never globally.
+    for key in ("user.email", "user.name"):
+        assert mode_clean.git(pub, "config", "--unset", key)[0] == 0
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", os.devnull)
+    monkeypatch.setenv("GIT_CONFIG_SYSTEM", os.devnull)
+    result = mode_checkpoint(pub)
+    warning = result["warning"]
+    assert result["action"] == "continued", result
+    assert "checkpoint commit failed (git exit" in warning, warning
+    assert "git has no user identity" in warning, warning
+    assert "unable to auto-detect" not in warning, warning
+    assert "DEGRADED" in summarize([result], "checkpoint"), result
+    for leaked in (getpass.getuser(), socket.gethostname()):
+        assert leaked not in warning, result
+    assert "@" not in warning, result
 
 
 def test_scoped_checkpoint_leaves_other_work_uncommitted(tmp_path: Path) -> None:

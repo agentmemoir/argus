@@ -2,6 +2,8 @@
 # SPDX-License-Identifier: Apache-2.0
 """A push result reports what the push did, from the branch's own status line."""
 
+import getpass
+import socket
 from pathlib import Path
 
 import pytest
@@ -85,6 +87,42 @@ def test_push_result_reports_a_moved_branch_and_an_up_to_date_one(
     assert moved["ok"] is True
     assert moved["action"] == "pushed"
     assert moved["after"] == git(pub, "rev-parse", "HEAD")[1]
+
+
+def _assert_no_git_stderr(text: str) -> None:
+    """A stored reason names the step and the exit code, never git's own text."""
+    assert "does not appear to be a git repository" not in text, text
+    for leaked in (getpass.getuser(), socket.gethostname()):
+        assert leaked not in text, text
+    assert "@" not in text, text
+
+
+def test_a_failed_push_names_the_step_and_exit_without_git_stderr(
+    tmp_path: Path,
+) -> None:
+    pub = _clone(tmp_path)
+    # A remote that is not a repository makes the push itself fail; git's stderr
+    # for that carries the path and can carry the machine name.
+    assert git(pub, "remote", "set-url", "origin", str(tmp_path / "gone"))[0] == 0
+    out = _push_one(pub)
+    assert out["ok"] is False
+    reason = out["blockers"][0]
+    assert reason.startswith("push failed (git exit "), reason
+    _assert_no_git_stderr(reason)
+
+
+def test_a_failed_phase_branch_publish_names_the_step_without_git_stderr(
+    tmp_path: Path,
+) -> None:
+    pub = _clone(tmp_path)
+    assert git(pub, "remote", "set-url", "origin", str(tmp_path / "gone"))[0] == 0
+    out = ensure_phase_branch(pub, "feature/second-phase")
+    assert out["ok"] is True and out["action"] == "continued", out
+    warning = out["warning"]
+    assert warning.startswith(
+        "publish of 'feature/second-phase' to origin failed (git exit "
+    ), warning
+    _assert_no_git_stderr(warning)
 
 
 def test_published_head_takes_an_up_to_date_pushs_head_too() -> None:

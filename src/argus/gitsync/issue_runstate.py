@@ -24,6 +24,7 @@ from argus.gitsync.issue_paths import (
     private_layout,
 )
 from argus.gitsync.merge import sync_one
+from argus.gitsync.runstate import _git_failure
 
 
 def commit_issue_state(
@@ -54,7 +55,7 @@ def commit_issue_state(
     if changed:
         rc, out, err = git(private, "--literal-pathspecs", "add", "-A", "--", *scopes)
         if rc != 0:
-            return degraded(info, f"could not stage issue state: {err or out}")
+            return degraded(info, _git_failure("stage of issue state", rc, err or out))
         rc, out, err = git(
             private,
             "commit",
@@ -65,7 +66,7 @@ def commit_issue_state(
             *scopes,
         )
         if rc != 0:
-            return degraded(info, f"could not commit issue state: {err or out}")
+            return degraded(info, _git_failure("commit of issue state", rc, err or out))
     # Push even when clean: a prior attempt may have committed and failed to push.
     for attempt in (1, 2):
         if before_push is not None:

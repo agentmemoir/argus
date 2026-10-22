@@ -21,6 +21,7 @@ from argus.gitsync.modes import _run_phase_numbers
 from argus.gitsync.receipts import phase_receipt
 from argus.gitsync.runstate import (
     _commit_and_push_run_state,
+    _git_failure,
     _phase_run_pathspec,
     runstate_repo,
 )
@@ -289,7 +290,9 @@ def mode_checkpoint(
     rc, out, err = git(root, "add", "-A", *(["--", *paths] if paths else []))
     if rc != 0:
         return degraded(
-            info, f"could not stage the checkout: {err or out}; retrying next tick"
+            info,
+            f"{_git_failure('stage of the checkpoint', rc, err or out)}; "
+            "retrying next tick",
         )
     # Ask git first. With nothing staged, the pre-commit hook refused the commit
     # with its own text, and git's "nothing to commit" never appeared. So an
@@ -300,7 +303,8 @@ def mode_checkpoint(
     if rc not in (0, 1):
         return degraded(
             info,
-            f"could not read the staged changes: {err or out}; retrying next tick",
+            f"{_git_failure('read of the staged changes', rc, err or out)}; "
+            "retrying next tick",
         )
     committed = rc == 1
     if committed:
@@ -314,14 +318,16 @@ def mode_checkpoint(
         if rc != 0:
             return degraded(
                 info,
-                f"checkpoint commit failed: {err or out}; retrying next tick",
+                f"{_git_failure('checkpoint commit', rc, err or out)}; "
+                "retrying next tick",
             )
     # --porcelain reports a ref that was already up to date as well, so the
     # result names what the push did instead of what the stage held.
     rc, out, err = git(root, "push", "--porcelain", remote, branch)
     if rc != 0:
         return degraded(
-            info, f"checkpoint push failed: {err or out}; retrying next tick"
+            info,
+            f"{_git_failure('checkpoint push', rc, err or out)}; retrying next tick",
         )
     if committed:
         action = "committed-and-pushed"

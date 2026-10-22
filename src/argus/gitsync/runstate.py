@@ -15,6 +15,7 @@ from argus.conventions import (
 )
 from argus.gitsync.git import (
     ConfigError,
+    _git_failure,
     _is_private_path,
     blocked,
     degraded,
@@ -111,22 +112,8 @@ def _scoped_pathspecs(pathspec: str) -> list[str]:
 # git names the local user and machine in ``'<user>@<host>.(none)'`` when it
 # cannot find an identity, so its stderr is read for a known cause and then
 # dropped: SECURITY.md rule 4 forbids storing a machine name in a warning.
-_NO_IDENTITY_HINTS = (
-    "unable to auto-detect email",
-    "please tell me who you are",
-    "empty ident",
-)
-
-
-def _git_failure(step: str, rc: int, stderr: str) -> str:
-    """Name a failed git step by step and exit code, never by its stderr.
-
-    ``stderr`` is read for the one cause worth naming to a reader, a checkout
-    with no git identity, and is not carried into the result.
-    """
-    if any(hint in stderr.lower() for hint in _NO_IDENTITY_HINTS):
-        return f"{step} failed (git exit {rc}): git has no user identity"
-    return f"{step} failed (git exit {rc})"
+# The helper lives in the git primitives, so every mode can reach it without a
+# cycle through this module.
 
 
 def _stage_and_commit(

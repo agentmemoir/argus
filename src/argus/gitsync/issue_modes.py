@@ -31,6 +31,7 @@ from argus.gitsync.issue_paths import (
 from argus.gitsync.issue_runstate import mode_issue_clean
 from argus.gitsync.issue_tidy import mode_issue_tidy
 from argus.gitsync.publish_issue import publish_issue
+from argus.gitsync.runstate import _git_failure
 from argus.gitsync.sync import sync_all
 
 
@@ -79,7 +80,7 @@ def mode_issue_checkpoint(root: str | Path) -> dict[str, Any]:
     rc, out, err = git(root, *args)
     if rc != 0:
         return degraded(
-            {"repo": str(root)}, f"could not stage issue work: {err or out}"
+            {"repo": str(root)}, _git_failure("stage of issue work", rc, err or out)
         )
     rc, staged, _err = git(root, "diff", "--cached", "--name-only")
     if rc != 0:
@@ -90,7 +91,8 @@ def mode_issue_checkpoint(root: str | Path) -> dict[str, Any]:
         )
         if rc != 0:
             return degraded(
-                {"repo": str(root)}, f"could not commit issue work: {err or out}"
+                {"repo": str(root)},
+                _git_failure("commit of issue work", rc, err or out),
             )
     store.assert_owner(reservation)
     return _push_one(root)

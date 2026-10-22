@@ -2,8 +2,12 @@
 # SPDX-License-Identifier: Apache-2.0
 """Issue publication fences and private snapshot scope use local Git only."""
 
+import getpass
+import os
+import socket
 import subprocess
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any, cast
 
 import pytest
@@ -13,7 +17,7 @@ from argus.board.reservations import ReservationFenced
 from argus.gitsync.git import ConfigError, current_branch, git
 from argus.gitsync.issue_modes import mode_issue_branch, mode_issue_checkpoint
 from argus.gitsync.issue_paths import issue_branch
-from argus.gitsync.issue_runstate import mode_issue_clean
+from argus.gitsync.issue_runstate import commit_issue_state, mode_issue_clean
 from argus.gitsync.publish_issue import publish_issue
 from test_issue_publication_fixture import Publication
 from test_issue_publication_fixture import (
@@ -196,6 +200,60 @@ def test_issue_checkpoint_excludes_private_data_without_an_ignore_rule(
     assert git(publication.root, "ls-files", "--", "vault")[1] == ""
     assert git(publication.remote, "show", f"{branch}:code.txt")[1] == "partial fix"
     assert task.read_text() == "FROZEN_TASK_SENTINEL\n"
+
+
+def _without_identity(checkout: str | Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Take the identity off one checkout and off the machine's own config.
+
+    git writes ``'<user>@<host>.(none)'`` into its stderr when it cannot find an
+    identity, so this is the failure whose message must never be stored. The
+    fixture sets the identity locally, never globally.
+    """
+    for key in ("user.email", "user.name"):
+        assert git(checkout, "config", "--unset", key)[0] == 0
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", os.devnull)
+    monkeypatch.setenv("GIT_CONFIG_SYSTEM", os.devnull)
+
+
+def _assert_no_host_or_user(warning: str) -> None:
+    assert "unable to auto-detect" not in warning, warning
+    for leaked in (getpass.getuser(), socket.gethostname()):
+        assert leaked not in warning, warning
+    assert "@" not in warning, warning
+
+
+def test_issue_state_commit_without_an_identity_names_no_user_or_host(
+    publication: Publication, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    publication.claim(1234567)
+    run = publication.private / "runs" / "issue-1234567"
+    run.mkdir(parents=True, exist_ok=True)
+    (run / "run.json").write_text('{"state":"completed"}\n', encoding="utf-8")
+    _without_identity(publication.private, monkeypatch)
+    result = commit_issue_state(publication.root, 1234567)
+    warning = result["warning"]
+    assert result["ok"] is True and result["action"] == "continued", result
+    assert "commit of issue state failed (git exit" in warning, warning
+    assert "git has no user identity" in warning, warning
+    _assert_no_host_or_user(warning)
+
+
+def test_issue_checkpoint_without_an_identity_names_no_user_or_host(
+    publication: Publication, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _token, task = publication.claim(1234567)
+    mode_issue_branch(publication.root, 1234567, task)
+    # The fixture excludes the private checkout through .git/info/exclude, and a
+    # second exclusion for the same path makes git add refuse the empty pathspec.
+    (publication.root / ".git" / "info" / "exclude").write_text("", encoding="utf-8")
+    (publication.root / "code.txt").write_text("partial fix\n", encoding="utf-8")
+    _without_identity(publication.root, monkeypatch)
+    result = mode_issue_checkpoint(publication.root)
+    warning = result["warning"]
+    assert result["ok"] is True and result["action"] == "continued", result
+    assert "commit of issue work failed (git exit" in warning, warning
+    assert "git has no user identity" in warning, warning
+    _assert_no_host_or_user(warning)
 
 
 def test_issue_cleanup_reports_a_mismatched_private_upstream(

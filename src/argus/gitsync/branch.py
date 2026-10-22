@@ -7,6 +7,7 @@ from typing import Any
 
 from argus.conventions import board_repo
 from argus.gitsync.git import (
+    _git_failure,
     blocked,
     current_branch,
     degraded,
@@ -147,7 +148,8 @@ def ensure_phase_branch(
         if rc != 0:
             return degraded(
                 info,
-                f"could not check out {branch!r}: {err or out}; the next tick retries",
+                f"{_git_failure(f'check out of {branch!r}', rc, err or out)}; "
+                "the next tick retries",
             )
         return dict(
             info,
@@ -161,7 +163,8 @@ def ensure_phase_branch(
     if rc != 0:
         return degraded(
             info,
-            f"could not create {branch!r}: {err or out}; the next tick retries",
+            f"{_git_failure(f'creation of {branch!r}', rc, err or out)}; "
+            "the next tick retries",
         )
     # Publish the new branch and give it an upstream straight away. Two
     # reasons, both load-bearing: the sync helper refuses a branch with no
@@ -172,7 +175,7 @@ def ensure_phase_branch(
     if rc != 0:
         return degraded(
             info,
-            f"could not publish {branch!r} to {remote}: {err or out}; "
+            f"{_git_failure(f'publish of {branch!r} to {remote}', rc, err or out)}; "
             "the phase continues on it and the next tick retries the push",
         )
     return dict(

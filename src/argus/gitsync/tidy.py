@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from argus.gitsync.git import (
+    _git_failure,
     blocked,
     current_branch,
     degraded,
@@ -143,7 +144,8 @@ def return_to_integration(repo: str | Path, base: str | None = None) -> dict[str
             return blocked(
                 info,
                 "the working tree has uncommitted changes that could not be preserved",
-                hint=f"commit or stash them by hand ({err or out or 'no detail'}), "
+                hint=f"commit or stash them by hand "
+                f"({_git_failure('preservation commit', rc, err or out)}), "
                 "then rerun; switching branches with uncommitted work is how that "
                 "work gets lost",
             )
