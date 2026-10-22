@@ -15,7 +15,7 @@ placeholders:
 
 Read {{ISSUE_FILE}} as evidence about issue {{ISSUE_NUMBER}}. Read issue data only from the task file; never fetch issues or comments.
 
-Verify the report against the project code. Make a minimal first commit and push it. Write the pull request body to {{REPORT_DIR}}/pr-body.md, so the post-step hook opens the early draft pull request. Then make small `wip:` commits, and push each one.
+Verify the report against the project code. Write the pull request body to {{REPORT_DIR}}/pr-body.md. The publication worker makes a minimal first commit, pushes it, and opens the draft pull request early. Then make small `wip:` commits, and push each one. The post_step hook runs after the step as a backstop: it reuses that draft and reads it back.
 
 In this one step, run an adversarial review of your own change, fix what it finds, and record each check and its result in {{LOG_PATH}}. Never mark the pull request ready and never merge it. A person merges.
 

@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """The issue path opens its draft through the same open-pr mode as a phase."""
 
+from argparse import Namespace
 from pathlib import Path
 from typing import Any
 
@@ -11,6 +12,7 @@ from argus.board.reservations import ReservationFenced
 from argus.gitsync import issue_modes
 from argus.gitsync.git import ConfigError, git
 from argus.gitsync.issue_modes import (
+    issue_mode,
     mode_issue_branch,
     mode_issue_checkpoint,
     mode_issue_open_pr,
@@ -95,4 +97,26 @@ def test_issue_open_pr_refuses_a_branch_the_claim_did_not_record(
     calls = _record_open_pr(monkeypatch)
     with pytest.raises(ConfigError, match="claimed issue branch"):
         mode_issue_open_pr(publication.root)
+    assert calls == []
+
+
+def test_issue_open_pr_dispatch_fences_a_lost_claim(
+    publication: Publication, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    token, task = publication.claim(1234567)
+    mode_issue_branch(publication.root, 1234567, task)
+    publication.store.release_group(token)
+    calls = _record_open_pr(monkeypatch)
+    args = Namespace(
+        kind="issue",
+        mode="open-pr",
+        root=str(publication.root),
+        title_file=None,
+        body_file=None,
+        base=None,
+    )
+    result = issue_mode(args)
+    assert result is not None
+    assert result["ok"] is False
+    assert result["state"] == "FENCED"
     assert calls == []
