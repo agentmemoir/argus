@@ -104,7 +104,7 @@ def test_each_skipped_phase_is_logged_once_and_rc_stays_zero(
 
 
 def test_clean_sweep_logs_no_skip_line(tmp_path: Path) -> None:
-    payload = {
+    payload: dict[str, object] = {
         "ok": True,
         "mode": "clean",
         "repos": [],
