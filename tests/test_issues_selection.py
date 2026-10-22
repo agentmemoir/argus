@@ -299,12 +299,18 @@ def test_every_cli_path_types_remote_failure(
     assert "Traceback" not in captured.err
 
 
-def test_claim_keeps_the_board_record_only(configured: Configured) -> None:
+def test_claim_writes_the_board_record_and_the_label_only(
+    configured: Configured,
+) -> None:
     repo, _, board = configured
     result = IssuesSource(repo).select()
     assert (
         result["state"] == "RESERVED" and board.records["100001"]["status"] == "claimed"
     )
-    # The board record is the only claim artifact: no GitHub write is made.
-    assert not any(call["argv"][:2] == ["issue", "edit"] for call in argv(repo))
+    # Besides the board record, the claim label is the only GitHub write.
+    edits = [c["argv"] for c in argv(repo) if c["argv"][:2] == ["issue", "edit"]]
+    assert edits == [
+        ["issue", "edit", "100001", "--repo", "example/project"]
+        + ["--add-label", "accepted"]
+    ]
     assert not any(call["argv"][:2] == ["issue", "comment"] for call in argv(repo))

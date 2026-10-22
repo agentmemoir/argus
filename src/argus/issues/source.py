@@ -17,7 +17,7 @@ from argus.board.reservations import (
 from argus.issues import claims
 from argus.issues.client import IssueClient
 from argus.issues.evidence import Evidence, escalated, pending, signals
-from argus.issues.filter import eligible
+from argus.issues.filter import eligible, label_claimed
 from argus.issues.order import PREFERENCES, ordering
 from argus.issues.report import _Reports
 from argus.issues.task import render, task_directory, task_path, write
@@ -36,6 +36,7 @@ class IssuesSource(_Reports, WorkSource):
             self.preference = conventions.setting("issues.preference")
             self.groups = conventions.setting("issues.label-groups")
             self.difficulty = conventions.setting("issues.difficulty-order")
+            self.claim_label = conventions.setting("issues.claim-label")
             if (
                 conventions.setting("board.repo", None) is None
                 or conventions.setting("board.issues-file", None) is None
@@ -71,6 +72,7 @@ class IssuesSource(_Reports, WorkSource):
                     "claimed",
                     "failed",
                     "escalated",
+                    "claim_label",
                 ),
                 0,
             )
@@ -132,6 +134,12 @@ class IssuesSource(_Reports, WorkSource):
                 conventions.setting("issues.category", None),
             ):
                 detail["evidence"] = "changed"
+            elif label_claimed(
+                detail, self.records.get(f"{number:06d}"), self.claim_label
+            ):
+                # A person added the claim label after the search snapshot.
+                detail["evidence"] = "claim_label"
+                self.skipped["claim_label"] += 1
             else:
                 detail["evidence"] = self.evidence.inspect(detail)
                 if detail["evidence"]:
@@ -215,6 +223,9 @@ class IssuesSource(_Reports, WorkSource):
                 last = row, record
                 last_state = "WAIT_FOR_CLAIM"
                 continue
+            if label_claimed(row, record, self.claim_label):
+                self.skipped["claim_label"] += 1
+                continue
             detail = self._detail(row)
             if detail["evidence"]:
                 continue
@@ -242,6 +253,11 @@ class IssuesSource(_Reports, WorkSource):
                     break
                 continue
             claims.save(self.repo, number, reservation, path)
+            try:
+                self.client.add_label(number, self.claim_label)
+            except IssuesUnavailable as exc:
+                # The board reservation is the claim; a lost label write keeps it.
+                print(f"issue claim: label not added: {exc}", file=sys.stderr)
             return self._base("RESERVED", detail, reservation, attempts=attempts)
         if last:
             return self._base(
@@ -257,7 +273,11 @@ class IssuesSource(_Reports, WorkSource):
         survivors: list[tuple[int, Path]] = []
         for row in self.rows or []:
             record = self.records.get(f"{row['number']:06d}")
-            if claims.held(record) or escalated(record):
+            if (
+                claims.held(record)
+                or escalated(record)
+                or label_claimed(row, record, self.claim_label)
+            ):
                 continue
             detail = self._detail(row)
             if not detail["evidence"]:
