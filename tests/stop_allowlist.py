@@ -44,8 +44,6 @@ STOP_ALLOWLIST = r"""
     driver/lib-driver-drive.sh	drive_rc_nonzero	fn:_drive_cut_branch|tidy_published_checkout "$number" || { _DRIVE_RC=1; return 0; }#1
     driver/lib-driver-drive.sh	drive_rc_nonzero	fn:_drive_cut_branch|_DRIVE_RC=1#1
     driver/lib-driver-control.sh	halt_marker	fn:stop|printf 'stopped by operator at %s\n' "$(ts)" >"$HALT"#1
-    driver/lib-driver-control.sh	return_nonzero	fn:stop|return 1#1
-    driver/lib-driver-control.sh	return_nonzero	fn:stop|return 1#2
     driver/lib-driver-control.sh	return_nonzero	fn:release|return 1#1
     driver/lib-driver-control.sh	return_nonzero	fn:release|return 1#2
     driver/lib-driver-control.sh	return_nonzero	fn:release|return 1#3

@@ -14,42 +14,33 @@
 
 stop() {
   mkdir -p "$RUN_DIR"
-  # The lock first, then the ownership proof, and only then a write. The halt
-  # marker used to go first so a stop stopped the line even when the lock was
-  # busy; that ordering let any machine write the marker and the manual-stop
-  # hold, including one whose claim expired or was taken over. The proof is
-  # therefore read before either file exists: a bad, empty, unreadable, or
-  # mismatched fence writes neither one and refuses.
-  driver_lock_wait || log "stop: the driver lock is held by a running tick; proving the fence anyway"
-  if ! claim_read_fields "$CLAIM" || [ -z "$CLAIM_NUMBER" ] \
-      || [ -z "$CLAIM_ID" ] || [ -z "$CLAIM_GEN" ]; then
-    log "stop: no readable claim fence; refusing to stop and writing no halt marker (see $CLAIM)"
-    exec 9>&- || true
-    return 1
-  fi
-  # The board is the authority for who may stop this run: a claim file alone
-  # proves nothing, because an expired, released, or taken-over reservation
-  # still reads live to the machine that held it once. A board that cannot
-  # answer fails closed, so nothing is written and the operator retries.
-  if ! board_assert_owner "$CLAIM_NUMBER" "$CLAIM_ID" "$CLAIM_GEN"; then
-    log "stop: the board does not confirm the fence for ${work_kind:-phase} $CLAIM_NUMBER; refusing to stop and writing no halt marker (see $RUN_DIR/assert-owner-$CLAIM_NUMBER.json)"
-    exec 9>&- || true
-    return 1
-  fi
+  # The halt marker is this machine's own run state and names no board
+  # reservation, so it is written on every path: no claim, a bad claim, and a
+  # board that cannot answer must all still stop the line. Only the
+  # `stopped-claim` hold names a reservation, so only it waits on the board.
+  driver_lock_wait || log "stop: the driver lock is held by a running tick; stopping anyway"
   printf 'stopped by operator at %s\n' "$(ts)" >"$HALT"
   local stopped_phase=""
-  # A stale current file alone has no recoverable claim. Holding it would
-  # strand an idle stop, because neither resume nor release could consume it.
-  stopped_phase="$CLAIM_NUMBER"
-  # The live window names the phase actually running; the claim file can be a
-  # stale record from an earlier run. Prefer the live phase when it is a
-  # number, so a resume targets what was stopped and not what was recorded.
-  local live_phase
-  live_phase="$(cat "$CURRENT" 2>/dev/null || true)"
-  case "$live_phase" in
-    ""|*[!0-9]*) ;;
-    *) stopped_phase="$live_phase" ;;
-  esac
+  if ! claim_read_fields "$CLAIM" || [ -z "$CLAIM_NUMBER" ] \
+      || [ -z "$CLAIM_ID" ] || [ -z "$CLAIM_GEN" ]; then
+    log "stop: no readable claim fence; wrote the halt marker and recorded no stopped claim (see $CLAIM)"
+  # The board is the authority for the hold: a claim file alone proves
+  # nothing, because an expired, released, or taken-over reservation still
+  # reads live to the machine that held it once.
+  elif ! board_assert_owner "$CLAIM_NUMBER" "$CLAIM_ID" "$CLAIM_GEN"; then
+    log "stop: the board does not confirm the fence for ${work_kind:-phase} $CLAIM_NUMBER; wrote the halt marker and recorded no stopped claim (see $RUN_DIR/assert-owner-$CLAIM_NUMBER.json)"
+  else
+    stopped_phase="$CLAIM_NUMBER"
+    # The live window names the phase actually running; the claim file can be
+    # a stale record from an earlier run. Prefer the live phase when it is a
+    # number, so a resume targets what was stopped and not what was recorded.
+    local live_phase
+    live_phase="$(cat "$CURRENT" 2>/dev/null || true)"
+    case "$live_phase" in
+      ""|*[!0-9]*) ;;
+      *) stopped_phase="$live_phase" ;;
+    esac
+  fi
   [ -z "$stopped_phase" ] || printf '%s\n' "$stopped_phase" >"$RUN_DIR/stopped-claim"
   # Ctrl-C must reach the phase window. Targeting the session would send it to
   # whichever window is current, which may be the idle status display.

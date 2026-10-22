@@ -2,10 +2,11 @@
 # SPDX-License-Identifier: Apache-2.0
 """Every write path proves the fence before its first write, or writes nothing.
 
-One case per path named by issue 164: ``stop``, ``tidy`` with a phase,
+One case per path named by issue 164: ``tidy`` with a phase,
 ``clean <phase>``, the whole-tree ``clean`` sweep, ``checkpoint``, and
 ``branch``. A foreign fence must leave the file, ref, and board exactly as they
-were and return a refusal; a matching fence must let the write happen.
+were and return a refusal; a matching fence must let the write happen. The
+``stop`` cases live in ``test_driver_stop_fence.py``.
 """
 
 import contextlib
@@ -28,57 +29,10 @@ from driver_fence_fixture import (
     make_repo,
     run_path,
 )
-from driver_maintenance_support import shell
 
 
 def _refs(root: Path) -> str:
     return git(root, "for-each-ref", "--format=%(refname) %(objectname)").strip()
-
-
-# --- stop -----------------------------------------------------------------
-
-
-def test_stop_refuses_a_foreign_fence_and_writes_neither_file(
-    tmp_path: Path,
-) -> None:
-    output = shell(
-        tmp_path,
-        "printf '100020\\trsv-foreign\\t7\\n' >\"$CLAIM\"\n"
-        "board_assert_owner() { log ASSERT; return 1; }\n"
-        "rc=0; stop || rc=$?\n"
-        'printf "stop_rc=%s\\n" "$rc"\n',
-    )
-    assert "stop_rc=1" in output
-    assert "ASSERT" in (tmp_path / "events").read_text().splitlines()
-    assert not (tmp_path / "halted").exists()
-    assert not (tmp_path / "stopped-claim").exists()
-
-
-def test_stop_without_a_claim_writes_neither_file(tmp_path: Path) -> None:
-    output = shell(
-        tmp_path,
-        "board_assert_owner() { log ASSERT; return 0; }\n"
-        "rc=0; stop || rc=$?\n"
-        'printf "stop_rc=%s\\n" "$rc"\n',
-    )
-    assert "stop_rc=1" in output
-    assert "ASSERT" not in (tmp_path / "events").read_text().splitlines()
-    assert not (tmp_path / "halted").exists()
-    assert not (tmp_path / "stopped-claim").exists()
-
-
-def test_stop_writes_both_files_when_the_fence_matches(tmp_path: Path) -> None:
-    output = shell(
-        tmp_path,
-        "printf '100020\\trsv-fixture\\t2\\n' >\"$CLAIM\"\n"
-        "board_assert_owner() { log ASSERT; return 0; }\n"
-        "rc=0; stop || rc=$?\n"
-        'printf "stop_rc=%s\\n" "$rc"\n',
-    )
-    assert "stop_rc=0" in output
-    assert "ASSERT" in (tmp_path / "events").read_text().splitlines()
-    assert (tmp_path / "halted").is_file()
-    assert (tmp_path / "stopped-claim").read_text().strip() == "100020"
 
 
 # --- tidy -----------------------------------------------------------------
