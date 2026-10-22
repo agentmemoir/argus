@@ -10,102 +10,29 @@ were and return a refusal; a matching fence must let the write happen.
 
 import contextlib
 import json
-import subprocess
 from pathlib import Path
 
 import pytest
 
-from argus import conventions
-from argus.board.core import ReservationFenced
 from argus.gitsync.fence import phase_fence
 from argus.gitsync.mode_branch import mode_branch
 from argus.gitsync.mode_clean import mode_checkpoint, mode_clean
 from argus.gitsync.modes import mode_tidy
+from driver_fence_fixture import (
+    PHASE,
+    Board,
+    foreign_claim,
+    git,
+    head_sha,
+    make_claim,
+    make_repo,
+    run_path,
+)
 from driver_maintenance_support import shell
-
-PHASE = 100020
-
-
-def _run(root: Path, phase: int = PHASE) -> Path:
-    return root / "runs" / f"phase-{phase}"
-
-
-def _git(cwd: Path, *args: str) -> str:
-    return subprocess.run(
-        ["git", "-c", "user.email=a@b", "-c", "user.name=a", *args],
-        cwd=cwd,
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout
-
-
-def _repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """A checkout with one commit, and the settings every mode reads."""
-    monkeypatch.setattr(conventions, "_settings", {})
-    root = tmp_path / "repo"
-    root.mkdir()
-    _git(root, "init", "-q", "-b", "main")
-    (root / "README").write_text("fixture\n")
-    _git(root, "add", "-A")
-    _git(root, "commit", "-qm", "fixture")
-    conventions.configure(
-        {"commands.git": "git", "repo-root": str(root), "driver.runs": "runs"}
-    )
-    return root
-
-
-class _Board:
-    """A board that confirms the fixture reservation and fences every other one.
-
-    The board transport is proved by ``tests/test_driver_claim_fencing.py`` and
-    the board's own suite; what these cases pin is the ordering, so the fence is
-    stubbed at its one hole rather than rebuilt with a bare-clone board here.
-    """
-
-    def __init__(self, *_args: object, **_kwargs: object) -> None:
-        pass
-
-    def assert_owner(self, reservation: dict[str, object]) -> dict[str, object]:
-        if reservation.get("reservation_id") != "rsv-fixture":
-            raise ReservationFenced(f"{PHASE} is no longer owned by this reservation")
-        return dict(reservation)
-
-
-def _claim(root: Path, monkeypatch: pytest.MonkeyPatch, phase: int = PHASE) -> None:
-    """The run state a live reservation leaves behind, and a board that owns it."""
-    monkeypatch.setattr("argus.board.reservations.ReservationStore", _Board)
-    run = _run(root, phase)
-    run.mkdir(parents=True, exist_ok=True)
-    (run / "run.json").write_text('{"state": "running"}\n')
-    (run / "reservation.json").write_text(
-        json.dumps(
-            {
-                "machine_id": "server-01",
-                "reservation_id": "rsv-fixture",
-                "generation": 2,
-                "phase": f"{phase:06d}",
-            }
-        )
-    )
-    _git(root, "add", "-A")
-    _git(root, "commit", "-qm", "run state")
-
-
-def _foreign(root: Path, phase: int = PHASE) -> None:
-    """A reservation file whose id no board record carries."""
-    path = _run(root, phase) / "reservation.json"
-    data = json.loads(path.read_text())
-    data["reservation_id"] = "rsv-foreign"
-    path.write_text(json.dumps(data))
-
-
-def _head(root: Path) -> str:
-    return _git(root, "rev-parse", "HEAD").strip()
 
 
 def _refs(root: Path) -> str:
-    return _git(root, "for-each-ref", "--format=%(refname) %(objectname)").strip()
+    return git(root, "for-each-ref", "--format=%(refname) %(objectname)").strip()
 
 
 # --- stop -----------------------------------------------------------------
@@ -160,9 +87,9 @@ def test_stop_writes_both_files_when_the_fence_matches(tmp_path: Path) -> None:
 def test_tidy_with_a_phase_refuses_a_foreign_fence(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    root = _repo(tmp_path, monkeypatch)
-    _claim(root, monkeypatch)
-    _foreign(root)
+    root = make_repo(tmp_path, monkeypatch)
+    make_claim(root, monkeypatch)
+    foreign_claim(root)
     before = _refs(root)
     out = mode_tidy(root, PHASE)
     assert out["state"] == "FENCED"
@@ -173,8 +100,8 @@ def test_tidy_with_a_phase_refuses_a_foreign_fence(
 def test_tidy_fence_passes_when_the_fence_matches(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    root = _repo(tmp_path, monkeypatch)
-    _claim(root, monkeypatch)
+    root = make_repo(tmp_path, monkeypatch)
+    make_claim(root, monkeypatch)
     assert phase_fence(root, PHASE, "tidy") is None
 
 
@@ -201,36 +128,36 @@ def test_tidy_without_a_phase_never_reads_the_fence(
 def test_clean_phase_refuses_a_foreign_fence_before_the_commit(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    root = _repo(tmp_path, monkeypatch)
-    _claim(root, monkeypatch)
-    _foreign(root)
-    before = _head(root)
+    root = make_repo(tmp_path, monkeypatch)
+    make_claim(root, monkeypatch)
+    foreign_claim(root)
+    before = head_sha(root)
     out = mode_clean(root, PHASE)
     assert out["state"] == "FENCED"
     assert out["repos"] == []
-    assert _head(root) == before
+    assert head_sha(root) == before
 
 
 def test_whole_tree_clean_skips_a_phase_whose_fence_is_unproven(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    root = _repo(tmp_path, monkeypatch)
-    _claim(root, monkeypatch)
-    _foreign(root)
-    before = _head(root)
+    root = make_repo(tmp_path, monkeypatch)
+    make_claim(root, monkeypatch)
+    foreign_claim(root)
+    before = head_sha(root)
     out = mode_clean(root)
     assert out["state"] == "PARTIAL"
     assert out["skipped"][0]["phase"] == f"{PHASE:06d}"
     assert "fence" in out["skipped"][0]["detail"]
-    assert _head(root) == before
+    assert head_sha(root) == before
 
 
 def test_clean_phase_commits_when_the_fence_matches(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    root = _repo(tmp_path, monkeypatch)
-    _claim(root, monkeypatch)
-    (_run(root) / "ledger.json").write_text('{"steps": {}}\n')
+    root = make_repo(tmp_path, monkeypatch)
+    make_claim(root, monkeypatch)
+    (run_path(root) / "ledger.json").write_text('{"steps": {}}\n')
     out = mode_clean(root, PHASE)
     assert out["ok"] is True
     assert out["repos"][0]["ok"] is True
@@ -242,23 +169,23 @@ def test_clean_phase_commits_when_the_fence_matches(
 def test_checkpoint_refuses_a_foreign_fence_before_the_commit(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    root = _repo(tmp_path, monkeypatch)
-    _claim(root, monkeypatch)
-    _foreign(root)
-    _git(root, "checkout", "-q", "-b", "feature/x")
+    root = make_repo(tmp_path, monkeypatch)
+    make_claim(root, monkeypatch)
+    foreign_claim(root)
+    git(root, "checkout", "-q", "-b", "feature/x")
     (root / "work.txt").write_text("wip\n")
-    before = _head(root)
+    before = head_sha(root)
     out = mode_checkpoint(root, phase=PHASE)
     assert out["state"] == "FENCED"
-    assert _head(root) == before
-    assert "?? work.txt" in _git(root, "status", "--porcelain")
+    assert head_sha(root) == before
+    assert "?? work.txt" in git(root, "status", "--porcelain")
 
 
 def test_checkpoint_fence_passes_when_the_fence_matches(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    root = _repo(tmp_path, monkeypatch)
-    _claim(root, monkeypatch)
+    root = make_repo(tmp_path, monkeypatch)
+    make_claim(root, monkeypatch)
     assert phase_fence(root, PHASE, "checkpoint") is None
 
 
@@ -284,11 +211,11 @@ def test_checkpoint_without_a_phase_never_reads_the_fence(
 def test_branch_refuses_a_foreign_fence_before_the_cut(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    root = _repo(tmp_path, monkeypatch)
+    root = make_repo(tmp_path, monkeypatch)
     (root / "phases").mkdir()
     (root / "phases" / "phase-100020-cut.md").write_text("# cut\n")
-    _claim(root, monkeypatch)
-    _foreign(root)
+    make_claim(root, monkeypatch)
+    foreign_claim(root)
     before = _refs(root)
     out = mode_branch(root, PHASE, "phase-100020-cut.md", root / "phases")
     assert out["state"] == "FENCED"
@@ -299,15 +226,15 @@ def test_branch_refuses_a_foreign_fence_before_the_cut(
 def test_branch_fence_passes_when_the_fence_matches(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    root = _repo(tmp_path, monkeypatch)
-    _claim(root, monkeypatch)
+    root = make_repo(tmp_path, monkeypatch)
+    make_claim(root, monkeypatch)
     assert phase_fence(root, PHASE, "branch") is None
 
 
 # --- the fixture claim the group-resume case was missing -------------------
 
 
-class _RecordingBoard(_Board):
+class _RecordingBoard(Board):
     """The fence board above, plus a claim that names the branch it wrote on."""
 
     branches: list[str | None] = []
@@ -335,12 +262,12 @@ def test_reserve_phase_writes_the_reservation_the_branch_fence_reads(
     """
     from argus.gitsync.selftest_fixture import _reserve_phase
 
-    root = _repo(tmp_path, monkeypatch)
+    root = make_repo(tmp_path, monkeypatch)
     _RecordingBoard.branches = []
     monkeypatch.setattr("argus.board.reservations.ReservationStore", _RecordingBoard)
     _reserve_phase(root, 100030, machine_id="argus-selftest", branch="fixture-claims")
 
-    written = _run(root, 100030) / "reservation.json"
+    written = run_path(root, 100030) / "reservation.json"
     assert json.loads(written.read_text())["reservation_id"] == "rsv-fixture"
     assert _RecordingBoard.branches == ["fixture-claims"]
     assert phase_fence(root, 100030, "branch") is None

@@ -13,17 +13,17 @@ import pytest
 
 from argus.gitsync.mode_clean import mode_clean
 from argus.gitsync.modes import result_exit_code
-from test_driver_write_fences import PHASE, _claim, _foreign, _head, _repo
+from driver_fence_fixture import PHASE, foreign_claim, head_sha, make_claim, make_repo
 
 
 def test_a_sweep_that_skips_every_phase_is_not_ok(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    root = _repo(tmp_path, monkeypatch)
-    _claim(root, monkeypatch)
-    _foreign(root)
+    root = make_repo(tmp_path, monkeypatch)
+    make_claim(root, monkeypatch)
+    foreign_claim(root)
     (root / "runs" / f"phase-{PHASE}" / "ledger.json").write_text("{}\n")
-    before = _head(root)
+    before = head_sha(root)
     out = mode_clean(root)
     assert out["ok"] is False
     assert result_exit_code(out) == 1
@@ -34,4 +34,4 @@ def test_a_sweep_that_skips_every_phase_is_not_ok(
     # The summary is the line a caller logs, so it names the phase, the
     # state, and the reason, not only the phase.
     assert f"{PHASE:06d} (FENCED: {skip['error']})" in out["summary"]
-    assert _head(root) == before
+    assert head_sha(root) == before
