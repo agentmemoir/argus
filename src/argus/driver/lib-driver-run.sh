@@ -154,10 +154,12 @@ on_stop() {
 # still answer ok, because a sibling phase landed. The exit code cannot carry
 # either fact, so the driver reads the file it just wrote and says both itself.
 #
-# A file that is missing, empty, unreadable, not a regular file, or not a JSON
-# object logs nothing. The caller has already logged a non-zero exit for a run
-# that failed, and a result the driver cannot parse is not a second fault worth
-# a line.
+# A result the driver cannot parse logs nothing: the caller has already reported a
+# non-zero exit for a failed run, and an unparseable answer is not a second fault
+# worth a line. A missing path and an empty file are that same silence, because a
+# clean run may legitimately write neither. A path that is there and is not a
+# regular file, and an answer over the ceiling, are refused out loud instead: a
+# result the driver cannot read must not look like no result.
 #
 # The file is one this driver just wrote, and its whole answer is a few hundred
 # bytes, so 256 KiB is a ceiling no real result reaches: thousands of skipped
@@ -173,14 +175,28 @@ on_stop() {
 # loop below reads one record per line, and no result file may block a tick or
 # flood the log. Each field is flattened for that reason, so a newline inside one
 # could never be read as the start of a second record.
+#
+# Every line goes through `log_changed`, so a skip or a degradation that persists
+# says itself once and a later tick adds nothing; the key names the fact, not the
+# tick.
 gitsync_log_result() {
-  local file="$1" label="$2" kind first second third
-  [ -f "$file" ] || return 0
+  local file="$1" label="$2" kind first second third slug
+  # A clean run legitimately writes no file, so a missing path says nothing. A
+  # path that is there and not a regular file, or an answer over the ceiling, is
+  # refused out loud: silence there would be the gap this function exists to close.
+  slug="${label// /-}"
+  [ -e "$file" ] || return 0
+  if [ ! -f "$file" ]; then
+    log_changed "gitsync-$slug-unreadable" \
+      "$label result file $file is not a regular file; it says nothing about the run"
+    return 0
+  fi
   [ -s "$file" ] || return 0
   "$PYTHON" -c 'import json,os,sys
 ceiling = 262144
 try:
     if os.path.getsize(sys.argv[1]) > ceiling:
+        print("refused\t")
         raise SystemExit(0)
     with open(sys.argv[1], "rb") as handle:
         raw = handle.read(ceiling + 1)
@@ -208,9 +224,12 @@ if isinstance(skipped, list):
     "$file" 2>/dev/null | while IFS=$'\t' read -r kind first second third; do
     case "$kind" in
       warning)
-        log "$label continued in a degraded state: $(cap_length "$(flatten_one_line "$first")" 500)" ;;
+        log_changed "gitsync-$slug-degraded" "$label continued in a degraded state: $(cap_length "$(flatten_one_line "$first")" 500)" ;;
       skipped)
-        log "$label skipped phase $first ($second): $(cap_length "$(flatten_one_line "$third")" 500)" ;;
+        log_changed "gitsync-$slug-skipped-$first" "$label skipped phase $first ($second): $(cap_length "$(flatten_one_line "$third")" 500)" ;;
+      refused)
+        log_changed "gitsync-$slug-oversize" \
+          "$label result file $file is over the 256 KiB ceiling; it says nothing about the run" ;;
     esac
   done
   return 0

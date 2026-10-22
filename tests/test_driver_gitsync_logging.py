@@ -19,7 +19,14 @@ import pytest
 DRIVER = Path(__file__).resolve().parents[1] / "src/argus/driver"
 
 FAKE_MAIN = """import os, sys
-sys.stdout.write(open(os.path.join(os.environ["TEST_ROOT"], "payload.json")).read())
+root = os.environ["TEST_ROOT"]
+count_file = os.path.join(root, "count")
+count = int(open(count_file).read()) if os.path.exists(count_file) else 0
+open(count_file, "w").write(str(count + 1))
+name = "payload.json"
+if count > 0 and os.path.exists(os.path.join(root, "payload2.json")):
+    name = "payload2.json"
+sys.stdout.write(open(os.path.join(root, name)).read())
 sys.exit(int(os.environ.get("TEST_EXIT", "0")))
 """
 
@@ -37,6 +44,11 @@ ARGUS_CONFIG_ARGS=(--config fixture.json); GITSYNC_KIND_ARGS=()
 rc=0
 case "$TEST_CALL" in
   clean) gitsync_clean 100020 || rc=$? ;;
+  repeat)
+    gitsync_land_leftovers || rc=$?
+    gitsync_land_leftovers || rc=$? ;;
+  nonregular) gitsync_log_result "$RUN_DIR" "leftover run state" || rc=$? ;;
+  missing) gitsync_log_result "$RUN_DIR/absent.json" "leftover run state" || rc=$? ;;
   *) gitsync_land_leftovers || rc=$? ;;
 esac
 printf 'rc=%s\\n' "$rc"
@@ -44,7 +56,11 @@ printf 'rc=%s\\n' "$rc"
 
 
 def run_clean(
-    tmp_path: Path, payload: str, call: str = "land", exit_code: int = 0
+    tmp_path: Path,
+    payload: str,
+    call: str = "land",
+    exit_code: int = 0,
+    payload2: str | None = None,
 ) -> tuple[str, list[str]]:
     """Run one clean function over a fake main.py printing payload."""
     root = tmp_path / "root"
@@ -52,6 +68,8 @@ def run_clean(
     (tmp_path / "argus" / "gitsync").mkdir(parents=True)
     (tmp_path / "argus" / "gitsync" / "main.py").write_text(FAKE_MAIN)
     (tmp_path / "payload.json").write_text(payload)
+    if payload2 is not None:
+        (tmp_path / "payload2.json").write_text(payload2)
     completed = subprocess.run(
         ["bash", "-c", SCRIPT],
         cwd=tmp_path,
@@ -133,9 +151,7 @@ def test_a_warning_on_an_ok_result_logs_one_degraded_line(
                 "action": "continued",
                 "repo": "/nonexistent/clone",
                 "pathspec": "runs/phase-100020",
-                "warning": "commit of run state failed: Author identity unknown\n\n"
-                "*** Please tell me who you are.\n"
-                "fatal: unable to auto-detect email address; the next tick retries",
+                "warning": "commit of run state failed: git exited 128; the next tick retries",
             }
         )
         + "\n"
@@ -150,14 +166,13 @@ def test_a_warning_on_an_ok_result_logs_one_degraded_line(
     )
     assert lines[0] == (
         f"fixture-time {label} continued in a degraded state: commit of run state "
-        "failed: Author identity unknown *** Please tell me who you are. fatal: "
-        "unable to auto-detect email address; the next tick retries"
+        "failed: git exited 128; the next tick retries"
     )
 
 
 @pytest.mark.parametrize("call", ["clean", "land"])
 @pytest.mark.parametrize("payload", ["", "{not json\n", "[1, 2, 3]\n"])
-def test_an_empty_or_malformed_result_file_logs_nothing(
+def test_the_reader_contract_stays_silent_on_an_empty_or_malformed_file(
     tmp_path: Path, payload: str, call: str
 ) -> None:
     out, lines = run_clean(tmp_path, payload, call)
@@ -166,7 +181,7 @@ def test_an_empty_or_malformed_result_file_logs_nothing(
 
 
 @pytest.mark.parametrize("call", ["clean", "land"])
-def test_a_result_with_neither_warning_nor_skipped_logs_nothing(
+def test_the_reader_contract_stays_silent_when_there_is_no_fact(
     tmp_path: Path, call: str
 ) -> None:
     out, lines = run_clean(tmp_path, payload=json.dumps({"ok": True}), call=call)
@@ -174,15 +189,93 @@ def test_a_result_with_neither_warning_nor_skipped_logs_nothing(
     assert lines == []
 
 
+@pytest.mark.parametrize("payload", ["", "{not json\n", "[1, 2, 3]\n"])
+def test_the_reader_contract_pairs_silence_with_a_speaking_file(
+    tmp_path: Path, payload: str
+) -> None:
+    # A count of passes over silent cases proves nothing on its own, so each one
+    # is paired with the same reader speaking over a well-formed file.
+    silent_out, silent_lines = run_clean(tmp_path / "silent", payload)
+    assert "rc=0" in silent_out
+    assert silent_lines == []
+    speaking = (
+        json.dumps(
+            {"ok": True, "warning": "commit of run state failed: git exited 128"}
+        )
+        + "\n"
+    )
+    speaking_out, speaking_lines = run_clean(tmp_path / "speaking", speaking)
+    assert "rc=0" in speaking_out
+    assert speaking_lines == [
+        "fixture-time leftover run state continued in a degraded state: "
+        "commit of run state failed: git exited 128"
+    ]
+
+
 @pytest.mark.parametrize("call", ["clean", "land"])
-def test_an_oversized_result_file_logs_nothing(tmp_path: Path, call: str) -> None:
-    # 256 KiB is the ceiling. A file above it is not a result this driver wrote,
-    # so it says nothing and the function still answers 0.
+def test_an_oversized_result_file_is_refused_out_loud(
+    tmp_path: Path, call: str
+) -> None:
+    # 256 KiB is the ceiling. A file above it is refused with one line that names
+    # the file, and the function still answers 0.
     payload = json.dumps({"ok": True, "warning": "commit of run state failed " * 10000})
     assert len(payload.encode()) > 262144, len(payload.encode())
     out, lines = run_clean(tmp_path, payload, call)
     assert "rc=0" in out
+    name = (
+        "run-state-leftovers.json" if call == "land" else "phase-100020-run-state.json"
+    )
+    label = (
+        "phase 100020 closing run state" if call == "clean" else "leftover run state"
+    )
+    assert lines == [
+        f"fixture-time {label} result file {tmp_path}/root/run/{name} is over the "
+        "256 KiB ceiling; it says nothing about the run"
+    ]
+
+
+def test_a_missing_result_file_stays_silent(tmp_path: Path) -> None:
+    # A clean run may legitimately write no file, so a missing path says nothing.
+    out, lines = run_clean(tmp_path, "", call="missing")
+    assert "rc=0" in out
     assert lines == []
+
+
+def test_a_non_regular_result_path_is_refused_out_loud(tmp_path: Path) -> None:
+    out, lines = run_clean(tmp_path, "", call="nonregular")
+    assert "rc=0" in out
+    assert lines == [
+        f"fixture-time leftover run state result file {tmp_path}/root/run is not a "
+        "regular file; it says nothing about the run"
+    ]
+
+
+def test_the_same_payload_on_two_ticks_writes_one_line(tmp_path: Path) -> None:
+    payload = (
+        json.dumps(
+            {"ok": True, "warning": "commit of run state failed: git exited 128"}
+        )
+        + "\n"
+    )
+    out, lines = run_clean(tmp_path, payload, call="repeat")
+    assert "rc=0" in out
+    assert lines == [
+        "fixture-time leftover run state continued in a degraded state: "
+        "commit of run state failed: git exited 128"
+    ]
+
+
+def test_a_changed_payload_on_the_second_tick_writes_a_second_line(
+    tmp_path: Path,
+) -> None:
+    first = json.dumps({"ok": True, "warning": "git exited 128"}) + "\n"
+    second = json.dumps({"ok": True, "warning": "git exited 141"}) + "\n"
+    out, lines = run_clean(tmp_path, first, call="repeat", payload2=second)
+    assert "rc=0" in out
+    assert lines == [
+        "fixture-time leftover run state continued in a degraded state: git exited 128",
+        "fixture-time leftover run state continued in a degraded state: git exited 141",
+    ]
 
 
 def test_a_result_just_under_the_ceiling_still_logs_its_warning(
