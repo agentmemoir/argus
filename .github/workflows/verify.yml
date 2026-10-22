@@ -54,7 +54,7 @@ jobs:
   affected-checks:
     name: affected checks
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 15
     steps:
       - name: Mount temporary storage
         run: |

@@ -26,4 +26,4 @@ Issue faults cover trust, delimiter escaping, text caps, preference validation, 
 
 `make leakscan` covers tracked files plus untracked files that git does not ignore, so a leak fails before it is committed. `make example-check` puts a stand-in `glide` command first on `PATH`, because the readiness report only asks whether the configured command resolves.
 
-CI runs the lint, format, type, and line-limit checks, then `make leakscan`, `make example-check`, `make install-check`, `make self-test`, and `make guard-faults`, on every pull request. [CONTRIBUTING.md](../CONTRIBUTING.md) carries the local gate and the commit rules.
+CI runs the lint, format, type, and line-limit checks, then `make leakscan`, `make example-check`, `make install-check`, `make self-test`, and `make guard-faults`, on every pull request. The `affected-checks` job also runs the whole `tests/` tree with `pytest`, so a test in any file can fail the build. A guard test in `tests/test_ci_runs_every_test_file.py` fails when a test file is not collected. [CONTRIBUTING.md](../CONTRIBUTING.md) carries the local gate and the commit rules.
