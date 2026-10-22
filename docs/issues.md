@@ -28,7 +28,7 @@ A group with `cardinality: one` must match exactly one configured label. A `many
 
 Numeric issue order breaks ties. Blocked, claimed, and escalated work is skipped and counted. An issue whose job failed and left its claim is skipped too, so the line continues to another issue while the failed claim waits to resume on its own.
 
-A red check on an open issue pull request gets a CI repair round before new work, as for a phase pull request. Only the branch an issue run folder records is read. See [CI repair rounds](running.md#ci-repair-rounds).
+A red check on an open issue pull request gets a CI repair round before new work, as for a phase pull request. Only the branch an issue run folder records is read, and only a pull request from this repository: a fork pull request with the same branch name is ignored. See [CI repair rounds](running.md#ci-repair-rounds).
 
 ## Settings
 

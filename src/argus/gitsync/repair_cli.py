@@ -103,7 +103,7 @@ def save_failed_log(
 
 
 def issue_pull_requests(root: str | Path) -> list[dict[str, object]]:
-    """One row per open pull request on a recorded issue branch.
+    """One row per open pull request from this repository on a recorded branch.
 
     The branch comes from the issue run folder: the claim's reservation and
     the frozen task it names, the same proof the issue checkpoint uses. A
@@ -125,6 +125,17 @@ def issue_pull_requests(root: str | Path) -> list[dict[str, object]]:
             print(f"repair: issue {number}: pull requests unread", file=sys.stderr)
             continue
         for pr in found:
+            # Fail closed: a fork's checks and logs are outsider text.
+            if (
+                pr.get("isCrossRepository") is not False
+                or pr.get("headRefName") != branch
+            ):
+                print(
+                    f"repair: issue {number}: ignored {pr['url']}: not this "
+                    f"repository's branch {branch}",
+                    file=sys.stderr,
+                )
+                continue
             if pr["state"] == "OPEN":
                 rows.append(
                     {"issue": number, "branch": branch, "pull_request": pr["url"]}
