@@ -12,7 +12,7 @@ selftest_case_abandon() {
   rel="$(resume_phase_file_of "$phase")" || rel=""
   run_dir="$(phase_run_dir "$phase" "$rel")"
   old_fence="${DRIVER_STUB_BOARD_FENCE:-}"
-  DRIVER_STUB_BOARD_FENCE=renew
+  DRIVER_STUB_BOARD_FENCE=assert
   export DRIVER_STUB_BOARD_FENCE
   wait_phase_window_gone
   rm -f "$HALT" "$HALT_RECORD" "$CLAIM" "$run_dir/abandoned.json"
@@ -68,8 +68,14 @@ selftest_case_abandon() {
 
   # A live recorded pid with no phase window is an orphaned run. Parking the phase
   # would delete the evidence a person needs, so abandon refuses and writes no
-  # residue. The marker and the pid file survive.
+  # residue. Restore a full claim so the later fence check cannot hide a skipped
+  # orphan check. The marker and the pid file must survive.
   rm -f "$run_dir/abandoned.json"
+  selftest_resume_record "$phase" "$rel" "$run_dir" blocked 1
+  if ! claim_read_fields "$CLAIM" || [ "$CLAIM_NUMBER" != "$phase" ] \
+      || [ -z "$CLAIM_ID" ] || [ -z "$CLAIM_GEN" ]; then
+    echo "FAIL: orphan case did not prepare a full claim fence"; fail=1
+  fi
   printf 'halted for the orphan case\n' >"$HALT"
   printf '%s\n' "$$" >"$PIDFILE"
   exec 9>&- || true
@@ -80,7 +86,7 @@ selftest_case_abandon() {
     echo "FAIL: abandon parked a phase with a live orphaned pid"; fail=1
   fi
 
-  rm -f "$PIDFILE" "$HALT" "$run_dir/abandoned.json"
+  rm -f "$PIDFILE" "$HALT" "$HALT_RECORD" "$CLAIM" "$run_dir/abandoned.json"
   DRIVER_STUB_BOARD_FENCE="$old_fence"
   export DRIVER_STUB_BOARD_FENCE
 }

@@ -131,8 +131,14 @@ for entry in entries:
 # that message with one naming the wrong step. So that one result is deferred
 # and the gate answers it.
 tidy_published_checkout() {
-  local rc=0 not_a_tree=0
-  "$PYTHON" "$ARGUS/gitsync/main.py" "${ARGUS_CONFIG_ARGS[@]}" --root "$REPO" --mode tidy \
+  local rc=0 not_a_tree=0 phase="${1:-}" tidy_args=(--mode tidy)
+  # A caller that knows the phase names it, and then gitsync reads the board
+  # fence before it moves either checkout. The pre-selection call does not know
+  # the phase, so it never passes one: that call runs before a selection, and
+  # its job is only to refuse a checkout a tidy cannot preserve.
+  [ -z "$phase" ] || tidy_args+=(--phase "$phase")
+  "$PYTHON" "$ARGUS/gitsync/main.py" "${ARGUS_CONFIG_ARGS[@]}" --root "$REPO" \
+    "${tidy_args[@]}" \
     "${GITSYNC_KIND_ARGS[@]+"${GITSYNC_KIND_ARGS[@]}"}" \
     >"$RUN_DIR/phase-tidy.json" 2>/dev/null || rc=$?
   if [ "$rc" -eq 0 ]; then

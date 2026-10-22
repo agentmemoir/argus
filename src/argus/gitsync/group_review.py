@@ -1,19 +1,17 @@
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
 # SPDX-License-Identifier: Apache-2.0
-"""The group's one pull request: reuse it while it is open, ready it when the group finishes."""
+"""The group's shared pull request and its ready transition."""
 
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from argus.gitsync.gh import (
-    gh_comment_pull_request,
-    gh_edit_pull_request_body,
     gh_mark_pull_request_ready,
-    gh_pull_request_body,
     gh_pull_request_open,
+    gh_pull_request_stage_history,
 )
-from argus.gitsync.gh_gate import gh_pull_request_comment_bodies
+from argus.gitsync.gh_checks import gh_pull_request_checks
 from argus.gitsync.receipts import _phase_run_entries, phase_receipt, pull_request_ref
 
 
@@ -98,8 +96,45 @@ def _group_pending(root: str | Path, members: Iterable[Any], phase: int) -> list
     return pending
 
 
+def _ready_retry_allowed(
+    stage: dict[str, Any] | None, detail: str
+) -> tuple[bool, bool, str]:
+    """Check complete GitHub history before a ready transition."""
+    if not isinstance(stage, dict):
+        return False, False, detail or "GitHub PR history is unavailable"
+    state, is_draft, events = (
+        stage.get("state"),
+        stage.get("is_draft"),
+        stage.get("events"),
+    )
+    if (
+        state not in {"OPEN", "CLOSED", "MERGED"}
+        or not isinstance(is_draft, bool)
+        or not isinstance(events, list)
+    ):
+        return False, False, "GitHub PR history is unclear"
+    stage_events = cast(list[object], events)
+    has_ready_event = False
+    for raw_event in stage_events:
+        event = cast(dict[str, Any], raw_event) if isinstance(raw_event, dict) else None
+        if event is not None and event.get("type") == "ReadyForReviewEvent":
+            has_ready_event = True
+            break
+    if has_ready_event:
+        return False, True, "GitHub history records a prior ready; no retry was made"
+    if stage_events:
+        return False, False, "GitHub PR history has an unclear stage transition"
+    if state == "OPEN" and is_draft:
+        return True, False, ""
+    return False, False, "GitHub PR stage does not prove a safe ready retry"
+
+
 def mark_group_pull_request_ready(
-    phase: int, pending: Iterable[Any], pull_request: str | None
+    root: str | Path,
+    phase: int,
+    members: Iterable[Any],
+    pending: Iterable[Any],
+    pull_request: str | None,
 ) -> dict[str, Any] | None:
     """The one place a group's shared pull request is marked ready for review.
 
@@ -109,15 +144,65 @@ def mark_group_pull_request_ready(
     gh result, or None when there is nothing to do: a member is still to run, no
     pull request is recorded, or its URL cannot name a pull request to act on.
 
+    The transition is gated on the pull request's checks: the ready is recorded
+    only when gh reports at least one check and every one reads ``pass``, so a
+    pull request that is not yet mergeable stays draft. An empty check report is
+    a refusal too: gh returning zero rows is not ``all checks pass``, so a
+    pull request with no reported checks stays draft until checks are reported.
+
+    Every ready transition checks GitHub's complete ready/draft history and stops
+    if it is unclear or records any earlier ready. That history is the once-guard,
+    and it is the only one: nothing is written locally to record an attempt, so a
+    tick that cannot take the transition simply tries again on the next tick.
+    GitHub has no atomic guard for this transition.
+
     A failed transition is reported, never raised. The phase's commits are
     already on the branch and its receipt is written, so making the pull request
     ready is the last step and its failure must not undo the publication.
     """
-    if list(pending) or not pull_request:
+    members = list(members)
+    if list(pending) or not pull_request or not members:
         return None
     ref = pull_request_ref(pull_request)
     if not ref:
         return None
+    stage, history_detail = gh_pull_request_stage_history(
+        ref["number"], ref.get("owner"), ref.get("repo"), ref.get("host")
+    )
+    retry, prior_ready, history_detail = _ready_retry_allowed(stage, history_detail)
+    if prior_ready:
+        return {
+            "ok": True,
+            "phase": f"{int(phase):06d}",
+            "pull_request": pull_request,
+            "detail": history_detail,
+            "skipped": True,
+        }
+    if not retry:
+        return {
+            "ok": False,
+            "phase": f"{int(phase):06d}",
+            "pull_request": pull_request,
+            "detail": history_detail,
+        }
+    rows, code, detail = gh_pull_request_checks(
+        Path(root), ref["number"], ref.get("owner"), ref.get("repo"), ref.get("host")
+    )
+    # gh returning zero rows is not "all checks pass": an empty report names no
+    # passing check, so the pull request stays draft until checks are reported.
+    if (
+        rows is None
+        or code != 0
+        or not rows
+        or any(str(row.get("bucket") or "") != "pass" for row in rows)
+    ):
+        return {
+            "ok": False,
+            "phase": f"{int(phase):06d}",
+            "pull_request": pull_request,
+            "detail": detail
+            or "the checks are not all green; the pull request stays draft",
+        }
     ready, detail = gh_mark_pull_request_ready(
         ref["number"], ref.get("owner"), ref.get("repo"), ref.get("host")
     )
@@ -129,201 +214,8 @@ def mark_group_pull_request_ready(
     }
 
 
-def _normalize_label(label: str) -> str:
-    """A checkbox label in comparable form: case, dashes, and spacing unified."""
-    import re
-
-    text = label.strip().lower().replace("_", " ").replace("-", " ")
-    return re.sub(r"\s+", " ", text).strip()
-
-
-def _sanitize_label(label: str) -> str:
-    """A label safe for public text: no phase numbers or long tails."""
-    import re
-
-    text = re.sub(r"\b\d{6}\b", "", label)
-    text = re.sub(r"\s+", " ", text).strip(" -_:")
-    return text[:120] if len(text) > 120 else text or "group item"
-
-
-def _group_task_labels(
-    root: str | Path, members: Iterable[Any]
-) -> list[tuple[str, str]]:
-    """One public label per group member, in declaration order.
-
-    The label is the phases behaviour slug, never the phase number: the branch
-    already carries the slug, so it is public by construction. A member with no
-    document falls back to a numbered task, which keeps checkboxes distinct
-    without leaking anything.
-    """
-    from argus.conventions import phase_file_parts, phase_paths
-    from argus.gitsync.paths import phases_folder
-
-    keys = [f"{int(member):06d}" for member in members]
-    slugs: dict[str, str] = {}
-    try:
-        folder = phases_folder(root)
-        for path in phase_paths(folder):
-            parts = phase_file_parts(path)
-            if parts is not None and f"{int(parts[0]):06d}" in keys:
-                slugs[f"{int(parts[0]):06d}"] = str(parts[1])
-    except Exception:  # noqa: BLE001 - a missing phases falls back below
-        slugs = {}
-    labels: list[tuple[str, str]] = []
-    for i, key in enumerate(keys):
-        raw = slugs.get(key, "")
-        if raw:
-            text = _sanitize_label(raw.replace("-", " ").replace("_", " "))
-        else:
-            text = f"task {i + 1}"
-        labels.append((key, text or "group item"))
-    return labels
-
-
-def _update_body_checklist(
-    body: str, labels_done: list[tuple[str, bool]]
-) -> tuple[str, bool]:
-    """Tick known checkboxes in place, appending any missing label.
-
-    Lines already checked stay checked: this never unticks. Returns the new
-    body and whether anything changed.
-    """
-    import re
-
-    wanted = {_normalize_label(label): done for label, done in labels_done}
-    seen: set[str] = set()
-    changed = False
-    out: list[str] = []
-    pattern = re.compile(r"^(\s*-\s*\[)( |x|X)(\](\s*)(.+?)(\s*))$")
-    for line in body.splitlines():
-        match = pattern.match(line)
-        if not match:
-            out.append(line)
-            continue
-        norm = _normalize_label(match.group(5))
-        if norm not in wanted:
-            out.append(line)
-            continue
-        seen.add(norm)
-        if wanted[norm] and match.group(2) == " ":
-            out.append(f"{match.group(1)}x]{match.group(4)}{match.group(5).strip()}")
-            changed = True
-        else:
-            out.append(line)
-    for label, done in labels_done:
-        if _normalize_label(label) not in seen:
-            box = "x" if done else " "
-            out.append(f"- [{box}] {label}")
-            changed = True
-    return "\n".join(out) + "\n", changed
-
-
-def _tidy_group_body(body: str) -> str:
-    """Final whitespace tidy before ready: no trailing spaces, no tall gaps."""
-    import re
-
-    lines = [line.rstrip() for line in body.split("\n")]
-    text = "\n".join(lines).strip() + "\n"
-    return re.sub(r"\n{4,}", "\n\n\n", text)
-
-
-def update_group_pull_request(
-    root: str | Path, phase: int, members: Iterable[Any], pull_request: str | None
-) -> dict[str, Any] | None:
-    """Tick this member's checkbox, then post its comment. Never raises.
-
-    Every member runs this on publish, including the first and the last. The
-    comment goes out only after the checkbox lands (or was already current),
-    so a failed body edit never leaves a ``Completed`` comment beside an open
-    box. The last member's edit also tidies the body; ready itself stays in
-    ``mark_group_pull_request_ready`` so it still happens exactly once. A
-    GitHub failure is reported in the result and never undoes the publication.
-    """
-    if not pull_request:
-        return None
-    ref = pull_request_ref(pull_request)
-    if not ref:
-        return None
-    member_list = [f"{int(member):06d}" for member in members]
-    labels = _group_task_labels(root, member_list)
-    done_keys = {
-        key for key in member_list if phase_receipt(root, int(key)) is not None
-    }
-    labels_done = [(label, key in done_keys) for key, label in labels]
-    mine = f"{int(phase):06d}"
-    my_label = next((label for key, label in labels if key == mine), "group item")
-    receipt = phase_receipt(root, int(phase))
-    head = ""
-    if isinstance(receipt, dict):
-        public_head = str(receipt.get("public_head") or "")
-        if public_head:
-            head = f" ({public_head[:7]})"
-    body, body_detail = gh_pull_request_body(
-        ref["number"], ref.get("owner"), ref.get("repo"), ref.get("host")
-    )
-    if body is None:
-        return {
-            "ok": False,
-            "phase": mine,
-            "pull_request": pull_request,
-            "comment_ok": None,
-            "comment_detail": "comment skipped: pull request body unreadable",
-            "body_ok": None,
-            "body_detail": body_detail,
-        }
-    new_body, changed = _update_body_checklist(body, labels_done)
-    pending = [key for key in member_list if key not in done_keys]
-    if not pending:
-        new_body = _tidy_group_body(new_body)
-        changed = changed or new_body != body
-    if changed:
-        body_ok, body_detail = gh_edit_pull_request_body(
-            ref["number"],
-            ref.get("owner"),
-            ref.get("repo"),
-            ref.get("host"),
-            new_body,
-        )
-    else:
-        body_ok, body_detail = True, "body already current"
-    comment_ok: bool | None = None
-    comment_detail = "comment skipped: body update failed"
-    if body_ok:
-        comment = f"Completed {my_label}.{head}"
-        # A publish that runs again for the same head (a retry after a failed
-        # step, a rerun of the helper) finds its comment already there. When the
-        # comments cannot be read the comment is posted: a repeat is noise, a
-        # missing comment is lost.
-        posted = gh_pull_request_comment_bodies(
-            ref["number"], ref.get("owner"), ref.get("repo"), ref.get("host")
-        ).value
-        if posted is not None and comment in {text.strip() for text in posted}:
-            comment_ok, comment_detail = True, "comment already posted"
-        else:
-            comment_ok, comment_detail = gh_comment_pull_request(
-                ref["number"],
-                ref.get("owner"),
-                ref.get("repo"),
-                ref.get("host"),
-                comment,
-            )
-    return {
-        "ok": bool(comment_ok and body_ok),
-        "phase": mine,
-        "pull_request": pull_request,
-        "comment_ok": comment_ok,
-        "comment_detail": comment_detail,
-        "body_ok": body_ok,
-        "body_detail": body_detail,
-    }
-
-
 __all__ = [
     "_group_pending",
     "_group_pull_request",
-    "_group_task_labels",
-    "_tidy_group_body",
-    "_update_body_checklist",
     "mark_group_pull_request_ready",
-    "update_group_pull_request",
 ]

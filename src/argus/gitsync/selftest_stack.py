@@ -14,7 +14,7 @@ from argus.gitsync.paths import phase_branch_for
 from argus.gitsync.publish_phase import publish_phase
 from argus.gitsync.receipts import phase_receipt
 from argus.gitsync.review import awaiting_review, open_predecessor
-from argus.gitsync.selftest_fixture import _gh_says, _StubGH
+from argus.gitsync.selftest_fixture import _gh_says, _reserve_phase, _StubGH
 from argus.gitsync.selftest_publish import _publish_fixture
 from argus.gitsync.sync import mode_resync
 
@@ -35,12 +35,9 @@ def _two_phase_stack_checks(base: Path) -> list[tuple[str, object, str]]:
     old_branch = conventions.setting("board.branch")
     conventions.override({"board.branch": "main"})
     try:
-        from argus.board.reservations import ReservationStore, save_reservation_file
-
         # 100469 is taken by the fixture itself; the two phases under test
         # are 100470 and 100471, so each needs its own reservation below.
         pub, nested, _run = _publish_fixture(base, "stack-e2e", 100469)
-        store = ReservationStore(pub, branch="main")
         base_branch = integration_branch(pub)
         first_branch = phase_branch_for(100470, "phase-100470-stack-first.md")
         second_branch = phase_branch_for(100471, "phase-100471-stack-second.md")
@@ -50,14 +47,21 @@ def _two_phase_stack_checks(base: Path) -> list[tuple[str, object, str]]:
         # the other.
         third_phases = "phase-100472-evidence-freshness-sweep.md"
 
-        def reserve(phase: int) -> None:
+        def claim(phase: int) -> None:
+            """Claim the phase before a fenced mode reads the board.
+
+            --mode branch checks the fence first, so the launch has to be a
+            really claimed one. The claim is made before the phase runs, which
+            is where the engine makes it, and the finished run state is landed
+            separately by ``finish`` below.
+            """
+            _reserve_phase(pub, phase, sync=nested)
+
+        def finish(phase: int) -> None:
+            """Write the finished run state and land it, after the phase's work."""
             git(nested, "fetch", "-q", "origin")
             git(nested, "merge", "-q", "--ff-only", "origin/main")
             rd = nested / "runs" / f"phase-{phase:06d}"
-            rd.mkdir(parents=True, exist_ok=True)
-            save_reservation_file(
-                rd / "reservation.json", store.reserve(phase, "server-01")
-            )
             (rd / "run.json").write_text('{"state":"completed"}\n')
             (rd / "finalize-task-r1.log").write_text("log\nFINALIZE_DONE\n")
             git(nested, "add", "-A")
@@ -72,6 +76,7 @@ def _two_phase_stack_checks(base: Path) -> list[tuple[str, object, str]]:
         git(nested, "add", "-A")
         git(nested, "commit", "-q", "-m", "phases")
         git(nested, "push", "-q", "origin", integration_branch(nested))
+        claim(100470)
         one_branch = mode_branch(pub, 100470, "phase-100470-stack-first.md")
         results.append(
             (
@@ -86,7 +91,7 @@ def _two_phase_stack_checks(base: Path) -> list[tuple[str, object, str]]:
         (pub / "first.txt").write_text("phase one's code\n")
         git(pub, "add", "first.txt")
         git(pub, "commit", "-q", "-m", "phase 100470: the first change")
-        reserve(100470)
+        finish(100470)
         one = publish_phase(
             pub,
             100470,
@@ -105,6 +110,7 @@ def _two_phase_stack_checks(base: Path) -> list[tuple[str, object, str]]:
         )
 
         # Phase two starts while phase one is still open.
+        claim(100471)
         two_branch = mode_branch(pub, 100471, "phase-100471-stack-second.md")
         results.append(
             (
@@ -158,7 +164,7 @@ def _two_phase_stack_checks(base: Path) -> list[tuple[str, object, str]]:
         (pub / "second.txt").write_text("phase two's code\n")
         git(pub, "add", "second.txt")
         git(pub, "commit", "-q", "-m", "phase 100471: the second change")
-        reserve(100471)
+        finish(100471)
         two = publish_phase(
             pub,
             100471,
@@ -229,6 +235,7 @@ def _two_phase_stack_checks(base: Path) -> list[tuple[str, object, str]]:
         git(nested, "push", "-q", "origin", integration_branch(nested))
         third_branch = phase_branch_for(100472, third_phases)
         started_on_integration = current_branch(pub) == base_branch
+        claim(100472)
         three = mode_branch(pub, 100472, third_phases)
         results.append(
             (
@@ -257,6 +264,7 @@ def _two_phase_stack_checks(base: Path) -> list[tuple[str, object, str]]:
         git(nested, "add", "-A")
         git(nested, "commit", "-q", "-m", "phases")
         git(nested, "push", "-q", "origin", integration_branch(nested))
+        claim(100473)
         four = mode_branch(pub, 100473, fourth_phases)
         results.append(
             (

@@ -4,6 +4,48 @@ Notable changes to this project are documented here. The format follows [Keep a 
 
 ## [Unreleased]
 
+- A resume stops with no launch when the board fence refuses the branch cut, and the resume now cuts the branch after it renews or takes its fence and records its claim. A group declaration the resume cannot read is still refused before the fence, so that refusal takes no reservation. Every other branch failure is still a repair.
+
+- `abandon` and `resume` are tested against a real local board and the real `assert_owner` fence. Under another machine's live claim, each refuses and leaves the claim and the board unchanged; under this machine's fence, abandon parks the phase and resume passes the fence check.
+
+- `argus abandon` writes the residue to `abandoned.json.pending`, then releases the board group, then renames it to `abandoned.json`. A failed residue write stops the command with the claim held and nothing released, so the same command can run again. A failed release stops the command and parks nothing. A failed rename after the release reports failure and keeps the staged file. ([#164](https://github.com/agentmemoir/argus/issues/164))
+
+- `argus abandon` parks a phase when no other machine holds a live claim on its group. When this machine still holds the claim, it releases the group first. When no machine holds a live claim (no claim, an expired claim, or a terminal record), it parks with no release, because nothing is held. It refuses when another machine holds a live claim on the group, or when the board cannot answer, and it writes nothing. A rerun of the same command on a halted phase finishes a park whose rename failed. ([#171](https://github.com/agentmemoir/argus/issues/171))
+
+- A whole-tree `gitsync --mode clean` that skips every phase now reports not ok and exits 1. A sweep that lands at least one phase still succeeds, and its summary names each skipped phase with its phase number, state, and reason. ([#164](https://github.com/agentmemoir/argus/issues/164))
+
+- The tick stops with no launch when `gitsync --mode branch` refuses on the phase fence (FENCED or COORDINATION_UNAVAILABLE), instead of launching on the branch the checkout already has. Every other branch failure is still a repair. ([#164](https://github.com/agentmemoir/argus/issues/164))
+
+- The driver writes the phase reservation file the write fences read, from the same board-confirmed claim it records in the shell claim file.
+
+- The group gate's check read names the pull request's own repository and host on the `gh` call: `gh pr checks` now receives `--repo [HOST/]OWNER/REPO` from the receipt's `owner`, `repo`, and `host`, the same triple the stage-history read already used. Without it gh answered about the repository of the run directory, so a run directory outside a checkout, or on a different repository, read another repository's checks and reported them as this group's. ([#168](https://github.com/agentmemoir/argus/pull/168))
+
+- `--release` drops the driver lock on every return path, the board's refusal included. That one path kept fd 9 open and with it the flock, so the operator's next driver command in the same shell was refused by a lock nothing else held. The operator commands (`stop`, `release`, and the phase-window wait they share) move to `lib-driver-control.sh`, one file per responsibility, and the tick file stays under the executable size limit. ([#168](https://github.com/agentmemoir/argus/pull/168))
+
+- The board fence is bounded on a host with neither `timeout` nor `gtimeout`. The assert-owner call runs in the background, its pid is polled every 0.2s without a busy spin, and it is sent SIGTERM then SIGKILL after `ARGUS_FENCE_TIMEOUT_S` seconds (20 by default, the value the timer path always used). A timeout is a refusal, exactly as a timer's kill is, so a hung board can no longer hold the driver lock for ever. ([#168](https://github.com/agentmemoir/argus/pull/168))
+
+- A reservation group's shared draft pull request is readied by a later tick, not only by the publish that completes the group. The new `gitsync --mode ready` sweep runs in the driver's maintenance pass, never in issues mode, and sweeps every phase receipt to retry the ready, so a group whose checks were still running when it published is readied once they pass instead of staying in draft for ever. It runs for a receipt that already reads `published`, which the old per-phase retry could not reach: `--mode published` only runs for a phase waiting on a merge, and the receipt settles on that same tick. ([#166](https://github.com/agentmemoir/argus/issues/166))
+
+- The ready sweep writes no phase state, holds no claim, and never changes a published or merge verdict. The transition is once per pull request and GitHub's own ready/draft timeline is the guard: any ready event skips the retry, so a person who re-drafts the pull request is never overridden, and a pending or empty check report takes no transition.
+
+- Phase state and publication writes read the board fence before they write. `gitsync --mode published` verifies the phase's reservation with `assert_owner` before the receipt is marked published and returns `FENCED` on a mismatch; `--release` proves the fence before the checkpoint push and the group release; `abandon` proves the fence before the residue is written; and `record_claim` refuses a pair the board does not confirm as a live claim. A board that cannot answer fails closed on every path. ([#164](https://github.com/agentmemoir/argus/issues/164))
+
+- `argus --stop` always writes the local halt marker, so a stop holds this machine's line whether or not a fence holds. Only the manual-stop hold (`stopped-claim`) is fenced: `--stop` takes the driver lock, reads the claim, and asks the board with `assert_owner` before it writes that hold, and a bad, empty, unreadable, or mismatched fence writes no `stopped-claim`. ([#164](https://github.com/agentmemoir/argus/issues/164))
+
+- `gitsync --mode tidy` accepts `--phase` and proves the fence before it moves a checkout, and `--mode branch` proves it before the branch cut. The pre-selection tidy call has no phase to name, so it stays unfenced and keeps its dirty-tree refusal; only the branch cut's call, which knows the phase, passes it. ([#164](https://github.com/agentmemoir/argus/issues/164))
+
+- `gitsync --mode clean`, single phase or sweep, lands a phase's run state unless another machine holds a live claim on its group or the board cannot answer, and a record that is rejected, completed, accepted, released, or expired lands too, as does a claim whose window has passed and this machine's own live claim. The fence is proved before the run-state commit and push. `--mode checkpoint` proves it before it stages or commits. The fresh-start sweep that runs with no phase decides per planned phase: a refused phase is skipped, and the result names it with its phase number and reason. A sweep that skips every phase now fails; a sweep that lands at least one phase still succeeds. ([#164](https://github.com/agentmemoir/argus/issues/164))
+
+- Every one of those fences returns `FENCED` on a mismatch and `COORDINATION_UNAVAILABLE` when the reservation cannot be read or the board cannot answer, through the one helper `argus.gitsync.fence.phase_fence`, and every refusal writes nothing. ([#164](https://github.com/agentmemoir/argus/issues/164))
+
+- The last member of a reservation group makes the shared draft pull request ready for review. The publish step readies the shared pull request once every member has published and the pull request's checks all pass; the once-guard is GitHub's own ready/draft timeline, so a rerun, or a later tick, never overrides a human who re-drafted the pull request. ([#166](https://github.com/agentmemoir/argus/issues/166))
+
+- The ready-once record beside the receipt is deleted, with its writer, its reader, the `persist_attempt` parameter, and the run-state commit that wrote it. No production writer ever emitted the version the reader accepted, the version-2 attempt it did write was discarded unread, and the timeline already answers the question, so the record could only refuse a ready a later tick should have taken. The GitHub ready/draft timeline is the guard and is named as such in the docs. ([#166](https://github.com/agentmemoir/argus/issues/166))
+
+- The ready sweep runs on a real run directory and a fake `gh` on `PATH` that records the transition it was asked for, `gh pr checks` is asserted on the full argv and a non-default host, `abandon`'s ordering runs the real shell function against a board release that fails and one that succeeds, and each fenced write path has a negative and a positive case that asserts the file, ref, and board are unchanged.
+
+- The ready sweep logs `a group's shared pull request is ready; its checks passed` only on the tick that readies a pull request. A pull request that an earlier tick readied is skipped, and its result still reads `READY`, so that line is no longer repeated for it on every tick.
+
 - `gitsync --mode open-pr` refuses to create a draft pull request without `--body-file`, so a draft is never opened with an empty body that could be published before a later pass filled it; reusing an open pull request needs no body file, and the title still defaults to the branch name. ([#167](https://github.com/agentmemoir/argus/issues/167))
 
 - `python -m argus.board.reservations scan` reports each phase whose run directory holds `run.json`, `resume.json`, or a `session-*.log` but whose claim is missing, expired, held by another machine, or terminal. It is a read-only board read that writes nothing, takes optional `--phase` and `--machine-id`, and exits 2 when the board is unreadable.

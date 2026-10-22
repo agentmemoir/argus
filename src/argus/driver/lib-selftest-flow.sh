@@ -54,10 +54,21 @@ selftest_case_flow() {
   # case that proves Ctrl-C is aimed at the phase window: the idle window is
   # still there, and a session-scoped send-keys would have hit it instead.
   rm -f "$HALT"
-  DRIVER_STUB_RC=0; DRIVER_STUB_SLEEP=20; export DRIVER_STUB_RC DRIVER_STUB_SLEEP
+  local stop_wait="$tmp/stop-wait" stop_ready="$tmp/stop-ready" stop_waited=0
+  rm -f "$stop_wait" "$stop_ready"
+  DRIVER_STUB_RC=0; DRIVER_STUB_SLEEP=20
+  DRIVER_STUB_WAIT_FILE="$stop_wait"; DRIVER_STUB_READY_FILE="$stop_ready"
+  export DRIVER_STUB_RC DRIVER_STUB_SLEEP DRIVER_STUB_WAIT_FILE DRIVER_STUB_READY_FILE
   drive --self-test || true
-  sleep 0.5
+  while [ ! -e "$stop_ready" ] && [ "$stop_waited" -lt 200 ]; do
+    sleep 0.1
+    stop_waited=$((stop_waited + 1))
+  done
+  [ -e "$stop_ready" ] \
+    && echo "ok: stop reached the live phase stub" \
+    || { echo "FAIL: stop stub never started"; fail=1; }
   stop || true
+  : >"$stop_wait"
   wait_phase_window_gone
   [ -f "$HALT" ] \
     && echo "ok: stop wrote halt marker" || { echo "FAIL: stop marker missing"; fail=1; }
@@ -73,7 +84,9 @@ selftest_case_flow() {
   # The recovery flag goes back with it, so the cases after this one start from the
   # state they would have started from before the stub was introduced.
   unset DRIVER_STUB_COORDINATION
+  unset DRIVER_STUB_WAIT_FILE DRIVER_STUB_READY_FILE
   RECOVER_OWN_CLAIM=0; export RECOVER_OWN_CLAIM
+  rm -f "$stop_wait" "$stop_ready"
 
   # Coordination failure: the normal driver path must refuse before tmux launch.
   # Reservable but unsyncable: a real fixture board so the tick reaches the
@@ -233,7 +246,7 @@ selftest_case_release() {
   # the release marker before it interrupts the phase window; the child's signal
   # trap reads it. This exercises that handshake on a live stub run.
   rm -f "$HALT" "$RELEASE" "$CLAIM" "$RUN_DIR/stopped-claim"
-  local release_wait="$tmp/release-wait" release_ready="$tmp/release-ready"
+  local release_wait="$tmp/release-wait" release_ready="$tmp/release-ready" release_rc=0
   rm -f "$release_wait" "$release_ready"
   local old_stub_sleep="${DRIVER_STUB_SLEEP:-}"
   DRIVER_STUB_RC=0
@@ -265,7 +278,7 @@ selftest_case_release() {
   before_stopped="$(grep -c 'stopped by signal\|needs attention' "$LOG" || true)"
   before_stalled="$(grep -c 'looks stalled\|stalled:' "$LOG" || true)"
   before_orphan="$(grep -c 'orphaned run detected' "$LOG" || true)"
-  release || true
+  release || release_rc=$?
   # Let any straggler pane finish if the interrupt did not reach it, so the
   # case cannot hang the suite.
   : >"$release_wait"
@@ -312,8 +325,6 @@ selftest_case_release() {
   grep -q "release: sent Ctrl-C" "$LOG" \
     && echo "ok: release interrupted the phase window" \
     || { echo "FAIL: release did not interrupt the phase window"; fail=1; }
-  local release_rc=0
-  release || release_rc=$?
   [ "$release_rc" = 0 ] \
     && echo "ok: release returns success and does not exit through the error path" \
     || { echo "FAIL: release returned $release_rc"; fail=1; }

@@ -14,12 +14,16 @@ from argus.gitsync.git import (
     is_git_repo,
     summarize,
 )
+from argus.gitsync.group_body import update_group_pull_request
 from argus.gitsync.group_publication import (
     _load_phase_reservation,
     _push_one,
     _write_publication_receipt,
 )
-from argus.gitsync.group_review import _group_pending, update_group_pull_request
+from argus.gitsync.group_review import (
+    _group_pending,
+    mark_group_pull_request_ready,
+)
 from argus.gitsync.review import open_predecessor
 from argus.gitsync.runstate import (
     commit_leftover_run_state,
@@ -274,6 +278,20 @@ def publish_phase(
                             f"may show an open checkbox or a missing comment; "
                             f"read the pull request body before merging."
                         )
+                # The last member asks GitHub to ready the shared pull request.
+                # The retry checks the complete GitHub stage history and stops
+                # after any prior ready event, including one followed by a human
+                # draft change; no local ready record exists on this path.
+                if not pending:
+                    ready = mark_group_pull_request_ready(
+                        root,
+                        phase,
+                        members,
+                        pending,
+                        receipt.get("pull_request"),
+                    )
+                    if ready is not None:
+                        outcome["pull_request_ready"] = ready
             outcome["repos"] = results
             outcome["summary"] = summarize(
                 [

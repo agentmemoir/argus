@@ -21,6 +21,37 @@ git push origin refs/heads/BOARD--argus-backup:refs/heads/BOARD
 
 Verify the restored board reads as initialized: run the board reader (`python -m argus.board.reservations show`) and confirm it prints the coordination state. A board whose state file was lost instead fails with `coordination state file was deleted from an initialized board`.
 
+## Write Paths And Their Fence
+
+Every path that writes reads the board fence before its first write, and a fence that does not hold writes nothing. The fence is the phase's own `reservation.json` (`machine_id`, `reservation_id`, `generation`) proved with `ReservationStore.assert_owner` through one helper, `argus.gitsync.fence.phase_fence`; the answer is `FENCED` when the board says this machine, reservation, or generation is not the owner, and `COORDINATION_UNAVAILABLE` when the reservation cannot be read or the board cannot answer. Both are refusals: a refused command exits non-zero. Except for the halt marker that `--stop` always writes, a refusal leaves the file, the ref, and the board exactly as they were. The whole-tree `gitsync --mode clean` sweep is the exception to the exit code: it exits 0 when it lands at least one phase and skips others, and names each skip in its result; a sweep that lands nothing exits non-zero.
+
+| Path | First write | Reads the board today | Exemption or refusal rule |
+|---|---|---|---|
+| `gitsync --mode published` | the phase receipt | yes, before the write | Fenced. `FENCED` or `COORDINATION_UNAVAILABLE`, exit 2 or 1, no receipt |
+| `--release` | the checkpoint push | yes, before the interrupt and the push | Fenced. A missing, incomplete, or mismatched claim refuses; no checkpoint, no release |
+| `abandon` | `abandoned.json.pending`, then `abandoned.json` | yes, before the residue | Fenced. It parks when no other machine holds a live claim on the group (an expired or released claim, or this machine's own). Another machine's live claim, or a board that cannot answer, refuses and writes nothing |
+| `record_claim` | the claim file | yes, before the claim | Fenced. A pair the board does not confirm writes no claim |
+| `gitsync --mode ready` | nothing | no board read; it reads GitHub's ready/draft timeline | Exempt: it is a sweep that writes no file, no ref, and no receipt, holds no claim, and changes no verdict. The transition it takes is guarded by GitHub's own timeline |
+| `--stop` | `$HALT`, then `stopped-claim` | yes, before `stopped-claim` only | Not fenced: `$HALT` is always written, because it is local to this machine. Only `stopped-claim` is fenced: a bad, empty, unreadable, or mismatched fence writes no `stopped-claim` |
+| `gitsync --mode tidy --phase N` | the checkout move | yes, before either checkout moves | Fenced when a phase is named |
+| `gitsync --mode tidy` (pre-sync) | the checkout move | no | Exempt: it runs before a phase is selected, so there is no phase to name. It still refuses a dirty tree, so it never moves a checkout that would lose work |
+| `gitsync --mode clean --phase N` | the run-state commit and push | yes, before the commit | Lands unless another machine holds a live claim on the phase's group, or the board cannot answer. A record that is rejected, completed, accepted, released, or expired lands too, as does a claim whose window has passed or this machine's own live claim. A refusal writes no commit and pushes nothing |
+| `gitsync --mode clean` (whole sweep) | each planned phase's run-state commit | yes, per planned phase | The same rule per planned phase. A refused phase is skipped and named, and the sweep continues |
+| `gitsync --mode checkpoint --phase N` | the commit and push | yes, before the stage | Fenced when a phase is named; `release`, its only production caller, always names one |
+| `gitsync --mode branch` | the branch cut | yes, before either checkout is touched | Fenced. A refusal creates no branch and leaves both refs where they were |
+
+`--mode published`, `--release`, `abandon`, and `record_claim` were already fenced; `--stop` (its `stopped-claim` record only), `--mode tidy` with a phase, `--mode clean` (one phase and the whole sweep), `--mode checkpoint` with a phase, and `--mode branch` are fenced as of the same change. `gitsync --mode ready` is the one path that writes nothing, so there is nothing for a fence to protect.
+
+Every row above has a test that drives the real writer and asserts the refusal wrote nothing it fences: `tests/test_driver_stop_fence.py` for `stop`; `tests/test_driver_write_fences.py` for `tidy` (with a phase and the pre-sync exemption), `clean` (one phase and the sweep), `checkpoint`, and `branch`, one negative and one positive case each; `tests/test_clean_fence_records.py` for the record states that `clean` lands or refuses; `tests/test_driver_abandon_rollback.py` for the `abandon` ordering, with a failing and a succeeding board release; `tests/test_driver_release_lock.py` for `--release`'s lock, `tests/test_driver_claim_fencing.py` for `record_claim`, `tests/test_publish_separation.py` for `--mode published`, and `tests/test_group_ready_tick.py` for the `--mode ready` sweep on the real run directory.
+
+`abandon` writes the residue to `abandoned.json.pending` first, then releases the board group, then renames the file to `abandoned.json`. A failed residue write stops the command with the claim held and nothing released. A failed release stops the command and parks nothing. The rename comes last, so a phase is never parked while this machine still holds its claim. A rename that fails after the release reports failure and keeps the staged file, and a rerun of the same command on a halted phase finishes that park. When no machine holds a live claim, abandon parks with no release, because nothing is held.
+
+The whole-tree `--mode clean` sweep has no single owner, so it decides per planned phase rather than refusing the sweep. A phase's run state lands unless another machine holds a live claim on its group or the board cannot answer. A record that is rejected, completed, accepted, released, or expired lands too, as does a claim whose window has passed and this machine's own live claim. A refused phase is skipped with its phase number and reason in the result's `skipped` array and the summary, and the other phases still land. A hard fail would strand post-merge run state that the next phase's publish then refuses on.
+
+The pre-selection `--mode tidy` call is the one write path with no phase, because it runs before a phase is selected. It stays unfenced and keeps its own guard: it refuses a dirty tree, a phase that is not published, and a missing integration branch, so it cannot move a checkout that would lose work. The call from the branch cut knows the phase and passes it, and that call is fenced.
+
+`--stop` always writes the local halt marker, whether or not a fence holds: the marker is per-machine state, and it fences no other owner. Only the `stopped-claim` hold is fenced, so a machine whose claim expired or was taken over writes no `stopped-claim`. `kill-session` remains the last resort for a running session.
+
 ## Reservation Groups
 
 A phase document may declare a reservation group: several phases one owner runs as one unit. The whole group is claimed in one board write under one reservation id, its members run one per tick on one branch, and one pull request covers them all, while each member keeps its own receipt under its own run directory.
@@ -31,17 +62,17 @@ Every member records the group's single pull request in its receipt, and a membe
 
 ## The Group Gate
 
-The group gate runs when a member publishes, and again on every tick that finds a published member waiting for its pull request to merge (`--mode gate --phase NUMBER` runs it by hand). It does two things.
+A group's shared pull request stays in draft until the group is done. When a member publishes, the publish step checks whether any member is still to publish; once every member has published, the last one asks GitHub whether the shared pull request's checks all pass, and only then marks it ready for review.
 
-First, it merges the open pull requests whose base is the group branch, so a fix for a bug an earlier member left reaches the branch before the next member starts. A pull request is merged only when it is ready for review, comes from this repository and not from a fork, is mergeable, has no review requesting changes, and has passing checks.
+The transition is gated on the checks: gh must report at least one check, and every reported check must read pass. A pull request whose checks are failing, still running, or not reported at all stays in draft, and the result says which.
 
-The merge is pinned to the head those checks were read for and never uses administrator rights. Any other pull request stays open, and the result names it with the reason.
+The check read names the pull request's own `[HOST/]OWNER/REPO` on the `gh pr checks` call, so a run directory outside a checkout, or one on a different repository, cannot read another repository's checks and report them as this group's.
 
-Second, once every member has published, it makes the shared pull request ready for review, but only when the checks on it all pass. A pull request whose checks are failing, still running, or not reported yet stays in draft, and the result says which.
+The ready is retried on every driver tick by `gitsync --mode ready`, which sweeps every phase receipt rather than the phases waiting on a merge, so it keeps retrying until the pull request is readied or the timeline shows a prior ready, whatever state the phase's own receipt is in. A receipt that already reads `published` is the case that matters: it leaves the pending list, so a retry placed on the `--mode published` path would run once and never again. The sweep writes no phase state, holds no claim, and never changes the published or merge verdict.
 
-A fix merged by the same run holds it too, because the merge moves the head the checks judge. The transition happens once, so a person who sets the pull request back to draft is not undone on the next tick.
+The transition happens once: GitHub's own ready/draft timeline is the once-guard. A pull request whose timeline holds any ready event is skipped, so a person who sets it back to draft is not undone on a later tick, and no local record is consulted. The ready-once record an earlier revision wrote beside the receipt is gone: no production writer ever emitted a version a reader accepted, the version-2 attempt it did write was discarded, and the timeline already answers the question, so the sweep carries no local state at all.
 
-The result is the `group_gate` object in the publication output: `state` (`WAITING` while a member is still to publish, `HELD`, or `READY`), the `reasons` it is held, and `fix_pull_requests` with the numbers merged and the pull requests held. The driver logs a changed answer once, not on every tick.
+A failed transition is reported, never raised, because the phase's commits are already on the branch and its receipt is written. The failure is named in the sweep's result and the next tick tries again; a person is not put on the critical path to notice it.
 
 ## Issue Work
 

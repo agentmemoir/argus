@@ -48,8 +48,29 @@ terminal_state_of_file() {
 record_claim() {
   local number="$1" reservation_id="${2:-}" generation="${3:-}"
   if [ -z "$reservation_id" ] || [ -z "$generation" ]; then
-    rm -f "$CLAIM"
-    return 0
+    # An empty pair proves nothing about the board: the caller may have failed
+    # to read a live claim, and deleting the file would strand that fence on
+    # the board until its window closes. The claim file is removed only when it
+    # provably holds no releasable fence (missing, empty, or missing fields);
+    # a claim with a full pair is left alone, so a live fence is never lost to
+    # a transient selection failure.
+    if [ -s "$CLAIM" ]; then
+      claim_read_fields "$CLAIM" || true
+      if [ -z "$CLAIM_ID" ] || [ -z "$CLAIM_GEN" ]; then
+        rm -f "$CLAIM"
+      fi
+    fi
+    printf 'argus: the board did not provide a full claim fence for phase %s; refusing to launch\n' \
+      "$number" >&2
+    return 1
+  fi
+  # The board is the authority: a pair that names no live reservation this
+  # machine owns must not become the local fence, and a board that cannot
+  # answer fails closed. The claim file is written only on a confirmed fence.
+  if ! board_assert_owner "$number" "$reservation_id" "$generation"; then
+    printf 'argus: the board does not confirm the claim for phase %s; the fence is refused (see %s/assert-owner-%s.json)\n' \
+      "$number" "$RUN_DIR" "$number" >&2
+    return 1
   fi
   # A hand-started --session writes the claim before run_session creates the
   # run directory, so the write makes the folder it needs. The tick path has

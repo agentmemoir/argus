@@ -4,93 +4,14 @@
 
 import copy
 import json
-import os
 import subprocess
-import sys
 from pathlib import Path
+from typing import Any
 
 import pytest
 
 from config_fixture import BASE, PHASES_LOCAL, write
-
-DRIVER = Path(__file__).resolve().parents[1] / "src/argus/driver"
-
-
-def shell(tmp_path: Path, body: str) -> str:
-    script = """
-set -euo pipefail
-for name in lib-driver-drive lib-driver-select lib-driver-group lib-driver-resume \
-    lib-driver-select-flow lib-driver-issues lib-driver-config lib-driver-run; do
-  . "$TEST_DRIVER/$name.sh"
-done
-if [ -f "$TEST_DRIVER/lib-driver-maintenance.sh" ]; then
-  . "$TEST_DRIVER/lib-driver-maintenance.sh"
-fi
-PYTHON="$TEST_PYTHON"
-ARGUS="$TEST_DRIVER/.."
-REPO="$TEST_ROOT"; RUN_DIR="$TEST_ROOT"
-HALT="$RUN_DIR/halted"; HALT_RECORD="$RUN_DIR/halted.json"
-CLAIM="$RUN_DIR/claim"; CURRENT="$RUN_DIR/current"
-PIDFILE="$RUN_DIR/pid"; STALL="$RUN_DIR/stall"; LOCK="$RUN_DIR/lock"
-GROUPFILE="$RUN_DIR/group"; GROUPBRANCH="$RUN_DIR/group-branch"
-DRY_RUN=0; MERGE_CHECK_MAX=5; work_kind=phase; WORK_SOURCE=phases
-ARGUS_CONFIG_ARGS=(--config fixture.json); GITSYNC_KIND_ARGS=(); WORK_SOURCE_FLAGS=()
-PHASE_MACHINE_ID=fixture; SESSION=fixture
-log() { printf '%s\\n' "$*" >>"$RUN_DIR/events"; }
-log_changed() { shift; log "$*"; }
-ts() { printf fixture-time; }
-notify() { :; }
-tmux_busy() { return 1; }
-tmux_phase_window_alive() { return 1; }
-tmux_session_exists() { return 1; }
-tmux_set_title() { :; }
-claim_renew() { :; }
-prune() { :; }
-repair_due() { return 1; }
-work_preflight() { return 0; }
-_drive_choose_selection() { log SELECT; _DRIVE_RC=0; }
-_drive_cut_branch() { log BRANCH; }
-_drive_launch() { log LAUNCH; }
-tidy_published_checkout() { log TIDY; }
-pending_review_snapshot() {
-  printf '{"awaiting_review":[{"phase":"100010","branch":"feature/fixture","pull_request":"https://example.test/pull/1"}]}'
-}
-gate_group_pull_request() { log GATE; }
-watch_signals_pull_request() { log SIGNALS; }
-python_transport() {
-  case "$1" in
-    */gitsync/main.py)
-      if [ "$PUBLICATION" = merged ]; then
-        log PUBLISH
-        printf '{"state":"PUBLISHED"}'
-      else
-        printf '{"state":"BLOCKED"}'
-      fi
-      ;;
-    *) "$TEST_PYTHON" "$@" ;;
-  esac
-}
-PYTHON=python_transport
-PUBLICATION=open
-"""
-    result = subprocess.run(
-        ["bash", "-c", script + body],
-        cwd=tmp_path,
-        env={
-            "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
-            "TEST_DRIVER": str(DRIVER),
-            "TEST_ROOT": str(tmp_path),
-            "TEST_PYTHON": sys.executable,
-        },
-        stdin=subprocess.DEVNULL,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        timeout=20,
-        check=False,
-    )
-    assert result.returncode == 0, result.stderr
-    return result.stdout
+from driver_maintenance_support import DRIVER, shell
 
 
 @pytest.mark.parametrize("publication", ["open", "merged"])
@@ -192,7 +113,18 @@ _drive --merge-check-only
 
 
 def test_idle_stop_does_not_hold_stale_current_file(tmp_path: Path) -> None:
-    shell(tmp_path, 'printf "100020\\n" >"$CURRENT"\nstop\nrm "$HALT"\n_drive\n')
+    # A current file with no claim proves nothing, so the stop halts the line
+    # but the stale current file never becomes a hold. Once the marker is
+    # cleared, the next tick selects work: nothing is left for a resume to
+    # consume.
+    output = shell(
+        tmp_path,
+        'printf "100020\\n" >"$CURRENT"\nrc=0; stop || rc=$?\n'
+        'printf "stop_rc=%s\\n" "$rc"\n'
+        '[ -f "$HALT" ] && printf "halted=yes\\n"\nrm "$HALT"\n_drive\n',
+    )
+    assert "stop_rc=0" in output
+    assert "halted=yes" in output
     assert not (tmp_path / "stopped-claim").exists()
     assert "SELECT" in (tmp_path / "events").read_text().splitlines()
 
@@ -212,6 +144,7 @@ printf 'manual halt\\n' >"$HALT"
 resume_phase_file_of() { printf 'phase-100020-fixture.md'; }
 phase_run_dir() { printf '%s' "$RUN_DIR"; }
 phase_state() { printf blocked; }
+_drive_resume_group() { :; }
 _drive_resume_branch() { :; }
 resume_fence() { RESUME_RESERVATION_ID=rsv-fixture; RESUME_RESERVATION_GENERATION=2; }
 record_claim() { :; }
@@ -253,6 +186,15 @@ def test_abandon_clears_manual_stop_after_group_release(
 . "$TEST_DRIVER/lib-driver-run.sh"
 . "$TEST_DRIVER/lib-driver-halt-record.sh"
 . "$TEST_DRIVER/lib-driver-abandon.sh"
+# The stub, so DRIVER_STUB_BOARD_FENCE below decides this case; the harness
+# stub would make the refused-fence half pass for the wrong reason.
+board_assert_owner() { [ "${DRIVER_STUB_BOARD_FENCE:-}" != fail ] || return 1; }
+python_transport() {
+  case "$1" in
+    */board/reservations.py) return 0 ;;
+    *) "$TEST_PYTHON" "$@" ;;
+  esac
+}
 resume_phase_file_of() { printf phase-100020-fixture.md; }
 phase_run_dir() { printf '%s' "$RUN_DIR"; }
 phase_state() { printf blocked; }
@@ -260,11 +202,17 @@ printf '100020\\trsv-fixture\\t2\\n' >"$CLAIM"
 stop
 DRIVER_STUB_BOARD_FENCE=BOARD_RESULT
 (abandon_cmd 100020) || true
-""".replace("BOARD_RESULT", "renew" if release_ok else "fail"),
+""".replace("BOARD_RESULT", "assert" if release_ok else "fail"),
     )
     assert (tmp_path / "stopped-claim").exists() is not release_ok
     assert (tmp_path / "halted").exists()
-    assert json.loads((tmp_path / "abandoned.json").read_text())["phase"] == "100020"
+    if release_ok:
+        assert (
+            json.loads((tmp_path / "abandoned.json").read_text())["phase"] == "100020"
+        )
+    else:
+        # A refused fence means no residue write: the phase is not parked.
+        assert not (tmp_path / "abandoned.json").exists()
 
 
 def test_cleared_failure_halt_still_resumes_recorded_phase(tmp_path: Path) -> None:
@@ -330,3 +278,43 @@ def test_help_explains_maintenance_mode(tmp_path: Path) -> None:
     )
     assert "--merge-check-only" in result.stdout
     assert "without selecting or launching work" in result.stdout
+
+
+READY_LINE = "a group's shared pull request is ready; its checks passed"
+
+
+def test_a_ready_sweep_with_no_new_transition_logs_nothing(tmp_path: Path) -> None:
+    # The first sweep readies the pull request. The second sweep reads READY
+    # too, but only because it skipped that pull request: nothing new to log.
+    answer: dict[str, Any] = {
+        "ok": True,
+        "mode": "ready",
+        "state": "READY",
+        "results": [
+            {
+                "ok": True,
+                "phase": "100010",
+                "pull_request": "https://example.test/pull/1",
+                "detail": "",
+                "state": "READY",
+            }
+        ],
+    }
+    (tmp_path / "fresh.json").write_text(json.dumps(answer), encoding="utf-8")
+    answer["results"][0]["skipped"] = True
+    (tmp_path / "skipped.json").write_text(json.dumps(answer), encoding="utf-8")
+    shell(
+        tmp_path,
+        "SWEEP=fresh.json\n"
+        "python_transport() {\n"
+        '  case "$1" in\n'
+        '    */gitsync/main.py) cat "$TEST_ROOT/$SWEEP" ;;\n'
+        '    *) "$TEST_PYTHON" "$@" ;;\n'
+        "  esac\n"
+        "}\n"
+        "reconcile_group_ready\n"
+        "SWEEP=skipped.json\n"
+        "reconcile_group_ready\n",
+    )
+    events = (tmp_path / "events").read_text(encoding="utf-8").splitlines()
+    assert events.count(READY_LINE) == 1

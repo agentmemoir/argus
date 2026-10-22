@@ -12,11 +12,13 @@
 # Write a halt record the way the driver writes one, then clear the marker, which
 # is what an operator does before the next tick resumes. Using the driver's own
 # writer keeps a case from spelling the schema out and from drifting from it.
-selftest_resume_record() {   # <phase> <rel> <run_dir> <state> <rc>
+selftest_resume_record() {   # <phase> <rel> <run_dir> <state> <rc> [reservation_id] [generation]
   printf 'phase %s rc=%s state=%s at fixture\n' "$1" "$5" "$4" >"$HALT"
   # A halt leaves its claim beside the run, and the record keeps that fence so a
-  # resume renews it instead of taking a new one.
-  printf '%s\trsv-fixture\t7\n' "$1" >"$CLAIM"
+  # resume renews it instead of taking a new one. A case that made a real board
+  # claim passes its pair, because record_claim reads this file back and the
+  # board refuses a pair it did not issue.
+  printf '%s\t%s\t%s\n' "$1" "${6:-rsv-fixture}" "${7:-7}" >"$CLAIM"
   halt_record_write "$1" "$2" "$3" "$4" "$5" rc
   rm -f "$HALT"
 }
@@ -214,6 +216,38 @@ selftest_case_resume() {
   export DRIVER_STUB_SLEEP DRIVER_STUB_BOARD_FENCE DRIVER_STUB_COORDINATION
 }
 
+# Claim one phase on a fixture's board and write the run state's
+# `reservation.json`, which is the file every write path reads before its first
+# write. The shell counterpart of the Python fixtures' `_reserve_phase`, and it
+# calls that helper rather than repeating it: one reservation, made through the
+# production store, on the board branch the fixture's own configuration names.
+#
+# A fixture that wants to drive a fenced write path without a tick to reserve
+# first needs this. Without it the path reads no reservation, refuses with
+# COORDINATION_UNAVAILABLE, and the case proves the refusal instead of the work
+# it exists to prove.
+#
+#   $1  the root     $2  the phase
+selftest_fixture_claim_phase() {
+  "$PYTHON" - "$ARGUS" "$1" "$2" "$PHASE_MACHINE_ID" "${ARGUS_CONFIG_ARGS[@]}" <<'PY'
+import sys
+
+sys.path.insert(0, sys.argv[1])
+import _bootstrap  # noqa: F401 - register the source package
+from argus import conventions
+
+conventions.configure_from_cli(sys.argv[5:])
+from argus.gitsync.selftest_fixture import _reserve_phase
+
+_reserve_phase(
+    sys.argv[2],
+    int(sys.argv[3]),
+    machine_id=sys.argv[4],
+    branch=conventions.setting("board.branch"),
+)
+PY
+}
+
 selftest_case_group_resume() {
   # A resume has no selection to read the group from, and it still has to land on
   # the group's one branch: the tick's resume branch runs before the selector,
@@ -224,7 +258,7 @@ selftest_case_group_resume() {
   local group_root="$tmp/group-resume-root" group_base="$tmp/group-resume-base"
   local group_config="$tmp/group-resume-config.json"
   local group_branch="feature/group-cache-warm" member_branch="feature/cache-read"
-  local rel="" run_dir="" head="" rc=0
+  local rel="" run_dir="" head="" rc=0 rid="" gen=""
   local old_coordination="${DRIVER_STUB_COORDINATION:-}" old_sleep="$DRIVER_STUB_SLEEP"
   if ! selftest_group_begin group-resume "$group_root" "$group_base" "$group_config"; then
     echo "FAIL: the group-resume case could not build its own checkout"
@@ -235,6 +269,27 @@ selftest_case_group_resume() {
   # The branch cut is the step under test, so the real helper has to run here.
   unset DRIVER_STUB_COORDINATION
   export DRIVER_STUB_RC DRIVER_STUB_SLEEP
+
+  # The member the case resumes holds a real claim before the branch is cut, the
+  # way a member of a half-run group holds one: the group's earlier tick reserved
+  # it. The branch helper proves that claim before it touches either checkout, so
+  # a fixture with no reservation would exercise the refusal, and the branch it
+  # never cut would leave every check below failing for the same wrong reason.
+  if ! selftest_fixture_claim_phase "$group_root" 100030; then
+    echo "FAIL: the group-resume case could not reserve phase 100030"
+    fail=1
+    # The rest of the suite runs in this process, so a case that cannot finish
+    # still puts back the settings it repointed.
+    DRIVER_STUB_SLEEP="$old_sleep"
+    if [ -n "$old_coordination" ]; then
+      DRIVER_STUB_COORDINATION="$old_coordination"
+    else
+      unset DRIVER_STUB_COORDINATION
+    fi
+    export DRIVER_STUB_SLEEP DRIVER_STUB_COORDINATION
+    selftest_group_end
+    return 0
+  fi
 
   # The group's first member is waiting on its pull request, which is what makes
   # it an open predecessor for the member being resumed. The receipt carries no
@@ -265,7 +320,17 @@ selftest_case_group_resume() {
   run_dir="$(phase_run_dir 100030 "$rel")"
   mkdir -p "$run_dir"
   printf '{"phase": "100030", "state": "blocked"}\n' >"$run_dir/run.json"
-  selftest_resume_record 100030 "$rel" "$run_dir" blocked 1
+  # The halt record must name the same board-confirmed pair the branch fence
+  # read, because record_claim reads this file back and the board refuses a
+  # pair it did not issue.
+  rid="$("$PYTHON" -c 'import json,sys; print(json.load(open(sys.argv[1]))["reservation_id"])' "$run_dir/reservation.json")" || rid=""
+  gen="$("$PYTHON" -c 'import json,sys; print(json.load(open(sys.argv[1]))["generation"])' "$run_dir/reservation.json")" || gen=""
+  if [ -z "$rid" ] || [ -z "$gen" ]; then
+    echo "FAIL: the group-resume case lost the reservation fence"
+    fail=1
+  else
+    selftest_resume_record 100030 "$rel" "$run_dir" blocked 1 "$rid" "$gen"
+  fi
   drive || true
 
   # The launch has to have happened, or the two checks below would pass on a

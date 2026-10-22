@@ -181,8 +181,13 @@ _drive() {
   # The fence goes down with the claim, not at the launch. A tick that refuses
   # after this point, at the branch cut or the sync gate, still leaves the claim
   # releasable by `--release` instead of stranded on the board until its window
-  # closes.
-  record_claim "$number" "$reservation_id" "$reservation_generation"
+  # closes. A claim the board does not confirm is a refused fence: the tick
+  # stops here, before the branch cut and the launch, because a launch would
+  # run without an ownership fence.
+  #
+  # Both shapes of that fence are written, because the tick's own fenced steps
+  # read the file and only this shell reads the claim; see record_claim_fence.
+  record_claim_fence "$number" "$reservation_id" "$reservation_generation" || return $?
 
   _drive_cut_branch || return $?
   [ -z "$_DRIVE_RC" ] || return "$_DRIVE_RC"
@@ -228,7 +233,7 @@ _drive_cut_branch() {
     # the step is idempotent, and each place covers a case the other does not.
     # A tidy that cannot preserve its work is the narrow lost-work stop. A
     # preserved, degraded, or clean tidy returns 0 and the launch continues.
-    tidy_published_checkout || { _DRIVE_RC=1; return 0; }
+    tidy_published_checkout "$number" || { _DRIVE_RC=1; return 0; }
     # The exit code is captured by running the command and reading $? straight
     # after. Putting it behind `if ! cmd; then rc=$?` cannot work: the `!`
     # resets $? to 0 before the body runs, so the guard below saw success even
@@ -249,8 +254,19 @@ _drive_cut_branch() {
       --phases-directory "$(phases_dir)" \
       "${GROUP_ARGS[@]+"${GROUP_ARGS[@]}"}" \
       >"$RUN_DIR/phase-branch.json" 2>/dev/null
-    local branch_rc=$?
+    local branch_rc=$? branch_state
     if [ "$branch_rc" -ne 0 ]; then
+      # A fence refusal is not a branch failure. The board does not confirm
+      # this machine owns the phase, so a launch would run another owner's
+      # work. The claim file stays, so --release can still return it.
+      branch_state="$(selection_value state <"$RUN_DIR/phase-branch.json")"
+      case "$branch_state" in
+        FENCED|COORDINATION_UNAVAILABLE)
+          log "${work_kind:-phase} $number: the $branch_state fence refused the branch cut; no launch (see $RUN_DIR/phase-branch.json)"
+          _DRIVE_RC=1
+          return 0
+          ;;
+      esac
       # A branch cut that fails is a repair: launch on the branch the checkout
       # already has and retry the cut next tick. The phase branch is published
       # by the finalize push, which reports a real failure there.
@@ -328,128 +344,4 @@ drive() {
   fi
   heartbeat
   return "$rc"
-}
-
-stop() {
-  mkdir -p "$RUN_DIR"
-  printf 'stopped by operator at %s\n' "$(ts)" >"$HALT"
-  # The halt goes first, so the stop stops the line even when the lock is busy;
-  # losing the lock leaves the halt marker doing its job.
-  driver_lock_wait || log "stop: the driver lock is held by a running tick; the halt marker still stops the line"
-  local stopped_phase=""
-  # A stale current file alone has no recoverable claim. Holding it would
-  # strand an idle stop, because neither resume nor release could consume it.
-  if claim_read_fields "$CLAIM" && [ -n "$CLAIM_ID" ] && [ -n "$CLAIM_GEN" ]; then
-    stopped_phase="$CLAIM_NUMBER"
-    # The live window names the phase actually running; the claim file can be a
-    # stale record from an earlier run. Prefer the live phase when it is a
-    # number, so a resume targets what was stopped and not what was recorded.
-    local live_phase
-    live_phase="$(cat "$CURRENT" 2>/dev/null || true)"
-    case "$live_phase" in
-      ""|*[!0-9]*) ;;
-      *) stopped_phase="$live_phase" ;;
-    esac
-  fi
-  [ -z "$stopped_phase" ] || printf '%s\n' "$stopped_phase" >"$RUN_DIR/stopped-claim"
-  # Ctrl-C must reach the phase window. Targeting the session would send it to
-  # whichever window is current, which may be the idle status display.
-  if tmux_phase_window_alive; then
-    tmux_phase_window_interrupt
-    log "stop: sent Ctrl-C to '$SESSION:phase' and wrote halt marker"
-  elif tmux_session_exists; then
-    log "stop: wrote halt marker (session idle, no phase window)"
-  else
-    log "stop: wrote halt marker (no live session)"
-  fi
-  # Drop the lock this function may have taken. A caller that runs another driver
-  # command in the same shell would otherwise inherit the held fd and be refused.
-  # No redirection on this line, and that is load-bearing: on an `exec` command a
-  # redirection applies to the shell and persists, so hiding a bad-fd message
-  # here would send this shell's stderr to /dev/null for the rest of the run.
-  exec 9>&- || true
-}
-
-# Give the current phase's group back without halting the line.
-#
-# This is deliberately not `stop()`. stop() writes the halt marker before it
-# does anything else; a release is the opposite. Nothing here writes the halt
-# marker, triggers the orphan or stall check, or sends a halt notification. It
-# interrupts only the phase window, waits for that window to close, clears the
-# same run-state files the signal path clears, and returns 0. The board group is
-# released after partial work is pushed, so the next owner resumes from the
-# branch. A failure to push or to release is logged and never halts.
-release() {
-  mkdir -p "$RUN_DIR"
-  # Best-effort serialize with a tick's own claim and hold reads. A release must
-  # still return the group when the lock is busy.
-  driver_lock_wait || log "release: the driver lock is held by a running tick; releasing without it"
-  local number="" claim_number="" reservation_id="" generation="" rc=0
-  number="$(cat "$CURRENT" 2>/dev/null || true)"
-  if [ -f "$CLAIM" ]; then
-    IFS=$'\t' read -r claim_number reservation_id generation <"$CLAIM" || true
-    [ -n "$claim_number" ] && number="${number:-$claim_number}"
-  fi
-  # Written before the interrupt: the child's signal trap reads it and stops
-  # without writing a halt marker. The parent removes it on every path.
-  : >"$RELEASE"
-  if tmux_phase_window_alive; then
-    tmux_phase_window_interrupt
-    log "release: sent Ctrl-C to '$SESSION:phase'${number:+ for ${work_kind:-phase} $number}"
-  else
-    log "release: no live phase window${number:+ for ${work_kind:-phase} $number}"
-  fi
-  wait_phase_window_gone
-  # Partial work first, so the next owner resumes instead of starting over. A
-  # failure is logged, never a halt. gitsync_clean lands the private run state;
-  # the checkpoint lands the public checkout's unfinished work on the branch the
-  # next owner resumes from, which is the handoff the requirement promises.
-  "$PYTHON" "$ARGUS/gitsync/main.py" "${ARGUS_CONFIG_ARGS[@]}" --root "$REPO" \
-    "${GITSYNC_KIND_ARGS[@]+"${GITSYNC_KIND_ARGS[@]}"}" \
-    --mode checkpoint >"$RUN_DIR/release-checkpoint.json" 2>/dev/null \
-    || log "release: could not push the work in progress; the next owner starts from what is already on the branch (see $RUN_DIR/release-checkpoint.json)"
-  [ -z "$number" ] || gitsync_clean "$number"
-  # The operator asked to release, so the local manual-stop hold goes whatever
-  # the board write does; clearing it only on success left an expired release
-  # holding the line on a hold nothing would consume.
-  rm -f "$RUN_DIR/stopped-claim"
-  # The array the run covered, for the log line below. Read before the board
-  # write, because the write is what ends the group on this machine.
-  local group_members=""
-  [ -s "$GROUPFILE" ] && group_members="$(tr '\n' ' ' <"$GROUPFILE")"
-  if [ -n "$reservation_id" ] && [ -n "$generation" ]; then
-    if "$PYTHON" "$ARGUS/board/reservations.py" release-group \
-        "${ARGUS_CONFIG_ARGS[@]}" "${BOARD_KIND_ARGS[@]+"${BOARD_KIND_ARGS[@]}"}" --repo-root "$REPO" \
-        --machine-id "$PHASE_MACHINE_ID" \
-        --reservation-id "$reservation_id" \
-        --generation "$generation" \
-        >"$RUN_DIR/release${number:+-$number}.json" 2>&1; then
-      if [ -n "$group_members" ]; then
-        log "release: returned the group for ${work_kind:-phase} $number to the queue [$group_members]"
-      else
-        log "release: returned the group for ${work_kind:-phase} $number to the queue"
-      fi
-      rm -f "$CLAIM"
-    else
-      rc=$?
-      log "release: could not return the group for ${work_kind:-phase} $number (rc=$rc; see $RUN_DIR/release${number:+-$number}.json)"
-    fi
-  else
-    log "release: no board token was recorded; the run was stopped without a board write"
-  fi
-  rm -f "$CURRENT" "$PIDFILE" "$RELEASE" "$GROUPFILE" "$GROUPBRANCH"
-  # Drop the lock this function may have taken; see the note in stop().
-  exec 9>&- || true
-  return 0
-}
-
-# Wait for the phase window to disappear. The session itself is persistent and
-# is never waited on.
-wait_phase_window_gone() {
-  local i=0
-  while tmux_window_exists; do
-    i=$((i + 1)); [ "$i" -gt 60 ] && break
-    sleep 0.25
-  done
-  sleep 0.3
 }

@@ -10,7 +10,12 @@ from typing import Any
 from argus.gitsync.git import dirty_paths, git, git_binary
 from argus.gitsync.mode_clean import mode_clean
 from argus.gitsync.runstate import commit_leftover_run_state
-from argus.gitsync.selftest_fixture import BOARD_REL, _check, _init_remote
+from argus.gitsync.selftest_fixture import (
+    BOARD_REL,
+    _check,
+    _init_remote,
+    _reserve_phase,
+)
 
 
 def _runstate_checks(base: Path, checks: list[dict[str, Any]]) -> None:
@@ -151,6 +156,9 @@ def _runstate_checks(base: Path, checks: list[dict[str, Any]]) -> None:
     # Another phase's partial record, which must be left where it is.
     (nested / "runs" / "phase-100601" / "run.json").write_text('{"state": "blocked"}\n')
     (pub / "uncommitted-public.txt").write_text("mid-work\n")
+    # --mode clean proves the board fence before its commit, so the phase it
+    # closes out must be really claimed, exactly as the runner claims it.
+    _reserve_phase(pub, 100440, sync=nested)
     res = mode_clean(pub, 100440)
     dirty_after: list[str] = dirty_paths(nested)
     _check(
@@ -167,6 +175,9 @@ def _runstate_checks(base: Path, checks: list[dict[str, Any]]) -> None:
     # leftover run state is landed, each scoped to its own directory, so a phase
     # whose run ended without its own closing commit cannot block the next
     # phase's publish. The public checkout is mid-work and must stay untouched.
+    # The sweep fences per planned phase, so each phase it is expected to land
+    # carries a real claim; an unclaimed one would be skipped and named.
+    _reserve_phase(pub, 100601, sync=nested)
     res = mode_clean(pub)
     dirty_after_all: list[str] = dirty_paths(nested)
     _check(
