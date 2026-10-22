@@ -193,10 +193,20 @@ def test_issue_tick_claims_one_issue_and_launches_only_the_stub(
     backlog: Path, tmux_dir: Path
 ) -> None:
     board = backlog / "root/board"
+    pipeline = board / "flow.yaml"
+    pipeline.write_text(
+        pipeline.read_text()
+        .replace("board/runs/issue-{issue_number:06d}", "board/runs/phase-100001")
+        .replace("issue_file: {required: true}", "issue_file: {default: fixture.md}")
+    )
+    phase_fence = board / "runs/phase-100001/reservation.json"
+    phase_fence.parent.mkdir()
+    phase_fence.write_text("existing phase fence\n")
     tick = argus(backlog, tmux_dir)
     log_path = board / "runs/driver-state/driver.log"
     log = log_path.read_text(encoding="utf-8") if log_path.exists() else ""
     assert tick.returncode == 0, (tick.stderr, log)
+    assert phase_fence.read_text() == "existing phase fence\n"
     assert "reserved issue 100001 (board/tasks/" in log, log
 
     git(board, "fetch", "-q", "origin")
