@@ -90,6 +90,7 @@ def test_mode_clean_commits_in_the_checkout_that_holds_the_run_dir(
             "board.remote": "origin",
         },
     )
+    conventions.override({"machine.id": "server-01"})
     run_dir = board / "runs" / f"phase-{PHASE:06d}"
     run_dir.mkdir(parents=True)
     (run_dir / "run.json").write_text('{"state":"completed"}\n')

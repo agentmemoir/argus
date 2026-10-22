@@ -177,7 +177,7 @@ def _configure_self_test(
             "driver.exclude": list(exclude),
             "number-input": number_input,
             "file-input": file_input,
-            "machine.id": "self-test",
+            "machine.id": "server-01",
             "commands.git": "git",
             "commands.gh": "gh",
             "board.repo": board,

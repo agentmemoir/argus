@@ -7,7 +7,7 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import Any, cast
 
-from argus.conventions import board_repo, phase_run_dir
+from argus.conventions import board_repo, phase_run_dir, setting
 from argus.gitsync.git import (
     ConfigError,
     blocked,
@@ -214,8 +214,9 @@ def _load_phase_reservation(
         data = cast("dict[str, Any]", json.loads(Path(reservation_file).read_text()))
     except (OSError, ValueError) as exc:
         raise ConfigError(f"cannot read phase reservation: {exc}") from exc
-    if machine_id:
-        data["machine_id"] = machine_id
+    # A committed reservation can arrive from another machine. Only the local
+    # configuration or an explicit caller identity can identify this writer.
+    data["machine_id"] = machine_id or setting("machine.id")
     if reservation_id:
         data["reservation_id"] = reservation_id
     if generation is not None:

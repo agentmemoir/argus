@@ -134,16 +134,34 @@ resume_fence_reserve() {   # <phase>
 #   $1 the phase   $2 the reservation id   $3 the generation
 record_claim_fence() {
   record_claim "$1" "$2" "$3" || return $?
+  [ "${work_kind:-phase}" = phase ] || return 0
   record_phase_reservation "$1" "$2" "$3"
+}
+
+# A failed local fence must not strand the selected group. The board verifies
+# the exact token again, so a replacement owner's reservation cannot be freed.
+release_refused_claim() {
+  local number="$1" reservation_id="$2" generation="$3"
+  if "$PYTHON" "$ARGUS/board/reservations.py" release-group \
+      "${ARGUS_CONFIG_ARGS[@]}" "${BOARD_KIND_ARGS[@]+"${BOARD_KIND_ARGS[@]}"}" \
+      --repo-root "$REPO" --machine-id "$PHASE_MACHINE_ID" \
+      --reservation-id "$reservation_id" --generation "$generation" \
+      >"$RUN_DIR/claim-refusal-release-$number.json" 2>&1; then
+    if claim_read_fields "$CLAIM" && [ "$CLAIM_NUMBER" = "$number" ] \
+        && [ "$CLAIM_ID" = "$reservation_id" ] && [ "$CLAIM_GEN" = "$generation" ]; then
+      rm -f "$CLAIM"
+    fi
+    log "claim: returned the refused ${work_kind:-phase} $number reservation to the queue"
+  else
+    log "claim: could not return the refused ${work_kind:-phase} $number reservation (see $RUN_DIR/claim-refusal-release-$number.json)"
+  fi
 }
 
 # Write the confirmed claim where the fenced write paths read it.
 #
-# Best effort, and silent when the run folder cannot be named: a fence that is
-# missing is refused loudly by the path that reads it, and a claim is not
-# something this write may take back. A write that fails where the folder could
-# be named is said out loud, because it is the difference between a fence that is
-# there and one that only looks as though it is.
+# A missing or unwritable fence refuses the caller before its next write.
+# Release uses the same writer to repair missing or stale saved reservations
+# from the shell claim the board just proved.
 #
 # The values are the ones the board has just confirmed, and the ids and the
 # generation are checked to be the shapes that cannot break the JSON. Anything
@@ -152,16 +170,17 @@ record_claim_fence() {
 #   $1 the phase   $2 the reservation id   $3 the generation
 record_phase_reservation() {
   local phase="$1" reservation_id="$2" generation="$3" dir="" file=""
-  case "$phase" in ''|*[!0-9]*) return 0 ;; esac
-  case "$generation" in ''|*[!0-9]*) return 0 ;; esac
-  [ -n "$reservation_id" ] || return 0
-  dir="$(phase_run_dir "$phase" "" 2>/dev/null)" || return 0
-  [ -n "$dir" ] || return 0
+  case "$phase" in ''|*[!0-9]*) return 1 ;; esac
+  case "$generation" in ''|*[!0-9]*) return 1 ;; esac
+  [ -n "$reservation_id" ] || return 1
+  dir="$(phase_run_dir "$phase" "" 2>/dev/null)" || return 1
+  [ -n "$dir" ] || return 1
   file="$dir/reservation.json"
-  mkdir -p "$dir" 2>/dev/null || true
+  mkdir -p "$dir" 2>/dev/null || return 1
   if ! printf '{\n  "phase": "%s",\n  "machine_id": "%s",\n  "reservation_id": "%s",\n  "generation": %s\n}\n' \
       "$phase" "${PHASE_MACHINE_ID:-}" "$reservation_id" "$generation" >"$file" 2>/dev/null; then
     log "claim: could not write the reservation file for ${work_kind:-phase} $phase (see $file); the fence reads nothing"
+    return 1
   fi
 }
 

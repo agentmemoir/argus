@@ -259,4 +259,12 @@ STOP_ALLOWLIST = r"""
     gitsync/sync.py	ok_false	fn:sync_all|"ok": False,#1
     gitsync/tidy.py	blocked_call	fn:return_to_integration|return blocked(#1
     gitsync/tidy.py	blocked_call	fn:return_to_integration|return blocked(#2
+    driver/lib-driver-control.sh	return_nonzero	fn:release|return 1#5
+    driver/lib-driver-fence.sh	return_nonzero	fn:record_phase_reservation|case "$phase" in ''|*[!0-9]*) return 1 ;; esac#1
+    driver/lib-driver-fence.sh	return_nonzero	fn:record_phase_reservation|case "$generation" in ''|*[!0-9]*) return 1 ;; esac#1
+    driver/lib-driver-fence.sh	return_nonzero	fn:record_phase_reservation|[ -n "$reservation_id" ] || return 1#1
+    driver/lib-driver-fence.sh	return_nonzero	fn:record_phase_reservation|dir="$(phase_run_dir "$phase" "" 2>/dev/null)" || return 1#1
+    driver/lib-driver-fence.sh	return_nonzero	fn:record_phase_reservation|[ -n "$dir" ] || return 1#1
+    driver/lib-driver-fence.sh	return_nonzero	fn:record_phase_reservation|mkdir -p "$dir" 2>/dev/null || return 1#1
+    driver/lib-driver-fence.sh	return_nonzero	fn:record_phase_reservation|return 1#1
 """
