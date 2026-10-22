@@ -151,8 +151,10 @@ release_refused_claim() {
         && [ "$CLAIM_ID" = "$reservation_id" ] && [ "$CLAIM_GEN" = "$generation" ]; then
       rm -f "$CLAIM"
     fi
+    CLAIM_RELEASED=1
     log "claim: returned the $why ${work_kind:-phase} $number reservation to the queue"
   else
+    CLAIM_RELEASED=0
     log "claim: could not return the $why ${work_kind:-phase} $number reservation (see $RUN_DIR/claim-refusal-release-$number.json)"
   fi
 }

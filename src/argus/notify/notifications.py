@@ -140,16 +140,25 @@ def format_notification(
     group: Any = None,
     kind: str = "phase",
     claim_label: str | None = None,
+    claim_held: bool = False,
 ) -> str:
     """Format one phase event as a short, user-facing notification."""
     label = phase_label(phase_file, kind=kind)
     # A failed issue run releases its claim; the claim label alone holds it.
-    retry = (
-        f"Remove the `{claim_label}` label from issue "
-        f"#{int(parse_phase_file(phase_file)[0])} to let Argus retry."
-        if kind == "issue" and claim_label
-        else f"This {kind} is skipped until a person decides."
-    )
+    # When the release failed, the label does not decide, so say what does.
+    retry = f"This {kind} is skipped until a person decides."
+    if kind == "issue" and claim_held:
+        retry = (
+            "Argus could not give back its board claim. No action is needed: "
+            "after the claim expires and its cooldown passes, a later tick "
+            "retries the issue, "
+            "even with the claim label."
+        )
+    elif kind == "issue" and claim_label:
+        retry = (
+            f"Remove the `{claim_label}` label from issue "
+            f"#{int(parse_phase_file(phase_file)[0])} to let Argus retry."
+        )
     safe_reason = _safe_reason(reason)
     suffix = _group_phrase(group) if kind == "phase" else ""
     if event == "started":
@@ -236,6 +245,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--exit-code", type=int)
     parser.add_argument("--quiet-minutes", type=int)
     parser.add_argument(
+        "--claim-held",
+        action="store_true",
+        help="a failed issue run could not give back its board claim",
+    )
+    parser.add_argument(
         "--group",
         action="append",
         default=None,
@@ -274,6 +288,7 @@ def main(argv: list[str] | None = None) -> int:
                 if args.kind == "issue"
                 else None
             ),
+            claim_held=args.claim_held,
         )
     )
     return 0

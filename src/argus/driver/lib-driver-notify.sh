@@ -122,6 +122,7 @@ notify_phase() {
   local quiet_minutes="${5:-$QUIET_MINUTES}" message phase_number
   local args=("${ARGUS_CONFIG_ARGS[@]}" --phase-file "$phase_file" --event "$event" --quiet-minutes "$quiet_minutes")
   if [ "${work_kind:-phase}" = issue ]; then args+=(--kind issue); fi
+  if [ "${ISSUE_CLAIM_HELD:-0}" = 1 ]; then args+=(--claim-held); fi
   [ -n "$reason" ] && args+=(--reason "$reason")
   [ -n "$exit_code" ] && args+=(--exit-code "$exit_code")
   message="$("$PYTHON" "$NOTIFIER" "${args[@]}" 2>/dev/null || true)"

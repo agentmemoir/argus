@@ -229,13 +229,19 @@ if unreadable:
 # A failed issue run gives its board claim back, so the claim label alone holds
 # the issue: removing the label lets Argus retry, and work that completed,
 # published, or was rejected stays retained on the board (decision 9).
+# ISSUE_CLAIM_HELD=1 tells the notice that the claim is still held (belief 4).
 release_failed_issue() {
+  ISSUE_CLAIM_HELD=0
   [ "${work_kind:-phase}" = issue ] || return 0
+  ISSUE_CLAIM_HELD=1
   if [ -z "${CLIO_RESERVATION_ID:-}" ] || [ -z "${CLIO_RESERVATION_GENERATION:-}" ]; then
     log "claim: no board token for failed issue $1; the claim waits for its expiry"
     return 0
   fi
+  CLAIM_RELEASED=0
   release_refused_claim "$1" "$CLIO_RESERVATION_ID" "$CLIO_RESERVATION_GENERATION" failed
+  [ "$CLAIM_RELEASED" = 1 ] && ISSUE_CLAIM_HELD=0
+  return 0
 }
 
 # Record an exhausted remedy loop and continue the line.
