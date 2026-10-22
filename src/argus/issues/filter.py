@@ -22,7 +22,9 @@ def label_claimed(
     status = (record or {}).get("status")
     if status in ACTIVE_STATUSES or status == EXPIRED_STATUS:
         return False
-    return label in label_names(issue)
+    # GitHub matches label names without case, so the repo's spelling counts too.
+    wanted = label.casefold()
+    return any(name.casefold() == wanted for name in label_names(issue))
 
 
 def eligible(

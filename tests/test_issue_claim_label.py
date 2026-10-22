@@ -49,6 +49,15 @@ def test_an_issue_with_the_claim_label_is_not_picked(configured: Configured) -> 
     assert result["skipped"]["claim_label"] == 1
 
 
+def test_a_label_in_another_case_still_stops_the_pick(configured: Configured) -> None:
+    # GitHub matches label names without case, so the repo's "Accepted" is the claim.
+    repo, _ = configured
+    fixture_update(repo, rows=[labelled(100002, "Accepted"), issue(100001)])
+    result = IssuesSource(repo).select(reserve=False)
+    assert result["state"] == "AVAILABLE" and result["issue"] == "100001"
+    assert result["skipped"]["claim_label"] == 1
+
+
 def test_the_label_name_comes_from_config(configured: Configured) -> None:
     repo, _ = configured
     conventions.override({"issues.claim-label": "taken"})
