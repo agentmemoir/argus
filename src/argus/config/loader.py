@@ -215,6 +215,13 @@ def _build(
     if "repair.pipeline" not in values:
         values["repair.pipeline"] = Path(str(values["pipeline"])).parent / "repair.yaml"
         sources["repair.pipeline"] = "default"
+    # A zero or negative count would end the round before it starts, or run it
+    # early; refuse it here, before any work, and name the key.
+    for key, least in (("repair.attempts", 1), ("repair.wait", 0)):
+        if cast("int", values[key]) < least:
+            raise ConfigError(
+                f"invalid value for key '{key}': must be at least {least}"
+            )
     if issues is not None:
         validate_trust(issues)
     if provider == "issues":
