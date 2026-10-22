@@ -4,6 +4,8 @@ Notable changes to this project are documented here. The format follows [Keep a 
 
 ## [Unreleased]
 
+- When Argus claims an issue, it adds the claim label to the issue on GitHub after the trust check. It creates the label once when the repository lacks it and logs that. A failed label write keeps the claim. Argus never removes the label. ([#184](https://github.com/agentmemoir/argus/issues/184))
+
 - Issue selection skips an open issue that carries the claim label, set by `issues.claim-label` with the default `accepted`. A person can keep an issue by adding the label. A held or expired board claim still decides for its own issue. The skip counters gain `claim_label`. ([#186](https://github.com/agentmemoir/argus/issues/186))
 
 - A tick that cannot save or prove its selected claim returns that reservation to the queue. It keeps another machine's replacement claim and records a refused cleanup. ([#183](https://github.com/agentmemoir/argus/issues/183))

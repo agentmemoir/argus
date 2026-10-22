@@ -253,6 +253,11 @@ class IssuesSource(_Reports, WorkSource):
                     break
                 continue
             claims.save(self.repo, number, reservation, path)
+            try:
+                self.client.add_label(number, self.claim_label)
+            except IssuesUnavailable as exc:
+                # The board reservation is the claim; a lost label write keeps it.
+                print(f"issue claim: label not added: {exc}", file=sys.stderr)
             return self._base("RESERVED", detail, reservation, attempts=attempts)
         if last:
             return self._base(

@@ -107,6 +107,12 @@ elif args[:2] == ["issue", "view"]:
     result = next(row for row in fixture["rows"] if row["number"] == int(args[2]))
 elif args[:2] == ["pr", "view"]:
     result = {"state": fixture.get("pr_states", {}).get(args[2], "CLOSED")}
+elif args[:2] == ["label", "list"]:
+    result = [{"name": name} for name in fixture.get("labels", [])]
+elif args[:2] == ["label", "create"]:
+    fixture.setdefault("labels", []).append(args[2])
+    (root / "github.json").write_text(json.dumps(fixture))
+    sys.exit(0)
 elif args[0] == "api":
     result = fixture.get("pages", [[]])
 elif args[:2] == ["issue", "comment"]:

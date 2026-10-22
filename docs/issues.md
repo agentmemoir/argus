@@ -24,7 +24,9 @@ A group with `cardinality: one` must match exactly one configured label. A `many
 
 `category` filters by one label and chooses the newest survivor. `search` uses GitHub's best-match order. `category` and `search` can also filter other preferences.
 
-Numeric issue order breaks ties. Blocked, claimed, and escalated work is skipped and counted. An issue that carries the claim label (`claim-label`, default `accepted`) is skipped and counted as `claim_label`, so a person can keep an issue by adding the label. When the board holds or has expired a claim on that issue, the board decides instead: a held claim resumes, and an expired claim can be claimed again. An issue whose job failed and left its claim is skipped too, so the line continues to another issue while the failed claim waits to resume on its own.
+Numeric issue order breaks ties. Blocked, claimed, and escalated work is skipped and counted. An issue that carries the claim label (`claim-label`, default `accepted`) is skipped and counted as `claim_label`, so a person can keep an issue by adding the label. When the board holds or has expired a claim on that issue, the board decides instead: a held claim resumes, and an expired claim can be claimed again.
+
+After the fresh read and the trust check, Argus reserves the issue on the board and then adds the claim label to it on GitHub. If the repository has no label with that name, Argus creates it once and logs `created label`. A failed label write is logged and keeps the claim, because the board reservation is the claim. Argus never removes the label; remove it by hand to let Argus pick the issue again. An issue whose job failed and left its claim is skipped too, so the line continues to another issue while the failed claim waits to resume on its own.
 
 ## Settings
 

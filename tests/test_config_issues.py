@@ -203,6 +203,7 @@ def test_difficulty_labels_and_order_must_match(tmp_path: Path) -> None:
         ("claim-attempts", 0),
         ("claim-label", ""),
         ("claim-label", "accepted,bug"),
+        ("claim-label", "--force"),
         ("claim-label", "accepted\nforged"),
         ("trusted-authors", [""]),
         ("comment-trust", {"authors": [1]}),

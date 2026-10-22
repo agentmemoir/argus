@@ -10,7 +10,7 @@ import pytest
 
 from argus import conventions
 from argus.issues.source import IssuesSource
-from issues_fixture import Board, fake_gh, fixture_update, issue, settings
+from issues_fixture import Board, argv, fake_gh, fixture_update, issue, settings
 
 Configured = tuple[Path, Board]
 BASE = ("bug", "area:cli", "difficulty:easy")
@@ -89,3 +89,45 @@ def test_the_board_decides_a_held_or_expired_claim(
     fixture_update(repo, rows=[labelled(100001, "accepted")])
     result = IssuesSource(repo).select(reserve=False, store=board)
     assert result["state"] == state and result["skipped"]["claim_label"] == 0
+
+
+def calls(repo: Path, *head: str) -> list[list[str]]:
+    return [c["argv"] for c in argv(repo) if c["argv"][: len(head)] == list(head)]
+
+
+def test_claim_creates_a_missing_label_once_and_adds_it(
+    configured: Configured, capsys: pytest.CaptureFixture[str]
+) -> None:
+    repo, board = configured
+    fixture_update(repo, rows=[issue(100001), issue(100002)], labels=["bug"])
+    assert IssuesSource(repo).select(store=board)["issue"] == "100001"
+    board.records.clear()
+    fixture_update(repo, rows=[issue(100002)])
+    assert IssuesSource(repo).select(store=board)["issue"] == "100002"
+    assert calls(repo, "label", "create") == [
+        ["label", "create", "accepted", "--repo", "example/project"]
+    ]
+    assert "created label 'accepted'" in capsys.readouterr().err
+    added = [c[2] for c in calls(repo, "issue", "edit") if "--add-label" in c]
+    assert added == ["100001", "100002"]
+    assert not any("--remove-label" in c for c in calls(repo))
+
+
+def test_a_failed_label_write_keeps_the_claim(
+    configured: Configured, capsys: pytest.CaptureFixture[str]
+) -> None:
+    repo, board = configured
+    fixture_update(repo, mode="edit-failure", labels=["accepted"])
+    result = IssuesSource(repo).select(store=board)
+    assert result["state"] == "RESERVED" and board.records["100001"]
+    assert calls(repo, "label", "create") == []
+    assert "label not added: issues command_failed: issue edit" in (
+        capsys.readouterr().err
+    )
+
+
+def test_an_untrusted_issue_is_never_labelled(configured: Configured) -> None:
+    repo, board = configured
+    fixture_update(repo, rows=[issue(authorAssociation="NONE")])
+    assert IssuesSource(repo).select(store=board)["state"] == "NO_PHASE"
+    assert calls(repo, "issue", "edit") == [] and calls(repo, "label") == []
