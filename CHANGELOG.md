@@ -4,6 +4,8 @@ Notable changes to this project are documented here. The format follows [Keep a 
 
 ## [Unreleased]
 
+- `argus abandon` stages the residue before it releases the board group. A residue write that fails stops the command with the claim held and nothing released, so the same command can run again. ([#164](https://github.com/agentmemoir/argus/issues/164))
+
 - A whole-tree `gitsync --mode clean` that skips every phase now reports not ok and exits 1. A sweep that lands at least one phase still succeeds, and its summary names each skipped phase with its phase number, state, and reason. ([#164](https://github.com/agentmemoir/argus/issues/164))
 
 - The tick stops with no launch when `gitsync --mode branch` refuses on the phase fence (FENCED or COORDINATION_UNAVAILABLE), instead of launching on the branch the checkout already has. Every other branch failure is still a repair. ([#164](https://github.com/agentmemoir/argus/issues/164))
