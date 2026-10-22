@@ -183,6 +183,21 @@ gitsync_land_leftovers() {
   if [ "$rc" -ne 0 ]; then
     log "could not land leftover run state before launch (rc=$rc; see $RUN_DIR/run-state-leftovers.json)"
   fi
+  # A whole-tree sweep lands some phases and skips others and still exits 0,
+  # so the exit code cannot carry a skip. Say each one; never change the rc.
+  "$PYTHON" -c 'import json,sys
+try:
+    data = json.load(open(sys.argv[1]))
+except (OSError, ValueError):
+    data = {}
+skipped = data.get("skipped") if isinstance(data, dict) else None
+for one in skipped if isinstance(skipped, list) else []:
+    if isinstance(one, dict):
+        print(*(" ".join(str(one.get(k, "")).split()) for k in ("phase", "state", "error")), sep="\t")' \
+    "$RUN_DIR/run-state-leftovers.json" 2>/dev/null |
+    while IFS=$'\t' read -r phase state reason; do
+      log_changed "leftovers-skipped-$phase" "leftover run state skipped phase $phase ($state): $reason"
+    done || true
   return 0
 }
 
