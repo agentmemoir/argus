@@ -5,6 +5,7 @@
 from collections import Counter
 from typing import Any
 
+from argus.board.core import ACTIVE_STATUSES, EXPIRED_STATUS
 from argus.issues.trust import Trust
 
 
@@ -12,6 +13,18 @@ def label_names(issue: dict[str, Any]) -> set[str]:
     return {
         label["name"] for label in issue["labels"] if isinstance(label.get("name"), str)
     }
+
+
+def label_claimed(
+    issue: dict[str, Any], record: dict[str, Any] | None, label: str
+) -> bool:
+    """A claim label stops a pick; a held or expired board claim decides alone."""
+    status = (record or {}).get("status")
+    if status in ACTIVE_STATUSES or status == EXPIRED_STATUS:
+        return False
+    # GitHub matches label names without case, so the repo's spelling counts too.
+    wanted = label.casefold()
+    return any(name.casefold() == wanted for name in label_names(issue))
 
 
 def eligible(

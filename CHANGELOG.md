@@ -6,6 +6,10 @@ Notable changes to this project are documented here. The format follows [Keep a 
 
 - `gitsync --mode open-pr` and `--mode peek-ci` use a pull request for the branch only when its head branch is in this repository and has the same name. A row with a missing value is not used.
 
+- When Argus claims an issue, it adds the claim label to the issue on GitHub after the trust check. It creates the label once when the repository lacks it and logs that. A failed label write keeps the claim. Argus never removes the label. ([#184](https://github.com/agentmemoir/argus/issues/184))
+
+- Issue selection skips an open issue that carries the claim label, set by `issues.claim-label` with the default `accepted`. A person can keep an issue by adding the label. A held or expired board claim still decides for its own issue. The skip counters gain `claim_label`. ([#186](https://github.com/agentmemoir/argus/issues/186))
+
 - The example issue pipeline is one step with a `post_step` hook that runs the issue checkpoint, then open-pr. The step does the fix, its review, and its publication. `glide run --dry-run` validates it. ([#193](https://github.com/agentmemoir/argus/issues/193), [#194](https://github.com/agentmemoir/argus/issues/194))
 
 - `gitsync --kind issue --mode open-pr` opens or reuses the draft pull request for the checked-out issue branch through the same open-pr mode as a phase, so the draft state is read back after the create. It first proves this worker still holds the issue claim, and it refuses a checked-out branch that is not the one the claim recorded. On a branch that is not an issue branch it reports a warning and opens nothing. The issue checkpoint now commits as `wip: work in progress on <branch>`, and it no longer fails to stage when an ignore rule already keeps the private checkout out. ([#191](https://github.com/agentmemoir/argus/issues/191), [#192](https://github.com/agentmemoir/argus/issues/192))
