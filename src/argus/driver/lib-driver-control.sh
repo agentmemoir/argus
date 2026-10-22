@@ -111,6 +111,14 @@ release() {
     exec 9>&- || true
     return 1
   fi
+  # Checkpoint and clean must read the fence this command just proved, including
+  # claims from older runs that have no saved reservation yet.
+  if [ "${work_kind:-phase}" = phase ] \
+      && ! record_phase_reservation "$number" "$reservation_id" "$generation"; then
+    log "release: could not save the proved phase fence; no checkpoint, no release"
+    exec 9>&- || true
+    return 1
+  fi
   # Written before the interrupt: the child's signal trap reads it and stops
   # without writing a halt marker. The parent removes it on every path.
   : >"$RELEASE"

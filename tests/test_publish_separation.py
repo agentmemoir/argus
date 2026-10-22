@@ -9,6 +9,7 @@ import pytest
 
 import argus.gitsync.group_review as group_review
 from argus import conventions
+from argus.board.reservations import ReservationStore, save_reservation_file
 from argus.gitsync.git import git
 from argus.gitsync.modes import mode_published
 from argus.gitsync.publish_phase import publish_phase
@@ -60,8 +61,11 @@ def test_a_foreign_fence_refuses_the_published_write(tmp_path: Path) -> None:
     before = git(nested, "rev-parse", "HEAD")[1]
     reservation_path = run_dir / "reservation.json"
     reservation = json.loads(reservation_path.read_text())
-    reservation["machine_id"] = "server-99"
-    reservation_path.write_text(json.dumps(reservation) + "\n")
+    store = ReservationStore(pub)
+    store.release_group(reservation)
+    foreign = store.reserve(100454, "server-99")
+    save_reservation_file(reservation_path, foreign)
+    before_board = store.read()
 
     result = mode_published(pub, 100454)
 
@@ -69,6 +73,7 @@ def test_a_foreign_fence_refuses_the_published_write(tmp_path: Path) -> None:
     assert result["state"] == "FENCED", result
     assert not (run_dir / "publication.json").exists()
     assert git(nested, "rev-parse", "HEAD")[1] == before
+    assert store.read() == before_board
 
 
 def test_an_unreadable_reservation_fails_closed(tmp_path: Path) -> None:

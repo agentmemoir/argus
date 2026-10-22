@@ -43,7 +43,7 @@ def test_tidy_with_a_phase_refuses_a_foreign_fence(
 ) -> None:
     root = make_repo(tmp_path, monkeypatch)
     make_claim(root, monkeypatch)
-    foreign_claim(root)
+    foreign_claim(root, monkeypatch)
     before = _refs(root)
     out = mode_tidy(root, PHASE)
     assert out["state"] == "FENCED"
@@ -84,7 +84,7 @@ def test_clean_phase_refuses_a_foreign_fence_before_the_commit(
 ) -> None:
     root = make_repo(tmp_path, monkeypatch)
     make_claim(root, monkeypatch)
-    foreign_claim(root)
+    foreign_claim(root, monkeypatch)
     before = head_sha(root)
     out = mode_clean(root, PHASE)
     assert out["state"] == "FENCED"
@@ -97,7 +97,7 @@ def test_whole_tree_clean_skips_a_phase_whose_fence_is_unproven(
 ) -> None:
     root = make_repo(tmp_path, monkeypatch)
     make_claim(root, monkeypatch)
-    foreign_claim(root)
+    foreign_claim(root, monkeypatch)
     before = head_sha(root)
     out = mode_clean(root)
     assert out["state"] == "PARTIAL"
@@ -125,7 +125,7 @@ def test_checkpoint_refuses_a_foreign_fence_before_the_commit(
 ) -> None:
     root = make_repo(tmp_path, monkeypatch)
     make_claim(root, monkeypatch)
-    foreign_claim(root)
+    foreign_claim(root, monkeypatch)
     git(root, "checkout", "-q", "-b", "feature/x")
     (root / "work.txt").write_text("wip\n")
     before = head_sha(root)
@@ -169,7 +169,7 @@ def test_branch_refuses_a_foreign_fence_before_the_cut(
     (root / "phases").mkdir()
     (root / "phases" / "phase-100020-cut.md").write_text("# cut\n")
     make_claim(root, monkeypatch)
-    foreign_claim(root)
+    foreign_claim(root, monkeypatch)
     before = _refs(root)
     out = mode_branch(root, PHASE, "phase-100020-cut.md", root / "phases")
     assert out["state"] == "FENCED"
