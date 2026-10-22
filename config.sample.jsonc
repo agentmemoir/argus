@@ -198,6 +198,18 @@
     "heartbeat": ""
   },
 
+  // CI repair round. Optional; these are the defaults. When a check on an open
+  // driver pull request is red, the driver runs this one-step pipeline on the
+  // pull request branch, before any new work.
+  "repair": {
+    // The repair pipeline. The default is "repair.yaml" beside "pipeline".
+    "pipeline": "repair.yaml",
+    // How many repair rounds run before Needs You.
+    "attempts": 3,
+    // Seconds added before each later round: now, +10 min, +20 min.
+    "wait": 600
+  },
+
   // Estimate factor. Optional; both keys switch it on. After a phase finishes
   // from a fresh start, the driver sets the developer harness's factor toward
   // phase hours / (ideal days x 2), moving it at most 20% per phase, then

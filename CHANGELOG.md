@@ -4,6 +4,10 @@ Notable changes to this project are documented here. The format follows [Keep a 
 
 ## [Unreleased]
 
+- A tick starts a CI repair round before new work when a phase pull request that waits on review, or an open pull request on a branch an issue run folder records, has a failed check. A fork pull request with the same branch name as an issue branch is ignored. The round runs `repair.pipeline` in the phase window, inside its own temporary git worktree on the pull request branch, so the main checkout never moves. The session pushes the run's commit to that branch without force and removes the worktree; the next tick removes a worktree a crash left behind. Before a removal, work that was not pushed, a push the remote refused included, is kept on a `refs/argus/repair-backup/<pr>-<time>` ref that a notice names. A round counts only after its launch, and after `repair.attempts` rounds a still-red check sends one notice. The round's `glide` gets `ARGUS_CONFIG_FILE`. ([#196](https://github.com/agentmemoir/argus/issues/196))
+
+- The configuration accepts `repair.pipeline`, `repair.attempts`, and `repair.wait` for the CI repair round, and passes them to the driver as `REPAIR_*` variables. With no `repair` object, the defaults are `repair.yaml` beside `pipeline`, 3 attempts, and 600 seconds. A `repair` object no longer warns as stale. ([#195](https://github.com/agentmemoir/argus/issues/195))
+
 - When Argus claims an issue, it adds the claim label to the issue on GitHub after the trust check. It creates the label once when the repository lacks it and logs that. A failed label write keeps the claim. Argus never removes the label. ([#184](https://github.com/agentmemoir/argus/issues/184))
 
 - Issue selection skips an open issue that carries the claim label, set by `issues.claim-label` with the default `accepted`. A person can keep an issue by adding the label. A held or expired board claim still decides for its own issue. The skip counters gain `claim_label`. ([#186](https://github.com/agentmemoir/argus/issues/186))

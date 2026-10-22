@@ -290,7 +290,7 @@ def gh_pull_requests_for_branch(
         "--limit",
         str(int(limit)),
         "--json",
-        "number,url,isDraft,state",
+        "number,url,isDraft,state,headRefName,isCrossRepository",
     ]
     try:
         done = subprocess.run(
@@ -335,6 +335,10 @@ def gh_pull_requests_for_branch(
                 # would invent a value gh never gave.
                 "isDraft": draft if isinstance(draft, bool) else None,
                 "state": state,
+                # gh --head matches the branch name only, so a fork's pull
+                # request can be listed too; callers check both values.
+                "headRefName": row.get("headRefName"),
+                "isCrossRepository": row.get("isCrossRepository"),
             }
         )
     if not rows and entries:
