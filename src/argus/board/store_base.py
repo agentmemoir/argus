@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """The store root: construction, the board branch, and the board read."""
 
+import datetime as _datetime
 import json
 from pathlib import Path
 from typing import Any
@@ -14,12 +15,14 @@ from argus.board.branch import (
     _state_initialized,
 )
 from argus.board.core import (
+    ACTIVE_STATUSES,
     CoordinationUnavailable,
     _issue_key,
     _phase_key,
     _safe_detail,
 )
 from argus.board.git import _assert_private_boundary, _git
+from argus.board.records import _claim_window_passed
 from argus.board.seed import ensure_board_branch
 from argus.board.state import (
     _empty_state,
@@ -73,6 +76,17 @@ class _StoreBase:
             self.branch,
             issues=self.issues,
             ensure_backup=True,
+        )
+
+    def has_live_claim(self, phase: int | str) -> bool:
+        """Whether any owner still holds this phase; unreadable windows stay live."""
+        key, _number = self._key(phase)
+        state, _commit = self.read()
+        record = state["phases"].get(key)
+        return bool(
+            record is not None
+            and record.get("status") in ACTIVE_STATUSES
+            and not _claim_window_passed(record, _datetime.datetime.now(_datetime.UTC))
         )
 
     def read(self) -> tuple[dict[str, Any], str]:

@@ -114,3 +114,82 @@ def test_other_writers_still_refuse_a_terminal_record(
     refusal = phase_fence(root, PHASE, mode) or {}
     assert refusal.get("state") == "FENCED"
     assert "already rejected" in refusal.get("error", "")
+
+
+@pytest.mark.parametrize(
+    "records",
+    [
+        LANDS[key]
+        for key in (
+            "rejected",
+            "completed",
+            "accepted",
+            "released",
+            "expired",
+            "window-passed",
+        )
+    ]
+    + [{"100021": record()}],
+)
+@pytest.mark.parametrize("sweep", [False, True], ids=["phase", "sweep"])
+def test_clean_without_reservation_lands_only_unheld_phase(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    records: dict[str, dict[str, Any]],
+    sweep: bool,
+) -> None:
+    root = _dirty_claim(tmp_path, monkeypatch, records)
+    (run_path(root) / "reservation.json").unlink()
+    before = head_sha(root)
+    out = mode_clean(root) if sweep else mode_clean(root, PHASE)
+    assert out["ok"] is True, out["summary"]
+    assert head_sha(root) != before
+    assert git(root, "status", "--porcelain") == ""
+    assert git(root, "rev-parse", "origin/main").strip() == head_sha(root)
+
+
+@pytest.mark.parametrize(
+    ("records", "state"),
+    [
+        ({KEY: record()}, "FENCED"),
+        ({KEY: record(machine_id="server-02")}, "FENCED"),
+        ({KEY: record(heartbeat_at="unreadable")}, "FENCED"),
+        (None, "COORDINATION_UNAVAILABLE"),
+    ],
+)
+@pytest.mark.parametrize("sweep", [False, True], ids=["phase", "sweep"])
+def test_missing_reservation_refuses_live_or_unknown_claim(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    records: dict[str, dict[str, Any]] | None,
+    state: str,
+    sweep: bool,
+) -> None:
+    root = _dirty_claim(tmp_path, monkeypatch, records)
+    (run_path(root) / "reservation.json").unlink()
+    before = head_sha(root)
+    out = mode_clean(root) if sweep else mode_clean(root, PHASE)
+    refusal = out["skipped"][0] if sweep else out
+    assert out["ok"] is False
+    assert refusal["state"] == state
+    assert head_sha(root) == before
+    assert (run_path(root) / "escalation.json").exists()
+
+
+@pytest.mark.parametrize("mode", ["branch", "checkpoint", "tidy", "published"])
+def test_missing_reservation_still_refuses_other_writers(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mode: str
+) -> None:
+    root = _dirty_claim(tmp_path, monkeypatch, {})
+    (run_path(root) / "reservation.json").unlink()
+    refusal = phase_fence(root, PHASE, mode) or {}
+    assert refusal.get("state") == "COORDINATION_UNAVAILABLE"
+
+
+def test_clean_still_refuses_malformed_reservation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _dirty_claim(tmp_path, monkeypatch, {})
+    (run_path(root) / "reservation.json").write_text("broken")
+    refusal = phase_fence(root, PHASE, "clean") or {}
+    assert refusal.get("state") == "COORDINATION_UNAVAILABLE"
