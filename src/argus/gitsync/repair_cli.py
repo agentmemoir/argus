@@ -17,6 +17,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -26,8 +28,14 @@ if not __package__:
     from argus import (
         _bootstrap as _bootstrap,  # noqa: F401 - register the source package
     )
+from argus import conventions
 from argus.gitsync import repair_round
 from argus.gitsync.gh_checks import gh_pull_request_checks
+from argus.gitsync.git import GH_TIMEOUT_S, gh_binary
+
+# A GitHub Actions job link: the repository and the job id are all gh needs.
+_JOB_LINK = re.compile(r"https://([^/]+)/([^/]+/[^/]+)/actions/runs/\d+/job/(\d+)")
+TAIL_LINES = 40
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -47,6 +55,41 @@ def _key(pull_request: str) -> str:
     return tail
 
 
+def save_failed_log(
+    run_dir: Path, key: str, failing: list[dict[str, str]]
+) -> tuple[list[str], str | None]:
+    """Save the first failing job's failed-step log; return its tail and path.
+
+    Only a GitHub Actions job link is read. Any other link, or a gh call that
+    fails or times out, gives no log: the task file then says "not saved".
+    """
+    for check in failing:
+        match = _JOB_LINK.match(check.get("link", ""))
+        if not match:
+            continue
+        host, repo, job = match.groups()
+        target = repo if host == "github.com" else f"{host}/{repo}"
+        argv = [gh_binary(), "run", "view", "--job", job, "--log-failed"]
+        try:
+            done = subprocess.run(
+                [*argv, "--repo", target],
+                stdin=subprocess.DEVNULL,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=GH_TIMEOUT_S,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            return [], None
+        if done.returncode:
+            return [], None
+        path = run_dir / f"repair-{key}.log"
+        path.write_text(done.stdout, encoding="utf-8")
+        return done.stdout.splitlines()[-TAIL_LINES:], str(path)
+    return [], None
+
+
 def run(args: argparse.Namespace, now: float) -> tuple[int, dict[str, object]]:
     key = _key(args.pull_request)
     rows, code, _detail = gh_pull_request_checks(args.run_dir, args.pull_request)
@@ -63,8 +106,9 @@ def run(args: argparse.Namespace, now: float) -> tuple[int, dict[str, object]]:
         out["due"] = due
     elif action == "repair":
         task = args.run_dir / f"repair-{key}.md"
+        tail, log_path = save_failed_log(args.run_dir, key, failing)
         task.write_text(
-            repair_round.task_text(args.pull_request, failing, [], None),
+            repair_round.task_text(args.pull_request, failing, tail, log_path),
             encoding="utf-8",
         )
         record["attempts"] = [*record.get("attempts", []), now]
@@ -80,7 +124,8 @@ def run(args: argparse.Namespace, now: float) -> tuple[int, dict[str, object]]:
 
 
 def main(argv: list[str] | None = None, now: float | None = None) -> int:
-    args = build_parser().parse_args(argv)
+    # The driver also passes its configuration flags; configure_from_cli reads them.
+    args, _config = build_parser().parse_known_args(argv)
     try:
         rc, out = run(args, time.time() if now is None else now)
     except ValueError as exc:
@@ -91,4 +136,6 @@ def main(argv: list[str] | None = None, now: float | None = None) -> int:
 
 
 if __name__ == "__main__":
+    # gh_binary reads commands.gh, so the settings load before any gh call.
+    conventions.configure_from_cli(sys.argv[1:])
     sys.exit(main())

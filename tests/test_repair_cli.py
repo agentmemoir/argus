@@ -65,3 +65,25 @@ def test_pull_request_without_number_is_refused(
     argv = ["--pull-request", "../x", "--run-dir", str(tmp_path)]
     assert repair_cli.main([*argv, "--attempts", "1", "--wait", "0"]) == 2
     assert "has no number" in capsys.readouterr().err
+
+
+def test_failed_job_log_is_saved_and_its_tail_named(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    calls: list[list[str]] = []
+
+    def fake_run(argv: list[str], **_kw: object) -> Any:
+        calls.append(argv)
+        return type("Done", (), {"returncode": 0, "stdout": "a\nboom\n"})()
+
+    monkeypatch.setattr(repair_cli.subprocess, "run", fake_run)
+    monkeypatch.setattr(repair_cli, "gh_binary", lambda: "gh")
+    link = "https://github.com/o/r/actions/runs/5/job/9"
+    tail, path = repair_cli.save_failed_log(tmp_path, "7", [{"link": link}])
+    assert tail == ["a", "boom"]
+    assert path is not None and Path(path).read_text(encoding="utf-8") == "a\nboom\n"
+    assert calls[0][-4:] == ["9", "--log-failed", "--repo", "o/r"]
+    assert repair_cli.save_failed_log(tmp_path, "7", [{"link": "https://ci/1"}]) == (
+        [],
+        None,
+    )
