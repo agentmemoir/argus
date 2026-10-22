@@ -17,9 +17,6 @@ from argus.gitsync.gh_read import (
     gh_default_branch as gh_default_branch,
 )
 from argus.gitsync.gh_read import (
-    gh_pull_request_body as gh_pull_request_body,
-)
-from argus.gitsync.gh_read import (
     gh_pull_request_open as gh_pull_request_open,
 )
 from argus.gitsync.gh_read import (
@@ -30,6 +27,9 @@ from argus.gitsync.gh_read import (
 )
 from argus.gitsync.gh_read import (
     gh_repository_is_fork as gh_repository_is_fork,
+)
+from argus.gitsync.gh_read_body import (
+    gh_pull_request_body as gh_pull_request_body,
 )
 from argus.gitsync.gh_target import (
     repo_target as repo_target,
