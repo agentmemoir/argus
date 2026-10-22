@@ -50,6 +50,12 @@ REFUSES: dict[str, tuple[dict[str, dict[str, Any]] | None, str]] = {
     "unreachable": (None, "COORDINATION_UNAVAILABLE"),
 }
 
+PUBLISHED_REFUSES: dict[str, tuple[dict[str, dict[str, Any]] | None, str]] = {
+    "other-live": REFUSES["other-live"],
+    "same-machine-live": ({KEY: record()}, "FENCED"),
+    "unreachable": REFUSES["unreachable"],
+}
+
 
 def _dirty_claim(
     tmp_path: Path,
@@ -194,3 +200,68 @@ def test_clean_still_refuses_malformed_reservation(
     (run_path(root) / "reservation.json").write_text("broken")
     refusal = phase_fence(root, PHASE, "clean") or {}
     assert refusal.get("state") == "COORDINATION_UNAVAILABLE"
+
+
+@pytest.mark.parametrize(
+    ("records", "state"), PUBLISHED_REFUSES.values(), ids=PUBLISHED_REFUSES.keys()
+)
+@pytest.mark.parametrize("sweep", [False, True], ids=["phase", "sweep"])
+def test_missing_reservation_with_published_receipt_refuses_live_or_unknown_claim(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    records: dict[str, dict[str, Any]] | None,
+    state: str,
+    sweep: bool,
+) -> None:
+    root = _dirty_claim(tmp_path, monkeypatch, records)
+    run = run_path(root)
+    (run / "reservation.json").unlink()
+    (run / "publication.json").write_text('{"state": "published"}\n')
+    before_local = head_sha(root)
+    remote = tmp_path / "remote.git"
+    before_remote = git(remote, "rev-parse", "refs/heads/main").strip()
+
+    out = mode_clean(root) if sweep else mode_clean(root, PHASE)
+
+    refusal = out["skipped"][0] if sweep else out
+    assert out["ok"] is False
+    assert refusal["state"] == state
+    assert head_sha(root) == before_local
+    assert git(remote, "rev-parse", "refs/heads/main").strip() == before_remote
+    assert (run / "escalation.json").exists()
+
+
+@pytest.mark.parametrize("sweep", [False, True], ids=["phase", "sweep"])
+def test_missing_reservation_with_published_receipt_lands_without_live_claim(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, sweep: bool
+) -> None:
+    root = _dirty_claim(tmp_path, monkeypatch, {})
+    run = run_path(root)
+    (run / "reservation.json").unlink()
+    (run / "publication.json").write_text('{"state": "published"}\n')
+    before = head_sha(root)
+    remote = tmp_path / "remote.git"
+
+    out = mode_clean(root) if sweep else mode_clean(root, PHASE)
+
+    assert out["ok"] is True, out["summary"]
+    assert head_sha(root) != before
+    assert git(remote, "rev-parse", "refs/heads/main").strip() == head_sha(root)
+    assert git(root, "status", "--porcelain") == ""
+
+
+def test_published_receipt_with_reservation_lands_when_board_is_unavailable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _dirty_claim(tmp_path, monkeypatch, None)
+    run = run_path(root)
+    (run / "publication.json").write_text('{"state": "published"}\n')
+    before = head_sha(root)
+
+    out = mode_clean(root)
+
+    assert out["ok"] is True, out["summary"]
+    assert head_sha(root) != before
+    assert git(
+        tmp_path / "remote.git", "rev-parse", "refs/heads/main"
+    ).strip() == head_sha(root)

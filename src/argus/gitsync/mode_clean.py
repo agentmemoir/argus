@@ -17,6 +17,7 @@ from argus.gitsync.git import (
     resolve_upstream,
     summarize,
 )
+from argus.gitsync.group_publication import _load_phase_reservation
 from argus.gitsync.modes import _run_phase_numbers
 from argus.gitsync.receipts import phase_receipt
 from argus.gitsync.runstate import (
@@ -48,9 +49,10 @@ def _sweep_one(
 ) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
     """Commit one phase's leftovers, or name why the sweep skips it.
 
-    A phase whose receipt is terminal is exempt by construction: its run is
-    recorded as published, nothing the sweep lands can change that verdict, and
-    a released claim is the ordinary end state rather than a lost fence.
+    A phase with a readable reservation and terminal receipt is exempt: its
+    run is recorded as published, and a released claim is the ordinary end
+    state rather than a lost fence. A missing reservation still needs the
+    board to prove no live claim holds the phase.
 
     Every other phase must prove the fence first. A phase that cannot is
     skipped, not fatal: a hard fail would strand post-merge run state that the
@@ -59,6 +61,11 @@ def _sweep_one(
     """
     receipt = phase_receipt(root, number)
     terminal = isinstance(receipt, dict) and receipt.get("state") == "published"
+    if terminal:
+        try:
+            _load_phase_reservation(root, number)
+        except ConfigError:
+            terminal = False
     if not terminal:
         refusal = phase_fence(root, number, "clean")
         if refusal is not None:
@@ -114,9 +121,9 @@ def mode_clean(root: str | Path, phase: int | str | None = None) -> dict[str, An
     an earlier phase's commit.
 
     The sweep has no single owner, so it fences per planned phase: a phase with
-    a published receipt is exempt, a phase whose clean fence holds is landed,
-    and a phase whose fence does not hold is skipped with its reason in
-    ``skipped``.
+    a published receipt with a readable reservation is exempt, a phase whose
+    clean fence holds is landed, and a refused phase has its reason recorded
+    in ``skipped``.
     One unproven phase never stops the others.
     """
     root = Path(root).resolve()
