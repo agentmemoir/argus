@@ -2,8 +2,8 @@
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
 # SPDX-License-Identifier: Apache-2.0
 #
-# The resume: resolve the target, cut the branch, prove the ledger, hold the
-# fence, launch.
+# The resume: resolve the target, prove the ledger, hold the fence, cut the
+# branch, launch.
 #
 # The branch is cut before the launch, so the launch uses the phase's own
 # branch. Every check runs before the launch, so a refusal leaves the run
@@ -36,7 +36,8 @@ PY
 # The tick's own cut also runs a resync. Only the branch half runs here. A
 # failure is a repair, not a stop: the phase keeps its claim, the resume
 # continues on the branch the checkout already has, and the next tick retries
-# the cut.
+# the cut. A fence refusal is not a failure: the board does not confirm this
+# machine owns the phase, so the resume stops and launches nothing.
 #
 # Every member of a group publishes on the group's one branch, and a resume has
 # no selection to read the group from: the tick's resume branch runs before the
@@ -64,6 +65,14 @@ _drive_resume_branch() {   # <number> <rel>
       --phases-directory "$(phases_dir)" \
       "${GROUP_ARGS[@]+"${GROUP_ARGS[@]}"}" \
       >"$RUN_DIR/phase-branch.json" 2>/dev/null; then
+    local branch_state
+    branch_state="$(selection_value state <"$RUN_DIR/phase-branch.json")"
+    case "$branch_state" in
+      FENCED|COORDINATION_UNAVAILABLE)
+        RESUME_REFUSAL="the $branch_state fence refused the branch cut for ${work_kind:-phase} $number; no launch (see $RUN_DIR/phase-branch.json)"
+        log "resume: $RESUME_REFUSAL"
+        return 1 ;;
+    esac
     log "resume: could not put ${work_kind:-phase} $number on its own branch; continuing on $(git -C "$REPO" rev-parse --abbrev-ref HEAD 2>/dev/null || printf 'the current branch'); the next tick retries (see $RUN_DIR/phase-branch.json)"
     return 0
   fi
@@ -165,16 +174,6 @@ _drive_resume() {   # [<number>]
       log "resume gate: ${work_kind:-phase} $number moved on since the halt: $reason; continuing on its own branch for the repair"
   fi
 
-  # The branch is cut before the launch so the launch lands on the phase's own
-  # branch. A gitsync branch failure is a repair: the resume continues on the
-  # branch the checkout has, and the next tick retries the cut. A group
-  # declaration the resume cannot read is the resume's own reservation and
-  # still stops it.
-  if ! _drive_resume_branch "$number" "$rel"; then
-    resume_refuse "$target" "$RESUME_REFUSAL"
-    return 1
-  fi
-
   if ! resume_fence "$number"; then
     resume_refuse "$target" "$RESUME_REFUSAL"
     return 1
@@ -190,6 +189,17 @@ _drive_resume() {   # [<number>]
   # record_claim_fence.
   if ! record_claim_fence "$number" "$reservation_id" "$reservation_generation"; then
     resume_refuse "$target" "the claim fence was refused for phase $number; no launch (see the driver log)"
+    return 1
+  fi
+
+  # The branch is cut after the fence and before the launch: the branch step
+  # proves the reservation file record_claim_fence just wrote, and the launch
+  # lands on the phase's own branch. A gitsync branch failure is a repair: the
+  # resume continues on the branch the checkout has, and the next tick retries
+  # the cut. A fence refusal, or a group declaration the resume cannot read,
+  # stops it.
+  if ! _drive_resume_branch "$number" "$rel"; then
+    resume_refuse "$target" "$RESUME_REFUSAL"
     return 1
   fi
 
