@@ -22,6 +22,7 @@ import datetime as _datetime
 from pathlib import Path
 from typing import Any
 
+from argus.gitsync.git import ConfigError
 from argus.gitsync.group_publication import _load_phase_reservation
 
 
@@ -79,7 +80,8 @@ def phase_fence(root: str | Path, phase: int | str, mode: str) -> dict[str, Any]
     fence must not run work the board already finished.
 
     A reservation that cannot be read is ``COORDINATION_UNAVAILABLE``, not a
-    quiet pass. Reading nothing is not proof of ownership, and treating it as
+    quiet pass. Clean alone can recover a missing file after the board proves
+    the phase has no live claim. Reading nothing is not proof of ownership, and treating it as
     one would let a phase with no reservation at all write wherever it liked.
 
     ``clean`` passes when no other machine holds a live claim on the phase's
@@ -93,8 +95,15 @@ def phase_fence(root: str | Path, phase: int | str, mode: str) -> dict[str, Any]
     except Exception as exc:  # noqa: BLE001 - normalize boundary errors
         return _refusal(mode, phase, "COORDINATION_UNAVAILABLE", str(exc))
     try:
-        reservation = _load_phase_reservation(root, int(str(phase)))
         store = ReservationStore(root)
+        try:
+            reservation = _load_phase_reservation(root, int(str(phase)))
+        except ConfigError as exc:
+            if mode != "clean" or not isinstance(exc.__cause__, FileNotFoundError):
+                raise
+            if store.has_live_claim(phase):
+                return _refusal(mode, phase, "FENCED", "phase is held by a live claim")
+            return None
         try:
             store.assert_owner(reservation)
         except ReservationFenced:
