@@ -73,6 +73,8 @@ def _owned_issue_branch(root: Path) -> tuple[str, ReservationStore, Any] | None:
     reservation = load_issue_reservation(root, number)
     store = ReservationStore(root, issues=True)
     store.assert_owner(reservation)
+    if branch != issue_branch(number, issue_scope(root, number)[1][1]):
+        raise ConfigError("checked-out branch is not the claimed issue branch")
     return branch, store, reservation
 
 

@@ -9,7 +9,7 @@ import pytest
 
 from argus.board.reservations import ReservationFenced
 from argus.gitsync import issue_modes
-from argus.gitsync.git import git
+from argus.gitsync.git import ConfigError, git
 from argus.gitsync.issue_modes import (
     mode_issue_branch,
     mode_issue_checkpoint,
@@ -84,3 +84,15 @@ def test_issue_checkpoint_commits_with_the_wip_subject_past_an_ignore_rule(
     assert result["ok"], result
     subject = git(publication.remote, "log", "-1", "--format=%s", branch)[1]
     assert subject == f"wip: work in progress on {branch}"
+
+
+def test_issue_open_pr_refuses_a_branch_the_claim_did_not_record(
+    publication: Publication, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _token, task = publication.claim(1234567)
+    mode_issue_branch(publication.root, 1234567, task)
+    git(publication.root, "checkout", "-q", "-b", "issue/1234567-other")
+    calls = _record_open_pr(monkeypatch)
+    with pytest.raises(ConfigError, match="claimed issue branch"):
+        mode_issue_open_pr(publication.root)
+    assert calls == []
