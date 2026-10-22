@@ -186,6 +186,13 @@ gitsync_land_leftovers() {
   # A whole-tree sweep lands some phases and skips others and still exits 0,
   # so the exit code cannot carry a skip. Say each one; never change the rc.
   "$PYTHON" -c 'import json,sys
+
+
+def clean(value):
+    text = "".join(ch if ch.isprintable() else " " for ch in str(value))
+    return " ".join(text.split())
+
+
 try:
     with open(sys.argv[1], encoding="utf-8") as handle:
         data = json.load(handle)
@@ -203,13 +210,13 @@ if not unreadable:
             if not isinstance(one, dict):
                 unreadable = True
                 continue
-            print("skip", *(" ".join(str(one.get(k, "")).split()) for k in ("phase", "state", "error")), sep="\t")
+            print("skip", clean(one.get("phase", "")), clean(one.get("state", "")), clean(one.get("error", "")), sep="\t")
 if unreadable:
     print("unreadable")' \
     "$RUN_DIR/run-state-leftovers.json" 2>/dev/null |
     while IFS=$'\t' read -r kind first second third; do
       case "$kind" in
-        skip) log_changed "leftovers-skipped-$first" "leftover run state skipped phase $first ($second): $third" ;;
+        skip) log_changed "leftovers-skipped-$first" "leftover run state skipped phase $first ($second): $(cap_length "$(flatten_one_line "$third")" 500)" ;;
         unreadable) log_changed "leftovers-unreadable" "could not read the clean sweep result at $RUN_DIR/run-state-leftovers.json; skipped phases are unknown" ;;
       esac
     done || true

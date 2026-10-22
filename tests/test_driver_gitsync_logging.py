@@ -138,3 +138,25 @@ def test_empty_result_file_is_logged_as_unreadable(tmp_path: Path) -> None:
     stdout, lines = _run(tmp_path, "")
     assert "land_rc=0" in stdout
     assert any(line.endswith("skipped phases are unknown") for line in lines)
+
+
+def test_control_characters_are_removed_and_the_reason_is_capped(
+    tmp_path: Path,
+) -> None:
+    reason = "a\nb\tc\rd\x1b[2K\x1b[31mRED\x07e" + "x" * 5000
+    payload = {
+        "ok": True,
+        "mode": "clean",
+        "state": "PARTIAL",
+        "skipped": [{"phase": "100040", "state": "FENCED", "error": reason}],
+    }
+    _stdout, lines = _run(tmp_path, json.dumps(payload))
+    skip_lines = [line for line in lines if "leftover run state skipped phase" in line]
+    assert len(skip_lines) == 1
+    assert "\x1b" not in skip_lines[0]
+    assert "\x07" not in skip_lines[0]
+    # The line is the driver's 25-byte timestamp, the 50-byte message prefix, the
+    # 500-byte cap, and cap_length's 26-byte truncation marker: 601 bytes here,
+    # against over 5000 for the uncapped reason.
+    assert "[+4521 bytes truncated]" in skip_lines[0]
+    assert len(skip_lines[0]) <= 620
