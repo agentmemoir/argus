@@ -93,7 +93,7 @@ if not __package__:
     )
 from argus import conventions
 from argus.config.loader import ConfigError as ArgusConfigError
-from argus.gitsync.git import ConfigError, summarize
+from argus.gitsync.git import ConfigError
 from argus.gitsync.issue_modes import issue_mode
 from argus.gitsync.merge import sync_one
 from argus.gitsync.mode_branch import mode_branch
@@ -104,6 +104,7 @@ from argus.gitsync.modes import mode_published, mode_ready, mode_tidy, result_ex
 from argus.gitsync.pr_signal_reply import mode_signal_reply
 from argus.gitsync.pr_signals import mode_signals
 from argus.gitsync.publish_phase import publish_phase
+from argus.gitsync.report import config_error, summarize
 from argus.gitsync.selftest import self_test
 from argus.gitsync.sync import mode_resync, sync_all
 
@@ -330,17 +331,7 @@ def main() -> int:
         else:
             out = sync_all(Path(args.root).resolve(), args.mode, branch=args.branch)
     except (ArgusConfigError, ConfigError, ValueError) as e:
-        print(
-            json.dumps(
-                {
-                    "ok": False,
-                    "mode": args.mode,
-                    "state": "CONFIG_ERROR",
-                    "error": str(e),
-                },
-                indent=2,
-            )
-        )
+        print(json.dumps(config_error(args.mode, e), indent=2))
         return 2
     print(json.dumps(out, indent=2))
     return result_exit_code(out)

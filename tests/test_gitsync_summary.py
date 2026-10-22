@@ -10,8 +10,13 @@ deferred step.
 
 from typing import Any
 
-from argus.gitsync.git import WARNING_EXCERPT_CHARS, blocked, degraded, summarize
 from argus.gitsync.modes import result_exit_code
+from argus.gitsync.report import (
+    WARNING_EXCERPT_CHARS,
+    blocked,
+    degraded,
+    summarize,
+)
 
 REPO = "/work/board"
 

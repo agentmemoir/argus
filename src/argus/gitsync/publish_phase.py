@@ -12,7 +12,6 @@ from argus.gitsync.git import (
     current_branch,
     dirty_paths,
     is_git_repo,
-    summarize,
 )
 from argus.gitsync.group_body import update_group_pull_request
 from argus.gitsync.group_publication import (
@@ -24,6 +23,7 @@ from argus.gitsync.group_review import (
     _group_pending,
     mark_group_pull_request_ready,
 )
+from argus.gitsync.report import summarize
 from argus.gitsync.review import open_predecessor
 from argus.gitsync.runstate import (
     commit_leftover_run_state,

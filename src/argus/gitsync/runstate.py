@@ -16,18 +16,20 @@ from argus.conventions import (
 from argus.gitsync.git import (
     ConfigError,
     _is_private_path,
-    blocked,
-    degraded,
     dirty_paths,
     git,
-    git_failure,
     git_toplevel,
     is_git_repo,
     is_run_state,
     resolve_upstream,
-    summarize,
 )
 from argus.gitsync.merge import sync_one
+from argus.gitsync.report import (
+    blocked,
+    degraded,
+    git_failure,
+    summarize,
+)
 from argus.gitsync.runstate_artifacts import (
     ENGINE_WRITTEN_RUN_ARTIFACTS,
     is_engine_written_run_artifact,

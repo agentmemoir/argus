@@ -8,13 +8,15 @@ from typing import Any
 
 from argus.gitsync.git import (
     current_branch,
-    degraded,
     dirty_paths,
     integration_branch,
     resolve_upstream,
-    summarize,
 )
 from argus.gitsync.issue_paths import issue_number
+from argus.gitsync.report import (
+    degraded,
+    summarize,
+)
 
 
 def tidy_issue_checkout(root: str | Path) -> dict[str, Any]:

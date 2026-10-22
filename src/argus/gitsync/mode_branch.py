@@ -7,12 +7,16 @@ from typing import Any
 
 from argus.gitsync.branch import branch_phase_checkouts
 from argus.gitsync.fence import phase_fence
-from argus.gitsync.git import git, integration_branch, summarize
+from argus.gitsync.git import (
+    git,
+    integration_branch,
+)
 from argus.gitsync.paths import (
     assert_group_branch_unique,
     assert_phase_branch_unique,
     group_branch,
 )
+from argus.gitsync.report import summarize
 from argus.gitsync.review import open_predecessor
 
 

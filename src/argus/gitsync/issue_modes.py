@@ -15,11 +15,8 @@ from argus.gitsync.branch import branch_phase_checkouts
 from argus.gitsync.git import (
     ConfigError,
     current_branch,
-    degraded,
     git,
-    git_failure,
     integration_branch,
-    summarize,
 )
 from argus.gitsync.group_publication import _push_one
 from argus.gitsync.issue_paths import (
@@ -32,6 +29,11 @@ from argus.gitsync.issue_paths import (
 from argus.gitsync.issue_runstate import mode_issue_clean
 from argus.gitsync.issue_tidy import mode_issue_tidy
 from argus.gitsync.publish_issue import publish_issue
+from argus.gitsync.report import (
+    degraded,
+    git_failure,
+    summarize,
+)
 from argus.gitsync.sync import sync_all
 
 

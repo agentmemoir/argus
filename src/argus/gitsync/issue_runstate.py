@@ -9,13 +9,10 @@ from typing import Any
 
 from argus import conventions
 from argus.gitsync.git import (
-    degraded,
     dirty_paths,
     git,
-    git_failure,
     integration_branch,
     resolve_upstream,
-    summarize,
 )
 from argus.gitsync.group_publication import _push_one
 from argus.gitsync.issue_paths import (
@@ -25,6 +22,11 @@ from argus.gitsync.issue_paths import (
     private_layout,
 )
 from argus.gitsync.merge import sync_one
+from argus.gitsync.report import (
+    degraded,
+    git_failure,
+    summarize,
+)
 
 
 def commit_issue_state(

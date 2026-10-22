@@ -8,7 +8,7 @@ from typing import Any
 
 from argus.conventions import board_repo, runs_dir
 from argus.gitsync.fence import phase_fence
-from argus.gitsync.git import is_git_repo, summarize
+from argus.gitsync.git import is_git_repo
 from argus.gitsync.group_publication import (
     _group_all_published,
     _member_published,
@@ -16,6 +16,7 @@ from argus.gitsync.group_publication import (
 from argus.gitsync.group_review import _group_pending, mark_group_pull_request_ready
 from argus.gitsync.publish import mark_phase_published
 from argus.gitsync.receipts import _phase_run_entries, phase_receipt
+from argus.gitsync.report import summarize
 from argus.gitsync.tidy import return_to_integration, tidy_published_checkout
 
 

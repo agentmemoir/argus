@@ -6,16 +6,18 @@ from pathlib import Path
 from typing import Any
 
 from argus.gitsync.git import (
-    blocked,
     current_branch,
-    degraded,
     git,
-    git_failure,
     integration_branch,
     is_git_repo,
 )
 from argus.gitsync.group_publication import _group_all_published
 from argus.gitsync.receipts import receipt_for_branch
+from argus.gitsync.report import (
+    blocked,
+    degraded,
+    git_failure,
+)
 
 
 def tidy_published_checkout(

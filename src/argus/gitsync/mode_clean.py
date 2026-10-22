@@ -8,18 +8,20 @@ from typing import Any, cast
 from argus.gitsync.fence import phase_fence
 from argus.gitsync.git import (
     ConfigError,
-    degraded,
     dirty_paths,
     git,
-    git_failure,
     integration_branch,
     is_git_repo,
     push_moved,
     resolve_upstream,
-    summarize,
 )
 from argus.gitsync.modes import _run_phase_numbers
 from argus.gitsync.receipts import phase_receipt
+from argus.gitsync.report import (
+    degraded,
+    git_failure,
+    summarize,
+)
 from argus.gitsync.runstate import (
     _commit_and_push_run_state,
     _phase_run_pathspec,

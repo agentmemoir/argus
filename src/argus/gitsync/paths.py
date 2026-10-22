@@ -14,7 +14,8 @@ from argus.conventions import (
 from argus.conventions import (
     phases_folder as _phases_folder,
 )
-from argus.gitsync.git import ConfigError, degraded
+from argus.gitsync.git import ConfigError
+from argus.gitsync.report import degraded
 
 # A phase branch is named from the behaviour in the phase's phases file, and
 # never from its number. The branch is pushed to the public repository, where

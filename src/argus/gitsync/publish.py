@@ -7,8 +7,11 @@ from pathlib import Path
 from typing import Any
 
 from argus.conventions import phase_run_dir
-from argus.gitsync.git import blocked, degraded
 from argus.gitsync.receipts import phase_receipt
+from argus.gitsync.report import (
+    blocked,
+    degraded,
+)
 from argus.gitsync.runstate import (
     _commit_and_push_run_state,
     _phase_run_pathspec,

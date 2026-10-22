@@ -12,8 +12,8 @@ import pytest
 from argus import conventions
 from argus.gitsync import mode_clean
 from argus.gitsync.branch import ensure_phase_branch
-from argus.gitsync.git import summarize
 from argus.gitsync.mode_clean import mode_checkpoint
+from argus.gitsync.report import summarize
 from argus.gitsync.selftest_fixture import BOARD_REL, _configure_self_test, _init_remote
 
 BRANCH = "feature/group-cache-warm"

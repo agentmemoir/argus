@@ -10,10 +10,8 @@ from typing import Any, cast
 from argus.conventions import board_repo, phase_run_dir
 from argus.gitsync.git import (
     ConfigError,
-    blocked,
     current_branch,
     git,
-    git_failure,
     integration_branch,
     push_moved,
     resolve_upstream,
@@ -24,6 +22,10 @@ from argus.gitsync.receipts import (
     _published_head,
     phase_receipt,
     pull_request_ref,
+)
+from argus.gitsync.report import (
+    blocked,
+    git_failure,
 )
 from argus.gitsync.review import open_predecessor
 from argus.gitsync.runstate import commit_leftover_run_state, runstate_repo

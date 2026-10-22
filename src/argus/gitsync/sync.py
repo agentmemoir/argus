@@ -8,19 +8,21 @@ from typing import Any
 from argus.conventions import board_repo, phases_repo
 from argus.gitsync.git import (
     FETCH_TIMEOUT_S,
-    blocked,
     classify,
     configured_remote_urls,
     current_branch,
-    degraded,
     git,
-    git_failure,
     integration_branch,
     is_git_repo,
     resolve_upstream,
-    summarize,
 )
 from argus.gitsync.merge import _fast_forward, _merge, sync_one
+from argus.gitsync.report import (
+    blocked,
+    degraded,
+    git_failure,
+    summarize,
+)
 from argus.gitsync.runstate import runstate_repo
 
 

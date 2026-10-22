@@ -7,15 +7,17 @@ from typing import Any
 
 from argus.conventions import board_repo
 from argus.gitsync.git import (
-    blocked,
     current_branch,
-    degraded,
     dirty_paths,
     git,
-    git_failure,
     integration_branch,
     is_git_repo,
     resolve_upstream,
+)
+from argus.gitsync.report import (
+    blocked,
+    degraded,
+    git_failure,
 )
 
 

@@ -17,7 +17,6 @@ from argus.gitsync.git import (
     dirty_paths,
     git,
     resolve_upstream,
-    summarize,
 )
 from argus.gitsync.group_publication import _push_one
 from argus.gitsync.issue_paths import (
@@ -27,6 +26,7 @@ from argus.gitsync.issue_paths import (
     load_issue_reservation,
 )
 from argus.gitsync.issue_runstate import commit_issue_state
+from argus.gitsync.report import summarize
 from argus.gitsync.runstate import ENGINE_WRITTEN_RUN_ARTIFACTS
 from argus.gitsync.sync import mode_resync, sync_all
 from argus.issues.claims import snapshot
