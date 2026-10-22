@@ -19,6 +19,8 @@ STOP_ALLOWLIST = r"""
     driver/lib-driver-abandon.sh	exit_nonzero	fn:abandon_cmd|exit 1#4
     driver/lib-driver-abandon.sh	exit_nonzero	fn:abandon_cmd|exit 1 ;;#1
     driver/lib-driver-abandon.sh	exit_nonzero	fn:abandon_cmd|exit 1#5
+    driver/lib-driver-abandon.sh	exit_nonzero	fn:abandon_cmd|exit 1#6
+    driver/lib-driver-abandon.sh	exit_nonzero	fn:abandon_cmd|exit 1#7
     driver/lib-driver-check.sh	return_nonzero	fn:check|return 1#1
     driver/lib-driver-check.sh	return_nonzero	fn:check|return 1#2
     driver/lib-driver-config.sh	return_nonzero	fn:phases_dir_is_local|*) return 1 ;;#1
@@ -40,11 +42,14 @@ STOP_ALLOWLIST = r"""
     driver/lib-driver-drive.sh	return_nonzero	fn:_drive|reconcile_pending_reviews || return 1#1
     driver/lib-driver-drive.sh	return_nonzero	fn:_drive|return 1#1
     driver/lib-driver-drive.sh	drive_rc_nonzero	fn:_drive_cut_branch|tidy_published_checkout "$number" || { _DRIVE_RC=1; return 0; }#1
+    driver/lib-driver-drive.sh	drive_rc_nonzero	fn:_drive_cut_branch|_DRIVE_RC=1#1
     driver/lib-driver-control.sh	halt_marker	fn:stop|printf 'stopped by operator at %s\n' "$(ts)" >"$HALT"#1
     driver/lib-driver-control.sh	return_nonzero	fn:stop|return 1#1
     driver/lib-driver-control.sh	return_nonzero	fn:stop|return 1#2
     driver/lib-driver-control.sh	return_nonzero	fn:release|return 1#1
     driver/lib-driver-control.sh	return_nonzero	fn:release|return 1#2
+    driver/lib-driver-control.sh	return_nonzero	fn:release|return 1#3
+    driver/lib-driver-control.sh	return_nonzero	fn:release|return 1#4
     driver/lib-driver-dryrun.sh	drive_rc_zero_refusal	fn:_drive_dry_run|{ _DRIVE_RC=0; return 0; }#1
     driver/lib-driver-dryrun.sh	drive_rc_zero_refusal	fn:_drive_dry_run|{ _DRIVE_RC=0; return 0; }#2
     driver/lib-driver-dryrun.sh	drive_rc_zero_refusal	fn:_drive_dry_run|{ _DRIVE_RC=0; return 0; }#3
@@ -74,6 +79,7 @@ STOP_ALLOWLIST = r"""
     driver/lib-driver-log.sh	return_nonzero	fn:cap_last_byte|printf -v byte '%d' "'$last" || return 1#1
     driver/lib-driver-maintenance.sh	return_nonzero	fn:reconcile_pending_reviews|tidy_published_checkout || return 1#1
     driver/lib-driver-resume.sh	return_nonzero	fn:_drive_resume_branch|return 1#1
+    driver/lib-driver-resume.sh	return_nonzero	fn:_drive_resume_branch|return 1 ;;#1
     driver/lib-driver-resume.sh	resume_refuse	fn:_drive_resume|resume_refuse "$target" "no phase file found for phase $number"#1
     driver/lib-driver-resume.sh	return_nonzero	fn:_drive_resume|return 1#1
     driver/lib-driver-resume.sh	resume_refuse	fn:_drive_resume|resume_refuse "$target" "the halt record $HALT_RECORD is missing or malformed"#1
@@ -95,12 +101,14 @@ STOP_ALLOWLIST = r"""
     driver/lib-driver-resume.sh	exit_nonzero	fn:resume_cmd|exit 1#2
     driver/lib-driver-resume.sh	exit_nonzero	fn:resume_cmd|exit 1#3
     driver/lib-driver-run.sh	return_nonzero	fn:record_claim|return 1#1
+    driver/lib-driver-run.sh	return_nonzero	fn:record_claim|return 1#2
     driver/lib-driver-run.sh	return_nonzero	fn:claim_read_fields|[ -s "$1" ] || return 1#1
     driver/lib-driver-run.sh	return_nonzero	fn:claim_read_fields|IFS= read -r line <"$1" || return 1#1
     driver/lib-driver-run.sh	halt_marker	fn:on_stop|"${work_kind:-phase}" "$CUR_PHASE" "$rc" "$(ts)" >"$HALT"#1
     driver/lib-driver-run.sh	return_nonzero	fn:run_session|session_claim_start_running "$number" || return 1#1
     driver/lib-driver-run.sh	halt_marker	fn:run_session|"${work_kind:-phase}" "$number" "$rc" "${state:-unknown}" "$(ts)" >"$HALT"#1
     driver/lib-driver-run.sh	return_nonzero	fn:tmux_busy|return 1#1
+    driver/lib-driver-select-flow.sh	return_nonzero	fn:_drive_choose_selection|return 1#1
     driver/lib-driver-select-flow.sh	drive_rc_nonzero	fn:_drive_choose_selection|{ _DRIVE_RC=1; return 0; }#1
     driver/lib-driver-select-flow.sh	drive_rc_zero_refusal	fn:_drive_choose_selection|{ _DRIVE_RC=0; return 0; }#1
     driver/lib-driver-select-flow.sh	drive_rc_nonzero	fn:_drive_choose_selection|{ _DRIVE_RC=1; return 0; }#2
@@ -144,6 +152,7 @@ STOP_ALLOWLIST = r"""
     gitsync/fence.py	ok_false	fn:_refusal|"ok": False,#1
     gitsync/git.py	raise_config	fn:git|raise ConfigError("git is not on PATH") from exc#1
     gitsync/git.py	blocked_call	fn:blocked|def blocked(info: dict[str, Any], reason: str, **extra: Any) -> dict[str, Any]:#1
+    gitsync/group_body.py	ok_false	fn:update_group_pull_request|"ok": False,#1
     gitsync/group_publication.py	raise_config	fn:_declared_group|raise ConfigError(#1
     gitsync/group_publication.py	raise_config	fn:_write_publication_receipt|raise ConfigError(f"phase run directory is missing: {run_dir}")#1
     gitsync/group_publication.py	raise_config	fn:_write_publication_receipt|raise ConfigError(#1
@@ -153,7 +162,6 @@ STOP_ALLOWLIST = r"""
     gitsync/group_publication.py	blocked_call	fn:_push_one|return blocked(#1
     gitsync/group_review.py	ok_false	fn:mark_group_pull_request_ready|"ok": False,#1
     gitsync/group_review.py	ok_false	fn:mark_group_pull_request_ready|"ok": False,#2
-    gitsync/group_review.py	ok_false	fn:update_group_pull_request|"ok": False,#1
     gitsync/issue_modes.py	raise_config	fn:mode_issue_branch|raise ConfigError("branch task filename differs from the frozen issue task")#1
     gitsync/issue_modes.py	ok_false	fn:issue_mode|"ok": False,#1
     gitsync/issue_modes.py	raise_config	fn:_issue_mode|raise ConfigError(#1

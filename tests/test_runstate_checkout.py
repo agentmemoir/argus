@@ -9,6 +9,7 @@ and a phase whose run directory sits in a different repository than
 ``driver.runs`` still commits where the directory lives.
 """
 
+import json
 from pathlib import Path
 from typing import Any
 
@@ -28,6 +29,16 @@ PHASE = 100761
 
 def _configure(monkeypatch: pytest.MonkeyPatch, **settings: Any) -> None:
     monkeypatch.setattr(conventions, "_settings", {"commands.git": "git", **settings})
+
+
+class _Board:
+    """Stands in for the board; the fence is proven in test_driver_write_fences."""
+
+    def __init__(self, *_args: object, **_kwargs: object) -> None:
+        pass
+
+    def assert_owner(self, reservation: dict[str, Any]) -> dict[str, Any]:
+        return dict(reservation)
 
 
 def test_runstate_repo_setting_overrides_the_derived_checkout(
@@ -82,6 +93,17 @@ def test_mode_clean_commits_in_the_checkout_that_holds_the_run_dir(
     run_dir = board / "runs" / f"phase-{PHASE:06d}"
     run_dir.mkdir(parents=True)
     (run_dir / "run.json").write_text('{"state":"completed"}\n')
+    (run_dir / "reservation.json").write_text(
+        json.dumps(
+            {
+                "machine_id": "server-01",
+                "reservation_id": "rsv-fixture",
+                "generation": 1,
+                "phase": f"{PHASE:06d}",
+            }
+        )
+    )
+    monkeypatch.setattr("argus.board.reservations.ReservationStore", _Board)
 
     result = mode_clean(public, PHASE)
     assert result["ok"], result
