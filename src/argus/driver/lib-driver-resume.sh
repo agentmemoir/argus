@@ -37,26 +37,12 @@ PY
 # failure is a repair, not a stop: the phase keeps its claim, the resume
 # continues on the branch the checkout already has, and the next tick retries
 # the cut. A fence refusal is not a failure: the board does not confirm this
-# machine owns the phase, so the resume stops and launches nothing.
-#
-# Every member of a group publishes on the group's one branch, and a resume has
-# no selection to read the group from: the tick's resume branch runs before the
-# selector, and `--resume` never selects at all. The group comes from the phase's
-# own document, which is where the publication reads it, so the branch step below
-# names the branch the rest of the group's joins expect instead of stacking a
-# branch of this member's own. A declaration that cannot be read is refused
-# rather than read as "runs alone": a resume that cannot see the group would cut
-# exactly the wrong branch. The refusal carries the phases reader's own words,
-# which name the document to fix, and the way out of the refusal, because a
-# halted line stays halted until the declaration is fixed or the phase is parked.
+# machine owns the phase, so the resume stops and launches nothing. The group
+# comes from _drive_resume_group, which runs before the fence.
 _drive_resume_branch() {   # <number> <rel>
   local number="$1" rel="$2" phases_name
   if [ -n "${DRIVER_STUB_COORDINATION:-}" ]; then
     return 0
-  fi
-  if [ "${work_kind:-phase}" != issue ] && ! group_take_declared "$number"; then
-    RESUME_REFUSAL="the reservation group of phase $number could not be read (${GROUP_ERROR:-no reason reported}); fix the group declaration, or abandon the phase"
-    return 1
   fi
   phases_name="$(basename "$rel" .md)"
   if ! "$PYTHON" "$ARGUS/gitsync/main.py" "${ARGUS_CONFIG_ARGS[@]}" --root "$REPO" \
@@ -80,6 +66,32 @@ _drive_resume_branch() {   # <number> <rel>
     group_record_branch "$(selection_value branch <"$RUN_DIR/phase-branch.json")"
   fi
   log "${work_kind:-phase} $number: $(branch_state_line "$RUN_DIR/phase-branch.json")"
+  return 0
+}
+
+# Read the phase's reservation group before the fence.
+#
+# Every member of a group publishes on the group's one branch, and a resume has
+# no selection to read the group from: the tick's resume branch runs before the
+# selector, and `--resume` never selects at all. The group comes from the phase's
+# own document, which is where the publication reads it, so the branch step
+# names the branch the rest of the group's joins expect instead of stacking a
+# branch of this member's own. A declaration that cannot be read is refused
+# rather than read as "runs alone": a resume that cannot see the group would cut
+# exactly the wrong branch. The refusal carries the phases reader's own words,
+# which name the document to fix, and the way out of the refusal, because a
+# halted line stays halted until the declaration is fixed or the phase is parked.
+# It is a local read, so it runs before the fence: a resume that will refuse on
+# the declaration takes no reservation, and the refusal names the document.
+_drive_resume_group() {   # <number>
+  local number="$1"
+  if [ -n "${DRIVER_STUB_COORDINATION:-}" ]; then
+    return 0
+  fi
+  if [ "${work_kind:-phase}" != issue ] && ! group_take_declared "$number"; then
+    RESUME_REFUSAL="the reservation group of phase $number could not be read (${GROUP_ERROR:-no reason reported}); fix the group declaration, or abandon the phase"
+    return 1
+  fi
   return 0
 }
 
@@ -174,6 +186,11 @@ _drive_resume() {   # [<number>]
       log "resume gate: ${work_kind:-phase} $number moved on since the halt: $reason; continuing on its own branch for the repair"
   fi
 
+  if ! _drive_resume_group "$number"; then
+    resume_refuse "$target" "$RESUME_REFUSAL"
+    return 1
+  fi
+
   if ! resume_fence "$number"; then
     resume_refuse "$target" "$RESUME_REFUSAL"
     return 1
@@ -196,8 +213,7 @@ _drive_resume() {   # [<number>]
   # proves the reservation file record_claim_fence just wrote, and the launch
   # lands on the phase's own branch. A gitsync branch failure is a repair: the
   # resume continues on the branch the checkout has, and the next tick retries
-  # the cut. A fence refusal, or a group declaration the resume cannot read,
-  # stops it.
+  # the cut. A fence refusal stops it.
   if ! _drive_resume_branch "$number" "$rel"; then
     resume_refuse "$target" "$RESUME_REFUSAL"
     return 1

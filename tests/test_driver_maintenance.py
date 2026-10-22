@@ -140,6 +140,7 @@ printf 'manual halt\\n' >"$HALT"
 resume_phase_file_of() { printf 'phase-100020-fixture.md'; }
 phase_run_dir() { printf '%s' "$RUN_DIR"; }
 phase_state() { printf blocked; }
+_drive_resume_group() { :; }
 _drive_resume_branch() { :; }
 resume_fence() { RESUME_RESERVATION_ID=rsv-fixture; RESUME_RESERVATION_GENERATION=2; }
 record_claim() { :; }

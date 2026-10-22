@@ -78,7 +78,7 @@ STOP_ALLOWLIST = r"""
     driver/lib-driver-launch.sh	drive_rc_nonzero	fn:_drive_launch||| { notify "${work_kind:-phase} $number failed to launch in tmux"; { _DRIVE_RC=1; return 0; }; }#1
     driver/lib-driver-log.sh	return_nonzero	fn:cap_last_byte|printf -v byte '%d' "'$last" || return 1#1
     driver/lib-driver-maintenance.sh	return_nonzero	fn:reconcile_pending_reviews|tidy_published_checkout || return 1#1
-    driver/lib-driver-resume.sh	return_nonzero	fn:_drive_resume_branch|return 1#1
+    driver/lib-driver-resume.sh	return_nonzero	fn:_drive_resume_group|return 1#1
     driver/lib-driver-resume.sh	return_nonzero	fn:_drive_resume_branch|return 1 ;;#1
     driver/lib-driver-resume.sh	resume_refuse	fn:_drive_resume|resume_refuse "$target" "no phase file found for phase $number"#1
     driver/lib-driver-resume.sh	return_nonzero	fn:_drive_resume|return 1#1
@@ -94,6 +94,8 @@ STOP_ALLOWLIST = r"""
     driver/lib-driver-resume.sh	return_nonzero	fn:_drive_resume|return 1#6
     driver/lib-driver-resume.sh	resume_refuse	fn:_drive_resume|resume_refuse "$target" "the launch failed; see $RUN_DIR/driver.log"#1
     driver/lib-driver-resume.sh	return_nonzero	fn:_drive_resume|return 1#7
+    driver/lib-driver-resume.sh	resume_refuse	fn:_drive_resume|resume_refuse "$target" "$RESUME_REFUSAL"#3
+    driver/lib-driver-resume.sh	return_nonzero	fn:_drive_resume|return 1#8
     driver/lib-driver-resume.sh	exit_nonzero	fn:resume_cmd|exit 2 ;;#1
     driver/lib-driver-resume.sh	exit_nonzero	fn:resume_cmd|driver_lock_take || { printf 'argus: another driver instance holds the lock; try again\n' >&2; exit 1; }#1
     driver/lib-driver-resume.sh	exit_nonzero	fn:resume_cmd|exit 1#1
