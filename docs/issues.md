@@ -18,6 +18,8 @@ The report names the preference, skip reasons, capped results, the next issue, a
 
 Every candidate must be open, pass the author trust gate, and match each label group.
 
+The default `trusted-associations` is `OWNER` and `MEMBER`. An account that joins the organization is trusted on the next read of issues, with no config change, so review this list when membership changes. To drop `MEMBER`, set the list to `OWNER` only. An empty list is a configuration error. `trusted-authors` adds named logins to the trusted set.
+
 A group with `cardinality: one` must match exactly one configured label. A `many` group must match at least one.
 
 `difficulty-order` must contain the same labels as the difficulty group.
