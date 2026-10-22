@@ -9,7 +9,10 @@ and a phase whose run directory sits in a different repository than
 ``driver.runs`` still commits where the directory lives.
 """
 
+import getpass
 import json
+import os
+import socket
 from pathlib import Path
 from typing import Any
 
@@ -170,6 +173,39 @@ def test_commit_leftover_run_state_without_a_checkout_is_blocked(
     assert any(
         "no run-state checkout" in reason for reason in result["repos"][0]["blockers"]
     ), result
+
+
+def test_commit_failure_names_no_identity_without_the_host_name(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _configure(monkeypatch)
+    remote, runstate = _init_remote(tmp_path, "runstate")
+    # A checkout with no identity is the failure that makes git write the local
+    # user and machine name into its stderr, so this is the one the warning must
+    # report without copying it.
+    for key in ("user.email", "user.name"):
+        assert git(runstate, "config", "--unset", key)[0] == 0
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", os.devnull)
+    monkeypatch.setenv("GIT_CONFIG_SYSTEM", os.devnull)
+    run_dir = runstate / "runs" / f"phase-{PHASE:06d}"
+    run_dir.mkdir(parents=True)
+    (run_dir / "run.json").write_text('{"state":"completed"}\n')
+    project = tmp_path / "project"
+    project.mkdir()
+    _configure(
+        monkeypatch,
+        **{"repo-root": project, "driver.runs": runstate / "runs"},
+    )
+    result = commit_leftover_run_state(project, "close out")
+    warning = result["repos"][0]["warning"]
+    assert result["repos"][0]["action"] == "continued", result
+    assert "git exit" in warning, result
+    assert "git has no user identity" in warning, result
+    assert "unable to auto-detect" not in warning, result
+    for leaked in (getpass.getuser(), socket.gethostname()):
+        assert leaked not in warning, result
+    assert "@" not in warning, result
+    assert git(remote, "log", "--oneline", "main")[1].count("\n") == 0
 
 
 def test_commit_leftover_run_state_commits_in_a_valid_checkout(
