@@ -9,6 +9,7 @@ from typing import Any
 
 from argus import conventions
 from argus.gitsync.git import (
+    _git_failure,
     degraded,
     dirty_paths,
     git,
@@ -24,7 +25,6 @@ from argus.gitsync.issue_paths import (
     private_layout,
 )
 from argus.gitsync.merge import sync_one
-from argus.gitsync.runstate import _git_failure
 
 
 def commit_issue_state(

@@ -179,7 +179,8 @@ def return_to_integration(repo: str | Path, base: str | None = None) -> dict[str
     rc, _, err = git(repo, "checkout", base)
     if rc != 0:
         return degraded(
-            info, f"could not check out {base!r}: {err.strip()}; retrying next tick"
+            info,
+            f"{_git_failure(f'check out of {base!r}', rc, err)}; retrying next tick",
         )
     return dict(
         info,

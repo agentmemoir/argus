@@ -8,6 +8,7 @@ from typing import Any, cast
 from argus.gitsync.fence import phase_fence
 from argus.gitsync.git import (
     ConfigError,
+    _git_failure,
     degraded,
     dirty_paths,
     git,
@@ -21,7 +22,6 @@ from argus.gitsync.modes import _run_phase_numbers
 from argus.gitsync.receipts import phase_receipt
 from argus.gitsync.runstate import (
     _commit_and_push_run_state,
-    _git_failure,
     _phase_run_pathspec,
     runstate_repo,
 )
@@ -151,7 +151,7 @@ def mode_clean(root: str | Path, phase: int | str | None = None) -> dict[str, An
                 "mode": "clean",
                 "repos": [],
                 "pathspec": "runs",
-                "summary": "clean sync ok: no leftover run state",
+                "summary": "clean sync: no leftover run state",
             }
         results: list[dict[str, Any]] = []
         skipped: list[dict[str, Any]] = []
@@ -194,7 +194,7 @@ def mode_clean(root: str | Path, phase: int | str | None = None) -> dict[str, An
             "mode": "clean",
             "repos": [],
             "pathspec": "runs",
-            "summary": f"clean sync ok: no private checkout at {repo}",
+            "summary": f"clean sync: no private checkout at {repo}",
         }
     res = _commit_and_push_run_state(
         repo, f"runs: close out phase {int(phase):06d} run state", pathspec=pathspec

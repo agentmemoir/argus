@@ -14,6 +14,7 @@ from argus.board.reservations import (
 from argus.gitsync.branch import branch_phase_checkouts
 from argus.gitsync.git import (
     ConfigError,
+    _git_failure,
     current_branch,
     degraded,
     git,
@@ -31,7 +32,6 @@ from argus.gitsync.issue_paths import (
 from argus.gitsync.issue_runstate import mode_issue_clean
 from argus.gitsync.issue_tidy import mode_issue_tidy
 from argus.gitsync.publish_issue import publish_issue
-from argus.gitsync.runstate import _git_failure
 from argus.gitsync.sync import sync_all
 
 

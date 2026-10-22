@@ -380,6 +380,11 @@ def summarize(results: list[dict[str, Any]], mode: str) -> str:
     """
     parts: list[str] = []
     for r in results:
+        # A stop is printed as a stop, even when the same result also carries a
+        # deferred step: its blockers are the news, the warning is not.
+        if not r.get("ok"):
+            parts.append(f"{r['repo']}: BLOCKED ({'; '.join(r.get('blockers', []))})")
+            continue
         warning = str(r.get("warning") or "")
         if warning:
             excerpt = _warning_excerpt(warning)
@@ -388,10 +393,8 @@ def summarize(results: list[dict[str, Any]], mode: str) -> str:
                 if excerpt
                 else f"{r['repo']}: continued"
             )
-        elif r.get("ok"):
-            parts.append(f"{r['repo']}: {r.get('action', 'ok')}")
         else:
-            parts.append(f"{r['repo']}: BLOCKED ({'; '.join(r.get('blockers', []))})")
+            parts.append(f"{r['repo']}: {r.get('action', 'ok')}")
     # A blocked result outranks a degraded one: nothing it deferred is worth
     # reporting next to a stop.
     if not all(r.get("ok") for r in results):
