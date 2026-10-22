@@ -21,7 +21,7 @@ def test_a_sweep_that_skips_every_phase_is_not_ok(
 ) -> None:
     root = make_repo(tmp_path, monkeypatch)
     make_claim(root, monkeypatch)
-    foreign_claim(root)
+    foreign_claim(root, monkeypatch)
     (root / "runs" / f"phase-{PHASE}" / "ledger.json").write_text("{}\n")
     before = head_sha(root)
     out = mode_clean(root)

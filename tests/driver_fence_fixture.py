@@ -45,7 +45,12 @@ def make_repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     git(root, "add", "-A")
     git(root, "commit", "-qm", "fixture")
     conventions.configure(
-        {"commands.git": "git", "repo-root": str(root), "driver.runs": "runs"}
+        {
+            "commands.git": "git",
+            "repo-root": str(root),
+            "driver.runs": "runs",
+            "machine.id": "server-01",
+        }
     )
     return root
 
@@ -124,13 +129,21 @@ def make_claim(root: Path, monkeypatch: pytest.MonkeyPatch, phase: int = PHASE) 
     git(root, "commit", "-qm", "run state")
 
 
-def foreign_claim(root: Path, phase: int = PHASE) -> None:
-    """A reservation file of another machine, whose id no board record carries."""
+def foreign_claim(
+    root: Path, monkeypatch: pytest.MonkeyPatch, phase: int = PHASE
+) -> None:
+    """Another machine owns the phase and its saved reservation."""
     path = run_path(root, phase) / "reservation.json"
     data = json.loads(path.read_text())
     data["reservation_id"] = "rsv-foreign"
     data["machine_id"] = "server-02"
     path.write_text(json.dumps(data))
+    monkeypatch.setattr("argus.board.reservations.ReservationStore", RecordedBoard)
+    monkeypatch.setattr(
+        RecordedBoard,
+        "records",
+        {f"{phase:06d}": record(machine_id="server-02", reservation_id="rsv-foreign")},
+    )
 
 
 def head_sha(root: Path) -> str:

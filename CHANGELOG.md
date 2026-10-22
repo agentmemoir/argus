@@ -4,6 +4,8 @@ Notable changes to this project are documented here. The format follows [Keep a 
 
 ## [Unreleased]
 
+- Phase write fences and publication use the local machine identity when reading a saved reservation. A copied reservation from another machine cannot grant ownership or let clean land its live run state. ([#183](https://github.com/agentmemoir/argus/issues/183))
+
 - Single-phase and whole-tree `gitsync --mode clean` land a phase's run state when its reservation file is missing and the board shows no live claim. A published receipt also needs that board proof when the reservation is missing. A live claim, an unavailable board, or a malformed or unreadable reservation file still blocks that recovery. ([#173](https://github.com/agentmemoir/argus/issues/173))
 
 - A resume stops with no launch when the board fence refuses the branch cut, and the resume now cuts the branch after it renews or takes its fence and records its claim. A group declaration the resume cannot read is still refused before the fence, so that refusal takes no reservation. Every other branch failure is still a repair.
