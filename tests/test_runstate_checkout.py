@@ -22,6 +22,7 @@ from argus import conventions
 from argus.board.core import CoordinationUnavailable
 from argus.board.files import _runstate_remote  # pyright: ignore[reportPrivateUsage]
 from argus.gitsync.git import git
+from argus.gitsync.merge import sync_one
 from argus.gitsync.mode_clean import mode_clean
 from argus.gitsync.runstate import commit_leftover_run_state
 from argus.gitsync.runstate import runstate_repo as derived_runstate_repo
@@ -32,6 +33,14 @@ PHASE = 100761
 
 def _configure(monkeypatch: pytest.MonkeyPatch, **settings: Any) -> None:
     monkeypatch.setattr(conventions, "_settings", {"commands.git": "git", **settings})
+
+
+def _none(*_args: object, **_kwargs: object) -> None:
+    """Stand in for a fence that holds and for an absent run-state checkout."""
+
+
+def _run_pathspec(*_args: object, **_kwargs: object) -> str:
+    return f"runs/phase-{PHASE:06d}"
 
 
 class _Board:
@@ -116,7 +125,7 @@ def test_mode_clean_commits_in_the_checkout_that_holds_the_run_dir(
 
     sweep = mode_clean(public)
     assert sweep["ok"], sweep
-    assert "no leftover run state" in sweep["summary"], sweep
+    assert sweep["summary"] == "clean sync ok: no leftover run state", sweep
     assert git(board, "status", "--porcelain")[1] == ""
 
 
@@ -157,6 +166,22 @@ def test_runstate_remote_uses_a_configured_name_even_when_absent(
     _remote, runstate = _init_remote(tmp_path, "runstate")
     _configure(monkeypatch, **{"runstate.remote": "mirror"})
     assert _runstate_remote(runstate, "origin") == "mirror"
+
+
+def test_clean_phase_without_a_checkout_still_reads_as_ok(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A no-work summary is a clean result, so it starts with the same ``ok``
+    # head word ``summarize`` prints; anything else reads as a stop.
+    plain = tmp_path / "plain"
+    (plain / "runs").mkdir(parents=True)
+    _configure(monkeypatch, **{"repo-root": plain, "driver.runs": plain / "runs"})
+    monkeypatch.setattr("argus.gitsync.mode_clean.phase_fence", _none)
+    monkeypatch.setattr("argus.gitsync.mode_clean._phase_run_pathspec", _run_pathspec)
+    monkeypatch.setattr("argus.gitsync.mode_clean.runstate_repo", _none)
+    result = mode_clean(plain, PHASE)
+    assert result["ok"], result
+    assert result["summary"] == "clean sync ok: no private checkout at None", result
 
 
 def test_commit_leftover_run_state_without_a_checkout_is_blocked(
@@ -206,6 +231,34 @@ def test_commit_failure_names_no_identity_without_the_host_name(
         assert leaked not in warning, result
     assert "@" not in warning, result
     assert git(remote, "log", "--oneline", "main")[1].count("\n") == 0
+
+
+def test_fetch_failure_names_no_identity_without_the_host_name(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _configure(monkeypatch)
+    _remote, runstate = _init_remote(tmp_path, "runstate")
+    # A checkout with no identity is what makes git write the local user and
+    # machine name as '<user>@<host>.(none)', so the remote helper prints that
+    # shape and the stored detail must not carry it.
+    for key in ("user.email", "user.name"):
+        assert git(runstate, "config", "--unset", key)[0] == 0
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", os.devnull)
+    monkeypatch.setenv("GIT_CONFIG_SYSTEM", os.devnull)
+    leak = f"{getpass.getuser()}@{socket.gethostname()}"
+    monkeypatch.setenv("GIT_SSH_COMMAND", f"sh -c 'echo {leak} >&2; exit 1'")
+    url = "ssh://example/repo.git"
+    assert git(runstate, "remote", "set-url", "origin", url)[0] == 0
+    result = sync_one(runstate, "start")
+    assert result["ok"] is True, result
+    assert result["action"] == "continued", result
+    assert "the next tick retries" in result["warning"], result
+    detail = str(result["detail"])
+    assert "git exit" in detail, result
+    assert "unable to auto-detect" not in detail, result
+    for leaked in (getpass.getuser(), socket.gethostname()):
+        assert leaked not in detail, result
+    assert "@" not in detail, result
 
 
 def test_commit_leftover_run_state_commits_in_a_valid_checkout(

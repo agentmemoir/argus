@@ -7,16 +7,18 @@ from typing import Any, cast
 
 from argus.gitsync.git import (
     FETCH_TIMEOUT_S,
-    blocked,
     classify,
-    degraded,
     dirty_paths,
     git,
-    git_failure,
     is_git_repo,
     overlapping_paths,
     resolve_upstream,
     subjects,
+)
+from argus.gitsync.report import (
+    blocked,
+    degraded,
+    git_failure,
 )
 
 
@@ -191,7 +193,9 @@ def sync_one(
     rc, _, err = git(repo, "fetch", "--prune", remote, timeout=FETCH_TIMEOUT_S)
     if rc != 0:
         return degraded(
-            info, f"git fetch {remote} failed; the next tick retries", detail=err
+            info,
+            f"git fetch {remote} failed; the next tick retries",
+            detail=git_failure(f"fetch from {remote}", rc, err),
         )
     upstream = f"{remote}/{remote_branch}"
     rc, tip, _ = git(repo, "rev-parse", "--verify", upstream)

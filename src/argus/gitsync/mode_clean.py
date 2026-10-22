@@ -153,7 +153,7 @@ def mode_clean(root: str | Path, phase: int | str | None = None) -> dict[str, An
                 "mode": "clean",
                 "repos": [],
                 "pathspec": "runs",
-                "summary": "clean sync: no leftover run state",
+                "summary": "clean sync ok: no leftover run state",
             }
         results: list[dict[str, Any]] = []
         skipped: list[dict[str, Any]] = []
@@ -196,7 +196,7 @@ def mode_clean(root: str | Path, phase: int | str | None = None) -> dict[str, An
             "mode": "clean",
             "repos": [],
             "pathspec": "runs",
-            "summary": f"clean sync: no private checkout at {repo}",
+            "summary": f"clean sync ok: no private checkout at {repo}",
         }
     res = _commit_and_push_run_state(
         repo, f"runs: close out phase {int(phase):06d} run state", pathspec=pathspec
