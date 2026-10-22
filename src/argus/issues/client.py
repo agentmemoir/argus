@@ -4,6 +4,7 @@
 
 import hashlib
 import re
+import sys
 import tempfile
 from pathlib import Path
 from typing import Any, cast
@@ -250,5 +251,23 @@ class IssueClient:
                 "--body-file",
                 str(body_file),
             ],
+            parse=False,
+        )
+
+    def add_label(self, number: int, label: str) -> None:
+        """Add one label to an issue; create it first when the repo lacks it."""
+        number = issue_number(number)
+        listed = self.call(
+            ["label", "list", "--repo", self.repo, "--search", label]
+            + ["--limit", "100", "--json", "name"]
+        )
+        names = {
+            str(item.get("name")).casefold() for item in objects(listed, "label list")
+        }
+        if label.casefold() not in names:
+            self.call(["label", "create", label, "--repo", self.repo], parse=False)
+            print(f"issue claim: created label {label!r}", file=sys.stderr)
+        self.call(
+            ["issue", "edit", str(number), "--repo", self.repo, "--add-label", label],
             parse=False,
         )

@@ -231,8 +231,9 @@ def test_issue_tick_claims_one_issue_and_launches_only_the_stub(
     task = next((board / "tasks").glob("issue-100001-*.md"))
     assert "<<<UNTRUSTED-DATA-BEGIN id=issue-100001-body" in task.read_text("utf-8")
     calls = [call["argv"] for call in argv(backlog)]
-    # The board record is the claim; Argus makes no GitHub write for it.
-    assert not any(call[:2] == ["issue", "edit"] for call in calls)
+    # The board record is the claim; the claim label is its one GitHub write.
+    edits = [call for call in calls if call[:2] == ["issue", "edit"]]
+    assert [call[-2:] for call in edits] == [["--add-label", "accepted"]]
     assert not any(call["remote_in_env"] for call in argv(backlog))
 
 

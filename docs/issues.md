@@ -26,7 +26,11 @@ A group with `cardinality: one` must match exactly one configured label. A `many
 
 `category` filters by one label and chooses the newest survivor. `search` uses GitHub's best-match order. `category` and `search` can also filter other preferences.
 
-Numeric issue order breaks ties. Blocked, claimed, and escalated work is skipped and counted. An issue whose job failed and left its claim is skipped too, so the line continues to another issue while the failed claim waits to resume on its own.
+Numeric issue order breaks ties. Blocked, claimed, and escalated work is skipped and counted. An issue that carries the claim label (`claim-label`, default `accepted`) is skipped and counted as `claim_label`, so a person can keep an issue by adding the label. When the board holds or has expired a claim on that issue, the board decides instead: a held claim resumes, and an expired claim can be claimed again.
+
+After the fresh read and the trust check, Argus reserves the issue on the board and then adds the claim label to it on GitHub. If the repository has no label with that name, Argus creates it once and logs `created label`. A failed label write is logged and keeps the claim, because the board reservation is the claim. Argus never removes the label.
+
+Removing the label does not always let Argus pick the issue again. Argus picks it again only when the board has no record for it, or when its expired claim has passed the cooldown. A held claim is left to the board, even without the label. Argus does not pick again an issue whose board record is completed, rejected, or accepted. On this machine, an issue whose job failed and left its claim is skipped too, so the line continues to another issue while the failed claim waits to resume on its own.
 
 A red check on an open issue pull request gets a CI repair round before new work, as for a phase pull request. Only the branch an issue run folder records is read, and only a pull request from this repository: a fork pull request with the same branch name is ignored. See [CI repair rounds](running.md#ci-repair-rounds).
 
@@ -53,5 +57,6 @@ A red check on an open issue pull request gets a CI repair round before new work
 | `list-limit` | Candidate limit; defaults to 200. |
 | `timeout` | Bound per GitHub call in seconds; defaults to 30. |
 | `claim-attempts` | Claim attempts after races; defaults to 3. |
+| `claim-label` | The one label that marks a claimed issue; defaults to `accepted`. It is not the board status `accepted`. |
 
 `machine.settings-file` names an optional JSONC overlay.

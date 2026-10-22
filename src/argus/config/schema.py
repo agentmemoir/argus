@@ -103,6 +103,7 @@ SCHEMA = (
     Field("repair.pipeline", "path", "optional"),
     Field("repair.attempts", "int", "optional"),
     Field("repair.wait", "int", "optional"),
+    Field("issues.claim-label", "str", "optional"),
     Field("estimate.factors-file", "path", "optional"),
     Field("estimate.ideal-days", "str", "optional"),
 )
@@ -183,6 +184,7 @@ ISSUES_DEFAULTS: dict[str, object] = {
     "issues.list-limit": 200,
     "issues.timeout": 30,
     "issues.claim-attempts": 3,
+    "issues.claim-label": "accepted",
 }
 
 # Three rounds: now, after 10 minutes, after 20 minutes. Then Needs You.
