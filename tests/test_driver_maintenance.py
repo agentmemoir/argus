@@ -6,6 +6,7 @@ import copy
 import json
 import subprocess
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -285,7 +286,7 @@ READY_LINE = "a group's shared pull request is ready; its checks passed"
 def test_a_ready_sweep_with_no_new_transition_logs_nothing(tmp_path: Path) -> None:
     # The first sweep readies the pull request. The second sweep reads READY
     # too, but only because it skipped that pull request: nothing new to log.
-    answer = {
+    answer: dict[str, Any] = {
         "ok": True,
         "mode": "ready",
         "state": "READY",
