@@ -40,7 +40,7 @@ PY
 # It cannot stop the line and never gates a launch: a group that is held or
 # still waiting is logged and the next tick asks again.
 reconcile_group_ready() {
-  local state=""
+  local state="" newly=""
   # The self-test has no receipts, board or network.
   [ -z "${DRIVER_STUB_COORDINATION:-}" ] || return 0
   mkdir -p "$RUN_DIR"
@@ -49,7 +49,15 @@ reconcile_group_ready() {
   state="$(selection_value state <"$RUN_DIR/group-ready.json" 2>/dev/null || true)"
   case "$state" in
     READY)
-      log "a group's shared pull request is ready; its checks passed"
+      # A pull request that an earlier tick readied is skipped, and its result
+      # still reads READY. Log only a result that readied one on this tick.
+      newly="$("$PYTHON" -c 'import json, sys
+print(any(r.get("state") == "READY" and not r.get("skipped")
+          for r in json.load(sys.stdin).get("results", [])))' \
+        <"$RUN_DIR/group-ready.json" 2>/dev/null || true)"
+      if [ "$newly" = True ]; then
+        log "a group's shared pull request is ready; its checks passed"
+      fi
       ;;
     HELD)
       log_changed group-ready "group ready: a group pull request is held; the next tick retries"

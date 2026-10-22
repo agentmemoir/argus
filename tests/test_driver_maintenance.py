@@ -112,15 +112,18 @@ _drive --merge-check-only
 
 
 def test_idle_stop_does_not_hold_stale_current_file(tmp_path: Path) -> None:
-    # A current file with no claim proves nothing, so the stop refuses before it
-    # writes anything and the stale current file never becomes a hold.
+    # A current file with no claim proves nothing, so the stop halts the line
+    # but the stale current file never becomes a hold. Once the marker is
+    # cleared, the next tick selects work: nothing is left for a resume to
+    # consume.
     output = shell(
         tmp_path,
         'printf "100020\\n" >"$CURRENT"\nrc=0; stop || rc=$?\n'
-        'printf "stop_rc=%s\\n" "$rc"\n_drive\n',
+        'printf "stop_rc=%s\\n" "$rc"\n'
+        '[ -f "$HALT" ] && printf "halted=yes\\n"\nrm "$HALT"\n_drive\n',
     )
-    assert "stop_rc=1" in output
-    assert not (tmp_path / "halted").exists()
+    assert "stop_rc=0" in output
+    assert "halted=yes" in output
     assert not (tmp_path / "stopped-claim").exists()
     assert "SELECT" in (tmp_path / "events").read_text().splitlines()
 
@@ -274,3 +277,43 @@ def test_help_explains_maintenance_mode(tmp_path: Path) -> None:
     )
     assert "--merge-check-only" in result.stdout
     assert "without selecting or launching work" in result.stdout
+
+
+READY_LINE = "a group's shared pull request is ready; its checks passed"
+
+
+def test_a_ready_sweep_with_no_new_transition_logs_nothing(tmp_path: Path) -> None:
+    # The first sweep readies the pull request. The second sweep reads READY
+    # too, but only because it skipped that pull request: nothing new to log.
+    answer = {
+        "ok": True,
+        "mode": "ready",
+        "state": "READY",
+        "results": [
+            {
+                "ok": True,
+                "phase": "100010",
+                "pull_request": "https://example.test/pull/1",
+                "detail": "",
+                "state": "READY",
+            }
+        ],
+    }
+    (tmp_path / "fresh.json").write_text(json.dumps(answer), encoding="utf-8")
+    answer["results"][0]["skipped"] = True
+    (tmp_path / "skipped.json").write_text(json.dumps(answer), encoding="utf-8")
+    shell(
+        tmp_path,
+        "SWEEP=fresh.json\n"
+        "python_transport() {\n"
+        '  case "$1" in\n'
+        '    */gitsync/main.py) cat "$TEST_ROOT/$SWEEP" ;;\n'
+        '    *) "$TEST_PYTHON" "$@" ;;\n'
+        "  esac\n"
+        "}\n"
+        "reconcile_group_ready\n"
+        "SWEEP=skipped.json\n"
+        "reconcile_group_ready\n",
+    )
+    events = (tmp_path / "events").read_text(encoding="utf-8").splitlines()
+    assert events.count(READY_LINE) == 1
