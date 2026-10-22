@@ -140,3 +140,15 @@ def test_an_untrusted_issue_is_never_labelled(configured: Configured) -> None:
     fixture_update(repo, rows=[issue(authorAssociation="NONE")])
     assert IssuesSource(repo).select(store=board)["state"] == "NO_PHASE"
     assert calls(repo, "issue", "edit") == [] and calls(repo, "label") == []
+
+
+def test_a_removed_label_retries_a_released_issue(configured: Configured) -> None:
+    # A failed run gives its claim back, so no record is left and the label
+    # alone holds the issue. Finished work keeps a terminal record the board
+    # refuses to claim again.
+    repo, board = configured
+    fixture_update(repo, rows=[labelled(100001, "accepted")])
+    assert IssuesSource(repo).select(reserve=False, store=board)["state"] == "NO_PHASE"
+    fixture_update(repo, rows=[labelled(100001)])
+    result = IssuesSource(repo).select(reserve=False, store=board)
+    assert result["state"] == "AVAILABLE" and result["issue"] == "100001"
