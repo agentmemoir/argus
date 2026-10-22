@@ -20,14 +20,20 @@ def _run(
     tmp_path: Path,
     rows: list[dict[str, Any]] | None,
     now: float,
+    launched: bool = True,
 ) -> tuple[int, dict[str, Any]]:
     def checks(*_a: object) -> tuple[list[dict[str, Any]] | None, int, str]:
         return rows, 1, ""
 
     monkeypatch.setattr(repair_cli, "gh_pull_request_checks", checks)
     argv = ["--pull-request", PR, "--run-dir", str(tmp_path)]
-    rc = repair_cli.main([*argv, "--attempts", "2", "--wait", "600"], now=now)
-    return rc, json.loads(capsys.readouterr().out)
+    argv += ["--attempts", "2", "--wait", "600"]
+    rc = repair_cli.main(argv, now=now)
+    out = json.loads(capsys.readouterr().out)
+    if launched and out["action"] == "repair":
+        assert repair_cli.main([*argv, "--launched"], now=now) == 0
+        assert json.loads(capsys.readouterr().out) == {"action": "counted"}
+    return rc, out
 
 
 def test_red_repairs_then_waits_then_escalates_once(
@@ -47,6 +53,17 @@ def test_red_repairs_then_waits_then_escalates_once(
     assert out["action"] == "escalate"
     assert out["message"].startswith(f"Needs You. {PR} is still red after 2")
     assert _run(monkeypatch, capsys, tmp_path, RED, 9999.0)[1] == {"action": "none"}
+
+
+def test_a_round_that_never_launched_is_never_counted(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+) -> None:
+    for now in (1000.0, 1600.0, 9999.0):
+        _rc, out = _run(monkeypatch, capsys, tmp_path, RED, now, launched=False)
+        assert out["action"] == "repair"
+    assert not (tmp_path / "repair-7.json").exists()
 
 
 def test_unread_checks_fail_closed_and_record_nothing(

@@ -6,8 +6,10 @@ The driver runs it the way it runs ``board/remedy.py``: ``"$PYTHON" "$ARGUS/
 gitsync/repair_cli.py" ...``. It reads the checks once, decides with
 ``repair_round.decide``, and prints one JSON object: ``action`` (``none``,
 ``wait``, ``repair``, ``escalate``), plus ``task`` on repair and ``message``
-on escalate. A repair round is counted when it is decided, before the launch,
-so a launch that fails still uses one round and the count stays bounded.
+on escalate. A repair decision writes the task file but counts nothing. The
+driver runs the command again with ``--launched`` once the repair run has
+started, and only that call counts the round, so a launch that fails can never
+use up a round or lead to a false escalation.
 
 A checks read that fails exits 3 and changes nothing: an unread pull request
 is not a green one.
@@ -44,6 +46,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--run-dir", required=True, type=Path)
     parser.add_argument("--attempts", required=True, type=int)
     parser.add_argument("--wait", required=True, type=int)
+    parser.add_argument(
+        "--launched", action="store_true", help="count one round; read nothing"
+    )
     return parser
 
 
@@ -92,10 +97,15 @@ def save_failed_log(
 
 def run(args: argparse.Namespace, now: float) -> tuple[int, dict[str, object]]:
     key = _key(args.pull_request)
+    record_path = args.run_dir / f"repair-{key}.json"
+    if args.launched:
+        record = repair_round.load_record(record_path)
+        record["attempts"] = [*record.get("attempts", []), now]
+        repair_round.save_record(record_path, record)
+        return 0, {"action": "counted"}
     rows, code, _detail = gh_pull_request_checks(args.run_dir, args.pull_request)
     if rows is None:
         return 3, {"action": "unread", "exit_code": code}
-    record_path = args.run_dir / f"repair-{key}.json"
     record = repair_round.load_record(record_path)
     action, due = repair_round.decide(
         rows, record, now=now, attempts=args.attempts, wait=args.wait
@@ -111,8 +121,6 @@ def run(args: argparse.Namespace, now: float) -> tuple[int, dict[str, object]]:
             repair_round.task_text(args.pull_request, failing, tail, log_path),
             encoding="utf-8",
         )
-        record["attempts"] = [*record.get("attempts", []), now]
-        repair_round.save_record(record_path, record)
         out["task"] = str(task)
     elif action == "escalate":
         record["escalated"] = True
