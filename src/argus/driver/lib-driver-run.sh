@@ -206,17 +206,20 @@ if not unreadable:
     elif skipped is not None and not isinstance(skipped, list):
         unreadable = True
     elif isinstance(skipped, list):
-        for one in skipped:
+        for index, one in enumerate(skipped):
             if not isinstance(one, dict):
                 unreadable = True
                 continue
-            print("skip", clean(one.get("phase", "")), clean(one.get("state", "")), clean(one.get("error", "")), sep="\t")
+            print("skip", index,
+                  clean(one.get("phase", "")) or "unknown",
+                  clean(one.get("state", "")) or "unknown",
+                  clean(one.get("error", "")), sep="\t")
 if unreadable:
     print("unreadable")' \
     "$RUN_DIR/run-state-leftovers.json" 2>/dev/null |
-    while IFS=$'\t' read -r kind first second third; do
+    while IFS=$'\t' read -r kind index phase state reason; do
       case "$kind" in
-        skip) log_changed "leftovers-skipped-$first" "leftover run state skipped phase $first ($second): $(cap_length "$(flatten_one_line "$third")" 500)" ;;
+        skip) log_changed "leftovers-skipped-$index" "leftover run state skipped phase $phase ($state): $(cap_length "$(flatten_one_line "$reason")" 500)" ;;
         unreadable) log_changed "leftovers-unreadable" "could not read the clean sweep result at $RUN_DIR/run-state-leftovers.json; skipped phases are unknown" ;;
       esac
     done || true

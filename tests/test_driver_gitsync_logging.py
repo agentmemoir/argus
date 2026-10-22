@@ -81,6 +81,7 @@ def _run(tmp_path: Path, output: str, rc: int = 0) -> tuple[str, list[str]]:
         check=False,
     )
     assert done.returncode == 0, done.stderr
+    assert done.stderr == "", done.stderr
     log_path = tmp_path / "driver.log"
     lines = (
         log_path.read_text(encoding="utf-8").splitlines() if log_path.exists() else []
@@ -95,12 +96,44 @@ def test_each_skipped_phase_is_logged_once_and_rc_stays_zero(
     stdout, lines = _run(tmp_path, json.dumps(payload))
     assert "land_rc=0" in stdout
     skip_lines = [line for line in lines if "leftover run state skipped phase" in line]
-    assert len(skip_lines) == len(SKIPPED)
-    for entry in SKIPPED:
-        matches = [line for line in skip_lines if entry["phase"] in line]
-        assert len(matches) == 1
-        assert entry["state"] in matches[0]
-        assert entry["error"] in matches[0]
+    expected = [
+        f"leftover run state skipped phase {entry['phase']} ({entry['state']}): {entry['error']}"
+        for entry in SKIPPED
+    ]
+    assert len(skip_lines) == len(expected)
+    for message in expected:
+        assert any(line.endswith(message) for line in skip_lines)
+
+
+def test_empty_phase_and_state_are_named_unknown(tmp_path: Path) -> None:
+    payload = {
+        "ok": True,
+        "mode": "clean",
+        "state": "PARTIAL",
+        "skipped": [{"phase": "", "state": "", "error": "boom"}],
+    }
+    stdout, lines = _run(tmp_path, json.dumps(payload))
+    assert "land_rc=0" in stdout
+    assert any(
+        line.endswith("leftover run state skipped phase unknown (unknown): boom")
+        for line in lines
+    )
+    assert (tmp_path / "runs" / "log-last-leftovers-skipped-0").exists()
+
+
+def test_path_like_phase_stays_inside_the_run_directory(tmp_path: Path) -> None:
+    payload = {
+        "ok": True,
+        "mode": "clean",
+        "state": "PARTIAL",
+        "skipped": [{"phase": "../../escaped", "state": "FENCED", "error": "boom"}],
+    }
+    _stdout, lines = _run(tmp_path, json.dumps(payload))
+    assert any(
+        line.endswith("leftover run state skipped phase ../../escaped (FENCED): boom")
+        for line in lines
+    )
+    assert (tmp_path / "runs" / "log-last-leftovers-skipped-0").exists()
 
 
 def test_clean_sweep_logs_no_skip_line(tmp_path: Path) -> None:
