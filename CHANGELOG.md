@@ -4,6 +4,8 @@ Notable changes to this project are documented here. The format follows [Keep a 
 
 ## [Unreleased]
 
+- CI runs the whole test suite in the affected-checks job, so a test in any file can fail the build. A guard test fails if the workflow narrows back to a hand-written file list that misses a test file. ([#170](https://github.com/agentmemoir/argus/issues/170))
+
 - A resume stops with no launch when the board fence refuses the branch cut, and the resume now cuts the branch after it renews or takes its fence and records its claim. A group declaration the resume cannot read is still refused before the fence, so that refusal takes no reservation. Every other branch failure is still a repair.
 
 - `abandon` and `resume` are tested against a real local board and the real `assert_owner` fence. Under another machine's live claim, each refuses and leaves the claim and the board unchanged; under this machine's fence, abandon parks the phase and resume passes the fence check.
