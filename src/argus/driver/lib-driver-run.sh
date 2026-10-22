@@ -154,9 +154,19 @@ on_stop() {
 # still answer ok, because a sibling phase landed. The exit code cannot carry
 # either fact, so the driver reads the file it just wrote and says both itself.
 #
-# A file that is missing, empty, unreadable, or not a JSON object logs nothing.
-# The caller has already logged a non-zero exit for a run that failed, and a
-# result the driver cannot parse is not a second fault worth a line.
+# A file that is missing, empty, unreadable, not a regular file, or not a JSON
+# object logs nothing. The caller has already logged a non-zero exit for a run
+# that failed, and a result the driver cannot parse is not a second fault worth
+# a line.
+#
+# The file is one this driver just wrote, and its whole answer is a few hundred
+# bytes, so 256 KiB is a ceiling no real result reaches: thousands of skipped
+# entries fit under it. A larger file, or a path that is not a regular file, is
+# not a result this driver wrote and says nothing. The size is read through
+# Python and not through `stat` or `wc`, because those are not commands the
+# installed-command test provides (see the session-log offset in run_session),
+# and the read stops at the ceiling, so the size of the file cannot decide how
+# long the tick waits.
 #
 # The warning is git's own stderr, which spans lines, so it is flattened and cut
 # the way every other free-text reason in this driver is. The reader prints one
@@ -165,11 +175,20 @@ on_stop() {
 # warning would otherwise be read as the start of a second record.
 gitsync_log_result() {
   local file="$1" label="$2" kind first second third
+  [ -f "$file" ] || return 0
   [ -s "$file" ] || return 0
-  "$PYTHON" -c 'import json,sys
+  "$PYTHON" -c 'import json,os,sys
+ceiling = 262144
 try:
-    data = json.load(open(sys.argv[1]))
-except (OSError, ValueError):
+    if os.path.getsize(sys.argv[1]) > ceiling:
+        raise SystemExit(0)
+    with open(sys.argv[1], "rb") as handle:
+        raw = handle.read(ceiling + 1)
+except OSError:
+    raise SystemExit(0)
+try:
+    data = json.loads(raw)
+except ValueError:
     raise SystemExit(0)
 if not isinstance(data, dict):
     raise SystemExit(0)

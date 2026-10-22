@@ -161,6 +161,28 @@ def test_a_result_with_neither_warning_nor_skipped_logs_nothing(
     assert lines == []
 
 
+@pytest.mark.parametrize("call", ["clean", "land"])
+def test_an_oversized_result_file_logs_nothing(tmp_path: Path, call: str) -> None:
+    # 256 KiB is the ceiling. A file above it is not a result this driver wrote,
+    # so it says nothing and the function still answers 0.
+    payload = json.dumps({"ok": True, "warning": "commit of run state failed " * 10000})
+    assert len(payload.encode()) > 262144, len(payload.encode())
+    out, lines = run_clean(tmp_path, payload, call)
+    assert "rc=0" in out
+    assert lines == []
+
+
+def test_a_result_just_under_the_ceiling_still_logs_its_warning(
+    tmp_path: Path,
+) -> None:
+    payload = json.dumps({"ok": True, "warning": "commit of run state failed " * 8000})
+    assert len(payload.encode()) < 262144, len(payload.encode())
+    out, lines = run_clean(tmp_path, payload, "land")
+    assert "rc=0" in out
+    assert len(lines) == 1, lines
+    assert "continued in a degraded state" in lines[0]
+
+
 def test_a_failed_run_keeps_its_existing_line_and_returns_zero(tmp_path: Path) -> None:
     out, lines = run_clean(
         tmp_path, json.dumps({"ok": False}), call="land", exit_code=1
