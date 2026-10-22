@@ -138,6 +138,25 @@ record_claim_fence() {
   record_phase_reservation "$1" "$2" "$3"
 }
 
+# A failed local fence must not strand the selected group. The board verifies
+# the exact token again, so a replacement owner's reservation cannot be freed.
+release_refused_claim() {
+  local number="$1" reservation_id="$2" generation="$3"
+  if "$PYTHON" "$ARGUS/board/reservations.py" release-group \
+      "${ARGUS_CONFIG_ARGS[@]}" "${BOARD_KIND_ARGS[@]+"${BOARD_KIND_ARGS[@]}"}" \
+      --repo-root "$REPO" --machine-id "$PHASE_MACHINE_ID" \
+      --reservation-id "$reservation_id" --generation "$generation" \
+      >"$RUN_DIR/claim-refusal-release-$number.json" 2>&1; then
+    if claim_read_fields "$CLAIM" && [ "$CLAIM_NUMBER" = "$number" ] \
+        && [ "$CLAIM_ID" = "$reservation_id" ] && [ "$CLAIM_GEN" = "$generation" ]; then
+      rm -f "$CLAIM"
+    fi
+    log "claim: returned the refused ${work_kind:-phase} $number reservation to the queue"
+  else
+    log "claim: could not return the refused ${work_kind:-phase} $number reservation (see $RUN_DIR/claim-refusal-release-$number.json)"
+  fi
+}
+
 # Write the confirmed claim where the fenced write paths read it.
 #
 # A missing or unwritable fence refuses the caller before its next write.

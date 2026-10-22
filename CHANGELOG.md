@@ -4,6 +4,8 @@ Notable changes to this project are documented here. The format follows [Keep a 
 
 ## [Unreleased]
 
+- A tick that cannot save or prove its selected claim returns that reservation to the queue. It keeps another machine's replacement claim and records a refused cleanup. ([#183](https://github.com/agentmemoir/argus/issues/183))
+
 - Release repairs a missing or stale phase reservation from its proved claim before saving partial work. It keeps the claim when that file cannot be saved. Issue claims leave phase reservation files unchanged. ([#183](https://github.com/agentmemoir/argus/issues/183))
 
 - Phase write fences and publication use the local machine identity when reading a saved reservation. A copied reservation from another machine cannot grant ownership or let clean land its live run state. ([#183](https://github.com/agentmemoir/argus/issues/183))
