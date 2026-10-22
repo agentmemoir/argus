@@ -267,6 +267,8 @@ STOP_ALLOWLIST = r"""
     driver/lib-driver-fence.sh	return_nonzero	fn:record_phase_reservation|[ -n "$dir" ] || return 1#1
     driver/lib-driver-fence.sh	return_nonzero	fn:record_phase_reservation|mkdir -p "$dir" 2>/dev/null || return 1#1
     driver/lib-driver-fence.sh	return_nonzero	fn:record_phase_reservation|return 1#1
+    driver/lib-driver-repair.sh	return_nonzero	fn:repair_worktree_remove|[ -n "$tip" ] || { notify "Repair $key: Argus could not save the edits in $wt, so it kept the worktree. Copy what you need from it; the next tick tries again."; return 1; }#1
+    driver/lib-driver-repair.sh	return_nonzero	fn:repair_worktree_remove||| { notify "Repair $key: Argus could not save the work in $wt, so it kept the worktree. Copy what you need from it; the next tick tries again."; return 1; }#1
     driver/lib-driver-repair.sh	return_nonzero	fn:repair_worktree_add||| { log "repair $key: could not fetch $branch; the next tick retries"; return 1; }#1
     driver/lib-driver-repair.sh	return_nonzero	fn:repair_worktree_add||| { log "repair $key: could not add a worktree for $branch; the next tick retries"; return 1; }#1
     driver/lib-driver-repair.sh	return_nonzero	fn:repair_worktree_add|return 1#1

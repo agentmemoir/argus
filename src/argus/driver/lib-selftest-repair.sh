@@ -88,6 +88,7 @@ PY
   fi
 
   selftest_repair_issue_pr || bad=1
+  selftest_repair_backup || bad=1
 
   git -C "$REPO" push -q origin --delete "$branch" || true
   rm -f "$stub" "$cfg" "$notes" "$REPAIR_PIPELINE" "$RUN_DIR"/repair-77.*
@@ -123,5 +124,34 @@ selftest_repair_issue_pr() {
   fi
   git -C "$REPO" push -q origin --delete "$branch" || true
   rm -f "$glide" "$seen" "$RUN_DIR"/repair-78.* "$RUN_DIR/repair-pid"
+  return "$bad"
+}
+
+# A push the remote refuses, because the branch moved during the round, keeps the
+# agent's commit and its uncommitted edits on a backup ref (hard line 2).
+selftest_repair_backup() {
+  local bad=0 branch=issue/79-moved glide notes ref moved
+  notes="$RUN_DIR/repair-backup-notes"; : >"$notes"
+  notify() { printf '%s\n' "$1" >>"$notes"; }
+  git -C "$REPO" push -q origin "HEAD:refs/heads/$branch" || return 1
+  repair_worktree_add 79 "$branch" || return 1
+  moved="$(git -C "$REPO" -c user.name=t -c user.email=t@t commit-tree 'HEAD^{tree}' -p HEAD -m moved)"
+  git -C "$REPO" push -q origin "$moved:refs/heads/$branch" || return 1
+  glide="$RUN_DIR/repair-glide-commit"
+  printf '#!/bin/sh\ngit -c user.name=t -c user.email=t@t commit -q --allow-empty -m agent\necho edit >repair-edit.txt\n' >"$glide"
+  chmod 700 "$glide"
+  ( CMD_GLIDE="$glide"; PIDFILE="$RUN_DIR/repair-pid"
+    run_repair_session 79 "$RUN_DIR/repair-79.md" "$branch" ) >/dev/null 2>&1
+  ref="$(git -C "$REPO" for-each-ref --format='%(refname)' 'refs/argus/repair-backup/79-*' | head -1)"
+  if [ -n "$ref" ] && [ ! -e "$(repair_worktree 79)" ] && grep -qF "$ref" "$notes" \
+      && git -C "$REPO" cat-file -e "$ref:repair-edit.txt" \
+      && [ "$(git -C "$REPO" log -1 --format=%s "$ref^")" = agent ]; then
+    echo "ok: repair: a refused push keeps the commit and edits on a named backup ref"
+  else
+    echo "FAIL: repair: a refused push lost the work (ref '$ref')"; cat "$notes"; bad=1
+  fi
+  [ -z "$ref" ] || git -C "$REPO" update-ref -d "$ref"
+  git -C "$REPO" push -q origin --delete "$branch" || true
+  rm -f "$glide" "$notes" "$RUN_DIR"/repair-79.* "$RUN_DIR/repair-pid"
   return "$bad"
 }

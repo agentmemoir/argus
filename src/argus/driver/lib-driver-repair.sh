@@ -31,13 +31,29 @@ PY
 
 repair_worktree() { printf '%s/repair-worktree-%s' "$RUN_DIR" "$1"; }
 
-# Remove one repair worktree. Edits or commits that never reached the remote are
-# named in a notice first, so a removal is never silent about lost work.
+# Remove one repair worktree. Work that never reached the remote is saved first
+# (hard line 2): uncommitted edits become one commit on top of HEAD, and a ref
+# under refs/argus/repair-backup/ keeps it. Argus never pushes or deletes that
+# ref. When the backup fails, the worktree stays and the next tick tries again.
 repair_worktree_remove() {
-  local wt="$1" left
-  left="$("$CMD_GIT" -C "$wt" status --porcelain 2>/dev/null | head -1 || true)"
-  left="$left$("$CMD_GIT" -C "$wt" log --oneline --not --remotes 2>/dev/null | head -1 || true)"
-  [ -z "$left" ] || notify "Repair worktree $wt held edits or commits that were not pushed. Argus removed it; the next round starts from the pull request branch."
+  local wt="$1" key ref tip tree
+  key="${wt##*/repair-worktree-}"
+  tip="$("$CMD_GIT" -C "$wt" rev-parse -q --verify HEAD 2>/dev/null || true)"
+  if [ -n "$tip" ] && [ -n "$("$CMD_GIT" -C "$wt" status --porcelain 2>/dev/null | head -1)" ]; then
+    # Plumbing only: no hook runs, and a missing Git identity cannot refuse it.
+    tip="$("$CMD_GIT" -C "$wt" add -A >/dev/null 2>&1 \
+      && tree="$("$CMD_GIT" -C "$wt" write-tree)" \
+      && "$CMD_GIT" -C "$wt" -c user.name=argus -c user.email=argus@localhost \
+        commit-tree "$tree" -p "$tip" -m "argus: repair $key edits that were not committed")" \
+      || tip=""
+    [ -n "$tip" ] || { notify "Repair $key: Argus could not save the edits in $wt, so it kept the worktree. Copy what you need from it; the next tick tries again."; return 1; }
+  fi
+  if [ -n "$tip" ] && [ -n "$("$CMD_GIT" -C "$wt" log --oneline "$tip" --not --remotes 2>/dev/null | head -1)" ]; then
+    ref="refs/argus/repair-backup/$key-$(date +%s)"
+    "$CMD_GIT" -C "$REPO" update-ref "$ref" "$tip" \
+      || { notify "Repair $key: Argus could not save the work in $wt, so it kept the worktree. Copy what you need from it; the next tick tries again."; return 1; }
+    notify "Repair $key: work that was not pushed is saved as $ref (commit ${tip:0:12}). Inspect it with 'git log $ref', and delete the ref when you no longer need it."
+  fi
   "$CMD_GIT" -C "$REPO" worktree remove --force "$wt" >/dev/null 2>&1 || rm -rf "$wt"
   "$CMD_GIT" -C "$REPO" worktree prune >/dev/null 2>&1 || true
 }
@@ -49,7 +65,7 @@ repair_worktree_prune() {
   for wt in "$RUN_DIR"/repair-worktree-*; do
     [ -e "$wt" ] || continue
     log "removing a stale repair worktree: $wt"
-    repair_worktree_remove "$wt"
+    repair_worktree_remove "$wt" || true
   done
 }
 
@@ -175,7 +191,7 @@ run_repair_session() {
       log "repair $key: could not push to $branch (rc=$?)"
     fi
     cd "$REPO" || true
-    repair_worktree_remove "$wt"
+    repair_worktree_remove "$wt" || true
   fi
   tmux_set_title "repair $key done (rc=$rc)"
   rm -f "$PIDFILE"
