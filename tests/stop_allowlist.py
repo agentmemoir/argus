@@ -8,6 +8,8 @@ file cannot reuse another function's row.
 """
 
 STOP_ALLOWLIST = r"""
+    driver/lib-driver-abandon.sh	return_nonzero	fn:abandon_board_reason|case "${DRIVER_STUB_BOARD_FENCE:-}" in fail) return 1 ;; esac#1
+    driver/lib-driver-abandon.sh	return_nonzero	fn:abandon_board_reason|2>"$RUN_DIR/abandon-scan-$1.err")" || return 1#1
     driver/lib-driver-abandon.sh	exit_nonzero	fn:abandon_cmd|exit 2#1
     driver/lib-driver-abandon.sh	exit_nonzero	fn:abandon_cmd|exit 2 ;;#1
     driver/lib-driver-abandon.sh	exit_nonzero	fn:abandon_cmd|exit 2 ;;#2
@@ -18,9 +20,10 @@ STOP_ALLOWLIST = r"""
     driver/lib-driver-abandon.sh	exit_nonzero	fn:abandon_cmd|exit 1#3
     driver/lib-driver-abandon.sh	exit_nonzero	fn:abandon_cmd|exit 1#4
     driver/lib-driver-abandon.sh	exit_nonzero	fn:abandon_cmd|exit 1 ;;#1
+    driver/lib-driver-abandon.sh	exit_nonzero	fn:abandon_cmd|exit 1 ;;#2
+    driver/lib-driver-abandon.sh	exit_nonzero	fn:abandon_cmd|exit 1 ;;#3
     driver/lib-driver-abandon.sh	exit_nonzero	fn:abandon_cmd|exit 1#5
     driver/lib-driver-abandon.sh	exit_nonzero	fn:abandon_cmd|exit 1#6
-    driver/lib-driver-abandon.sh	exit_nonzero	fn:abandon_cmd|exit 1#7
     driver/lib-driver-check.sh	return_nonzero	fn:check|return 1#1
     driver/lib-driver-check.sh	return_nonzero	fn:check|return 1#2
     driver/lib-driver-config.sh	return_nonzero	fn:phases_dir_is_local|*) return 1 ;;#1
@@ -150,6 +153,7 @@ STOP_ALLOWLIST = r"""
     driver/phase-tmux.sh	return_nonzero	fn:tmux_phase_window_interrupt|"$TMUX_BIN" send-keys -t "$wid" C-c 2>/dev/null || return 1#1
     gitsync/branch.py	blocked_call	fn:ensure_phase_branch|return blocked(#1
     gitsync/fence.py	ok_false	fn:_refusal|"ok": False,#1
+    gitsync/fence.py	raise_fenced	fn:phase_fence|raise ReservationFenced(held) from None#1
     gitsync/git.py	raise_config	fn:git|raise ConfigError("git is not on PATH") from exc#1
     gitsync/git.py	blocked_call	fn:blocked|def blocked(info: dict[str, Any], reason: str, **extra: Any) -> dict[str, Any]:#1
     gitsync/group_body.py	ok_false	fn:update_group_pull_request|"ok": False,#1

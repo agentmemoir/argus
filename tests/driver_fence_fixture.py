@@ -2,14 +2,17 @@
 # SPDX-License-Identifier: Apache-2.0
 """The checkout, claim, and stub board that the write-fence cases share."""
 
+import datetime
 import json
 import subprocess
 from pathlib import Path
+from typing import Any, ClassVar
 
 import pytest
 
 from argus import conventions
-from argus.board.core import ReservationFenced
+from argus.board.core import CoordinationUnavailable, ReservationFenced, _phase_key
+from argus.board.store import ReservationStore
 
 PHASE = 100020
 
@@ -59,6 +62,43 @@ class Board:
             raise ReservationFenced(f"{PHASE} is no longer owned by this reservation")
         return dict(reservation)
 
+    def read(self) -> tuple[dict[str, Any], str]:
+        return {"phases": {f"{PHASE:06d}": record()}}, "fixture"
+
+
+def record(**fields: object) -> dict[str, Any]:
+    """The board record of the fixture claim: live, and owned by this machine."""
+    now = datetime.datetime.now(datetime.UTC).isoformat()
+    base: dict[str, Any] = {
+        "status": "running",
+        "machine_id": "server-01",
+        "reservation_id": "rsv-fixture",
+        "generation": 2,
+        "claimed_at": now,
+        "heartbeat_at": now,
+    }
+    return {**base, **fields}
+
+
+class RecordedBoard(ReservationStore):
+    """The real fence over board records a case sets, with no board checkout.
+
+    ``records`` maps a phase key to its record, or is ``None`` for a board that
+    cannot answer. ``assert_owner`` and the clean rule run unchanged.
+    """
+
+    records: ClassVar[dict[str, dict[str, Any]] | None] = {}
+
+    def __init__(self, *_args: object, **_kwargs: object) -> None:
+        self.issues = False
+        self.kind = "phase"
+        self._key = _phase_key
+
+    def read(self) -> tuple[dict[str, Any], str]:
+        if self.records is None:
+            raise CoordinationUnavailable("cannot read coordination state")
+        return {"phases": dict(self.records)}, "fixture"
+
 
 def make_claim(root: Path, monkeypatch: pytest.MonkeyPatch, phase: int = PHASE) -> None:
     """The run state a live reservation leaves behind, and a board that owns it."""
@@ -81,10 +121,11 @@ def make_claim(root: Path, monkeypatch: pytest.MonkeyPatch, phase: int = PHASE) 
 
 
 def foreign_claim(root: Path, phase: int = PHASE) -> None:
-    """A reservation file whose id no board record carries."""
+    """A reservation file of another machine, whose id no board record carries."""
     path = run_path(root, phase) / "reservation.json"
     data = json.loads(path.read_text())
     data["reservation_id"] = "rsv-foreign"
+    data["machine_id"] = "server-02"
     path.write_text(json.dumps(data))
 
 

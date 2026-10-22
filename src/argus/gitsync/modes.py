@@ -11,7 +11,6 @@ from argus.gitsync.fence import phase_fence
 from argus.gitsync.git import is_git_repo, summarize
 from argus.gitsync.group_publication import (
     _group_all_published,
-    _load_phase_reservation,
     _member_published,
 )
 from argus.gitsync.group_review import _group_pending, mark_group_pull_request_ready
@@ -139,35 +138,9 @@ def mode_published(root: str | Path, phase: int | str) -> dict[str, Any]:
     removed it.
     """
     root = Path(root).resolve()
-    try:
-        from argus.board.reservations import ReservationFenced, ReservationStore
-    except Exception as exc:  # noqa: BLE001 - normalize boundary errors
-        return {
-            "ok": False,
-            "mode": "published",
-            "state": "COORDINATION_UNAVAILABLE",
-            "error": str(exc),
-            "phase": f"{int(phase):06d}",
-        }
-    try:
-        reservation = _load_phase_reservation(root, int(phase))
-        ReservationStore(root).assert_owner(reservation)
-    except ReservationFenced as exc:
-        return {
-            "ok": False,
-            "mode": "published",
-            "state": "FENCED",
-            "error": str(exc),
-            "phase": f"{int(phase):06d}",
-        }
-    except Exception as exc:  # noqa: BLE001 - fail closed, never write
-        return {
-            "ok": False,
-            "mode": "published",
-            "state": "COORDINATION_UNAVAILABLE",
-            "error": str(exc),
-            "phase": f"{int(phase):06d}",
-        }
+    refusal = phase_fence(root, phase, "published")
+    if refusal is not None:
+        return refusal
     marked = mark_phase_published(root, phase)
     if marked.get("action") == "no-publish-evidence":
         # There is nothing to mark yet. The phase keeps waiting; the next tick

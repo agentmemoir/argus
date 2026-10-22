@@ -93,9 +93,10 @@ def mode_clean(root: str | Path, phase: int | str | None = None) -> dict[str, An
     the line.
 
     The board fence is read before the commit: the commit and its push are the
-    first writes on this path, and a machine whose claim expired or was taken
-    over must not land run state under another owner's phase. A fence that does
-    not hold writes nothing.
+    first writes on this path, and run state must never land while another
+    machine holds a live claim on the phase's group. A terminal, released, or
+    expired record lands, so an escalated or abandoned phase does not leave run
+    state that traps the next publish. A board that cannot answer writes nothing.
 
     It does not refuse because the public checkout is dirty, and that is the
     whole difference. A phase's closing run-state writes belong to the private
@@ -113,8 +114,9 @@ def mode_clean(root: str | Path, phase: int | str | None = None) -> dict[str, An
     an earlier phase's commit.
 
     The sweep has no single owner, so it fences per planned phase: a phase with
-    a terminal receipt is exempt, a phase whose fence holds is landed, and a
-    phase whose fence does not hold is skipped with its reason in ``skipped``.
+    a published receipt is exempt, a phase whose clean fence holds is landed,
+    and a phase whose fence does not hold is skipped with its reason in
+    ``skipped``.
     One unproven phase never stops the others.
     """
     root = Path(root).resolve()
