@@ -7,12 +7,12 @@ from typing import Any, cast
 
 from argus.gitsync.git import (
     FETCH_TIMEOUT_S,
-    _git_failure,
     blocked,
     classify,
     degraded,
     dirty_paths,
     git,
+    git_failure,
     is_git_repo,
     overlapping_paths,
     resolve_upstream,
@@ -46,7 +46,7 @@ def _fast_forward(
     if rc != 0:
         return degraded(
             info,
-            f"{_git_failure('fast-forward merge', rc, err or out)}; "
+            f"{git_failure('fast-forward merge', rc, err or out)}; "
             "the next tick retries",
             dirty=sorted(local),
             overlapping=[],
@@ -123,7 +123,7 @@ def _merge(
             info,
             f"{reason}; {hint}",
             conflicted=conflicts.splitlines() if conflicts else [],
-            merge_error=_git_failure("merge", rc, err or out),
+            merge_error=git_failure("merge", rc, err or out),
             merge_aborted=aborted,
         )
     after = git(repo, "rev-parse", "HEAD")[1]

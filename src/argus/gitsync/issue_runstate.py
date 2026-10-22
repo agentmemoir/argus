@@ -9,10 +9,10 @@ from typing import Any
 
 from argus import conventions
 from argus.gitsync.git import (
-    _git_failure,
     degraded,
     dirty_paths,
     git,
+    git_failure,
     integration_branch,
     resolve_upstream,
     summarize,
@@ -55,7 +55,7 @@ def commit_issue_state(
     if changed:
         rc, out, err = git(private, "--literal-pathspecs", "add", "-A", "--", *scopes)
         if rc != 0:
-            return degraded(info, _git_failure("stage of issue state", rc, err or out))
+            return degraded(info, git_failure("stage of issue state", rc, err or out))
         rc, out, err = git(
             private,
             "commit",
@@ -66,7 +66,7 @@ def commit_issue_state(
             *scopes,
         )
         if rc != 0:
-            return degraded(info, _git_failure("commit of issue state", rc, err or out))
+            return degraded(info, git_failure("commit of issue state", rc, err or out))
     # Push even when clean: a prior attempt may have committed and failed to push.
     for attempt in (1, 2):
         if before_push is not None:

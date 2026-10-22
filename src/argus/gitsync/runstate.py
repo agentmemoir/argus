@@ -15,12 +15,12 @@ from argus.conventions import (
 )
 from argus.gitsync.git import (
     ConfigError,
-    _git_failure,
     _is_private_path,
     blocked,
     degraded,
     dirty_paths,
     git,
+    git_failure,
     git_toplevel,
     is_git_repo,
     is_run_state,
@@ -91,7 +91,7 @@ def _commit_and_push_run_state(
                 )
     return degraded(
         info,
-        f"{_git_failure('push of run state', rc, err or out)}; the next tick retries",
+        f"{git_failure('push of run state', rc, err or out)}; the next tick retries",
     )
 
 
@@ -127,13 +127,13 @@ def _stage_and_commit(
     """
     rc, _, err = git(repo, "add", "-A", "--", *pathspecs)
     if rc != 0:
-        return _git_failure(f"stage of {pathspecs[0]}", rc, err), False
+        return git_failure(f"stage of {pathspecs[0]}", rc, err), False
     rc, out, err = git(repo, "commit", "-q", "-m", message, "--", *pathspecs)
     if rc != 0:
         combined = err or out
         if "nothing to commit" in combined.lower():
             return None, False
-        return _git_failure("commit of run state", rc, combined), False
+        return git_failure("commit of run state", rc, combined), False
     return None, True
 
 

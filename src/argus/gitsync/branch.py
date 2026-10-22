@@ -7,12 +7,12 @@ from typing import Any
 
 from argus.conventions import board_repo
 from argus.gitsync.git import (
-    _git_failure,
     blocked,
     current_branch,
     degraded,
     dirty_paths,
     git,
+    git_failure,
     integration_branch,
     is_git_repo,
     resolve_upstream,
@@ -148,7 +148,7 @@ def ensure_phase_branch(
         if rc != 0:
             return degraded(
                 info,
-                f"{_git_failure(f'check out of {branch!r}', rc, err or out)}; "
+                f"{git_failure(f'check out of {branch!r}', rc, err or out)}; "
                 "the next tick retries",
             )
         return dict(
@@ -163,7 +163,7 @@ def ensure_phase_branch(
     if rc != 0:
         return degraded(
             info,
-            f"{_git_failure(f'creation of {branch!r}', rc, err or out)}; "
+            f"{git_failure(f'creation of {branch!r}', rc, err or out)}; "
             "the next tick retries",
         )
     # Publish the new branch and give it an upstream straight away. Two
@@ -175,7 +175,7 @@ def ensure_phase_branch(
     if rc != 0:
         return degraded(
             info,
-            f"{_git_failure(f'publish of {branch!r} to {remote}', rc, err or out)}; "
+            f"{git_failure(f'publish of {branch!r} to {remote}', rc, err or out)}; "
             "the phase continues on it and the next tick retries the push",
         )
     return dict(

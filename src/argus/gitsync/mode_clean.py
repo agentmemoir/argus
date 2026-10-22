@@ -8,10 +8,10 @@ from typing import Any, cast
 from argus.gitsync.fence import phase_fence
 from argus.gitsync.git import (
     ConfigError,
-    _git_failure,
     degraded,
     dirty_paths,
     git,
+    git_failure,
     integration_branch,
     is_git_repo,
     push_moved,
@@ -291,7 +291,7 @@ def mode_checkpoint(
     if rc != 0:
         return degraded(
             info,
-            f"{_git_failure('stage of the checkpoint', rc, err or out)}; "
+            f"{git_failure('stage of the checkpoint', rc, err or out)}; "
             "retrying next tick",
         )
     # Ask git first. With nothing staged, the pre-commit hook refused the commit
@@ -303,7 +303,7 @@ def mode_checkpoint(
     if rc not in (0, 1):
         return degraded(
             info,
-            f"{_git_failure('read of the staged changes', rc, err or out)}; "
+            f"{git_failure('read of the staged changes', rc, err or out)}; "
             "retrying next tick",
         )
     committed = rc == 1
@@ -318,7 +318,7 @@ def mode_checkpoint(
         if rc != 0:
             return degraded(
                 info,
-                f"{_git_failure('checkpoint commit', rc, err or out)}; "
+                f"{git_failure('checkpoint commit', rc, err or out)}; "
                 "retrying next tick",
             )
     # --porcelain reports a ref that was already up to date as well, so the
@@ -327,7 +327,7 @@ def mode_checkpoint(
     if rc != 0:
         return degraded(
             info,
-            f"{_git_failure('checkpoint push', rc, err or out)}; retrying next tick",
+            f"{git_failure('checkpoint push', rc, err or out)}; retrying next tick",
         )
     if committed:
         action = "committed-and-pushed"

@@ -8,13 +8,13 @@ from typing import Any
 from argus.conventions import board_repo, phases_repo
 from argus.gitsync.git import (
     FETCH_TIMEOUT_S,
-    _git_failure,
     blocked,
     classify,
     configured_remote_urls,
     current_branch,
     degraded,
     git,
+    git_failure,
     integration_branch,
     is_git_repo,
     resolve_upstream,
@@ -84,8 +84,8 @@ def resync_integration(repo: str | Path, base: str | None = None) -> dict[str, A
     if rc != 0:
         return degraded(
             info,
-            f"{_git_failure(f'fetch from {remote}', rc, err)}; the next tick retries",
-            detail=_git_failure(f"fetch from {remote}", rc, err),
+            f"{git_failure(f'fetch from {remote}', rc, err)}; the next tick retries",
+            detail=git_failure(f"fetch from {remote}", rc, err),
         )
     upstream = f"{remote}/{base}"
     rc, _, _ = git(repo, "rev-parse", "--verify", upstream)

@@ -10,10 +10,10 @@ from typing import Any, cast
 from argus.conventions import board_repo, phase_run_dir
 from argus.gitsync.git import (
     ConfigError,
-    _git_failure,
     blocked,
     current_branch,
     git,
+    git_failure,
     integration_branch,
     push_moved,
     resolve_upstream,
@@ -239,7 +239,7 @@ def _push_one(repo: str | Path) -> dict[str, Any]:
     if rc != 0:
         return blocked(
             {"repo": str(repo)},
-            _git_failure("push", rc, err or out),
+            git_failure("push", rc, err or out),
             hint="resolve the remote and rerun; never force-push",
         )
     return {

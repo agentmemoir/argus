@@ -14,10 +14,10 @@ from argus.board.reservations import (
 from argus.gitsync.branch import branch_phase_checkouts
 from argus.gitsync.git import (
     ConfigError,
-    _git_failure,
     current_branch,
     degraded,
     git,
+    git_failure,
     integration_branch,
     summarize,
 )
@@ -80,7 +80,7 @@ def mode_issue_checkpoint(root: str | Path) -> dict[str, Any]:
     rc, out, err = git(root, *args)
     if rc != 0:
         return degraded(
-            {"repo": str(root)}, _git_failure("stage of issue work", rc, err or out)
+            {"repo": str(root)}, git_failure("stage of issue work", rc, err or out)
         )
     rc, staged, _err = git(root, "diff", "--cached", "--name-only")
     if rc != 0:
@@ -92,7 +92,7 @@ def mode_issue_checkpoint(root: str | Path) -> dict[str, Any]:
         if rc != 0:
             return degraded(
                 {"repo": str(root)},
-                _git_failure("commit of issue work", rc, err or out),
+                git_failure("commit of issue work", rc, err or out),
             )
     store.assert_owner(reservation)
     return _push_one(root)

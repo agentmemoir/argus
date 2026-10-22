@@ -31,7 +31,7 @@ _NO_IDENTITY_HINTS = (
 )
 
 
-def _git_failure(step: str, rc: int, stderr: str) -> str:
+def git_failure(step: str, rc: int, stderr: str) -> str:
     """Name a failed git step by step and exit code, never by its stderr.
 
     ``stderr`` is read for the one cause worth naming to a reader, a checkout
