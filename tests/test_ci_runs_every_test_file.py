@@ -17,13 +17,13 @@ TESTS = ROOT / "tests"
 def pytest_commands(workflow: Path) -> list[tuple[str, list[str]]]:
     """The job name and argv of every `run` line that invokes pytest."""
     jobs = yaml.safe_load(workflow.read_text(encoding="utf-8"))["jobs"]
-    commands = []
+    commands: list[tuple[str, list[str]]] = []
     for name, job in jobs.items():
         for step in job["steps"]:
             for line in str(step.get("run", "")).splitlines():
                 argv = line.split()
                 if "pytest" in argv:
-                    commands.append((name, argv))
+                    commands.append((str(name), argv))
     return commands
 
 
