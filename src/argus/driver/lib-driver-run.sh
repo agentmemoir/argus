@@ -146,6 +146,57 @@ on_stop() {
   exit "$rc"
 }
 
+# Say what a gitsync result file reported, without changing how the driver goes on.
+#
+# Both clean paths answer `ok` and exit 0 for work they did not do. `degraded`
+# keeps `ok` true so that no caller halts the line, and puts its reason in
+# `warning`; the whole-tree sweep can skip a phase whose fence is unproven and
+# still answer ok, because a sibling phase landed. The exit code cannot carry
+# either fact, so the driver reads the file it just wrote and says both itself.
+#
+# A file that is missing, empty, unreadable, or not a JSON object logs nothing.
+# The caller has already logged a non-zero exit for a run that failed, and a
+# result the driver cannot parse is not a second fault worth a line.
+#
+# The warning is git's own stderr, which spans lines, so it is flattened and cut
+# the way every other free-text reason in this driver is. The reader prints one
+# tab-separated record per fact, with each field already flattened to one line,
+# because the loop below reads one record per line and a raw newline in the
+# warning would otherwise be read as the start of a second record.
+gitsync_log_result() {
+  local file="$1" label="$2" kind first second third
+  [ -s "$file" ] || return 0
+  "$PYTHON" -c 'import json,sys
+try:
+    data = json.load(open(sys.argv[1]))
+except (OSError, ValueError):
+    raise SystemExit(0)
+if not isinstance(data, dict):
+    raise SystemExit(0)
+def flat(value):
+    text = "" if value is None else str(value)
+    return " ".join(text.split())
+warning = data.get("warning")
+if isinstance(warning, str) and warning.strip():
+    print("warning\t" + flat(warning))
+skipped = data.get("skipped")
+if isinstance(skipped, list):
+    for one in skipped:
+        if not isinstance(one, dict):
+            continue
+        print("skipped\t" + flat(one.get("phase", "")) + "\t"
+              + flat(one.get("state", "")) + "\t" + flat(one.get("error", "")))' \
+    "$file" 2>/dev/null | while IFS=$'\t' read -r kind first second third; do
+    case "$kind" in
+      warning)
+        log "$label continued in a degraded state: $(cap_length "$(flatten_one_line "$first")" 500)" ;;
+      skipped)
+        log "$label skipped phase $first ($second): $(cap_length "$(flatten_one_line "$third")" 500)" ;;
+    esac
+  done
+  return 0
+}
+
 # Commit and push one finished phase's closing private run state.
 #
 # The runner writes the ledger's finalize row, the run marker, the usage files
@@ -162,6 +213,8 @@ gitsync_clean() {
   if [ "$rc" -ne 0 ]; then
     log "could not commit ${work_kind:-phase} $number closing run state (rc=$rc; see $RUN_DIR/phase-$number-run-state.json)"
   fi
+  gitsync_log_result "$RUN_DIR/phase-$number-run-state.json" \
+    "${work_kind:-phase} $number closing run state"
   return 0
 }
 
@@ -183,6 +236,7 @@ gitsync_land_leftovers() {
   if [ "$rc" -ne 0 ]; then
     log "could not land leftover run state before launch (rc=$rc; see $RUN_DIR/run-state-leftovers.json)"
   fi
+  gitsync_log_result "$RUN_DIR/run-state-leftovers.json" "leftover run state"
   return 0
 }
 
