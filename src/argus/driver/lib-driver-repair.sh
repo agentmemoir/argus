@@ -123,11 +123,16 @@ repair_launch() {
   log "launched repair $key in tmux '$SESSION' window 'phase'"
 }
 
+# The head commit of one branch, as the remote reports it. Empty when it cannot answer.
+repair_remote_head() {
+  "$CMD_GIT" -C "$REPO" ls-remote origin "refs/heads/$1" 2>/dev/null | awk 'NR == 1 { print $1 }'
+}
+
 # The tick's repair step. $1 is the pending-review snapshot. A launched round
 # sets PENDING_PUBLISHED, the tick's "no new work" signal, so the repair runs
 # before any new work.
 repair_tick() {
-  local rows pr branch key out rc msg
+  local rows pr branch key out rc msg pr_head
   [ -n "${REPAIR_PIPELINE:-}" ] || return 0
   [ -z "${DRIVER_STUB_COORDINATION:-}" ] || return 0
   [ ! -f "$HALT" ] || return 0
@@ -144,9 +149,11 @@ for row in json.load(sys.stdin).get("awaiting_review", []):
   while read -r pr branch; do
     [ -n "$pr" ] || continue
     key="${pr%/}"; key="${key##*/}"
+    pr_head="$(repair_remote_head "$branch")"
+    [ -n "$pr_head" ] || { log "repair $key: could not read the head of $branch; the next tick retries"; continue; }
     rc=0
     out="$("$PYTHON" "$ARGUS/gitsync/repair_cli.py" "${ARGUS_CONFIG_ARGS[@]}" \
-      --pull-request "$pr" --run-dir "$RUN_DIR" \
+      --pull-request "$pr" --run-dir "$RUN_DIR" --head "$pr_head" \
       --attempts "$REPAIR_ATTEMPTS" --wait "$REPAIR_WAIT" </dev/null)" || rc=$?
     if [ "$rc" -ne 0 ]; then
       log "repair: the checks of $pr could not be read (rc=$rc); the next tick retries"
@@ -163,7 +170,7 @@ for row in json.load(sys.stdin).get("awaiting_review", []):
         # The round is counted before it launches, so a launch that fails still
         # uses one attempt. A round that cannot be counted never launches.
         "$PYTHON" "$ARGUS/gitsync/repair_cli.py" "${ARGUS_CONFIG_ARGS[@]}" \
-          --pull-request "$pr" --run-dir "$RUN_DIR" --launched \
+          --pull-request "$pr" --run-dir "$RUN_DIR" --launched --head "$pr_head" \
           --attempts "$REPAIR_ATTEMPTS" --wait "$REPAIR_WAIT" </dev/null >/dev/null \
           || { log "repair $key: the round could not be counted; no round starts"; continue; }
         repair_launch "$key" "$(selection_value task <<<"$out")" "$branch" </dev/null \

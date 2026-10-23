@@ -21,6 +21,7 @@ python_transport() {
   esac
 }
 notify() { log "NOTIFY $*"; }
+repair_remote_head() { printf 'abc123'; }
 """
 
 
@@ -41,7 +42,19 @@ repair_launch() { log "LAUNCH $*"; }""",
     )
     assert "LAUNCH 1 /t.md feature/fixture" in events
     assert "--launched" in events
+    assert "--head abc123" in events
     assert "pending=1" in events
+
+
+def test_a_pull_request_whose_head_cannot_be_read_is_skipped(tmp_path: Path) -> None:
+    events = _tick(
+        tmp_path,
+        """DECISION='{"action":"repair","task":"/t.md"}'
+repair_remote_head() { :; }
+repair_launch() { log "LAUNCH $*"; }""",
+    )
+    assert "repair_cli" not in events
+    assert "LAUNCH" not in events
 
 
 def test_a_failed_launch_uses_its_attempt_before_it_fails(tmp_path: Path) -> None:

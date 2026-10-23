@@ -14,6 +14,8 @@ from argus.gitsync import gh_read, repair_cli
 RED: list[dict[str, Any]] = [{"name": "lint", "bucket": "fail", "link": "https://ci/1"}]
 PR = "https://github.com/o/r/pull/7"
 SAME: dict[str, Any] = {"headRefName": "issue/7-fix-ci", "isCrossRepository": False}
+HEAD_A = "a" * 40
+HEAD_B = "b" * 40
 
 
 def _run(
@@ -23,13 +25,14 @@ def _run(
     rows: list[dict[str, Any]] | None,
     now: float,
     launched: bool = True,
+    head: str = HEAD_A,
 ) -> tuple[int, dict[str, Any]]:
     def checks(*_a: object) -> tuple[list[dict[str, Any]] | None, int, str]:
         return rows, 1, ""
 
     monkeypatch.setattr(repair_cli, "gh_pull_request_checks", checks)
     argv = ["--pull-request", PR, "--run-dir", str(tmp_path)]
-    argv += ["--attempts", "2", "--wait", "600"]
+    argv += ["--attempts", "2", "--wait", "600", "--head", head]
     rc = repair_cli.main(argv, now=now)
     out = json.loads(capsys.readouterr().out)
     if launched and out["action"] == "repair":
@@ -57,6 +60,21 @@ def test_red_repairs_then_waits_then_escalates_once(
     assert _run(monkeypatch, capsys, tmp_path, RED, 9999.0)[1] == {"action": "none"}
 
 
+def test_a_new_head_gets_a_fresh_budget_and_the_escalated_head_stays_stopped(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+) -> None:
+    for now in (1000.0, 1600.0):
+        _rc, out = _run(monkeypatch, capsys, tmp_path, RED, now)
+        assert out["action"] == "repair"
+    _rc, out = _run(monkeypatch, capsys, tmp_path, RED, 9999.0)
+    assert out["action"] == "escalate"
+    assert _run(monkeypatch, capsys, tmp_path, RED, 9999.0)[1] == {"action": "none"}
+    _rc, out = _run(monkeypatch, capsys, tmp_path, RED, 9999.0, head=HEAD_B)
+    assert out["action"] == "repair"
+
+
 def test_a_round_that_never_launched_is_never_counted(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
@@ -82,7 +100,10 @@ def test_pull_request_without_number_is_refused(
     capsys: pytest.CaptureFixture[str], tmp_path: Path
 ) -> None:
     argv = ["--pull-request", "../x", "--run-dir", str(tmp_path)]
-    assert repair_cli.main([*argv, "--attempts", "1", "--wait", "0"]) == 2
+    assert (
+        repair_cli.main([*argv, "--attempts", "1", "--wait", "0", "--head", HEAD_A])
+        == 2
+    )
     assert "has no number" in capsys.readouterr().err
 
 
