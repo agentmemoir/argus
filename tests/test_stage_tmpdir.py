@@ -6,13 +6,29 @@ from __future__ import annotations
 
 import subprocess
 import sys
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
 
 from argus import stage_tmpdir
+from argus.exec_tempdir import exec_tempdir
 
 HELPER = Path(stage_tmpdir.__file__).resolve()
+
+
+@pytest.fixture
+def exec_folder() -> Iterator[Path]:
+    """A directory the host runs files from, so a probe there must answer runs.
+
+    pytest's own temporary folder can be mounted noexec on a CI runner, so the
+    runs cases use this helper's folder, which the host has proven it runs files in.
+    """
+    owned = exec_tempdir(purpose="the stage folder probe")
+    try:
+        yield Path(owned.name)
+    finally:
+        owned.cleanup()
 
 
 def refuse(*_args: object, **_kwargs: object) -> None:
@@ -26,17 +42,17 @@ def cannot_run(*_args: object, **_kwargs: object) -> None:
 
 
 def test_a_folder_that_runs_a_file_is_created_and_accepted(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    exec_folder: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    folder = tmp_path / "stage-tmp"
+    folder = exec_folder / "stage-tmp"
     assert stage_tmpdir.main(["stage_tmpdir.py", str(folder)]) == 0
     assert folder.is_dir()
     assert "(runs)" in capsys.readouterr().out
 
 
-def test_the_driver_runs_it_as_a_script(tmp_path: Path) -> None:
+def test_the_driver_runs_it_as_a_script(exec_folder: Path) -> None:
     done = subprocess.run(
-        [sys.executable, str(HELPER), str(tmp_path / "stage-tmp")],
+        [sys.executable, str(HELPER), str(exec_folder / "stage-tmp")],
         capture_output=True,
         text=True,
         encoding="utf-8",
