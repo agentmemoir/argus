@@ -215,9 +215,9 @@ def mode_open_pr(
     # A phase's pull request is a publication: the board fence is read before the
     # checkout, the pull request list, or the create is touched.
     if phase is not None:
-        refusal = phase_fence(root, phase, "open-pr")
-        if refusal is not None:
-            return refusal
+        fenced = phase_fence(root, phase, "open-pr")
+        if fenced is not None:
+            return fenced
     # Every source of the branch is checked against the checkout, not only an
     # explicit --branch. A phase whose branch was never created used to reach
     # gh and come back as a bare failure that named nothing.
