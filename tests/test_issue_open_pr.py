@@ -194,6 +194,8 @@ def test_issue_open_pr_refuses_a_flag_it_would_ignore(
         phase=None,
     )
     setattr(args, flag, "some-value")
-    with pytest.raises(ConfigError, match=f"--{flag}"):
+    with pytest.raises(
+        ConfigError, match=f"--{flag} does not apply to --kind issue --mode open-pr"
+    ):
         issue_mode(args)
     assert calls == []
