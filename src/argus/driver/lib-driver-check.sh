@@ -47,6 +47,7 @@ check() {
   else
     echo "python3: $PYTHON (PyYAML MISSING - runner.py will fail on import)"
   fi
+  driver_checkout_report
   if command -v flock >/dev/null 2>&1; then
     echo "flock: $(command -v flock)"
   else

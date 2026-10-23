@@ -288,4 +288,12 @@ STOP_ALLOWLIST = r"""
     driver/lib-driver-repair.sh	return_nonzero	fn:repair_launch||| { notify "repair $key failed to launch in tmux"; repair_worktree_remove "$(repair_worktree "$key")"; return 1; }#1
     driver/lib-driver-repair.sh	exit_nonzero	fn:run_repair_session|trap 'rm -f "$PIDFILE"; exit 130' HUP INT TERM#1
     driver/phase-driver.sh	exit_nonzero	fn:<top>|[ "$#" -eq 4 ] || { echo "usage: phase-driver.sh --repair-session <id> <task-file> <branch>" >&2; exit 2; }#1
+    driver/lib-driver-checkout.sh	return_nonzero	fn:driver_checkout_lock|common="$(${CMD_GIT:-git} -C "$REPO" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" || return 1#1
+    driver/lib-driver-checkout.sh	return_nonzero	fn:driver_checkout_lock|[ -n "$common" ] || return 1#1
+    driver/lib-driver-checkout.sh	return_nonzero	fn:driver_checkout_held|lock="$(driver_checkout_lock)" || return 1#1
+    driver/lib-driver-checkout.sh	return_nonzero	fn:driver_checkout_held|return 1#1
+    driver/lib-driver-checkout.sh	return_nonzero	fn:driver_checkout_take|exec 8<>"$lock" || return 1#1
+    driver/lib-driver-checkout.sh	return_nonzero	fn:driver_checkout_take|driver_checkout_flock || return 1#1
+    driver/lib-driver-drive.sh	drive_rc_nonzero	fn:_drive_cut_branch|_DRIVE_RC=1#4
+    driver/phase-driver.sh	exit_nonzero	fn:<top>|driver_checkout_take || { driver_checkout_refusal >&2; exit 1; }#1
 """
