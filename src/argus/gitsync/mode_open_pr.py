@@ -24,6 +24,7 @@ A gh read that fails is never read as "no pull request". Believing that would
 create a duplicate on every network blip, so an unreadable list stops the mode.
 """
 
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -192,8 +193,11 @@ def mode_open_pr(
     title_file: str | Path | None = None,
     body_file: str | Path | None = None,
     base: str | None = None,
+    before_create: Callable[[], None] | None = None,
 ) -> dict[str, Any]:
     """Open a draft pull request for a branch, or reuse the one that exists.
+
+    ``before_create`` runs after the pull request list is read and just before the create. A caller that holds a claim passes a re-read of it, so a claim lost during the read creates nothing.
 
     The title defaults to the branch name. ``--body-file`` is required only when a draft has to be created: a draft opened with an empty body can be published before a later pass fills it, and a reused pull request is never written to, so the reuse path needs no body file. ``title_file`` and ``body_file`` let a caller supply its own text, and a file that is missing or empty is refused rather than quietly replaced by the default.
 
@@ -271,6 +275,8 @@ def mode_open_pr(
             "--body-file is required for --mode open-pr: a draft pull request is "
             "never opened with an empty body; pass the pull request prose in a file"
         )
+    if before_create is not None:
+        before_create()
     created, detail = gh_create_draft_pull_request(
         root,
         branch_name,

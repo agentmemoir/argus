@@ -123,8 +123,18 @@ def mode_issue_open_pr(
     owned = _owned_issue_branch(root)
     if owned is None:
         return degraded({"repo": str(root)}, "open-pr needs an issue branch")
+    branch, store, reservation = owned
+
+    def recheck_claim() -> None:
+        store.assert_owner(reservation)
+
     return mode_open_pr(
-        root, branch=owned[0], title_file=title_file, body_file=body_file, base=base
+        root,
+        branch=branch,
+        title_file=title_file,
+        body_file=body_file,
+        base=base,
+        before_create=recheck_claim,
     )
 
 
@@ -171,6 +181,21 @@ def _issue_mode(args: Namespace) -> dict[str, Any] | None:
     if args.mode == "checkpoint":
         return mode_issue_checkpoint(args.root)
     if args.mode == "open-pr":
+        # The issue branch comes from the claim, so these flags would be ignored.
+        ignored = [
+            flag
+            for flag, value in (
+                ("--branch", args.branch),
+                ("--repo", args.repo),
+                ("--phase", args.phase),
+            )
+            if value is not None
+        ]
+        if ignored:
+            raise ConfigError(
+                f"{', '.join(ignored)} do not apply to --kind issue --mode open-pr; "
+                "the issue branch comes from the claim"
+            )
         return mode_issue_open_pr(
             args.root,
             title_file=args.title_file,

@@ -105,6 +105,15 @@ def _merge(
     )
     if rc != 0:
         _, conflicts, _ = git(repo, "diff", "--name-only", "--diff-filter=U")
+        if not conflicts:
+            # git refused before it began the merge, so there is no conflict
+            # for the phase agent to finish. Unrelated histories is one such
+            # refusal, and it must not read as a continued step.
+            return blocked(
+                info,
+                "git refused the merge and left no conflict to resolve",
+                merge_error=(err or out),
+            )
         aborted: bool | None = None
         if abort_on_conflict:
             _, _, ab_err = git(repo, "merge", "--abort")
