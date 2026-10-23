@@ -81,6 +81,15 @@ check() {
       warned=1
     fi
   done
+  # The pipeline's pre_run hook gates every run. Glide runs it from the repository
+  # root before a run starts, so run it here once too: a refusing hook fails the
+  # check before the first tick. A missing pipeline is already reported above.
+  if [ -r "$PIPELINE" ]; then
+    local prerun_out prerun_rc=0
+    prerun_out="$(cd "$REPO" && "$PYTHON" "$ARGUS/prerun_hook.py" --pipeline "$PIPELINE" 2>&1)" || prerun_rc=$?
+    [ -z "$prerun_out" ] || printf '%s\n' "$prerun_out"
+    [ "$prerun_rc" -eq 0 ] || return 1
+  fi
   echo "work source: ${WORK_SOURCE:-phases}"
   # A halt, and the record a resume reads, in the report an operator runs when
   # the line will not advance. The record is named separately because it survives

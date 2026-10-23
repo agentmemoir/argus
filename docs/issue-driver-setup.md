@@ -65,7 +65,7 @@ argus --config <config-file> --check
 argus --config <config-file> --dry-run
 ```
 
-`--check` does not run the `pre_run` hook yet ([#220](https://github.com/agentmemoir/argus/issues/220)). A hook refusal therefore shows up on the first real tick. When both commands pass, the cron job runs the first tick.
+`--check` runs the `pre_run` hook, so a hook refusal shows before the first tick. When both commands pass, the cron job runs the first tick.
 
 ## Trade-off: the docker group
 
