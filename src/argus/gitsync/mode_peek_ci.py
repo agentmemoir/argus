@@ -17,12 +17,14 @@ This mode never waits. It does not pass ``--watch``, it does not poll, and it
 does not sleep: one call, one answer, and the caller decides when to look again.
 """
 
+import re
+import urllib.parse
 from pathlib import Path
 from typing import Any
 
 from argus.gitsync.gh import gh_pull_request_checks, gh_pull_requests_for_branch
 from argus.gitsync.gh_exit import gh_exit_detail
-from argus.gitsync.git import ConfigError
+from argus.gitsync.git import ConfigError, remote_urls, resolve_upstream
 from argus.gitsync.mode_open_pr import resolve_branch
 from argus.gitsync.peek_ci_summary import (
     BUCKETS,
@@ -78,6 +80,7 @@ def _row(root: Path) -> dict[str, Any]:
         "ok": False,
         "number": None,
         "url": None,
+        "remote": None,
         "state": "UNKNOWN",
         "checks": checks,
         "blockers": [],
@@ -98,6 +101,55 @@ def _branch_or_none(
         return resolve_branch(root, phase, branch)
     except ConfigError:
         return None
+
+
+_SCP_REMOTE = re.compile(r"^(?:[^@/:]+@)?(?P<host>[^@/:]+):(?P<path>[^/].*)$")
+
+
+def _owner_repo_host(url: str) -> tuple[str, str, str] | None:
+    """The (owner, repo, host) a git remote URL names, or None when it names none.
+
+    Accepts ``scheme://[user@]host/owner/repo[.git]`` and the scp form
+    ``[user@]host:owner/repo[.git]``. A local path names no host, so it is None.
+    """
+    text = url.strip().rstrip("/")
+    if "://" in text:
+        parts = urllib.parse.urlsplit(text)
+        host, path = parts.hostname, parts.path
+    else:
+        match = _SCP_REMOTE.match(text)
+        if match is None:
+            return None
+        host, path = match.group("host"), match.group("path")
+    segments = path.strip("/").removesuffix(".git").split("/")
+    if not host or len(segments) != 2 or not all(segments):
+        return None
+    return segments[0], segments[1], host
+
+
+def _checkout_repository(root: Path) -> tuple[dict[str, Any] | None, str]:
+    """The repository the checkout's publish remote names, or None and why.
+
+    The remote is the one ``resolve_upstream`` returns for the checkout's
+    branch, which is the remote the publish path pushes to. Nothing is read
+    from the working directory's own repository: when no remote resolves, or
+    its URL names no owner and repository, the caller refuses the read.
+    """
+    _branch, remote, _remote_branch, why = resolve_upstream(root)
+    if remote is None:
+        return None, (
+            f"no remote resolves for the checkout ({why}); "
+            "pass --pull-request with the pull request URL"
+        )
+    urls = remote_urls(root, remote)
+    named = _owner_repo_host(urls[0]) if urls else None
+    if named is None:
+        return None, (
+            f"remote {remote!r} names no GitHub owner and repository; "
+            "pass --pull-request with the pull request URL"
+        )
+    owner, repo, host = named
+    return {"owner": owner, "repo": repo, "host": host, "remote": remote}, ""
 
 
 def _result(
@@ -137,6 +189,10 @@ def mode_peek_ci(
     request is read directly, and the branch beside it is resolved best effort,
     so it is null when the checkout cannot say. No pull request found is a
     result with a reason, not a crash.
+
+    A bare number names no URL, so its repository is the checkout's publish
+    remote, and the row records which remote that was. It is refused when no
+    remote names a repository.
 
     Returns ``ok``, ``mode``, ``branch``, ``state``, ``repos``, and ``summary``.
     Each repository row carries ``repo``, ``ok``, ``number``, ``url``, ``state``,
@@ -182,14 +238,23 @@ def mode_peek_ci(
         target = number
 
     # The repository is the one the pull request's URL names: the explicit URL,
-    # or the URL gh listed for the branch. A bare number names none, so gh is
-    # not asked and the read is refused.
-    ref = pull_request_ref(url) or {}
+    # or the URL gh listed for the branch. A bare number names no URL, so the
+    # repository is the checkout's publish remote, and gh is not asked when no
+    # remote names one.
+    row["number"] = number
+    row["url"] = url
+    if url is None:
+        named, why = _checkout_repository(root)
+        if named is None:
+            row["blockers"] = [why]
+            return _result(branch_name, row, None, detail=why)
+        row["remote"] = named["remote"]
+        ref = named
+    else:
+        ref = pull_request_ref(url) or {}
     rows, code, detail = gh_pull_request_checks(
         root, target, ref.get("owner"), ref.get("repo"), ref.get("host")
     )
-    row["number"] = number
-    row["url"] = url
     if rows is None:
         row["blockers"] = [
             f"gh could not report checks for {target_label(number, url)}: {detail}"

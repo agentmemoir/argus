@@ -4,7 +4,8 @@
 
 The helper is replaced with a recorder, so each test checks only what the caller
 hands it: the owner, repo, and host its pull request URL names. A bare number
-names no repository, so the caller must hand over nothing.
+names no URL, so the caller hands over a repository only when the checkout's
+remote names one; with no remote, gh is not asked at all.
 """
 
 import argparse
@@ -58,14 +59,15 @@ def test_peek_ci_passes_the_repository_its_url_names(
     }
 
 
-def test_peek_ci_with_a_bare_number_names_no_repository(
+def test_peek_ci_with_a_bare_number_and_no_remote_does_not_ask_gh(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     seen = _recorder(monkeypatch, mode_peek_ci)
 
-    mode_peek_ci.mode_peek_ci(tmp_path, pull_request=7)
+    out = mode_peek_ci.mode_peek_ci(tmp_path, pull_request=7)
 
-    assert seen == {"owner": None, "repo": None, "host": None}
+    assert seen == {}, seen
+    assert out["ok"] is False, out
 
 
 def test_repair_passes_the_repository_its_url_names(
