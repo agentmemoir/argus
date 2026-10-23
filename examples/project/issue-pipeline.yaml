@@ -12,10 +12,10 @@ hooks:
   # After each step, the project's hook runs gitsync with `--kind issue`:
   # `--mode checkpoint` commits and pushes leftovers as a `wip:` commit, then
   # `--mode open-pr --body-file <run_dir>/pr-body.md` opens or reuses the draft
-  # pull request and reads its draft state back. The hook must exit 0, because
-  # glide treats a failed post_step hook as fatal; it records each result in
-  # the run directory instead.
-  post_step: ["python3", "scripts/post_step.py"]
+  # pull request and reads its draft state back. glide gates post_step, so the
+  # hook exits non-zero when either mode refuses, and the step stays incomplete.
+  # The path is relative to the repository root where glide runs.
+  post_step: ["python3", "examples/project/scripts/post_step.py"]
 
 inputs:
   issue_number: {type: int, required: true, description: "The GitHub issue number"}
