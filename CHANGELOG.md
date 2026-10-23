@@ -4,6 +4,8 @@ Notable changes to this project are documented here. The format follows [Keep a 
 
 ## [Unreleased]
 
+- When `gitsync --mode branch` crashes for a phase and writes no result, Argus no longer launches the phase on the current branch. The tick refuses the launch, keeps the claim, and sends one Needs You notice for that phase. The next tick retries the cut.
+
 - The timeline read from gh closes stdin, so gh cannot wait on the driver's terminal, and decodes its output as UTF-8 on every host. ([#179](https://github.com/agentmemoir/argus/issues/179))
 
 - The ready sweep sends the timeline read's owner and repository name to gh as strings, so an all-digit name no longer fails GraphQL and blocks a ready pull request. ([#176](https://github.com/agentmemoir/argus/issues/176))

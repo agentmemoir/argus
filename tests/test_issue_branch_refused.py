@@ -26,11 +26,20 @@ print(json.dumps({"ok": False, "state": "CONFIG_ERROR",
 raise SystemExit(2)
 """
 
+CRASHING_TOOL = """import sys
+mode = sys.argv[sys.argv.index("--mode") + 1]
+with open(sys.argv[0] + ".calls", "a", encoding="utf-8") as calls:
+    calls.write(mode + "\\n")
+raise RuntimeError("gitsync crashed before it wrote a result")
+"""
 
-def cut_branch(tmp_path: Path, kind: str, released: bool) -> tuple[str, str]:
+
+def cut_branch(
+    tmp_path: Path, kind: str, released: bool, tool_source: str = REFUSING_TOOL
+) -> tuple[str, str]:
     tool = tmp_path / "argus/gitsync/main.py"
     tool.parent.mkdir(parents=True, exist_ok=True)
-    tool.write_text(REFUSING_TOOL, encoding="utf-8")
+    tool.write_text(tool_source, encoding="utf-8")
     script = """
 set -euo pipefail
 for name in lib-driver-log lib-driver-select lib-driver-drive lib-driver-run \
@@ -113,6 +122,24 @@ def test_a_phase_branch_cut_failure_keeps_the_repair_path(tmp_path: Path) -> Non
     assert calls.split() == ["branch", "resync"], calls
     assert "drive_rc=\n" in events, events
     assert "release=" not in events and "notify=" not in events, events
+
+
+@pytest.mark.parametrize("kind", ["phase", "issue"])
+def test_a_crashed_branch_cut_never_launches(tmp_path: Path, kind: str) -> None:
+    events, calls = cut_branch(tmp_path, kind, released=True, tool_source=CRASHING_TOOL)
+    assert calls.split() == ["branch"], calls
+    assert "drive_rc=1" in events, events
+    assert "continuing on" not in events, events
+
+
+def test_a_phase_branch_cut_crash_sends_one_notice(tmp_path: Path) -> None:
+    runs = [
+        cut_branch(tmp_path, "phase", released=True, tool_source=CRASHING_TOOL)
+        for _ in range(3)
+    ]
+    events, calls = runs[-1]
+    assert calls.split() == ["branch"] * 3, calls
+    assert events.count("notify=branch-refused") == 1, events
 
 
 @pytest.mark.parametrize("held", [False, True])
