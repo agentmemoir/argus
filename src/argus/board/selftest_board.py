@@ -12,7 +12,7 @@ from argus.board.branch import _backup_branch, _integration_branch
 from argus.board.core import SELF_TEST_BRANCH, CoordinationUnavailable
 from argus.board.git import _git, git_binary
 from argus.board.selftest_fixture import _git_test_repo, _self_test_check
-from argus.board.state import state_rel
+from argus.board.state import _empty_state, state_rel
 from argus.board.store import ReservationStore
 
 
@@ -136,18 +136,18 @@ def _board_branch_checks(checks: list[dict[str, Any]], base: Path) -> None:
     shutil.rmtree(case, ignore_errors=True)
 
     before_read = remote_branches()
-    refused = ""
+    read_state: dict[str, Any] = {}
+    read_error = ""
     try:
-        probe.read()
-        refused = "the read succeeded against a remote with no board branch"
+        read_state, _read_commit = probe.read()
     except CoordinationUnavailable as exc:
-        refused = str(exc).splitlines()[0][:110]
+        read_error = str(exc).splitlines()[0][:110]
     after_read = remote_branches()
     _self_test_check(
         checks,
-        "a read refuses rather than creating the board branch",
-        "does not exist" in refused and before_read == after_read,
-        f"{refused}; branches {before_read} -> {after_read}",
+        "a read of a remote with no board branch reads as empty and creates no branch",
+        not read_error and read_state == _empty_state() and before_read == after_read,
+        f"error={read_error!r}; branches {before_read} -> {after_read}",
     )
 
     created = probe.migrate_board()
@@ -305,6 +305,10 @@ def _bad_phase_key_check(base: Path) -> tuple[bool, str]:
     root = base / "bad-key-root"
     root.mkdir()
     store = ReservationStore(root, private_repo=clients[0])
+    # The seed puts the state on the integration branch only. A read looks at the
+    # board branch, so the state is pushed there, or the read would refuse for a
+    # missing branch and never reach the key this check is about.
+    _git(base / "bad-key-seed", "push", "-q", "origin", f"HEAD:{store.branch}")
     try:
         store.read()
         return False, "noncanonical phase key was accepted"

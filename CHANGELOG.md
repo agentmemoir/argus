@@ -4,6 +4,8 @@ Notable changes to this project are documented here. The format follows [Keep a 
 
 ## [Unreleased]
 
+- A board whose remote holds no claims branch reads as an empty board. The first claim write creates the branch, through the existing write path. A remote that cannot be asked still fails closed. ([#216](https://github.com/agentmemoir/argus/issues/216))
+
 - The run-state folder and the driver's state folder inside it are made when they are missing, and the driver says so in one line for each. A folder that Argus does not own, such as a board or phases checkout, is still not made. ([#216](https://github.com/agentmemoir/argus/issues/216))
 
 - A configuration with a `board` object defaults `driver.runs` to a `runs` folder inside the board checkout, and it refuses a run folder set outside that checkout, naming the key. ([#216](https://github.com/agentmemoir/argus/issues/216))

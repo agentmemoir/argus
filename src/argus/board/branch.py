@@ -120,6 +120,38 @@ def _board_branch_exists(private: str | Path, remote: str, branch: str) -> bool:
     return rc == 0
 
 
+def _branch_confirmed_absent(private: str | Path, remote: str, branch: str) -> bool:
+    """Whether the remote answered and holds no board branch.
+
+    ``ls-remote --exit-code`` answers 0 when the branch is there, and 2 when the
+    remote answered with no such branch. Any other answer means the remote could
+    not be asked. Only the second counts, so an unreachable board is never read
+    as an empty one.
+    """
+    rc, _out, _err = _git(
+        private,
+        "ls-remote",
+        "--exit-code",
+        "--heads",
+        remote,
+        branch,
+        timeout=FETCH_TIMEOUT_S,
+    )
+    return rc == 2
+
+
+def _board_never_created(private: str | Path, remote: str, branch: str) -> bool:
+    """Whether the board was never created: no board branch and no backup either.
+
+    A backup ref means the board existed and was deleted. That is a broken board,
+    which must not read as an empty one and let a launch proceed while claims may
+    still be held on the backup, so it stays a failure.
+    """
+    return _branch_confirmed_absent(
+        private, remote, branch
+    ) and _branch_confirmed_absent(private, remote, _backup_branch(branch))
+
+
 def _backup_branch(branch: str) -> str:
     """The ref that mirrors the board branch, so a lost board can be restored.
 
