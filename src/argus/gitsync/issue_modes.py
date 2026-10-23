@@ -181,6 +181,21 @@ def _issue_mode(args: Namespace) -> dict[str, Any] | None:
     if args.mode == "checkpoint":
         return mode_issue_checkpoint(args.root)
     if args.mode == "open-pr":
+        # The issue branch comes from the claim, so these flags would be ignored.
+        ignored = [
+            flag
+            for flag, value in (
+                ("--branch", args.branch),
+                ("--repo", args.repo),
+                ("--phase", args.phase),
+            )
+            if value is not None
+        ]
+        if ignored:
+            raise ConfigError(
+                f"{', '.join(ignored)} do not apply to --kind issue --mode open-pr; "
+                "the issue branch comes from the claim"
+            )
         return mode_issue_open_pr(
             args.root,
             title_file=args.title_file,

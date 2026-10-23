@@ -141,9 +141,36 @@ def test_issue_open_pr_dispatch_fences_a_lost_claim(
         title_file=None,
         body_file=None,
         base=None,
+        branch=None,
+        repo=None,
+        phase=None,
     )
     result = issue_mode(args)
     assert result is not None
     assert result["ok"] is False
     assert result["state"] == "FENCED"
+    assert calls == []
+
+
+@pytest.mark.parametrize("flag", ["branch", "repo", "phase"])
+def test_issue_open_pr_refuses_a_flag_it_would_ignore(
+    publication: Publication, monkeypatch: pytest.MonkeyPatch, flag: str
+) -> None:
+    _token, task = publication.claim(1234567)
+    mode_issue_branch(publication.root, 1234567, task)
+    calls = _record_open_pr(monkeypatch)
+    args = Namespace(
+        kind="issue",
+        mode="open-pr",
+        root=str(publication.root),
+        title_file=None,
+        body_file=None,
+        base=None,
+        branch=None,
+        repo=None,
+        phase=None,
+    )
+    setattr(args, flag, "some-value")
+    with pytest.raises(ConfigError, match=f"--{flag}"):
+        issue_mode(args)
     assert calls == []
