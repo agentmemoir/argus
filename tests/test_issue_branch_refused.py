@@ -42,7 +42,7 @@ def cut_branch(
     tool.write_text(tool_source, encoding="utf-8")
     script = """
 set -euo pipefail
-for name in lib-driver-log lib-driver-select lib-driver-drive lib-driver-run \
+for name in lib-driver-log lib-driver-select lib-driver-checkout lib-driver-drive lib-driver-run \
   lib-driver-halt-record lib-driver-launchfault; do
   . "$TEST_DRIVER/$name.sh"
 done

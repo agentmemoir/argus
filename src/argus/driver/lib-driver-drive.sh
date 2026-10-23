@@ -205,6 +205,15 @@ _drive() {
 }
 
 _drive_cut_branch() {
+  # One checkout, one driver (issue 199). Another config's phase holds this
+  # checkout's lock, so this tick refuses before any cut or leftover commit moves
+  # it. No launch follows, so the claim this tick took is released.
+  if driver_checkout_held; then
+    log "$(driver_checkout_refusal)"
+    release_refused_claim "$number" "$reservation_id" "$reservation_generation"
+    _DRIVE_RC=1
+    return 0
+  fi
   # Before the checkout is cut over, land the previous phase's closing run-state
   # writes. A run that ended without its own clean leaves them dirty, and the
   # publish at the end of this phase would refuse on them.
