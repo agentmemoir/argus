@@ -74,14 +74,25 @@ def _argvs(root: Path) -> list[list[str]]:
     return [json.loads(line) for line in lines.splitlines()]
 
 
-def test_no_repository_named_passes_no_repo_flag(shim: Path) -> None:
-    rows, code, detail = gh_pull_request_checks(shim, 7)
+@pytest.mark.parametrize(
+    ("owner", "repo", "missing"),
+    [
+        (None, None, "owner and repo"),
+        ("example-org", None, "repo"),
+        (None, "example-repo", "owner"),
+    ],
+)
+def test_a_missing_repository_is_refused_and_gh_is_not_run(
+    shim: Path, owner: str | None, repo: str | None, missing: str
+) -> None:
+    # The shim writes its argv when it runs, so a missing file means gh was
+    # never started. Before the refusal existed, a partial reference ran gh
+    # about the repository of the working directory.
+    rows, code, detail = gh_pull_request_checks(shim, 7, owner, repo)
 
-    assert _argvs(shim) == [CHECKS]
-    assert rows == [
-        {"bucket": "pass", "state": "SUCCESS", "name": "verify", "link": ""}
-    ]
-    assert (code, detail) == (0, "")
+    assert not (shim.parent / "gh" / "argv.jsonl").exists()
+    assert (rows, code) == (None, -1)
+    assert f"{missing} missing" in detail
 
 
 def test_an_explicit_repository_is_passed_as_repo(shim: Path) -> None:

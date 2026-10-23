@@ -32,6 +32,7 @@ from argus.gitsync.peek_ci_summary import (
     summary_line,
     target_label,
 )
+from argus.gitsync.receipts import pull_request_ref
 
 # The buckets gh reports. Anything else counts toward the row total and toward
 # nothing else, which makes it "not a pass" rather than an invisible row.
@@ -180,7 +181,13 @@ def mode_peek_ci(
         url = chosen["url"]
         target = number
 
-    rows, code, detail = gh_pull_request_checks(root, target)
+    # The repository is the one the pull request's URL names: the explicit URL,
+    # or the URL gh listed for the branch. A bare number names none, so gh is
+    # not asked and the read is refused.
+    ref = pull_request_ref(url) or {}
+    rows, code, detail = gh_pull_request_checks(
+        root, target, ref.get("owner"), ref.get("repo"), ref.get("host")
+    )
     row["number"] = number
     row["url"] = url
     if rows is None:
