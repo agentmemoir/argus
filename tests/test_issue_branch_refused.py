@@ -29,15 +29,21 @@ raise SystemExit(2)
 
 def cut_branch(tmp_path: Path, kind: str, released: bool) -> tuple[str, str]:
     tool = tmp_path / "argus/gitsync/main.py"
-    tool.parent.mkdir(parents=True)
+    tool.parent.mkdir(parents=True, exist_ok=True)
     tool.write_text(REFUSING_TOOL, encoding="utf-8")
     script = """
 set -euo pipefail
-for name in lib-driver-log lib-driver-select lib-driver-drive; do
+for name in lib-driver-log lib-driver-select lib-driver-drive lib-driver-run \
+  lib-driver-halt-record lib-driver-launchfault; do
   . "$TEST_DRIVER/$name.sh"
 done
 PYTHON="$TEST_PYTHON"; ARGUS="$TEST_ROOT/argus"; REPO="$TEST_ROOT"
 RUN_DIR="$TEST_ROOT/run"; mkdir -p "$RUN_DIR"
+HALT="$RUN_DIR/halted"; HALT_RECORD="$RUN_DIR/halted.json"; CLAIM="$RUN_DIR/claim"
+ts() { printf fixture-time; }
+tmux_set_title() { :; }
+phase_run_dir() { printf '%s' "$RUN_DIR"; }
+notify() { printf 'notice=%s\n' "$1" | head -1 >>"$RUN_DIR/events"; }
 work_kind="$TEST_KIND"; ARGUS_CONFIG_ARGS=(); GITSYNC_KIND_ARGS=()
 number=23; rel=tasks/issue-000023-fix.md
 reservation_id=r1; reservation_generation=4
@@ -84,19 +90,22 @@ printf 'drive_rc=%s\\n' "$_DRIVE_RC" >>"$RUN_DIR/events"
     return (tmp_path / "run/events").read_text(encoding="utf-8"), calls
 
 
-def test_an_issue_branch_cut_failure_stops_the_launch(tmp_path: Path) -> None:
+def test_an_issue_branch_cut_failure_halts_and_keeps_the_claim(tmp_path: Path) -> None:
     events, calls = cut_branch(tmp_path, "issue", released=True)
     assert calls.split() == ["branch"], calls
     assert "drive_rc=1" in events, events
-    assert "release=23 r1 4 failed" in events, events
-    assert events.count("notify=") == 1, events
-    assert "notify=branch-refused held=0 reason=issue run directory" in events
+    assert "release=" not in events and "notify" not in events, events
     assert "continuing on" not in events, events
+    halt = (tmp_path / "run/halted").read_text(encoding="utf-8")
+    assert halt.startswith("launch fault: issue 23 attempt 1"), halt
 
 
-def test_a_held_claim_is_named_in_the_notice(tmp_path: Path) -> None:
-    events, _ = cut_branch(tmp_path, "issue", released=False)
-    assert "notify=branch-refused held=1" in events, events
+def test_the_third_branch_cut_failure_sends_one_notice(tmp_path: Path) -> None:
+    for _ in range(3):
+        cut_branch(tmp_path, "issue", released=True)
+    events, _calls = cut_branch(tmp_path, "issue", released=True)
+    assert events.count("notice=") == 1, events
+    assert "could not put it on its own branch" in events, events
 
 
 def test_a_phase_branch_cut_failure_keeps_the_repair_path(tmp_path: Path) -> None:

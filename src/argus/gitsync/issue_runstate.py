@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from argus import conventions
+from argus.board.files import reservation_file
 from argus.gitsync.git import (
     degraded,
     dirty_paths,
@@ -102,6 +103,10 @@ def mode_issue_clean(
             if match is None or not run.is_dir():
                 continue
             candidate = issue_number(match.group(1))
+            # A run folder a failed launch left without a reservation is not a
+            # claimed run; skip it so one leftover never stops the whole sweep.
+            if not reservation_file(root, candidate, kind="issue").is_file():
+                continue
             _private, scopes = issue_scope(root, candidate)
             if any(inside_scope(path, scopes) for path in dirty):
                 numbers.append(candidate)

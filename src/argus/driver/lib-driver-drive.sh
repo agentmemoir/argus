@@ -112,6 +112,7 @@ _drive() {
   # A receipt read that fails is a repair; a blocked tidy is a narrow own-state
   # or lost-work stop, so that one return still stops the tick.
   reconcile_pending_reviews || return 1
+  launchfault_due
   if [ -f "$HALT" ]; then
     log_changed halted "halted ($(tr '\n' ' ' <"$HALT")); no new work"
     return 0
@@ -271,14 +272,12 @@ _drive_cut_branch() {
       esac
       # An issue has no branch of its own to fall back to: the checkout is on
       # the base branch, so a launch would put issue work there (belief 4).
-      # Give the claim back, say why, and launch nothing.
+      # Launch nothing; it is a launch fault, so keep the claim and halt.
       if [ "${work_kind:-phase}" = issue ]; then
         branch_reason="$(selection_value error <"$RUN_DIR/phase-branch.json")"
         log "issue $number: could not put the issue on its own branch; no launch, nothing ran on the base branch (see $RUN_DIR/phase-branch.json)"
-        ISSUE_CLAIM_HELD=1; CLAIM_RELEASED=0
-        release_refused_claim "$number" "${reservation_id:-}" "${reservation_generation:-}" failed
-        [ "$CLAIM_RELEASED" != 1 ] || ISSUE_CLAIM_HELD=0
-        notify_phase "$rel" branch-refused "${branch_reason:-${branch_state:-unknown}}"
+        launchfault_halt "$number" "$rel" "$(phase_run_dir "$number" "$rel")" \
+          "${branch_state:-}" "$branch_rc" "" "" "$(launchfault_branch_reason "$branch_reason")"
         _DRIVE_RC=1
         return 0
       fi

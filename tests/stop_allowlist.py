@@ -78,12 +78,14 @@ STOP_ALLOWLIST = r"""
     driver/lib-driver-issues.sh	return_nonzero	fn:issue_preflight|return 1#4
     driver/lib-driver-launch.sh	drive_rc_nonzero	fn:_drive_launch||| { notify "${work_kind:-phase} $number failed to create tmux session '$SESSION'"; { _DRIVE_RC=1; return 0; }; }#1
     driver/lib-driver-launch.sh	drive_rc_nonzero	fn:_drive_launch||| { notify "${work_kind:-phase} $number failed to launch in tmux"; { _DRIVE_RC=1; return 0; }; }#1
+    driver/lib-driver-launchfault.sh	halt_marker	fn:launchfault_halt|"$number" "$attempts" "$rc" "${state:-unknown}" "$(ts)" >"$HALT"#1
     driver/lib-driver-log.sh	return_nonzero	fn:cap_last_byte|printf -v byte '%d' "'$last" || return 1#1
     driver/lib-driver-maintenance.sh	return_nonzero	fn:reconcile_pending_reviews|tidy_published_checkout || return 1#1
     driver/lib-driver-resume.sh	return_nonzero	fn:_drive_resume_group|return 1#1
     driver/lib-driver-resume.sh	return_nonzero	fn:_drive_resume_branch|return 1 ;;#1
     driver/lib-driver-resume.sh	return_nonzero	fn:_drive_resume_branch|return 1#1
     driver/lib-driver-resume.sh	resume_refuse	fn:_drive_resume|resume_refuse "$target" "no phase file found for phase $number"#1
+    driver/lib-driver-resume.sh	return_nonzero	fn:_drive_resume|[ "$RESUME_LAUNCH_FAULT" = 0 ] || return 1#1
     driver/lib-driver-resume.sh	return_nonzero	fn:_drive_resume|return 1#1
     driver/lib-driver-resume.sh	resume_refuse	fn:_drive_resume|resume_refuse "$target" "the halt record $HALT_RECORD is missing or malformed"#1
     driver/lib-driver-resume.sh	return_nonzero	fn:_drive_resume|return 1#2

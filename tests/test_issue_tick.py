@@ -237,6 +237,24 @@ def test_issue_tick_claims_one_issue_and_launches_only_the_stub(
     assert not any(call["remote_in_env"] for call in argv(backlog))
 
 
+def test_a_launch_fault_halt_selects_no_issue_and_writes_no_label(
+    backlog: Path, tmux_dir: Path
+) -> None:
+    state = backlog / "root/board/runs/driver-state"
+    state.mkdir(parents=True)
+    (state / "halted").write_text("launch fault: issue 100000 attempt 1 rc=2\n")
+    (state / "launch-fault").write_text("100000 1 9999999999 0\n")
+    (state / "claim").write_text("100000\tr1\t4\n")
+    tick = argus(backlog, tmux_dir)
+    log = (state / "driver.log").read_text(encoding="utf-8")
+    assert tick.returncode == 0, (tick.stderr, log)
+    assert "no new work" in log, log
+    assert "reserved issue" not in log, log
+    # The halt holds the tick before selection, so gh is never called at all.
+    assert not (backlog / "argv.jsonl").exists()
+    assert (state / "halted").exists()
+
+
 @pytest.mark.parametrize(
     ("error", "reason"),
     [

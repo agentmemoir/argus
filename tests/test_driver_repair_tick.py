@@ -34,7 +34,7 @@ def run_session(tmp_path: Path, result: dict[str, object] | None) -> str:
     )
     script = """
 set -euo pipefail
-for name in lib-driver-log lib-driver-run lib-driver-halt-record; do
+for name in lib-driver-log lib-driver-run lib-driver-halt-record lib-driver-launchfault; do
   . "$TEST_DRIVER/$name.sh"
 done
 PYTHON="$TEST_PYTHON"

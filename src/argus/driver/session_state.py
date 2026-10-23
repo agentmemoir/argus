@@ -9,7 +9,8 @@ parse fails by design. The object is found by trying each `{` from the end of
 the text and keeping the one whose parse reaches the end, which tolerates
 braces inside the error text.
 
-The answer is two lines with fixed prefixes, `state=` and `error=`, so one
+The answer is three lines with fixed prefixes, `state=`, `error=` and `hook=`
+(the failing hook point, such as `pre_run`), so one
 invocation reads the payload once. Each value is folded onto its line here, so
 a value can never add a line.
 
@@ -104,6 +105,8 @@ def main(argv: list[str]) -> int:
     error = payload.get("error")
     print(f"state={one_line(state)}")
     print(f"error={one_line(error) if isinstance(error, str) else ''}")
+    hook = payload.get("hook_point")
+    print(f"hook={one_line(hook) if isinstance(hook, str) else ''}")
     return 0
 
 
