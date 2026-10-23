@@ -26,14 +26,23 @@ def _load_hook() -> ModuleType:
 
 
 def _fake_gitsync(
-    monkeypatch: pytest.MonkeyPatch, outcomes: list[tuple[int, dict[str, Any]]]
+    monkeypatch: pytest.MonkeyPatch,
+    outcomes: list[tuple[int, dict[str, Any]]],
+    base_sync: tuple[int, str] = (0, "base-sync: no conflict with master"),
 ) -> list[list[str]]:
     hook = _load_hook()
     calls: list[list[str]] = []
+    gitsync_calls: list[list[str]] = []
 
     def fake_run(argv: list[str], **_kwargs: Any) -> subprocess.CompletedProcess[str]:
         calls.append(argv)
-        returncode, payload = outcomes[len(calls) - 1]
+        if argv[0] == "git":
+            return subprocess.CompletedProcess(argv, 0, "issue/248-fixture\n", "")
+        if "argus.gitsync.base_sync_cli" in argv:
+            returncode, text = base_sync
+            return subprocess.CompletedProcess(argv, returncode, text, "")
+        gitsync_calls.append(argv)
+        returncode, payload = outcomes[len(gitsync_calls) - 1]
         return subprocess.CompletedProcess(argv, returncode, json.dumps(payload), "")
 
     monkeypatch.setattr(hook.subprocess, "run", fake_run)
@@ -68,4 +77,33 @@ def test_example_hook_passes_the_body_file_and_exits_zero_on_success(
     ok = (0, {"ok": True, "state": "OPEN"})
     calls = _fake_gitsync(monkeypatch, [ok, ok])
     assert _load_hook().main() == 0
-    assert calls[1][-2:] == ["--body-file", "/run/pr-body.md"], calls
+    open_pr = [call for call in calls if "open-pr" in call]
+    assert open_pr[0][-2:] == ["--body-file", "/run/pr-body.md"], calls
+
+
+def test_base_sync_runs_before_open_pr_on_success(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ok = (0, {"ok": True, "state": "OPEN"})
+    calls = _fake_gitsync(monkeypatch, [ok, ok])
+    assert _load_hook().main() == 0
+    base = [i for i, call in enumerate(calls) if "argus.gitsync.base_sync_cli" in call]
+    pr = [i for i, call in enumerate(calls) if "open-pr" in call]
+    assert base and pr and base[0] < pr[0], calls
+    assert calls[base[0]][-4:] == ["--repo", ".", "--pr-branch", "issue/248-fixture"]
+
+
+@pytest.mark.parametrize(
+    "outcome",
+    [
+        (3, "base-sync: text conflict with origin/master; resolve, then commit"),
+        (1, "base-sync: failed: git fetch origin failed"),
+    ],
+)
+def test_base_sync_stop_exits_non_zero_before_open_pr(
+    monkeypatch: pytest.MonkeyPatch, outcome: tuple[int, str]
+) -> None:
+    ok = (0, {"ok": True, "state": "OPEN"})
+    calls = _fake_gitsync(monkeypatch, [ok, ok], base_sync=outcome)
+    assert _load_hook().main() == 1
+    assert not [call for call in calls if "open-pr" in call], calls
