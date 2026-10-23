@@ -212,6 +212,19 @@ def format_notification(
             f"The line continues. {retry} "
             f"For the residue, run:\n\n```\ncat {run_dir / 'failed.json'}\n```"
         )
+    if event == "branch-refused":
+        # Needs You: the run never started, so the base branch holds no work.
+        cause = safe_reason or "see phase-branch.json in the driver run folder"
+        if kind == "issue" and claim_held:
+            retry = (
+                "Argus could not give back its board claim, so a later tick "
+                "retries the issue after the claim expires and its cooldown passes."
+            )
+        return (
+            f"{label} did not start: Argus could not put it on its own branch, "
+            f"so nothing ran on the base branch. Cause: {cause}. "
+            f"Action: fix the cause. {retry}"
+        )
     if event == "stalled":
         quiet = "under a minute" if quiet_minutes < 1 else f"{quiet_minutes} minutes"
         return (
@@ -239,6 +252,7 @@ def build_parser() -> argparse.ArgumentParser:
             "stalled",
             "escalated",
             "failed",
+            "branch-refused",
         ],
     )
     parser.add_argument("--reason")

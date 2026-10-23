@@ -59,6 +59,13 @@ _drive_resume_branch() {   # <number> <rel>
         log "resume: $RESUME_REFUSAL"
         return 1 ;;
     esac
+    # An issue has no branch of its own to fall back to, so a resume on the
+    # current branch would put issue work on the base branch (belief 4).
+    if [ "${work_kind:-phase}" = issue ]; then
+      RESUME_REFUSAL="could not put issue $number on its own branch; no launch, nothing ran on the base branch (see $RUN_DIR/phase-branch.json)"
+      log "resume: $RESUME_REFUSAL"
+      return 1
+    fi
     log "resume: could not put ${work_kind:-phase} $number on its own branch; continuing on $(git -C "$REPO" rev-parse --abbrev-ref HEAD 2>/dev/null || printf 'the current branch'); the next tick retries (see $RUN_DIR/phase-branch.json)"
     return 0
   fi
