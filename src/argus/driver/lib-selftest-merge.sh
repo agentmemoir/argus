@@ -167,7 +167,7 @@ PY
   hook_last="$(printf '%s\n' "$hook_steps" | tail -1)"
   if [ -f "$title_hook" ]; then
     hook_sess="ar-hook-selftest-$$"
-    tmux new-session -d -s "$hook_sess" -x 80 -y 24 -n phase 'sleep 30' 2>/dev/null || true
+    9>&- tmux new-session -d -s "$hook_sess" -x 80 -y 24 -n phase 'sleep 30' 2>/dev/null || true
     hook_rc=0
     while IFS= read -r hook_step; do
       GLIDE_STEP="$hook_step" CLIO_TMUX_SESSION="$hook_sess" \
