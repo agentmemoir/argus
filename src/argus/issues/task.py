@@ -62,9 +62,8 @@ def task_directory(repo: Path) -> Path:
 
 def task_path(directory: Path, issue: dict[str, Any]) -> Path:
     number = issue_number(issue["number"])
-    slug = (
-        re.sub(r"[^a-z0-9]+", "-", issue["title"].lower()).strip("-")[:60].rstrip("-")
-    )
+    words = re.sub(r"[^a-z0-9]+", "-", issue["title"].lower()).strip("-").split("-")
+    slug = "-".join(words[:3])[:60].rstrip("-")
     return directory / (f"issue-{number:06d}" + (f"-{slug}" if slug else "") + ".md")
 
 

@@ -9,6 +9,7 @@ from typing import Any
 import pytest
 
 from argus import conventions
+from argus.gitsync.issue_paths import issue_branch
 from argus.issues.client import SEARCH_FIELDS, IssueClient
 from argus.issues.task import normalize, render, task_path, write
 from argus.issues.transport import IssuesUnavailable
@@ -233,3 +234,24 @@ def test_atomic_replacement_and_bounded_filename(configured: Configured) -> None
     write(path, "second")
     assert path.read_text() == "second"
     assert sorted(p.name for p in repo.iterdir()) == sorted(["github.json", path.name])
+
+
+@pytest.mark.parametrize(
+    ("title", "name", "branch"),
+    [
+        (
+            "Backup restore refuses a backup of a store",
+            "issue-100001-backup-restore-refuses.md",
+            "issue/100001-backup-restore-refuses",
+        ),
+        ("Fix input", "issue-100001-fix-input.md", "issue/100001-fix-input"),
+        ("!!!", "issue-100001.md", "issue/100001-task"),
+    ],
+)
+def test_task_slug_keeps_three_words_and_branch_follows(
+    configured: Configured, title: str, name: str, branch: str
+) -> None:
+    repo, _ = configured
+    path = task_path(repo, issue(title=title))
+    assert path.name == name
+    assert issue_branch(100001, path) == branch
