@@ -88,7 +88,13 @@ def test_session_ensure_leaves_the_driver_lock_free() -> None:
                 [tmux, "-S", str(socket), "has-session", "-t", SESSION],
                 capture_output=True,
             )
-            assert alive.returncode == 0, "no tmux server runs, so the check proves nothing"
-            assert _lock_is_free(lock), "a tmux server started by the driver keeps the lock"
+            assert alive.returncode == 0, (
+                "no tmux server runs, so the check proves nothing"
+            )
+            assert _lock_is_free(lock), (
+                "a tmux server started by the driver keeps the lock"
+            )
         finally:
-            subprocess.run([tmux, "-S", str(socket), "kill-server"], capture_output=True)
+            subprocess.run(
+                [tmux, "-S", str(socket), "kill-server"], capture_output=True
+            )
