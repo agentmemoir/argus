@@ -38,6 +38,16 @@ def workspace(
     )
 
 
+GITHUB_REMOTE = "https://github.com/example-org/example-repo.git"
+
+
+def _publish_to_github_remote(root: Path) -> None:
+    """Give the checkout a GitHub origin that its branch tracks, as a publish leaves it."""
+    assert git(root, "remote", "add", "origin", GITHUB_REMOTE)[0] == 0
+    assert git(root, "update-ref", "refs/remotes/origin/main", "HEAD")[0] == 0
+    assert git(root, "branch", "--set-upstream-to=origin/main", "main")[0] == 0
+
+
 def test_an_explicit_pull_request_still_reports_the_branch(
     workspace: Workspace,
 ) -> None:
@@ -97,6 +107,7 @@ def test_a_url_without_a_number_is_named_by_the_url(workspace: Workspace) -> Non
 
 
 def test_an_explicit_number_keeps_the_url_unknown(workspace: Workspace) -> None:
+    _publish_to_github_remote(workspace.root)
     workspace.answer(checks=[check_row("build", "pass")])
 
     out = mode_peek_ci(workspace.root, pull_request="42")
@@ -105,7 +116,26 @@ def test_an_explicit_number_keeps_the_url_unknown(workspace: Workspace) -> None:
     row = out["repos"][0]
     assert row["number"] == 42
     assert row["url"] is None
-    assert "42" in workspace.check_calls()[0]
+    assert row["remote"] == "origin"
+    checks = workspace.check_calls()
+    assert len(checks) == 1
+    assert "42" in checks[0]
+    assert checks[0][checks[0].index("--repo") + 1] == "example-org/example-repo"
+
+
+def test_an_explicit_number_with_no_remote_is_refused_and_gh_is_not_run(
+    workspace: Workspace,
+) -> None:
+    workspace.answer(checks=[check_row("build", "pass")])
+
+    out = mode_peek_ci(workspace.root, pull_request="42")
+
+    assert out["ok"] is False, out
+    row = out["repos"][0]
+    assert row["state"] == "UNKNOWN"
+    assert row["remote"] is None
+    assert any("--pull-request" in reason for reason in row["blockers"]), row
+    assert workspace.check_calls() == []
 
 
 def test_a_value_that_is_not_a_pull_request_is_refused_before_gh(

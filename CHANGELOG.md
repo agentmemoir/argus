@@ -6,6 +6,10 @@ Notable changes to this project are documented here. The format follows [Keep a 
 
 - Issue pull requests are marked ready for review once every check on them passes. The ready sweep reuses the group ready transition, with its once-only guard, and skips a pull request while its issue run or a repair round runs. ([#198](https://github.com/agentmemoir/argus/issues/198))
 
+- The check read of a pull request now names the repository it reads. The peek-ci mode and the CI repair step take the owner, repo, and host from the pull request URL. A read with no owner or no repo is refused, and gh is not run. A bare pull request number gets no check read in those two steps, so its result says the repository is missing. ([#180](https://github.com/agentmemoir/argus/issues/180))
+
+- A `failed.json` left by a glide stop before `run.json` was written is cleared before the next run starts in that folder. It no longer stays beside the new run, where the selector read it as a failed phase. ([#214](https://github.com/agentmemoir/argus/issues/214))
+
 - Docs: the issue driver pages now state the trust rules, claim label, branch names, and launch-fault retries as the code runs them. A new page gives the setup steps for an issue driver host, and the known gaps are listed in the issue page.
 
 - A run-state commit or push that fails no longer reads as a clean sync. The sync summary says `DEGRADED` and names the failed step, and the driver log says the run state did not land. The result gives git's step and exit code, not git's error text, so no machine name reaches output or the run folder. The phase reservation file is written by a JSON encoder, so an id with a quote still makes valid JSON. ([#174](https://github.com/agentmemoir/argus/issues/174), [#175](https://github.com/agentmemoir/argus/issues/175), [#178](https://github.com/agentmemoir/argus/issues/178))

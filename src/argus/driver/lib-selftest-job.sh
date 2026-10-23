@@ -112,3 +112,27 @@ selftest_case_job_failure() {
   fi
   rm -rf "$run_dir"
 }
+
+selftest_case_job_stale_failed() {
+  # A failed.json that a glide stop left before run.json existed is residue.
+  # The next run clears it before it starts, so the selector does not skip the
+  # phase because of a file the new run never wrote.
+  local phase=100012 rel run_dir old_cmd_glide number glide_inputs=()
+  rel="$(resume_phase_file_of "$phase")" || rel=""
+  run_dir="$(phase_run_dir "$phase" "$rel")"
+  rm -rf "$run_dir" "$run_dir".prev-*
+  mkdir -p "$run_dir"
+  printf '{"failed_at":"0","phase":"%s","rc":2,"retries":3,"state":"blocked","version":1}\n' \
+    "$phase" >"$run_dir/failed.json"
+  old_cmd_glide="$CMD_GLIDE"
+  CMD_GLIDE=true
+  number="$phase"
+  glide_run_once
+  CMD_GLIDE="$old_cmd_glide"
+  if [ ! -e "$run_dir/failed.json" ]; then
+    echo "ok: a stale failed.json with no run.json is cleared before the new run"
+  else
+    echo "FAIL: a stale failed.json with no run.json stayed beside the new run"; fail=1
+  fi
+  rm -rf "$run_dir" "$run_dir".prev-*
+}

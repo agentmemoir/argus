@@ -54,13 +54,15 @@ def gh_pull_request_checks(
 ) -> tuple[list[dict[str, Any]] | None, int, str]:
     """Every check gh reports for one pull request, and gh's own exit code.
 
-    ``owner``/``repo``/``host`` name the pull request's repository, in the same
-    order as ``gh_pull_request_stage_history``. Without them gh answers about the
+    ``owner`` and ``repo`` name the pull request's repository, and ``host`` names
+    its host, in the same order as ``gh_pull_request_stage_history``. Both
+    ``owner`` and ``repo`` are required: without them gh would answer about the
     repository of ``root``, which is wrong whenever the run directory sits
-    outside a checkout or on a different repository than the pull request. The
-    host travels inside the one ``--repo [HOST/]OWNER/REPO`` argument: it is the
-    only host-bearing flag ``gh pr checks`` accepts, so a second ``--hostname``
-    would be rejected by the command itself.
+    outside a checkout or on a different repository than the pull request. A call
+    missing either one is refused, and gh is not run. The host travels inside the
+    one ``--repo [HOST/]OWNER/REPO`` argument: it is the only host-bearing flag
+    ``gh pr checks`` accepts, so a second ``--hostname`` would be rejected by the
+    command itself.
 
     ``target`` is a pull request number or URL. Returns the rows, the exit code
     gh returned, and a detail. The rows and the code are returned together so a
@@ -80,6 +82,14 @@ def gh_pull_request_checks(
     request with a failing check on it. ``--watch`` is absent too: this reads
     once and returns.
     """
+    missing = [name for name, value in (("owner", owner), ("repo", repo)) if not value]
+    if missing:
+        return (
+            None,
+            -1,
+            f"the checks read names no repository: {' and '.join(missing)} missing, "
+            "so gh was not asked",
+        )
     argv = [
         gh_binary(),
         "pr",
@@ -87,9 +97,9 @@ def gh_pull_request_checks(
         str(int(target)) if isinstance(target, int) else str(target),
         "--json",
         "bucket,state,name,link",
+        "--repo",
+        repo_target(owner, repo, host),
     ]
-    if owner and repo:
-        argv.extend(["--repo", repo_target(owner, repo, host)])
     try:
         done = subprocess.run(
             argv,
