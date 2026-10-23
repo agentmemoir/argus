@@ -4,6 +4,7 @@ Notable changes to this project are documented here. The format follows [Keep a 
 
 ## [Unreleased]
 
+- A CI repair round is counted before its tmux launch, so a launch that fails uses one of the `repair.attempts`. A round that cannot be counted does not launch. Before, a failed count let the round run uncounted, so rounds could repeat without a limit. ([#210](https://github.com/agentmemoir/argus/issues/210))
 - The ready sweep reads each pull request once per pass. A group has one pull request shared by every member, so the sweep used to read its timeline and checks once per member. The first answer is now kept by pull request URL for the rest of that pass, and a pull request readied in the pass is not readied again. Merged, closed, or already readied pull requests are still read on later passes. ([#181](https://github.com/agentmemoir/argus/issues/181))
 
 - Docs: the repair section now states that a pull request that was escalated gets no further repair round or notice, even when its checks turn red again, and that an unreadable attempt record sends one notice and starts no round. ([#210](https://github.com/agentmemoir/argus/issues/210))

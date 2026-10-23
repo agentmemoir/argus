@@ -160,11 +160,14 @@ for row in json.load(sys.stdin).get("awaiting_review", []):
         [ "$(cat "$RUN_DIR/log-last-repair-record-$key" 2>/dev/null)" = "$msg" ] || notify "$msg"
         log_changed "repair-record-$key" "$msg" ;;
       repair)
-        repair_launch "$key" "$(selection_value task <<<"$out")" "$branch" </dev/null || continue
+        # The round is counted before it launches, so a launch that fails still
+        # uses one attempt. A round that cannot be counted never launches.
         "$PYTHON" "$ARGUS/gitsync/repair_cli.py" "${ARGUS_CONFIG_ARGS[@]}" \
           --pull-request "$pr" --run-dir "$RUN_DIR" --launched \
           --attempts "$REPAIR_ATTEMPTS" --wait "$REPAIR_WAIT" </dev/null >/dev/null \
-          || log "repair $key: the round started but was not counted"
+          || { log "repair $key: the round could not be counted; no round starts"; continue; }
+        repair_launch "$key" "$(selection_value task <<<"$out")" "$branch" </dev/null \
+          || { log "repair $key: the launch failed; the round used one attempt"; continue; }
         PENDING_PUBLISHED=$((PENDING_PUBLISHED + 1))
         return 0 ;;
     esac

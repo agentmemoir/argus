@@ -14,7 +14,7 @@ python_transport() {
     */gitsync/repair_cli.py)
       log "CLI $*"
       case "$*" in
-        *--launched*) printf '{"action":"counted"}' ;;
+        *--launched*) [ -z "${COUNT_FAILS:-}" ] || return 1; printf '{"action":"counted"}' ;;
         *) printf '%s' "$DECISION" ;;
       esac ;;
     *) "$TEST_PYTHON" "$@" ;;
@@ -44,14 +44,25 @@ repair_launch() { log "LAUNCH $*"; }""",
     assert "pending=1" in events
 
 
-def test_a_failed_launch_is_never_counted(tmp_path: Path) -> None:
+def test_a_failed_launch_uses_its_attempt_before_it_fails(tmp_path: Path) -> None:
     events = _tick(
         tmp_path,
         """DECISION='{"action":"repair","task":"/t.md"}'
 repair_launch() { log "LAUNCH $*"; return 1; }""",
     )
-    assert "LAUNCH" in events
-    assert "--launched" not in events
+    assert events.index("--launched") < events.index("LAUNCH")
+    assert "pending=0" in events
+
+
+def test_a_round_that_cannot_be_counted_never_launches(tmp_path: Path) -> None:
+    events = _tick(
+        tmp_path,
+        """DECISION='{"action":"repair","task":"/t.md"}'
+COUNT_FAILS=1
+repair_launch() { log "LAUNCH $*"; }""",
+    )
+    assert "--launched" in events
+    assert "LAUNCH" not in events
     assert "pending=0" in events
 
 
