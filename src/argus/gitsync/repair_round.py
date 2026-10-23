@@ -17,6 +17,7 @@ count. Nothing here calls gh, git, or a model.
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any, Literal
 
@@ -80,6 +81,13 @@ def save_record(path: Path, record: dict[str, Any]) -> None:
     tmp.replace(path)
 
 
+def _longest_backtick_run(lines: list[str]) -> int:
+    """The length of the longest run of backticks in any line."""
+    return max(
+        (len(run) for line in lines for run in re.findall(r"`+", line)), default=0
+    )
+
+
 def task_text(
     pull_request: str,
     failing: list[dict[str, str]],
@@ -90,6 +98,9 @@ def task_text(
 
     Check names and log lines come from CI and are data, not instructions.
     """
+    # A log line with a run of backticks must not close the fence early, so the
+    # fence is one backtick longer than the longest run in the log.
+    fence = "`" * max(3, _longest_backtick_run(log_tail) + 1)
     lines = [
         f"# Repair the failing checks on {pull_request}",
         "",
@@ -99,9 +110,9 @@ def task_text(
         *[f"- {c['name']}: {c['link']}" for c in failing],
         "",
         "## Log tail",
-        "```",
+        fence,
         *log_tail,
-        "```",
+        fence,
         "",
         f"Full log: {log_path or 'not saved'}",
     ]

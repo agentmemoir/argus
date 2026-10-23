@@ -86,6 +86,13 @@ def test_task_names_failing_checks_and_marks_ci_text_as_data() -> None:
     assert "error: E501" in text and "Full log: /run/repair-7/log.txt" in text
 
 
+def test_log_backticks_cannot_close_the_task_fence() -> None:
+    log = ["error: ```", "````", "ok"]
+    text = task_text("#7", [], log, None)
+    # The longest run in the log is four backticks, so the fence is five.
+    assert "`````\nerror: ```\n````\nok\n`````\n" in text
+
+
 def test_escalation_has_one_cause_and_one_action() -> None:
     line = escalation_text("#7", 3, failing_checks(RED))
     assert line == (
