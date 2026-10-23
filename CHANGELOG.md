@@ -4,6 +4,10 @@ Notable changes to this project are documented here. The format follows [Keep a 
 
 ## [Unreleased]
 
+- `abandon` takes a short park reservation on the board before it parks a phase that no machine holds. Before, it parked after one board read, so another machine could reserve the phase in between. A live claim by another machine, a board that cannot answer, or a claim still in its cooldown refuses the park and writes nothing. A park that stops before its release expires on its own. ([#182](https://github.com/agentmemoir/argus/issues/182))
+
+- The open-pr mode for a phase creates its draft pull request only when the board confirms this machine's claim. Before, it created the pull request with no board read, so a foreign or expired claim, or an unreadable board, could still publish the phase. A refused fence creates nothing. ([#164](https://github.com/agentmemoir/argus/issues/164))
+
 - An issue tick with no readable repair pipeline no longer lists the open pull requests of its issue run folders first. It names the missing file once and starts no repair round. `argus --check` reports a missing repair pipeline as MISSING. ([#210](https://github.com/agentmemoir/argus/issues/210))
 - The check for unpushed repair work asks the remote, not the local tracking refs, before a repair worktree is removed and before a repair round is judged to have made a commit. A fetch refspec that leaves the tracking refs behind no longer reports a pushed commit as unpushed, so no false notice is sent. ([#210](https://github.com/agentmemoir/argus/issues/210))
 - A CI repair attempt budget belongs to one pull request head commit. After the rounds are spent and Needs You is sent, the same head stays stopped with no further notice; a new head pushed to the branch starts a fresh budget of `repair.attempts` rounds. The remote's head of the branch is read each tick for this. Records written before this change have no head, so after the upgrade each awaiting pull request, including an escalated one, gets one fresh budget of `repair.attempts` rounds. ([#210](https://github.com/agentmemoir/argus/issues/210))
@@ -14,7 +18,9 @@ Notable changes to this project are documented here. The format follows [Keep a 
 
 - The example issue pipeline's post_step hook now runs an example script that exists. It exits non-zero when the checkpoint or open-pr mode refuses, so the step stays incomplete. The open-pr refusal for --branch, --repo, or --phase names the flag and says it does not apply. ([#209](https://github.com/agentmemoir/argus/issues/209))
 
-- The ready sweep reads each pull request once per pass. A group has one pull request shared by every member, so the sweep used to read its timeline and checks once per member. The first answer is now kept by pull request URL for the rest of that pass, and a pull request readied in the pass is not readied again. Merged, closed, or already readied pull requests are still read on later passes. ([#181](https://github.com/agentmemoir/argus/issues/181))
+- The ready sweep reads each pull request once per pass. A group has one pull request shared by every member, so the sweep used to read its timeline and checks once per member. The first answer is now kept by pull request URL for the rest of that pass, and a pull request readied in the pass is not readied again. ([#181](https://github.com/agentmemoir/argus/issues/181))
+
+- The ready sweep lists the open pull requests of each repository once per pass, and reads the timeline only of open draft pull requests. A merged, closed, or non-draft pull request is no longer read on later passes. If the open list cannot be read, the sweep reports the pull request as held and reads none. A draft that was readied before, such as one a person re-drafted, is still read, and its timeline stays the guard against a second ready. ([#181](https://github.com/agentmemoir/argus/issues/181))
 
 - Docs: the repair section now states that a pull request head that was escalated gets no further repair round or notice, even when its checks turn red again, that a new head starts a fresh budget, and that an unreadable attempt record sends one notice and starts no round. ([#210](https://github.com/agentmemoir/argus/issues/210))
 

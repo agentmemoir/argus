@@ -53,7 +53,13 @@ def gh(monkeypatch: pytest.MonkeyPatch) -> FakeGitHub:
     monkeypatch.setattr(group_review, "gh_pull_request_stage_history", fake.history)
     monkeypatch.setattr(group_review, "gh_pull_request_checks", fake.checks)
     monkeypatch.setattr(group_review, "gh_mark_pull_request_ready", fake.mark)
+    monkeypatch.setattr(group_review, "gh_open_pull_request_numbers", _open_list)
     return fake
+
+
+def _open_list(*_args: Any) -> tuple[dict[int, bool], str]:
+    """GitHub lists the issue's pull request as open and a draft."""
+    return {77: True}, ""
 
 
 def _no_phase_runs(_root: Path) -> list[Any]:

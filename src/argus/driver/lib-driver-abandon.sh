@@ -82,6 +82,24 @@ for found in data["phases"]:
 ' "$1"
 }
 
+# Take the park reservation for a phase no machine holds, before the residue is
+# written. The board refuses it when another machine holds a live claim, and a
+# board that cannot answer refuses it too, so a refused park writes nothing. The
+# reservation runs on the heartbeat window, so a park that stops before its
+# release expires on its own. Prints the reservation id and its generation.
+abandon_park_reserve() {   # <number>
+  local out=""
+  out="$("$PYTHON" "$ARGUS/board/reservations.py" reserve \
+    "${ARGUS_CONFIG_ARGS[@]}" "${BOARD_KIND_ARGS[@]+"${BOARD_KIND_ARGS[@]}"}" \
+    --repo-root "$REPO" --phase "$1" --machine-id "$PHASE_MACHINE_ID" --status running \
+    2>"$RUN_DIR/abandon-park-$1.err")" || return 1
+  printf '%s' "$out" | "$PYTHON" -c '
+import json, sys
+reservation = json.load(sys.stdin)["reservation"]
+print(reservation["reservation_id"], reservation["generation"])
+' 2>/dev/null
+}
+
 abandon_cmd() {   # <number> [--reason TEXT]
   local number="${1:-}" reason="" rel="" run_dir="" state=""
   shift || true
@@ -125,6 +143,7 @@ abandon_cmd() {   # <number> [--reason TEXT]
   state="$(phase_state "$number" "${rel:-}")"
 
   local fence_id="" fence_gen="" claimed=0 release=1 reason_on_board=""
+  local park=0 park_out="" park_id="" park_gen=""
   # The residue is a state write, and the board is the authority. A fence this
   # machine still holds is proved and released below. With no such fence, the
   # board's own scan decides: a phase no other machine holds live (no record,
@@ -144,7 +163,8 @@ abandon_cmd() {   # <number> [--reason TEXT]
       exit 1
     fi
     case "$reason_on_board" in
-      no_claim|expired|terminal) release=0 ;;
+      no_claim|expired) release=0; park=1 ;;
+      terminal) release=0 ;;
       other_owner)
         printf 'argus abandon: another machine holds a live claim on %s; not abandoning\n' "$number" >&2
         exit 1 ;;
@@ -154,12 +174,26 @@ abandon_cmd() {   # <number> [--reason TEXT]
         exit 1 ;;
     esac
   fi
+  # A park with no release must not overlap a new reservation of the phase by
+  # another machine, so the board takes the park reservation before anything is
+  # written. A refusal, or a board that cannot answer, stops here.
+  if [ "$park" = 1 ]; then
+    if ! park_out="$(abandon_park_reserve "$number")"; then
+      printf 'argus abandon: could not take a park reservation for %s; not abandoning (see %s/abandon-park-%s.err)\n' \
+        "$number" "$RUN_DIR" "$number" >&2
+      exit 1
+    fi
+    park_id="${park_out%% *}"
+    park_gen="${park_out#* }"
+  fi
   # The residue is staged first: a write that fails stops here with the claim
   # held and nothing released, so the same command can run again. A write after
   # the release could fail with the claim gone, and the phase would run again.
+  # A park reservation taken before this stop is not released; it expires on its
+  # own.
   if ! abandon_residue_write "$number" "$rel" "$run_dir" "$state" "$reason" \
       "$fence_id" "$fence_gen"; then
-    printf 'argus abandon: could not write the residue for %s in %s; nothing was released\n' \
+    printf 'argus abandon: could not write the residue for %s in %s; nothing was released, and a park reservation expires on its own\n' \
       "$number" "$run_dir" >&2
     exit 1
   fi
@@ -200,6 +234,17 @@ abandon_cmd() {   # <number> [--reason TEXT]
     printf 'argus abandon: the board no longer holds %s for this machine, but it could not be parked; the staged residue is %s/abandoned.json.pending, and the same command finishes it\n' \
       "$number" "$run_dir" >&2
     exit 1
+  fi
+  # The park is in place once the residue is renamed, so the park reservation is
+  # given back now. If that fails, the reservation expires on its own, and the
+  # phase stays parked.
+  if [ "$park" = 1 ] && ! "$PYTHON" "$ARGUS/board/reservations.py" release-group \
+      "${ARGUS_CONFIG_ARGS[@]}" "${BOARD_KIND_ARGS[@]+"${BOARD_KIND_ARGS[@]}"}" \
+      --repo-root "$REPO" --machine-id "$PHASE_MACHINE_ID" \
+      --reservation-id "$park_id" --generation "$park_gen" \
+      >"$run_dir/park-release.json" 2>&1; then
+    printf 'argus abandon: parked %s, but its park reservation could not be released; it expires on its own (see %s/park-release.json)\n' \
+      "$number" "$run_dir" >&2
   fi
   [ "$claimed" = 0 ] || rm -f "$CLAIM"
 

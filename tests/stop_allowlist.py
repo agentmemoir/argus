@@ -10,6 +10,7 @@ file cannot reuse another function's row.
 STOP_ALLOWLIST = r"""
     driver/lib-driver-abandon.sh	return_nonzero	fn:abandon_board_reason|case "${DRIVER_STUB_BOARD_FENCE:-}" in fail) return 1 ;; esac#1
     driver/lib-driver-abandon.sh	return_nonzero	fn:abandon_board_reason|2>"$RUN_DIR/abandon-scan-$1.err")" || return 1#1
+    driver/lib-driver-abandon.sh	return_nonzero	fn:abandon_park_reserve|2>"$RUN_DIR/abandon-park-$1.err")" || return 1#1
     driver/lib-driver-abandon.sh	exit_nonzero	fn:abandon_cmd|exit 2#1
     driver/lib-driver-abandon.sh	exit_nonzero	fn:abandon_cmd|exit 2 ;;#1
     driver/lib-driver-abandon.sh	exit_nonzero	fn:abandon_cmd|exit 2 ;;#2
@@ -24,6 +25,7 @@ STOP_ALLOWLIST = r"""
     driver/lib-driver-abandon.sh	exit_nonzero	fn:abandon_cmd|exit 1 ;;#3
     driver/lib-driver-abandon.sh	exit_nonzero	fn:abandon_cmd|exit 1#5
     driver/lib-driver-abandon.sh	exit_nonzero	fn:abandon_cmd|exit 1#6
+    driver/lib-driver-abandon.sh	exit_nonzero	fn:abandon_cmd|exit 1#7
     driver/lib-driver-check.sh	return_nonzero	fn:check|return 1#1
     driver/lib-driver-check.sh	return_nonzero	fn:check|return 1#2
     driver/lib-driver-check.sh	return_nonzero	fn:check|[ "$prerun_rc" -eq 0 ] || return 1#1
@@ -172,6 +174,7 @@ STOP_ALLOWLIST = r"""
     gitsync/group_publication.py	blocked_call	fn:_push_one|return blocked(#1
     gitsync/group_review.py	ok_false	fn:mark_group_pull_request_ready|"ok": False,#1
     gitsync/group_review.py	ok_false	fn:mark_group_pull_request_ready|"ok": False,#2
+    gitsync/group_review.py	ok_false	fn:_ready_once|"ok": False,#1
     gitsync/issue_modes.py	raise_config	fn:mode_issue_branch|raise ConfigError("branch task filename differs from the frozen issue task")#1
     gitsync/issue_modes.py	raise_config	fn:_owned_issue_branch|raise ConfigError("checked-out branch is not the claimed issue branch")#1
     gitsync/issue_modes.py	ok_false	fn:issue_mode|"ok": False,#1
