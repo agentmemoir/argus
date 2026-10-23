@@ -178,6 +178,8 @@ def pending_checks(pub: Path, results: list[tuple[str, object, str]]) -> None:
             return {"returncode": 0}
         if list(argv[1:3]) == ["api", "graphql"]:
             return prior_ready if state["ready"] else draft
+        if list(argv[1:3]) == ["pr", "list"]:
+            return {"returncode": 0, "stdout": json.dumps([{"number": 7}])}
         if list(argv[1:3]) == ["pr", "checks"]:
             return green
         return {"returncode": 1}

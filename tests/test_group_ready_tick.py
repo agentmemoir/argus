@@ -62,6 +62,10 @@ if args[:2] == ["api", "graphql"]:
     page = {{"data": {{"repository": {{"pullRequest": plan["pull_request"]}}}}}}
     print(json.dumps([page]))
     sys.exit(0)
+if args[:2] == ["pr", "list"]:
+    open_now = plan["pull_request"]["state"] == "OPEN"
+    print(json.dumps([{{"number": 7}}] if open_now else []))
+    sys.exit(0)
 if args[:2] == ["pr", "checks"]:
     print(json.dumps(plan["checks"]["rows"]))
     sys.exit(plan["checks"]["exit"])

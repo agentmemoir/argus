@@ -12,6 +12,8 @@ from argus.gitsync.gh import (
     gh_pull_request_stage_history,
 )
 from argus.gitsync.gh_checks import gh_pull_request_checks
+from argus.gitsync.gh_open import gh_open_pull_request_numbers
+from argus.gitsync.gh_target import repo_target
 from argus.gitsync.receipts import _phase_run_entries, phase_receipt, pull_request_ref
 
 
@@ -214,8 +216,85 @@ def mark_group_pull_request_ready(
     }
 
 
+class OpenPullRequests:
+    """One sweep's view of GitHub's open pull requests, listed once per repository.
+
+    A pull request missing from its repository's open list is merged or closed,
+    so no ready can apply to it and the sweep never reads its timeline. Each list
+    is read on first use, so a sweep with no candidate makes no call. A list that
+    cannot be read stays unreadable for the rest of the sweep.
+    """
+
+    def __init__(self, root: Path) -> None:
+        self._root = root
+        self._lists: dict[str, tuple[set[int] | None, str]] = {}
+
+    def check(self, pull_request: str) -> tuple[bool | None, str]:
+        """Whether to read this pull request: True or False, or None and the reason."""
+        ref = pull_request_ref(pull_request)
+        if not ref:
+            return False, ""
+        target = repo_target(ref["owner"], ref["repo"], ref["host"])
+        if target not in self._lists:
+            self._lists[target] = gh_open_pull_request_numbers(
+                self._root, ref["owner"], ref["repo"], ref["host"]
+            )
+        numbers, why = self._lists[target]
+        if numbers is None:
+            return None, why
+        return ref["number"] in numbers, ""
+
+
+def _ready_once(
+    decided: dict[str, dict[str, Any]],
+    root: Path,
+    phase: int,
+    members: list[Any],
+    pending: list[str],
+    pull_request: str,
+    open_pulls: OpenPullRequests,
+) -> dict[str, Any] | None:
+    """The group's ready transition, asked at most once per pull request per sweep.
+
+    Every member of a group carries the same pull request, so the sweep reaches
+    it once per member. The first answer is kept by pull request URL for the rest
+    of the sweep. A later member reuses it as a skip, so the timeline and the
+    checks are read once, and a pull request readied by the first member is
+    never readied again. Only an answer is kept: a fault is asked again.
+
+    A pull request that is not in its repository's open list is merged or closed,
+    so it returns ``None`` before any timeline read. An open list that cannot be
+    read returns a failure, so no pull request is read as closed by mistake.
+    """
+    prior = decided.get(pull_request)
+    if prior is not None:
+        return dict(
+            prior,
+            phase=f"{phase:06d}",
+            skipped=True,
+            detail=f"already decided earlier in this sweep: {prior.get('detail', '')}",
+        )
+    readable, why = open_pulls.check(pull_request)
+    if readable is None:
+        return {
+            "ok": False,
+            "phase": f"{phase:06d}",
+            "pull_request": pull_request,
+            "detail": f"GitHub's open pull request list could not be read ({why}); "
+            "the pull request was not checked",
+        }
+    if not readable:
+        return None
+    ready = mark_group_pull_request_ready(root, phase, members, pending, pull_request)
+    if ready is not None:
+        decided[pull_request] = ready
+    return ready
+
+
 __all__ = [
+    "OpenPullRequests",
     "_group_pending",
     "_group_pull_request",
+    "_ready_once",
     "mark_group_pull_request_ready",
 ]
