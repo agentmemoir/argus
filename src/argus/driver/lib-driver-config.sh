@@ -172,6 +172,8 @@ PY
 # driver from an arbitrary directory. Both sides must agree, so both anchor to
 # REPO.
 phases_dir() {
+  # Issues mode sets no phases folder; an unset name prints nothing.
+  [ -n "${PHASES_DIRECTORY:-}" ] || return 0
   case "$PHASES_DIRECTORY" in
     /*) printf '%s' "$PHASES_DIRECTORY" ;;
     *) printf '%s' "$PHASES_REPO/$PHASES_DIRECTORY" ;;

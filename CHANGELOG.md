@@ -4,6 +4,8 @@ Notable changes to this project are documented here. The format follows [Keep a 
 
 ## [Unreleased]
 
+- When Argus cannot put an issue on its own branch, it no longer launches the run on the base branch. It gives the board claim back and sends one Needs You notice with the cause and the action. A phase keeps the old repair path. In issues mode, the phases folder reads as empty instead of failing on an unset `PHASES_DIRECTORY`. ([#215](https://github.com/agentmemoir/argus/issues/215), [#218](https://github.com/agentmemoir/argus/issues/218))
+
 - A failed or escalated issue run now gives its board claim back and keeps the claim label. Its Needs You notice says: remove the label from issue #N to let Argus retry. While the label is there and no board record holds the issue, it is skipped; once a person removes the label, a later tick can pick the issue again. If the release fails, the notice says the claim could not be given back, and the issue is picked again after the claim expires and its cooldown passes, even with the label. Completed, rejected, and accepted issues stay blocked. ([#203](https://github.com/agentmemoir/argus/issues/203))
 
 - `gitsync --mode open-pr` and `--mode peek-ci` use a pull request for the branch only when its head branch is in this repository and has the same name. A row with a missing value is not used.

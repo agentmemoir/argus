@@ -256,7 +256,7 @@ _drive_cut_branch() {
       --phases-directory "$(phases_dir)" \
       "${GROUP_ARGS[@]+"${GROUP_ARGS[@]}"}" \
       >"$RUN_DIR/phase-branch.json" 2>/dev/null
-    local branch_rc=$? branch_state
+    local branch_rc=$? branch_state branch_reason
     if [ "$branch_rc" -ne 0 ]; then
       # A fence refusal is not a branch failure. The board does not confirm
       # this machine owns the phase, so a launch would run another owner's
@@ -269,8 +269,21 @@ _drive_cut_branch() {
           return 0
           ;;
       esac
-      # A branch cut that fails is a repair: launch on the branch the checkout
-      # already has and retry the cut next tick. The phase branch is published
+      # An issue has no branch of its own to fall back to: the checkout is on
+      # the base branch, so a launch would put issue work there (belief 4).
+      # Give the claim back, say why, and launch nothing.
+      if [ "${work_kind:-phase}" = issue ]; then
+        branch_reason="$(selection_value error <"$RUN_DIR/phase-branch.json")"
+        log "issue $number: could not put the issue on its own branch; no launch, nothing ran on the base branch (see $RUN_DIR/phase-branch.json)"
+        ISSUE_CLAIM_HELD=1; CLAIM_RELEASED=0
+        release_refused_claim "$number" "${reservation_id:-}" "${reservation_generation:-}" failed
+        [ "$CLAIM_RELEASED" != 1 ] || ISSUE_CLAIM_HELD=0
+        notify_phase "$rel" branch-refused "${branch_reason:-${branch_state:-unknown}}"
+        _DRIVE_RC=1
+        return 0
+      fi
+      # A phase branch cut that fails is a repair: launch on the branch the
+      # checkout already has and retry the cut next tick. The phase branch is published
       # by the finalize push, which reports a real failure there.
       log "could not put ${work_kind:-phase} $number on its own branch; continuing on $(git -C "$REPO" rev-parse --abbrev-ref HEAD 2>/dev/null || printf 'the current branch'); the next tick retries (see $RUN_DIR/phase-branch.json)"
     fi
