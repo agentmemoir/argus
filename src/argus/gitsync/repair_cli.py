@@ -55,6 +55,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--run-dir", required=True, type=Path)
     parser.add_argument("--attempts", required=True, type=int)
     parser.add_argument("--wait", required=True, type=int)
+    parser.add_argument("--head", required=True, help="the pull request head commit")
     parser.add_argument(
         "--launched", action="store_true", help="count one round; read nothing"
     )
@@ -145,7 +146,7 @@ def run(args: argparse.Namespace, now: float) -> tuple[int, dict[str, object]]:
     key = _key(args.pull_request)
     record_path = args.run_dir / f"repair-{key}.json"
     if args.launched:
-        record = repair_round.load_record(record_path)
+        record = repair_round.for_head(repair_round.load_record(record_path), args.head)
         record["attempts"] = [*record.get("attempts", []), now]
         repair_round.save_record(record_path, record)
         return 0, {"action": "counted"}
@@ -175,7 +176,7 @@ def run(args: argparse.Namespace, now: float) -> tuple[int, dict[str, object]]:
         if head is None:
             return 3, {"action": "unread", "read": "head", "exit_code": -1}
     try:
-        record = repair_round.load_record(record_path)
+        record = repair_round.for_head(repair_round.load_record(record_path), args.head)
     except ValueError:
         # A lost count must not read as zero attempts, so no round starts. The
         # notice names the record, so the cause is not the checks.

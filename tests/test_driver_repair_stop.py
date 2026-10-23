@@ -19,6 +19,7 @@ python_transport() {
 repair_launch() { log "REPAIR_LAUNCH $*"; }
 notify() { log "NOTIFY $*"; }
 check_stall() { :; }
+repair_remote_head() { printf 'abc123'; }
 """
 
 
@@ -107,3 +108,16 @@ def test_an_unlisted_issue_pull_request_ends_the_tick(tmp_path: Path) -> None:
     )
     assert "SELECT" not in events
     assert any("issue pull requests could not be listed" in e for e in events)
+
+
+def test_an_unread_branch_head_ends_the_tick_before_selection(tmp_path: Path) -> None:
+    events = _events(
+        tmp_path,
+        'repair_remote_head() { :; }\nDECISION=\'{"action":"none"}\'\n_drive\n',
+    )
+    assert "CLI" not in events
+    assert "SELECT" not in events
+    assert any(
+        e.startswith("repair: could not read the head of feature/fixture")
+        for e in events
+    )

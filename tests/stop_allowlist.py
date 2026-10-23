@@ -10,6 +10,7 @@ file cannot reuse another function's row.
 STOP_ALLOWLIST = r"""
     driver/lib-driver-abandon.sh	return_nonzero	fn:abandon_board_reason|case "${DRIVER_STUB_BOARD_FENCE:-}" in fail) return 1 ;; esac#1
     driver/lib-driver-abandon.sh	return_nonzero	fn:abandon_board_reason|2>"$RUN_DIR/abandon-scan-$1.err")" || return 1#1
+    driver/lib-driver-abandon.sh	return_nonzero	fn:abandon_park_reserve|2>"$RUN_DIR/abandon-park-$1.err")" || return 1#1
     driver/lib-driver-abandon.sh	exit_nonzero	fn:abandon_cmd|exit 2#1
     driver/lib-driver-abandon.sh	exit_nonzero	fn:abandon_cmd|exit 2 ;;#1
     driver/lib-driver-abandon.sh	exit_nonzero	fn:abandon_cmd|exit 2 ;;#2
@@ -24,6 +25,7 @@ STOP_ALLOWLIST = r"""
     driver/lib-driver-abandon.sh	exit_nonzero	fn:abandon_cmd|exit 1 ;;#3
     driver/lib-driver-abandon.sh	exit_nonzero	fn:abandon_cmd|exit 1#5
     driver/lib-driver-abandon.sh	exit_nonzero	fn:abandon_cmd|exit 1#6
+    driver/lib-driver-abandon.sh	exit_nonzero	fn:abandon_cmd|exit 1#7
     driver/lib-driver-check.sh	return_nonzero	fn:check|return 1#1
     driver/lib-driver-check.sh	return_nonzero	fn:check|return 1#2
     driver/lib-driver-check.sh	return_nonzero	fn:check|[ "$prerun_rc" -eq 0 ] || return 1#1
@@ -172,6 +174,7 @@ STOP_ALLOWLIST = r"""
     gitsync/group_publication.py	blocked_call	fn:_push_one|return blocked(#1
     gitsync/group_review.py	ok_false	fn:mark_group_pull_request_ready|"ok": False,#1
     gitsync/group_review.py	ok_false	fn:mark_group_pull_request_ready|"ok": False,#2
+    gitsync/group_review.py	ok_false	fn:_ready_once|"ok": False,#1
     gitsync/issue_modes.py	raise_config	fn:mode_issue_branch|raise ConfigError("branch task filename differs from the frozen issue task")#1
     gitsync/issue_modes.py	raise_config	fn:_owned_issue_branch|raise ConfigError("checked-out branch is not the claimed issue branch")#1
     gitsync/issue_modes.py	ok_false	fn:issue_mode|"ok": False,#1
@@ -285,4 +288,12 @@ STOP_ALLOWLIST = r"""
     driver/lib-driver-repair.sh	return_nonzero	fn:repair_launch||| { notify "repair $key failed to launch in tmux"; repair_worktree_remove "$(repair_worktree "$key")"; return 1; }#1
     driver/lib-driver-repair.sh	exit_nonzero	fn:run_repair_session|trap 'rm -f "$PIDFILE"; exit 130' HUP INT TERM#1
     driver/phase-driver.sh	exit_nonzero	fn:<top>|[ "$#" -eq 4 ] || { echo "usage: phase-driver.sh --repair-session <id> <task-file> <branch>" >&2; exit 2; }#1
+    driver/lib-driver-checkout.sh	return_nonzero	fn:driver_checkout_lock|common="$(${CMD_GIT:-git} -C "$REPO" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" || return 1#1
+    driver/lib-driver-checkout.sh	return_nonzero	fn:driver_checkout_lock|[ -n "$common" ] || return 1#1
+    driver/lib-driver-checkout.sh	return_nonzero	fn:driver_checkout_held|lock="$(driver_checkout_lock)" || return 1#1
+    driver/lib-driver-checkout.sh	return_nonzero	fn:driver_checkout_held|return 1#1
+    driver/lib-driver-checkout.sh	return_nonzero	fn:driver_checkout_take|exec 8<>"$lock" || return 1#1
+    driver/lib-driver-checkout.sh	return_nonzero	fn:driver_checkout_take|driver_checkout_flock || return 1#1
+    driver/lib-driver-drive.sh	drive_rc_nonzero	fn:_drive_cut_branch|_DRIVE_RC=1#4
+    driver/phase-driver.sh	exit_nonzero	fn:<top>|driver_checkout_take || { driver_checkout_refusal >&2; exit 1; }#1
 """

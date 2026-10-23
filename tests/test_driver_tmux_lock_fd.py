@@ -64,8 +64,8 @@ def _lock_is_free(lock: Path) -> bool:
 
 @pytest.mark.parametrize(
     ("fd", "open_redirect"),
-    [(9, "9>"), (3, "3<")],
-    ids=["driver-fd9", "cron-fd3"],
+    [(9, "9>"), (3, "3<"), (8, "8>")],
+    ids=["driver-fd9", "cron-fd3", "checkout-fd8"],
 )
 def test_session_ensure_leaves_the_driver_lock_free(
     fd: int, open_redirect: str

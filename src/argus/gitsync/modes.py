@@ -13,7 +13,11 @@ from argus.gitsync.group_publication import (
     _group_all_published,
     _member_published,
 )
-from argus.gitsync.group_review import _group_pending, mark_group_pull_request_ready
+from argus.gitsync.group_review import (
+    OpenPullRequests,
+    _group_pending,
+    _ready_once,
+)
 from argus.gitsync.publish import mark_phase_published
 from argus.gitsync.receipts import _phase_run_entries, phase_receipt
 from argus.gitsync.repair_cli import issue_pull_requests
@@ -26,41 +30,12 @@ def result_exit_code(out: dict[str, Any]) -> int:
     return 0 if out.get("ok") else 1
 
 
-def _ready_once(
-    decided: dict[str, dict[str, Any]],
-    root: Path,
-    phase: int,
-    members: list[Any],
-    pending: list[str],
-    pull_request: str,
-) -> dict[str, Any] | None:
-    """The group's ready transition, asked at most once per pull request per sweep.
-
-    Every member of a group carries the same pull request, so the sweep reaches
-    it once per member. The first answer is kept by pull request URL for the rest
-    of the sweep. A later member reuses it as a skip, so the timeline and the
-    checks are read once, and a pull request readied by the first member is
-    never readied again. Only an answer is kept: a fault is asked again.
-    """
-    prior = decided.get(pull_request)
-    if prior is not None:
-        return dict(
-            prior,
-            phase=f"{phase:06d}",
-            skipped=True,
-            detail=f"already decided earlier in this sweep: {prior.get('detail', '')}",
-        )
-    ready = mark_group_pull_request_ready(root, phase, members, pending, pull_request)
-    if ready is not None:
-        decided[pull_request] = ready
-    return ready
-
-
 def _ready_one(
     root: Path,
     phase: int,
     receipt: dict[str, Any],
     decided: dict[str, dict[str, Any]],
+    open_pulls: OpenPullRequests,
 ) -> dict[str, Any] | None:
     """Try to ready one phase's group pull request, and say what happened.
 
@@ -91,7 +66,9 @@ def _ready_one(
             "detail": f"{len(pending)} member(s) of this group have not published",
         }
     try:
-        ready = _ready_once(decided, root, phase, members, pending, pull_request)
+        ready = _ready_once(
+            decided, root, phase, members, pending, pull_request, open_pulls
+        )
     except Exception as exc:  # noqa: BLE001 - a ready fault must not stop the sweep
         return {
             "phase": f"{phase:06d}",
@@ -128,6 +105,7 @@ def _issue_ready_one(
     pull_request: str,
     run_dir: Path,
     decided: dict[str, dict[str, Any]],
+    open_pulls: OpenPullRequests,
 ) -> dict[str, Any] | None:
     """Try to ready one issue pull request through the group's ready transition.
 
@@ -142,7 +120,9 @@ def _issue_ready_one(
     if _issue_run_busy(run_dir, number, pull_request):
         return None
     try:
-        ready = _ready_once(decided, root, number, [number], [], pull_request)
+        ready = _ready_once(
+            decided, root, number, [number], [], pull_request, open_pulls
+        )
     except Exception as exc:  # noqa: BLE001 - a ready fault must not stop the sweep
         return {
             "kind": "issue",
@@ -181,11 +161,12 @@ def mode_ready(root: str | Path, run_dir: str | Path | None = None) -> dict[str,
     root = Path(root).resolve()
     results: list[dict[str, Any]] = []
     decided: dict[str, dict[str, Any]] = {}
+    open_pulls = OpenPullRequests(root)
     for number, _entry in _phase_run_entries(root):
         receipt = phase_receipt(root, number)
         if not isinstance(receipt, dict):
             continue
-        one = _ready_one(root, number, receipt, decided)
+        one = _ready_one(root, number, receipt, decided, open_pulls)
         if one is not None:
             results.append(one)
     # Issue pull requests have no receipt. They are swept from the same issue
@@ -199,6 +180,7 @@ def mode_ready(root: str | Path, run_dir: str | Path | None = None) -> dict[str,
                 str(row["pull_request"]),
                 Path(run_dir),
                 decided,
+                open_pulls,
             )
             if one is not None:
                 results.append(one)

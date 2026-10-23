@@ -29,6 +29,7 @@ from pathlib import Path
 from typing import Any
 
 from argus import conventions
+from argus.gitsync.fence import phase_fence
 from argus.gitsync.gh import gh_create_draft_pull_request, gh_pull_requests_for_branch
 from argus.gitsync.gh_exit import gh_exit_detail
 from argus.gitsync.git import (
@@ -211,6 +212,12 @@ def mode_open_pr(
     """
     root = Path(root).resolve()
     branch_name = resolve_branch(root, phase, branch)
+    # A phase's pull request is a publication: the board fence is read before the
+    # checkout, the pull request list, or the create is touched.
+    if phase is not None:
+        fenced = phase_fence(root, phase, "open-pr")
+        if fenced is not None:
+            return fenced
     # Every source of the branch is checked against the checkout, not only an
     # explicit --branch. A phase whose branch was never created used to reach
     # gh and come back as a bare failure that named nothing.

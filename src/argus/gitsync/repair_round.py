@@ -8,7 +8,8 @@ Waiting, and the next tick reads again. Red starts a repair round, at most
 ``attempts`` of them, spaced by ``wait`` seconds: the first now, the next
 ``wait`` after it, the one after that ``2 * wait`` after it. When every round
 is spent and the checks are still red, the step is ``escalate`` once, with one
-cause and one action, and the pull request is not repaired again.
+cause and one action, and that head of the pull request is not repaired again.
+A new head starts a new count (``for_head``).
 
 The attempt record is plain JSON in the run folder, so a restart keeps the
 count. Nothing here calls gh, git, or a model.
@@ -58,6 +59,18 @@ def decide(
         return "repair", None
     due = started[0] + len(started) * wait
     return ("repair", None) if now >= due else ("wait", due)
+
+
+def for_head(record: dict[str, Any], head: str) -> dict[str, Any]:
+    """The record for one pull request head. A new head starts a fresh budget.
+
+    The attempts and the escalation belong to the head they were counted on, so
+    a head pushed after an escalation gets the full budget again. The same head
+    keeps its record, and stays stopped once it is escalated.
+    """
+    if record.get("head") == head:
+        return record
+    return {"head": head, "attempts": []}
 
 
 def load_record(path: Path) -> dict[str, Any]:
@@ -135,6 +148,7 @@ __all__ = [
     "decide",
     "escalation_text",
     "failing_checks",
+    "for_head",
     "load_record",
     "save_record",
     "task_text",
