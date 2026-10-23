@@ -154,13 +154,32 @@ on_stop() {
 # refused with "working tree is dirty after phase cleanup", which halted the
 # line. This is the private-only, phase-scoped commit that lands them. A failure
 # is logged and never halts: the next phase's publish reports it if it recurs.
+# The first line of a degraded result's warning in a gitsync JSON file, or
+# nothing. A degraded step exits 0, so the exit code cannot show it did not land.
+run_state_warning() {
+  "$PYTHON" -c 'import json, sys
+try:
+    with open(sys.argv[1], encoding="utf-8") as handle:
+        data = json.load(handle)
+except (OSError, ValueError):
+    data = {}
+warning = data.get("warning") if isinstance(data, dict) else None
+if isinstance(warning, str) and warning.strip():
+    print(warning.splitlines()[0])' "$1" 2>/dev/null || true
+}
+
 gitsync_clean() {
-  local number="$1" rc=0
+  local number="$1" rc=0 warning=""
   "$PYTHON" "$ARGUS/gitsync/main.py" "${ARGUS_CONFIG_ARGS[@]}" --root "$REPO" --mode clean \
     "${GITSYNC_KIND_ARGS[@]+"${GITSYNC_KIND_ARGS[@]}"}" \
     --phase "$number" >"$RUN_DIR/phase-$number-run-state.json" 2>/dev/null || rc=$?
   if [ "$rc" -ne 0 ]; then
     log "could not commit ${work_kind:-phase} $number closing run state (rc=$rc; see $RUN_DIR/phase-$number-run-state.json)"
+  else
+    warning="$(run_state_warning "$RUN_DIR/phase-$number-run-state.json")"
+    if [ -n "$warning" ]; then
+      log "${work_kind:-phase} $number closing run state did not land: $warning"
+    fi
   fi
   return 0
 }
@@ -176,12 +195,17 @@ gitsync_clean() {
 # records into this phase's commit. A failure is logged and never halts: the
 # publish that would have refused reports it instead.
 gitsync_land_leftovers() {
-  local rc=0
+  local rc=0 warning=""
   "$PYTHON" "$ARGUS/gitsync/main.py" "${ARGUS_CONFIG_ARGS[@]}" --root "$REPO" --mode clean \
     "${GITSYNC_KIND_ARGS[@]+"${GITSYNC_KIND_ARGS[@]}"}" \
     >"$RUN_DIR/run-state-leftovers.json" 2>/dev/null || rc=$?
   if [ "$rc" -ne 0 ]; then
     log "could not land leftover run state before launch (rc=$rc; see $RUN_DIR/run-state-leftovers.json)"
+  else
+    warning="$(run_state_warning "$RUN_DIR/run-state-leftovers.json")"
+    if [ -n "$warning" ]; then
+      log "leftover run state did not land: $warning"
+    fi
   fi
   # A whole-tree sweep lands some phases and skips others and still exits 0,
   # so the exit code cannot carry a skip. Say each one; never change the rc.

@@ -68,7 +68,7 @@ def _commit_and_push_run_state(
     if not committed:
         return dict(info, ok=True, action="clean", hint=message)
     for attempt in (1, 2):
-        rc, out, err = git(repo, "push", remote, branch)
+        rc, _, _ = git(repo, "push", remote, branch)
         if rc == 0:
             after = git(repo, "rev-parse", "HEAD")[1]
             return dict(
@@ -90,7 +90,7 @@ def _commit_and_push_run_state(
                 )
     return degraded(
         info,
-        f"push of run state failed: {err or out}; the next tick retries",
+        f"push of run state failed (git exit {rc}); the next tick retries",
     )
 
 
@@ -119,13 +119,15 @@ def _stage_and_commit(
     """
     rc, _, err = git(repo, "add", "-A", "--", *pathspecs)
     if rc != 0:
-        return f"could not stage {pathspecs[0]}: {err}", False
+        return f"could not stage {pathspecs[0]} (git exit {rc})", False
     rc, out, err = git(repo, "commit", "-q", "-m", message, "--", *pathspecs)
     if rc != 0:
-        combined = err or out
-        if "nothing to commit" in combined.lower():
+        combined = (err or out).lower()
+        if "nothing to commit" in combined:
             return None, False
-        return f"commit of run state failed: {combined}", False
+        # git's own text can name the machine, so only a fixed reason is kept.
+        reason = " (no git identity)" if "identity" in combined else ""
+        return f"commit of run state failed (git exit {rc}){reason}", False
     return None, True
 
 

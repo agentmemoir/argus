@@ -258,12 +258,12 @@ def mode_checkpoint(
             "phase branch, so the checkpoint is retried after the branch cut",
         )
     if paths:
-        rc, staged, err = git(
+        rc, staged, _ = git(
             root, "diff", "--cached", "--no-renames", "--name-only", "-z"
         )
         if rc:
             return degraded(info, "could not read staged paths; retrying next tick")
-        rc, scoped, err = git(
+        rc, scoped, _ = git(
             root, "diff", "--cached", "--no-renames", "--name-only", "-z", "--", *paths
         )
         if rc:
@@ -278,7 +278,7 @@ def mode_checkpoint(
                 "staged and the checkpoint is retried",
                 staged=outside,
             )
-        rc, selected, err = git(
+        rc, selected, _ = git(
             root,
             "ls-files",
             "-z",
@@ -293,25 +293,25 @@ def mode_checkpoint(
         info["left_uncommitted"] = sorted(
             set(dirty_paths(root)) - set(selected.split("\0"))
         )
-    rc, out, err = git(root, "add", "-A", *(["--", *paths] if paths else []))
+    rc, out, _ = git(root, "add", "-A", *(["--", *paths] if paths else []))
     if rc != 0:
         return degraded(
-            info, f"could not stage the checkout: {err or out}; retrying next tick"
+            info, f"could not stage the checkout (git exit {rc}); retrying next tick"
         )
     # Ask git first. With nothing staged, the pre-commit hook refused the commit
     # with its own text, and git's "nothing to commit" never appeared. So an
     # empty stage must not reach the commit, and the push still runs: a repair
     # commits before this checkpoint, so an empty stage can carry a commit the
     # branch does not have yet, and the push is what says whether it moved.
-    rc, out, err = git(root, "diff", "--cached", "--quiet")
+    rc, out, _ = git(root, "diff", "--cached", "--quiet")
     if rc not in (0, 1):
         return degraded(
             info,
-            f"could not read the staged changes: {err or out}; retrying next tick",
+            f"could not read the staged changes (git exit {rc}); retrying next tick",
         )
     committed = rc == 1
     if committed:
-        rc, out, err = git(
+        rc, out, _ = git(
             root,
             "commit",
             "-q",
@@ -321,14 +321,14 @@ def mode_checkpoint(
         if rc != 0:
             return degraded(
                 info,
-                f"checkpoint commit failed: {err or out}; retrying next tick",
+                f"checkpoint commit failed (git exit {rc}); retrying next tick",
             )
     # --porcelain reports a ref that was already up to date as well, so the
     # result names what the push did instead of what the stage held.
-    rc, out, err = git(root, "push", "--porcelain", remote, branch)
+    rc, out, _ = git(root, "push", "--porcelain", remote, branch)
     if rc != 0:
         return degraded(
-            info, f"checkpoint push failed: {err or out}; retrying next tick"
+            info, f"checkpoint push failed (git exit {rc}); retrying next tick"
         )
     if committed:
         action = "committed-and-pushed"

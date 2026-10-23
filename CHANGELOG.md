@@ -4,6 +4,8 @@ Notable changes to this project are documented here. The format follows [Keep a 
 
 ## [Unreleased]
 
+- A run-state commit or push that fails no longer reads as a clean sync. The sync summary says `DEGRADED` and names the failed step, and the driver log says the run state did not land. The result gives git's step and exit code, not git's error text, so no machine name reaches output or the run folder. The phase reservation file is written by a JSON encoder, so an id with a quote still makes valid JSON. ([#174](https://github.com/agentmemoir/argus/issues/174), [#175](https://github.com/agentmemoir/argus/issues/175), [#178](https://github.com/agentmemoir/argus/issues/178))
+
 - When `gitsync --mode branch` crashes for a phase and writes no result, Argus no longer launches the phase on the current branch. The tick refuses the launch, keeps the claim, and sends one Needs You notice for that phase. The next tick retries the cut.
 
 - The timeline read from gh closes stdin, so gh cannot wait on the driver's terminal, and decodes its output as UTF-8 on every host. ([#179](https://github.com/agentmemoir/argus/issues/179))
