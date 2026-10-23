@@ -102,3 +102,21 @@ def test_stage_history_sends_owner_and_name_as_strings(
     assert ("-f", "owner=12345") in flags
     assert ("-f", "name=67890") in flags
     assert ("-F", "number=7") in flags
+
+
+def test_stage_history_closes_stdin_and_decodes_utf8(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # gh must never read the driver's terminal, and its JSON is always UTF-8.
+    seen: dict[str, object] = {}
+
+    def run(argv: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        seen.update(kwargs)
+        return subprocess.CompletedProcess(argv, 1, "", "")
+
+    monkeypatch.setattr(gh_history, "gh_binary", lambda: "gh")
+    monkeypatch.setattr(gh_history.subprocess, "run", run)
+    gh_history.gh_pull_request_stage_history(7, "example-org", "example-repo")
+
+    assert seen["stdin"] == subprocess.DEVNULL
+    assert seen["encoding"] == "utf-8"
