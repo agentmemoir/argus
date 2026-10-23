@@ -4,6 +4,8 @@ Notable changes to this project are documented here. The format follows [Keep a 
 
 ## [Unreleased]
 
+- Docs: the repair section now states that a pull request that was escalated gets no further repair round or notice, even when its checks turn red again, and that an unreadable attempt record sends one notice and starts no round. ([#210](https://github.com/agentmemoir/argus/issues/210))
+
 - A repair attempt record that cannot be read now sends one Needs You notice that names the record file and says no repair round starts. Before, the driver logged the checks as unreadable on every tick and sent no notice. ([#210](https://github.com/agentmemoir/argus/issues/210))
 
 - The repair task file puts the failed-job log tail in a code fence longer than any run of backticks in the log, so a log line cannot close the fence early and turn the rest of the log into task text. ([#210](https://github.com/agentmemoir/argus/issues/210))
