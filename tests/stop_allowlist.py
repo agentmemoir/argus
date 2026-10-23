@@ -172,6 +172,7 @@ STOP_ALLOWLIST = r"""
     gitsync/group_publication.py	blocked_call	fn:_push_one|return blocked(#1
     gitsync/group_review.py	ok_false	fn:mark_group_pull_request_ready|"ok": False,#1
     gitsync/group_review.py	ok_false	fn:mark_group_pull_request_ready|"ok": False,#2
+    gitsync/group_review.py	ok_false	fn:_ready_once|"ok": False,#1
     gitsync/issue_modes.py	raise_config	fn:mode_issue_branch|raise ConfigError("branch task filename differs from the frozen issue task")#1
     gitsync/issue_modes.py	raise_config	fn:_owned_issue_branch|raise ConfigError("checked-out branch is not the claimed issue branch")#1
     gitsync/issue_modes.py	ok_false	fn:issue_mode|"ok": False,#1
