@@ -94,7 +94,7 @@ check() {
   # stage does not depend on the default temporary folder. The folder must run a
   # file here, or no stage can start on this machine.
   local stage_rc=0
-  "$PYTHON" "$ARGUS/stage_tmpdir.py" "$STAGE_TMP" || stage_rc=$?
+  "$PYTHON" "$ARGUS/stage_tmpdir.py" "$RUN_DIR/stage-tmp" || stage_rc=$?
   [ "$stage_rc" -eq 0 ] || warned=1
   echo "work source: ${WORK_SOURCE:-phases}"
   # A halt, and the record a resume reads, in the report an operator runs when

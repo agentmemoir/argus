@@ -74,9 +74,10 @@ glide_run_once() {
   # Glide and its stages take their temporary folder from the run state, not from
   # the caller's TMPDIR, so a host whose default folder is mounted noexec still
   # starts a stage. The readiness check probes the folder.
-  mkdir -p "$STAGE_TMP"
-  log "stage temp dir: $STAGE_TMP (TMPDIR and BUN_TMPDIR for glide)"
-  TMPDIR="$STAGE_TMP" BUN_TMPDIR="$STAGE_TMP" "$CMD_GLIDE" run --pipeline "$PIPELINE" \
+  local stage_tmp="$RUN_DIR/stage-tmp"
+  mkdir -p "$stage_tmp"
+  log "stage temp dir: $stage_tmp (TMPDIR and BUN_TMPDIR for glide)"
+  TMPDIR="$stage_tmp" BUN_TMPDIR="$stage_tmp" "$CMD_GLIDE" run --pipeline "$PIPELINE" \
     "${fresh_args[@]+"${fresh_args[@]}"}" "${glide_inputs[@]}"
 }
 

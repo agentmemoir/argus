@@ -14,6 +14,7 @@ JOB_LIB = ROOT / "src/argus/driver/lib-driver-job.sh"
 # The job library is sourced, its neighbours are stubbed, and the glide command is
 # a shell function, so the test runs no program from a temporary folder.
 SCRIPT = r"""
+set -u
 source "$1"
 phase_run_dir() { printf '%s\n' "$STAGE_ROOT/phase"; }
 terminal_state_of_file() { :; }
@@ -24,8 +25,8 @@ PIPELINE=pipeline.yaml
 CLIO_RESUME=1
 number=1
 rel=phase.md
-glide_inputs=()
-STAGE_TMP="$STAGE_ROOT/stage-tmp"
+glide_inputs=(--input ticket=1)
+RUN_DIR="$STAGE_ROOT"
 glide_run_once
 """
 
