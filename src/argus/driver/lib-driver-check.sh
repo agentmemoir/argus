@@ -81,11 +81,10 @@ check() {
       warned=1
     fi
   done
-  # Each issue tick reads the repair pipeline before it lists pull requests, so a
-  # missing file is reported here as well.
+  # A missing repair pipeline is reported, not failed: the issue tick runs without
+  # repair rounds until the file exists, and the config may leave repair off.
   if [ -n "${REPAIR_PIPELINE:-}" ] && [ ! -e "$REPAIR_PIPELINE" ]; then
-    echo "MISSING: $REPAIR_PIPELINE"
-    warned=1
+    echo "MISSING: $REPAIR_PIPELINE (no repair round starts until it exists)"
   fi
   # The pipeline's pre_run hook gates every run. Glide runs it from the repository
   # root before a run starts, so run it here once too: a refusing hook fails the
