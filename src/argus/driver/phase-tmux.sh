@@ -90,7 +90,9 @@ tmux_session_ensure() {
     fi
     return 1
   fi
-  "$TMUX_BIN" new-session -d -s "$SESSION" -x "$TMUX_WIDTH" -y "$TMUX_HEIGHT" -c "$REPO" \
+  # A new tmux server inherits every open descriptor. 9>&- keeps the driver lock
+  # (fd 9) out of it, so the lock is released when the driver exits.
+  9>&- "$TMUX_BIN" new-session -d -s "$SESSION" -x "$TMUX_WIDTH" -y "$TMUX_HEIGHT" -c "$REPO" \
     -n "$TMUX_IDLE_WINDOW" "$ARGUS_DRIVER/$TMUX_IDLE_SCRIPT" "${ARGUS_CONFIG_ARGS[@]}" \
     || { log "failed to create tmux session '$SESSION'"; return 1; }
   # Hold the geometry. Without this, a client attaching at any other size

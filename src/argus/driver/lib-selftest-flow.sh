@@ -365,7 +365,7 @@ selftest_case_git_ceiling() {
   # this may start (TMUX is dropped before any tmux command), so a value found
   # here is the value a tick started by this suite would hand its panes.
   probe_session="git-ceiling-tmux-probe-$$"
-  tmux new-session -d -s "$probe_session" 'sleep 5' 2>/dev/null || true
+  9>&- tmux new-session -d -s "$probe_session" 'sleep 5' 2>/dev/null || true
   session_ceiling="$(tmux show-environment -g GIT_CEILING_DIRECTORIES 2>/dev/null || true)"
   tmux kill-session -t "$probe_session" 2>/dev/null || true
   if [ "$session_ceiling" = "GIT_CEILING_DIRECTORIES=$tmp" ]; then

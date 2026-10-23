@@ -182,7 +182,7 @@ selftest_case_locks_stall() {
     export SELFTEST_KEEP_TMP
     SELFTEST_REACHED_END=0
     export SELFTEST_REACHED_END
-    tmux new-session -d -s "$abort_name" 'sleep 30' 2>/dev/null || true
+    9>&- tmux new-session -d -s "$abort_name" 'sleep 30' 2>/dev/null || true
     trap selftest_teardown EXIT HUP INT TERM
     printf 'unreached %s\n' "${NO_SUCH_VARIABLE}"
   ) >/dev/null 2>&1 || true
