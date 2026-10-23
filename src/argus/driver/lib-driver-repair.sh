@@ -14,6 +14,7 @@
 
 # The open pull requests of `issues` work, in the pending-review shape. Only
 # branches that an issue run folder records are read (gitsync/repair_cli.py).
+# A pull request that gh cannot read exits 3, so the caller stops the tick.
 issue_review_snapshot() {
   "$PYTHON" - "$ARGUS" "$REPO" "${ARGUS_CONFIG_ARGS[@]}" <<'PY'
 import json
@@ -25,7 +26,11 @@ from argus import conventions
 from argus.gitsync.repair_cli import issue_pull_requests
 
 conventions.configure_from_cli(sys.argv[3:])
-print(json.dumps({"awaiting_review": issue_pull_requests(sys.argv[2])}))
+unread = []
+rows = issue_pull_requests(sys.argv[2], unread)
+if unread:
+    sys.exit(3)
+print(json.dumps({"awaiting_review": rows}))
 PY
 }
 
@@ -137,15 +142,25 @@ repair_remote_head() {
     | R="refs/heads/$1" awk '$2 == ENVIRON["R"] { print $1; exit }'
 }
 
+# Stop the tick before new work. A read that failed leaves a pull request's state
+# unknown, and an unknown state must never look like "no change" (SECURITY.md,
+# rule 2). The next tick reads again.
+repair_stop() {
+  REPAIR_STOP=1
+  log "repair: $1; no new work this tick, the next tick retries"
+}
+
 # The tick's repair step. $1 is the pending-review snapshot. A launched round
 # sets PENDING_PUBLISHED, the tick's "no new work" signal, so the repair runs
-# before any new work.
+# before any new work. A failed read sets REPAIR_STOP, which ends the tick the
+# same way. While REPAIR_HOLD_LAUNCH is 1 (the phase window runs), the reads and
+# notices still run, and no round starts.
 repair_tick() {
-  local rows pr branch key out rc msg pr_head
+  local rows pr branch key out rc msg notice cleared what pr_head
   [ -n "${REPAIR_PIPELINE:-}" ] || return 0
   [ -z "${DRIVER_STUB_COORDINATION:-}" ] || return 0
   [ ! -f "$HALT" ] || return 0
-  repair_worktree_prune
+  [ "${REPAIR_HOLD_LAUNCH:-0}" = 1 ] || repair_worktree_prune
   # A missing pipeline would spend every round and end in a false escalation.
   if [ ! -r "$REPAIR_PIPELINE" ]; then
     log_changed repair-pipeline "repair: cannot read $REPAIR_PIPELINE; no repair round starts"
@@ -154,20 +169,26 @@ repair_tick() {
   rows="$(printf '%s' "$1" | "$PYTHON" -c 'import json, sys
 for row in json.load(sys.stdin).get("awaiting_review", []):
     if row.get("pull_request") and row.get("branch"):
-        print(row["pull_request"], row["branch"])')" || return 0
+        print(row["pull_request"], row["branch"])')" \
+    || { repair_stop "the pull request list could not be read"; return 0; }
   while read -r pr branch; do
     [ -n "$pr" ] || continue
     key="${pr%/}"; key="${key##*/}"
     pr_head="$(repair_remote_head "$branch")"
-    [ -n "$pr_head" ] || { log "repair $key: could not read the head of $branch; the next tick retries"; continue; }
+    [ -n "$pr_head" ] || { repair_stop "could not read the head of $branch for $pr"; continue; }
     rc=0
     out="$("$PYTHON" "$ARGUS/gitsync/repair_cli.py" "${ARGUS_CONFIG_ARGS[@]}" \
       --pull-request "$pr" --run-dir "$RUN_DIR" --head "$pr_head" \
       --attempts "$REPAIR_ATTEMPTS" --wait "$REPAIR_WAIT" </dev/null)" || rc=$?
     if [ "$rc" -ne 0 ]; then
-      log "repair: the checks of $pr could not be read (rc=$rc); the next tick retries"
+      what="$(selection_value read <<<"$out")"
+      repair_stop "the ${what:-checks} of $pr could not be read (rc=$rc)"
       continue
     fi
+    notice="$(selection_value notice <<<"$out")"
+    [ -z "$notice" ] || notify "$notice"
+    cleared="$(selection_value cleared <<<"$out")"
+    [ -z "$cleared" ] || log "$cleared"
     case "$(selection_value action <<<"$out")" in
       escalate) notify "$(selection_value message <<<"$out")" ;;
       unreadable)
@@ -176,6 +197,10 @@ for row in json.load(sys.stdin).get("awaiting_review", []):
         [ "$(cat "$RUN_DIR/log-last-repair-record-$key" 2>/dev/null)" = "$msg" ] || notify "$msg"
         log_changed "repair-record-$key" "$msg" ;;
       repair)
+        if [ "${REPAIR_HOLD_LAUNCH:-0}" = 1 ]; then
+          log "repair $key waits: the phase window is running"
+          continue
+        fi
         # The round is counted before it launches, so a launch that fails still
         # uses one attempt. A round that cannot be counted never launches.
         "$PYTHON" "$ARGUS/gitsync/repair_cli.py" "${ARGUS_CONFIG_ARGS[@]}" \
@@ -188,6 +213,41 @@ for row in json.load(sys.stdin).get("awaiting_review", []):
         return 0 ;;
     esac
   done <<<"$rows"
+}
+
+# The issue pull requests' repair step. A failed listing stops the tick.
+repair_issue_reads() {
+  local issue_rows
+  # A missing pipeline ends the step before the snapshot, which would spend one
+  # gh read per issue run folder on a round that cannot start.
+  if [ ! -r "$REPAIR_PIPELINE" ]; then
+    log_changed repair-pipeline "repair: cannot read $REPAIR_PIPELINE; no repair round starts"
+    return 0
+  fi
+  if issue_rows="$(issue_review_snapshot)"; then
+    repair_tick "$issue_rows"
+  else
+    repair_stop "issue pull requests could not be listed"
+  fi
+}
+
+# The repair reads while the phase window runs. They record state and raise
+# notices, but start no round: one active run stays the rule, and a round waits
+# for the window to close.
+repair_observe() {
+  local pending
+  [ -n "${REPAIR_PIPELINE:-}" ] && [ -z "${DRIVER_STUB_COORDINATION:-}" ] || return 0
+  REPAIR_STOP=0
+  REPAIR_HOLD_LAUNCH=1
+  if [ "${WORK_SOURCE:-phases}" = issues ]; then
+    repair_issue_reads
+  elif pending="$(pending_review_snapshot)"; then
+    repair_tick "$pending"
+  else
+    repair_stop "publication receipts could not be read, so no pull request's checks were read"
+  fi
+  REPAIR_HOLD_LAUNCH=0
+  return 0
 }
 
 # One repair round, inside the phase window. It runs the repair pipeline in the

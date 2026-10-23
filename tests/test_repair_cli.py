@@ -10,6 +10,7 @@ from typing import Any
 import pytest
 
 from argus.gitsync import gh_read, repair_cli
+from argus.gitsync import git as gitsync_git
 
 RED: list[dict[str, Any]] = [{"name": "lint", "bucket": "fail", "link": "https://ci/1"}]
 PR = "https://github.com/o/r/pull/7"
@@ -233,3 +234,105 @@ def test_an_unreadable_record_names_its_cause_and_starts_no_round(
         f"Needs You. The attempt record repair-7.json of {PR}"
     )
     assert "no repair round" in out["message"]
+
+
+PENDING_ROWS: list[dict[str, Any]] = [{"name": "CI", "bucket": "pending", "link": ""}]
+REPAIR_ARGV = [
+    "--pull-request",
+    PR,
+    "--run-dir",
+    "",
+    "--attempts",
+    "2",
+    "--wait",
+    "600",
+    "--head",
+    HEAD_A,
+]
+
+
+def _gh_head(head: str | None) -> Any:
+    """A gh stub: the one pr view answers with the head, or fails when head is None."""
+
+    def run(argv: list[str], **_kw: Any) -> Any:
+        assert argv[1:3] == ["pr", "view"], argv
+        if head is None:
+            return type("Done", (), {"returncode": 1, "stdout": ""})()
+        payload = json.dumps({"headRefOid": head})
+        return type("Done", (), {"returncode": 0, "stdout": payload})()
+
+    return run
+
+
+def _pending_run(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+    head: str | None,
+    now: float,
+) -> tuple[int, dict[str, Any]]:
+    def checks(*_a: object) -> tuple[list[dict[str, Any]] | None, int, str]:
+        return PENDING_ROWS, 8, ""
+
+    real_setting = gitsync_git.setting
+
+    def setting(key: str) -> Any:
+        return "gh" if key == "commands.gh" else real_setting(key)
+
+    monkeypatch.setattr(repair_cli, "gh_pull_request_checks", checks)
+    monkeypatch.setattr(gitsync_git, "setting", setting)
+    monkeypatch.setattr(repair_cli.subprocess, "run", _gh_head(head))
+    argv = [*REPAIR_ARGV[:3], str(tmp_path), *REPAIR_ARGV[4:]]
+    rc = repair_cli.main(argv, now=now)
+    return rc, json.loads(capsys.readouterr().out)
+
+
+def test_a_pending_check_with_an_unread_head_fails_closed(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+) -> None:
+    rc, out = _pending_run(monkeypatch, capsys, tmp_path, None, 1000.0)
+    assert (rc, out["action"], out["read"]) == (3, "unread", "head")
+    assert not (tmp_path / "pending-7.json").exists()
+
+
+def test_a_pending_check_names_its_notice_once_past_the_limit(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+) -> None:
+    head = "d" * 40
+    _rc, first = _pending_run(monkeypatch, capsys, tmp_path, head, 1000.0)
+    assert first == {"action": "none"}
+    _rc, second = _pending_run(monkeypatch, capsys, tmp_path, head, 2801.0)
+    assert second["notice"].startswith(f"Needs You. {PR} has a check pending")
+    _rc, third = _pending_run(monkeypatch, capsys, tmp_path, head, 3600.0)
+    assert "notice" not in third
+
+
+def test_an_unread_issue_pull_request_is_listed_for_the_caller(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+) -> None:
+    runs = tmp_path / "runs"
+    (runs / "issue-9").mkdir(parents=True)
+    tasks = ["runs/issue-9", "tasks/issue-9-docs.md"]
+
+    def runs_dir(_root: object) -> Path:
+        return runs
+
+    def scope(_r: object, _n: int) -> tuple[Path, list[str]]:
+        return tmp_path, tasks
+
+    def listed(_r: object, _b: str) -> tuple[None, str]:
+        return None, "detail"
+
+    monkeypatch.setattr(repair_cli.conventions, "runs_dir", runs_dir)
+    monkeypatch.setattr(repair_cli, "issue_scope", scope)
+    monkeypatch.setattr(repair_cli, "gh_pull_requests_for_branch", listed)
+    unread: list[int] = []
+    assert repair_cli.issue_pull_requests(tmp_path, unread) == []
+    assert unread == [9]
+    assert "issue 9" in capsys.readouterr().err

@@ -36,11 +36,12 @@ if not __package__:
     )
 from argus import conventions
 from argus.board.core import CoordinationError
-from argus.gitsync import repair_round
+from argus.gitsync import pending_limit, repair_round
 from argus.gitsync.gh_checks import gh_pull_request_checks
 from argus.gitsync.gh_read import gh_pull_requests_for_branch
 from argus.gitsync.git import GH_TIMEOUT_S, ConfigError, gh_binary
 from argus.gitsync.issue_paths import issue_branch, issue_scope
+from argus.gitsync.pr_head import gh_pull_request_head
 from argus.gitsync.receipts import pull_request_ref
 
 # A GitHub Actions job link: the repository and the job id are all gh needs.
@@ -104,13 +105,16 @@ def save_failed_log(
     return [], None
 
 
-def issue_pull_requests(root: str | Path) -> list[dict[str, object]]:
+def issue_pull_requests(
+    root: str | Path, unread: list[int] | None = None
+) -> list[dict[str, object]]:
     """One row per open pull request from this repository on a recorded branch.
 
     The branch comes from the issue run folder: the claim's reservation and
     the frozen task it names, the same proof the issue checkpoint uses. A
     folder without that proof is skipped. A gh read that fails is named on
-    stderr by issue number only and skipped; the next tick reads it again.
+    stderr by issue number only and skipped. Its number is also appended to
+    ``unread`` when that list is given, so the caller can stop the tick.
     """
     rows: list[dict[str, object]] = []
     for run_dir in sorted(conventions.runs_dir(root).glob("issue-*")):
@@ -125,6 +129,8 @@ def issue_pull_requests(root: str | Path) -> list[dict[str, object]]:
         found, _why = gh_pull_requests_for_branch(Path(root), branch)
         if found is None:
             print(f"repair: issue {number}: pull requests unread", file=sys.stderr)
+            if unread is not None:
+                unread.append(number)
             continue
         # gh_pull_requests_for_branch is the one filter: it keeps only this
         # repository's rows on the branch, so a fork's checks and logs never arrive.
@@ -155,7 +161,20 @@ def run(args: argparse.Namespace, now: float) -> tuple[int, dict[str, object]]:
         ref.get("host"),
     )
     if rows is None:
-        return 3, {"action": "unread", "exit_code": code}
+        return 3, {"action": "unread", "read": "checks", "exit_code": code}
+    # The head is read only while a check is pending: the pending limit needs it,
+    # and a failed read stops the tick like any other unread state.
+    head: str | None = None
+    if any(row.get("bucket") == "pending" for row in rows):
+        head = gh_pull_request_head(
+            args.run_dir,
+            args.pull_request,
+            ref.get("owner"),
+            ref.get("repo"),
+            ref.get("host"),
+        )
+        if head is None:
+            return 3, {"action": "unread", "read": "head", "exit_code": -1}
     try:
         record = repair_round.for_head(repair_round.load_record(record_path), args.head)
     except ValueError:
@@ -188,6 +207,11 @@ def run(args: argparse.Namespace, now: float) -> tuple[int, dict[str, object]]:
         out["message"] = repair_round.escalation_text(
             args.pull_request, args.attempts, failing
         )
+    out.update(
+        pending_limit.step(
+            args.run_dir / f"pending-{key}.json", args.pull_request, head, rows, now
+        )
+    )
     return 0, out
 
 

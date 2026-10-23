@@ -107,5 +107,4 @@ Each tick, the driver reads the same open issue pull requests as the CI repair s
 
 These gaps are open in the Argus repository.
 
-- A pending limit for CI checks, based on measured CI durations, is not built yet ([#197](https://github.com/agentmemoir/argus/issues/197)).
 - Some host setup steps still run by hand ([#216](https://github.com/agentmemoir/argus/issues/216)).
