@@ -10,6 +10,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from driver_maintenance_support import shell as drive_shell
+
 DRIVER = Path(__file__).resolve().parents[1] / "src/argus/driver"
 
 SETUP = """
@@ -125,3 +127,29 @@ def test_a_stage_failure_keeps_the_per_issue_path(tmp_path: Path) -> None:
     assert "notify=failed" in events, events
     assert not (tmp_path / "run/launch-fault").exists()
     assert not (tmp_path / "run/halted").exists()
+
+
+RESUME = """
+. "$TEST_DRIVER/lib-driver-halt-record.sh"
+work_kind=issue; DRIVER_STUB_COORDINATION=1; RESUME_FROM_TICK=1
+mkdir -p "$RUN_DIR/issue-000023"
+halt_record_write 23 tasks/issue-000023-fix.md "$RUN_DIR/issue-000023" \\
+  config_error 2 launch-fault "hook pre_run failed (exit 1)"
+phase_state() { :; }
+resume_fence() { RESUME_RESERVATION_ID=r1; RESUME_RESERVATION_GENERATION=4; }
+record_claim_fence() { log "fence $*"; }
+_drive_launch() { log "launch resume=$RESUME_MODE"; _DRIVE_RC=0; }
+rc=0; _drive_resume || rc=$?
+printf 'rc=%s\\n' "$rc"
+"""
+
+
+def test_the_retry_resumes_a_run_that_never_started_a_stage(tmp_path: Path) -> None:
+    output = drive_shell(tmp_path, RESUME)
+    assert "rc=0" in output, output
+    events = (tmp_path / "events").read_text(encoding="utf-8")
+    assert "fence 23 r1 4" in events, events
+    assert "launch resume=1" in events, events
+    assert "halt-clear: phase 23 resume launched" in events, events
+    assert not (tmp_path / "halted.json").exists()
+    assert not (tmp_path / "halted").exists()

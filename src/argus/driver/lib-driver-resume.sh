@@ -60,10 +60,13 @@ _drive_resume_branch() {   # <number> <rel>
         return 1 ;;
     esac
     # An issue has no branch of its own to fall back to, so a resume on the
-    # current branch would put issue work on the base branch (belief 4).
+    # current branch would put issue work on the base branch (belief 4). It is
+    # a launch fault: halt again and keep retrying (lib-driver-launchfault.sh).
     if [ "${work_kind:-phase}" = issue ]; then
-      RESUME_REFUSAL="could not put issue $number on its own branch; no launch, nothing ran on the base branch (see $RUN_DIR/phase-branch.json)"
-      log "resume: $RESUME_REFUSAL"
+      log "resume: could not put issue $number on its own branch; no launch, nothing ran on the base branch (see $RUN_DIR/phase-branch.json)"
+      launchfault_halt "$number" "$rel" "$RESUME_RUN_DIR" "$branch_state" 1 "" "" \
+        "$(launchfault_branch_reason "$(selection_value error <"$RUN_DIR/phase-branch.json")")"
+      RESUME_LAUNCH_FAULT=1
       return 1
     fi
     log "resume: could not put ${work_kind:-phase} $number on its own branch; continuing on $(git -C "$REPO" rev-parse --abbrev-ref HEAD 2>/dev/null || printf 'the current branch'); the next tick retries (see $RUN_DIR/phase-branch.json)"
@@ -221,7 +224,9 @@ _drive_resume() {   # [<number>]
   # lands on the phase's own branch. A gitsync branch failure is a repair: the
   # resume continues on the branch the checkout has, and the next tick retries
   # the cut. A fence refusal stops it.
+  RESUME_LAUNCH_FAULT=0
   if ! _drive_resume_branch "$number" "$rel"; then
+    [ "$RESUME_LAUNCH_FAULT" = 0 ] || return 1
     resume_refuse "$target" "$RESUME_REFUSAL"
     return 1
   fi

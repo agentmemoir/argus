@@ -6,7 +6,7 @@
 #
 # A launch fault is a run that fails before any stage starts: glide exits with
 # rc=2 (a configuration error, such as a refused `pre_run` hook, or invalid
-# pipeline inputs). It is a fault of this host, not of the issue, so the next
+# pipeline inputs), or the issue branch cannot be cut. It is a fault of this host, not of the issue, so the next
 # issue would fail the same way. The run keeps its claim and halts the line with
 # the D65 pattern: the `$HALT` marker plus `halt_record_write`. `_drive` reads
 # the marker before selection, so no tick claims another issue.
@@ -30,7 +30,7 @@ launchfault_is() {   # <rc>
 }
 
 # Halt the line on a launch fault, keep the claim, and plan the next attempt.
-launchfault_halt() {   # <issue> <task file> <run dir> <state> <rc> <session log> <offset>
+launchfault_halt() {   # <issue> <task file> <run dir> <state> <rc> <session log> <offset> [reason]
   local number="$1" rel="$2" run_dir="$3" state="$4" rc="$5"
   local file="$RUN_DIR/$LAUNCHFAULT_FILE_NAME"
   local seen="" attempts=0 _next="" notified=0 delay=1200 reason
@@ -40,14 +40,14 @@ launchfault_halt() {   # <issue> <task file> <run dir> <state> <rc> <session log
   [ "$attempts" -ge 2 ] || delay=600
   halt_state_from_session "$6" "$7"
   [ -z "$HALT_LOG_STATE" ] || state="$HALT_LOG_STATE"
-  reason="${HALT_LOG_REASON:-glide exited with rc=$rc before any stage ran}"
+  reason="${8:-${HALT_LOG_REASON:-glide exited with rc=$rc before any stage ran}}"
   printf '%s issue %s attempt %s rc=%s state=%s at %s\n' "$LAUNCHFAULT_PREFIX" \
     "$number" "$attempts" "$rc" "${state:-unknown}" "$(ts)" >"$HALT"
   halt_record_write "$number" "$rel" "$run_dir" "$state" "$rc" launch-fault "$reason"
   if [ "$attempts" -ge 3 ] && [ "$notified" != 1 ]; then
     notify "Needs You. Issue $number cannot start, and no other issue is taken: $reason
 Action: fix that cause on this host.
-Check: the failing command exits 0 when you run it by hand. Argus retries issue $number every $((delay / 60)) minutes and resumes alone when the run starts."
+Check: the next retry starts the run. Argus retries issue $number every $((delay / 60)) minutes and resumes alone."
     notified=1
   fi
   printf '%s %s %s %s\n' "$number" "$attempts" "$(($(launchfault_now) + delay))" \
@@ -75,4 +75,10 @@ launchfault_due() {
   [ "$(launchfault_now)" -ge "$next" ] || return 0
   rm -f "$HALT"
   log "launch-fault: retrying issue $number after attempt $attempts"
+}
+
+# The cause of a refused issue branch cut, in the words of the #215 notice.
+launchfault_branch_reason() {   # <gitsync error>
+  printf 'Argus could not put it on its own branch, so nothing ran on the base branch. Cause: %s' \
+    "${1:-see phase-branch.json in the driver run folder}"
 }

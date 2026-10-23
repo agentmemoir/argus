@@ -55,13 +55,19 @@ def test_a_resume_branch_failure_that_is_not_a_fence_stays_a_repair(
     assert "continuing on" in (tmp_path / "events").read_text()
 
 
-def test_an_issue_resume_branch_failure_stops_the_resume(tmp_path: Path) -> None:
+def test_an_issue_resume_branch_failure_halts_as_a_launch_fault(
+    tmp_path: Path,
+) -> None:
     out = '{"ok": false, "mode": "branch", "state": "BLOCKED"}'
-    output = shell(
-        tmp_path, f"work_kind=issue; BRANCH_OUT='{out}'; BRANCH_RC=1\n" + RESUME_BRANCH
-    )
-    assert "rc=1 refusal=could not put issue 100020 on its own branch" in output
-    assert "continuing on" not in (tmp_path / "events").read_text()
+    setup = '. "$TEST_DRIVER/lib-driver-halt-record.sh"; RESUME_RUN_DIR="$RUN_DIR"\n'
+    body = f"work_kind=issue; BRANCH_OUT='{out}'; BRANCH_RC=1\n"
+    output = shell(tmp_path, setup + body + RESUME_BRANCH)
+    assert "rc=1 refusal=\n" in output
+    events = (tmp_path / "events").read_text()
+    assert "continuing on" not in events
+    assert "launch-fault: issue 100020 attempt 1" in events
+    halt = (tmp_path / "halted").read_text()
+    assert halt.startswith("launch fault: issue 100020 attempt 1")
 
 
 def test_the_resume_fences_and_claims_before_it_cuts_a_branch() -> None:

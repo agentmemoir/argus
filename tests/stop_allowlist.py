@@ -85,6 +85,7 @@ STOP_ALLOWLIST = r"""
     driver/lib-driver-resume.sh	return_nonzero	fn:_drive_resume_branch|return 1 ;;#1
     driver/lib-driver-resume.sh	return_nonzero	fn:_drive_resume_branch|return 1#1
     driver/lib-driver-resume.sh	resume_refuse	fn:_drive_resume|resume_refuse "$target" "no phase file found for phase $number"#1
+    driver/lib-driver-resume.sh	return_nonzero	fn:_drive_resume|[ "$RESUME_LAUNCH_FAULT" = 0 ] || return 1#1
     driver/lib-driver-resume.sh	return_nonzero	fn:_drive_resume|return 1#1
     driver/lib-driver-resume.sh	resume_refuse	fn:_drive_resume|resume_refuse "$target" "the halt record $HALT_RECORD is missing or malformed"#1
     driver/lib-driver-resume.sh	return_nonzero	fn:_drive_resume|return 1#2
