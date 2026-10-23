@@ -4,6 +4,8 @@ Notable changes to this project are documented here. The format follows [Keep a 
 
 ## [Unreleased]
 
+- The run-state folder and the driver's state folder inside it are made when they are missing, and the driver says so in one line for each. A folder that Argus does not own, such as a board or phases checkout, is still not made. ([#216](https://github.com/agentmemoir/argus/issues/216))
+
 - A configuration with a `board` object defaults `driver.runs` to a `runs` folder inside the board checkout, and it refuses a run folder set outside that checkout, naming the key. ([#216](https://github.com/agentmemoir/argus/issues/216))
 
 - Argus runs each Glide stage with TMPDIR and BUN_TMPDIR set to a stage folder under the run state, so a host whose default temporary folder is mounted noexec does not need them set by hand. `--check` creates that folder and runs a file in it, and it names the cause and the action when the folder refuses to run files. ([#216](https://github.com/agentmemoir/argus/issues/216))
