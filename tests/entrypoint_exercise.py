@@ -75,6 +75,9 @@ steps:
   build: {stage: build.md, end: blocked}
 """.replace("RUN_TEMPLATE", str(board / "artifacts/item-{ticket:06d}"))
     )
+    # The repair pipeline sits beside the pipeline, so the readiness report names no
+    # missing file. This exercise publishes no pull request, so no round reads it.
+    (project / "repair.yaml").write_text("version: 1\n")
     binary = base / "bin"
     result = run(["make", "install", f"BINDIR={binary}"], package, env)
     require(result.returncode == 0, "development install", result.stderr)
