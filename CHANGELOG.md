@@ -4,6 +4,8 @@ Notable changes to this project are documented here. The format follows [Keep a 
 
 ## [Unreleased]
 
+- A repair attempt record that cannot be read now sends one Needs You notice that names the record file and says no repair round starts. Before, the driver logged the checks as unreadable on every tick and sent no notice. ([#210](https://github.com/agentmemoir/argus/issues/210))
+
 - The repair task file puts the failed-job log tail in a code fence longer than any run of backticks in the log, so a log line cannot close the fence early and turn the rest of the log into task text. ([#210](https://github.com/agentmemoir/argus/issues/210))
 
 - Issue pull requests are marked ready for review once every check on them passes. The ready sweep reuses the group ready transition, with its once-only guard, and skips a pull request while its issue run or a repair round runs. ([#198](https://github.com/agentmemoir/argus/issues/198))

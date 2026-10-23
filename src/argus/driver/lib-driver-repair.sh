@@ -127,7 +127,7 @@ repair_launch() {
 # sets PENDING_PUBLISHED, the tick's "no new work" signal, so the repair runs
 # before any new work.
 repair_tick() {
-  local rows pr branch key out rc
+  local rows pr branch key out rc msg
   [ -n "${REPAIR_PIPELINE:-}" ] || return 0
   [ -z "${DRIVER_STUB_COORDINATION:-}" ] || return 0
   [ ! -f "$HALT" ] || return 0
@@ -154,6 +154,11 @@ for row in json.load(sys.stdin).get("awaiting_review", []):
     fi
     case "$(selection_value action <<<"$out")" in
       escalate) notify "$(selection_value message <<<"$out")" ;;
+      unreadable)
+        # The record stays unreadable on every tick, so the notice goes out once per message.
+        msg="$(selection_value message <<<"$out")"
+        [ "$(cat "$RUN_DIR/log-last-repair-record-$key" 2>/dev/null)" = "$msg" ] || notify "$msg"
+        log_changed "repair-record-$key" "$msg" ;;
       repair)
         repair_launch "$key" "$(selection_value task <<<"$out")" "$branch" </dev/null || continue
         "$PYTHON" "$ARGUS/gitsync/repair_cli.py" "${ARGUS_CONFIG_ARGS[@]}" \

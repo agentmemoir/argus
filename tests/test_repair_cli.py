@@ -198,3 +198,17 @@ def test_issue_pull_requests_ignore_a_fork_pull_request_on_the_recorded_branch(
     assert not list(tmp_path.rglob("repair-*"))
     err = capsys.readouterr().err
     assert "dropped 2 row(s)" in err and "#90" in err and "#91" in err
+
+
+def test_an_unreadable_record_names_its_cause_and_starts_no_round(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "repair-7.json").write_text("{not json", encoding="utf-8")
+    rc, out = _run(monkeypatch, capsys, tmp_path, RED, 1000.0, launched=False)
+    assert (rc, out["action"]) == (0, "unreadable")
+    assert out["message"].startswith(
+        f"Needs You. The attempt record repair-7.json of {PR}"
+    )
+    assert "no repair round" in out["message"]
