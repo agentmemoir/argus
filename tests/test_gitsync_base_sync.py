@@ -25,21 +25,15 @@ def git_settings(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def _git(cwd: Path, *args: str) -> str:
     done = subprocess.run(
-        [
-            "git",
-            "-c",
-            "user.name=argus-test",
-            "-c",
-            "user.email=argus-test@example.com",
-            "-C",
-            str(cwd),
-            *args,
-        ],
-        capture_output=True,
-        text=True,
-        check=True,
+        ["git", "-C", str(cwd), *args], capture_output=True, text=True, check=True
     )
     return done.stdout.strip()
+
+
+def _identity(repo: Path) -> None:
+    # A CI host has no global git identity, and base-sync's merge commit needs one.
+    _git(repo, "config", "user.name", "argus-test")
+    _git(repo, "config", "user.email", "argus-test@example.com")
 
 
 def _commit(repo: Path, name: str, text: str) -> None:
@@ -59,10 +53,12 @@ def repos(tmp_path: Path) -> dict[str, Path]:
     _git(tmp_path, "init", "--quiet", "--bare", "-b", "master", str(origin))
     seed = tmp_path / "seed"
     _git(tmp_path, "init", "--quiet", "-b", "master", str(seed))
+    _identity(seed)
     _commit(seed, "app.txt", "one\n")
     _git(seed, "push", "--quiet", str(origin), "master")
     work = tmp_path / "work"
     _git(tmp_path, "clone", "--quiet", str(origin), str(work))
+    _identity(work)
     _git(work, "checkout", "--quiet", "-b", BRANCH)
     _commit(work, "feature.txt", "feature\n")
     _git(work, "push", "--quiet", "-u", "origin", BRANCH)
