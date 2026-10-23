@@ -90,6 +90,12 @@ check() {
     [ -z "$prerun_out" ] || printf '%s\n' "$prerun_out"
     [ "$prerun_rc" -eq 0 ] || return 1
   fi
+  # Glide runs each stage with TMPDIR and BUN_TMPDIR set to the stage folder, so a
+  # stage does not depend on the default temporary folder. The folder must run a
+  # file here, or no stage can start on this machine.
+  local stage_rc=0
+  "$PYTHON" "$ARGUS/stage_tmpdir.py" "$STAGE_TMP" || stage_rc=$?
+  [ "$stage_rc" -eq 0 ] || warned=1
   echo "work source: ${WORK_SOURCE:-phases}"
   # A halt, and the record a resume reads, in the report an operator runs when
   # the line will not advance. The record is named separately because it survives

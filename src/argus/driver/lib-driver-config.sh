@@ -295,6 +295,8 @@ argus_init() {
     }
     DRIVER_RUN_DIR="$WF/$DRIVER_STATE"
     RUN_DIR="$DRIVER_RUN_DIR"
+    # The stage temporary folder: TMPDIR and BUN_TMPDIR for Glide, under the run state.
+    STAGE_TMP="$RUN_DIR/stage-tmp"
     LOCK="$RUN_DIR/driver.lock"
     HALT="$RUN_DIR/halted"
     # The halt's own record, written beside the marker at the run-end halt and

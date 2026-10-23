@@ -71,7 +71,12 @@ glide_run_once() {
       log "${work_kind:-phase} $number owner-edited $map_file detected before the --fresh restart; glide keeps and fills only the missing fields"
     fi
   fi
-  "$CMD_GLIDE" run --pipeline "$PIPELINE" \
+  # Glide and its stages take their temporary folder from the run state, not from
+  # the caller's TMPDIR, so a host whose default folder is mounted noexec still
+  # starts a stage. The readiness check probes the folder.
+  mkdir -p "$STAGE_TMP"
+  log "stage temp dir: $STAGE_TMP (TMPDIR and BUN_TMPDIR for glide)"
+  TMPDIR="$STAGE_TMP" BUN_TMPDIR="$STAGE_TMP" "$CMD_GLIDE" run --pipeline "$PIPELINE" \
     "${fresh_args[@]+"${fresh_args[@]}"}" "${glide_inputs[@]}"
 }
 
