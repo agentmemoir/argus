@@ -37,8 +37,9 @@
 # a lock descriptor left open there stays locked for as long as the server lives.
 # Fd 9 is the driver's own lock (`exec 9>`). Fd 3 is the lock under cron, where
 # `flock -n <lock> <cmd>` opens the lock file on the lowest free descriptor and the
-# tick inherits it.
-tmux_lockfree() { "$CMD_TMUX" "$@" 3>&- 9>&-; }
+# tick inherits it. Fd 8 is the checkout lock a phase holds for its run (issue 199),
+# so a tmux server started from the phase process cannot keep it.
+tmux_lockfree() { "$CMD_TMUX" "$@" 3>&- 8>&- 9>&-; }
 TMUX_BIN=tmux_lockfree
 
 tmux_session_exists() {

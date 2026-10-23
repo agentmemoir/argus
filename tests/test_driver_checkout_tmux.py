@@ -2,14 +2,14 @@
 # SPDX-License-Identifier: Apache-2.0
 """A tmux server must not keep the checkout lock after its phase ends.
 
-The phase takes the checkout lock inside its own window process. The test runs
-that phase in a window of a tmux server that was started from a process holding
-no lock descriptor. While the window runs, the lock must be held. Once the window
+The phase takes the checkout lock inside its own window process. The first test runs
+that phase in a window of a tmux server that was started from a process holding no
+lock descriptor. While the window runs, the lock must be held. Once the window
 closes, the lock must be free while the server still lives.
 
-Measured on tmux 3.7c: a server started while a shell holds the lock descriptor
-does not keep the lock after the shell exits. The older leak (#224, #234) did not
-reproduce on this version, so this test cannot show that it would catch that leak.
+The control starts a server from a shell that holds the lock, outside the driver's
+tmux wrapper. The server keeps the lock, so the wrapper must close descriptor 8 for
+every tmux call. The wrapper case is in test_driver_tmux_lock_fd.py.
 """
 
 from __future__ import annotations
@@ -126,6 +126,37 @@ def test_a_phase_window_releases_the_checkout_lock_for_the_tmux_server(
         alive = _tmux(tmux, socket, "has-session", "-t", SESSION)
         assert alive.returncode == 0, "no tmux server runs, so the check proves nothing"
         assert _lock_is_free(lock), "the tmux server keeps the checkout lock"
+    finally:
+        _tmux(tmux, socket, "kill-server")
+        scratch.cleanup()
+
+
+def test_control_a_server_started_with_the_lock_held_keeps_it(
+    tmux: str, tmp_path: Path
+) -> None:
+    repo = make_checkout(tmp_path / "repo")
+    lock = repo / ".git" / "argus-driver-checkout.lock"
+    lock.touch()
+    scratch = exec_tempdir(purpose="a tmux server socket")
+    work = Path(scratch.name)
+    socket = work / "tmux.sock"
+    try:
+        body = (
+            f"exec 8<>{shlex.quote(str(lock))}\n"
+            f"{shlex.quote(sys.executable)} -c "
+            "'import fcntl; fcntl.flock(8, fcntl.LOCK_EX | fcntl.LOCK_NB)' || exit 3\n"
+            f"{shlex.quote(tmux)} -S {shlex.quote(str(socket))} "
+            f"new-session -d -s {SESSION} cat\n"
+            "exec 8>&-\n"
+        )
+        subprocess.run(["bash", "-c", body], check=True, timeout=60)
+        alive = _tmux(tmux, socket, "has-session", "-t", SESSION)
+        assert alive.returncode == 0, (
+            "no tmux server runs, so the control proves nothing"
+        )
+        assert not _lock_is_free(lock), (
+            "a server started with the lock held did not keep it"
+        )
     finally:
         _tmux(tmux, socket, "kill-server")
         scratch.cleanup()
