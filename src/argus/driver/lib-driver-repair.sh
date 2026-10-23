@@ -36,6 +36,14 @@ PY
 
 repair_worktree() { printf '%s/repair-worktree-%s' "$RUN_DIR" "$1"; }
 
+# Whether the remote has this commit as one of its branch heads. The remote answers,
+# not the local tracking refs, so a clone whose fetch refspec leaves them behind does
+# not see a pushed commit as unpushed. No answer counts as not pushed, so the work is kept.
+repair_pushed() {
+  "$CMD_GIT" -C "$1" ls-remote origin 2>/dev/null \
+    | S="$2" awk 'index($2, "refs/heads/") == 1 && $1 == ENVIRON["S"] { found = 1 } END { exit !found }'
+}
+
 # Remove one repair worktree. Work that never reached the remote is saved first
 # (hard line 2): uncommitted edits become one commit on top of HEAD, and a ref
 # under refs/argus/repair-backup/ keeps it. Argus never pushes or deletes that
@@ -53,7 +61,7 @@ repair_worktree_remove() {
       || tip=""
     [ -n "$tip" ] || { notify "Repair $key: Argus could not save the edits in $wt, so it kept the worktree. Copy what you need from it; the next tick tries again."; return 1; }
   fi
-  if [ -n "$tip" ] && [ -n "$("$CMD_GIT" -C "$wt" log --oneline "$tip" --not --remotes 2>/dev/null | head -1)" ]; then
+  if [ -n "$tip" ] && ! repair_pushed "$wt" "$tip"; then
     ref="refs/argus/repair-backup/$key-$(date +%s)"
     "$CMD_GIT" -C "$REPO" update-ref "$ref" "$tip" \
       || { notify "Repair $key: Argus could not save the work in $wt, so it kept the worktree. Copy what you need from it; the next tick tries again."; return 1; }
@@ -128,6 +136,12 @@ repair_launch() {
   log "launched repair $key in tmux '$SESSION' window 'phase'"
 }
 
+# The head commit of one branch, as the remote reports it. Empty when it cannot answer.
+repair_remote_head() {
+  "$CMD_GIT" -C "$REPO" ls-remote origin "refs/heads/$1" 2>/dev/null \
+    | R="refs/heads/$1" awk '$2 == ENVIRON["R"] { print $1; exit }'
+}
+
 # Stop the tick before new work. A read that failed leaves a pull request's state
 # unknown, and an unknown state must never look like "no change" (SECURITY.md,
 # rule 2). The next tick reads again.
@@ -142,7 +156,7 @@ repair_stop() {
 # same way. While REPAIR_HOLD_LAUNCH is 1 (the phase window runs), the reads and
 # notices still run, and no round starts.
 repair_tick() {
-  local rows pr branch key out rc msg notice cleared what
+  local rows pr branch key out rc msg notice cleared what pr_head
   [ -n "${REPAIR_PIPELINE:-}" ] || return 0
   [ -z "${DRIVER_STUB_COORDINATION:-}" ] || return 0
   [ ! -f "$HALT" ] || return 0
@@ -160,9 +174,11 @@ for row in json.load(sys.stdin).get("awaiting_review", []):
   while read -r pr branch; do
     [ -n "$pr" ] || continue
     key="${pr%/}"; key="${key##*/}"
+    pr_head="$(repair_remote_head "$branch")"
+    [ -n "$pr_head" ] || { repair_stop "could not read the head of $branch for $pr"; continue; }
     rc=0
     out="$("$PYTHON" "$ARGUS/gitsync/repair_cli.py" "${ARGUS_CONFIG_ARGS[@]}" \
-      --pull-request "$pr" --run-dir "$RUN_DIR" \
+      --pull-request "$pr" --run-dir "$RUN_DIR" --head "$pr_head" \
       --attempts "$REPAIR_ATTEMPTS" --wait "$REPAIR_WAIT" </dev/null)" || rc=$?
     if [ "$rc" -ne 0 ]; then
       what="$(selection_value read <<<"$out")"
@@ -185,11 +201,14 @@ for row in json.load(sys.stdin).get("awaiting_review", []):
           log "repair $key waits: the phase window is running"
           continue
         fi
-        repair_launch "$key" "$(selection_value task <<<"$out")" "$branch" </dev/null || continue
+        # The round is counted before it launches, so a launch that fails still
+        # uses one attempt. A round that cannot be counted never launches.
         "$PYTHON" "$ARGUS/gitsync/repair_cli.py" "${ARGUS_CONFIG_ARGS[@]}" \
-          --pull-request "$pr" --run-dir "$RUN_DIR" --launched \
+          --pull-request "$pr" --run-dir "$RUN_DIR" --launched --head "$pr_head" \
           --attempts "$REPAIR_ATTEMPTS" --wait "$REPAIR_WAIT" </dev/null >/dev/null \
-          || log "repair $key: the round started but was not counted"
+          || { log "repair $key: the round could not be counted; no round starts"; continue; }
+        repair_launch "$key" "$(selection_value task <<<"$out")" "$branch" </dev/null \
+          || { log "repair $key: the launch failed; the round used one attempt"; continue; }
         PENDING_PUBLISHED=$((PENDING_PUBLISHED + 1))
         return 0 ;;
     esac
@@ -199,6 +218,12 @@ for row in json.load(sys.stdin).get("awaiting_review", []):
 # The issue pull requests' repair step. A failed listing stops the tick.
 repair_issue_reads() {
   local issue_rows
+  # A missing pipeline ends the step before the snapshot, which would spend one
+  # gh read per issue run folder on a round that cannot start.
+  if [ ! -r "$REPAIR_PIPELINE" ]; then
+    log_changed repair-pipeline "repair: cannot read $REPAIR_PIPELINE; no repair round starts"
+    return 0
+  fi
   if issue_rows="$(issue_review_snapshot)"; then
     repair_tick "$issue_rows"
   else
@@ -242,7 +267,7 @@ run_repair_session() {
       --input "repair_id=$key" --input "repair_task=$task" || rc=$?
     if [ "$rc" -ne 0 ]; then
       log "repair $key: the run ended with rc=$rc and pushed nothing"
-    elif [ -z "$("$CMD_GIT" -C "$wt" log --oneline --not --remotes | head -1)" ]; then
+    elif repair_pushed "$wt" "$("$CMD_GIT" -C "$wt" rev-parse HEAD 2>/dev/null)"; then
       log "repair $key: the run made no commit; nothing pushed to $branch"
     elif "$CMD_GIT" -C "$wt" push --quiet origin "HEAD:refs/heads/$branch" >/dev/null 2>&1; then
       log "repair $key: pushed to $branch; the next tick reads the new checks"

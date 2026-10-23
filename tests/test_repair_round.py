@@ -11,6 +11,7 @@ from argus.gitsync.repair_round import (
     decide,
     escalation_text,
     failing_checks,
+    for_head,
     load_record,
     save_record,
     task_text,
@@ -66,6 +67,12 @@ def test_record_round_trips_and_starts_empty(tmp_path: Path) -> None:
     assert load_record(path) == {"attempts": []}
     save_record(path, {"attempts": [1.0]})
     assert load_record(path) == {"attempts": [1.0]}
+
+
+def test_a_new_head_resets_the_record_and_the_same_head_keeps_it() -> None:
+    record: dict[str, Any] = {"head": "a", "attempts": [1.0], "escalated": True}
+    assert for_head(record, "a") is record
+    assert for_head(record, "b") == {"head": "b", "attempts": []}
 
 
 def test_unreadable_record_is_refused(tmp_path: Path) -> None:

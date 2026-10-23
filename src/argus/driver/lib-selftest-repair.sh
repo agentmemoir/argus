@@ -45,7 +45,7 @@ PY
   load_fixture_config "$cfg"
   RUN_DIR="$run_dir"
   REPAIR_PIPELINE="$RUN_DIR/repair-stub.yaml"; : >"$REPAIR_PIPELINE"
-  REPAIR_ATTEMPTS=1; REPAIR_WAIT=0
+  REPAIR_ATTEMPTS=2; REPAIR_WAIT=0
   notes="$RUN_DIR/repair-notes"; : >"$notes"
   notify() { printf '%s\n' "$1" >>"$notes"; }
   tmux_session_ensure() { return 0; }
@@ -59,24 +59,24 @@ PY
 
   PENDING_PUBLISHED=0
   repair_tick "$pending"
-  if [ "$(selftest_repair_count)" = 0 ] && [ "$PENDING_PUBLISHED" = 0 ] && [ ! -e "$wt" ] \
+  if [ "$(selftest_repair_count)" = 1 ] && [ "$PENDING_PUBLISHED" = 0 ] && [ ! -e "$wt" ] \
       && grep -q 'failed to launch' "$notes"; then
-    echo "ok: repair: a failed launch is named, not counted, and leaves no worktree"
+    echo "ok: repair: a failed launch uses one attempt, is named, and leaves no worktree"
   else
-    echo "FAIL: repair: a failed launch was counted, left a worktree, or sent no notice"; bad=1
+    echo "FAIL: repair: a failed launch was not counted once, left a worktree, or sent no notice (count $(selftest_repair_count))"; bad=1
   fi
   : >"$notes"
 
   tmux_phase_window_open() { return 0; }
   PENDING_PUBLISHED=0
   repair_tick "$pending"
-  if [ "$(selftest_repair_count)" = 1 ] && [ "$PENDING_PUBLISHED" = 1 ] \
+  if [ "$(selftest_repair_count)" = 2 ] && [ "$PENDING_PUBLISHED" = 1 ] \
       && [ "$(git -C "$wt" rev-parse HEAD 2>/dev/null)" = "$(git -C "$REPO" rev-parse "origin/$branch")" ] \
       && ! git -C "$wt" symbolic-ref -q HEAD >/dev/null \
       && [ "$(git -C "$REPO" symbolic-ref -q HEAD || echo detached)" = "$main_branch" ]; then
     echo "ok: repair: a red pull request starts one counted round in a detached worktree"
   else
-    echo "FAIL: repair: the round was not counted, or its worktree is wrong (count $(selftest_repair_count), started $PENDING_PUBLISHED)"; cat "$notes"; bad=1
+    echo "FAIL: repair: the round was not counted after the failed launch, or its worktree is wrong (count $(selftest_repair_count), started $PENDING_PUBLISHED)"; cat "$notes"; bad=1
   fi
 
   repair_tick "$pending"
