@@ -192,8 +192,9 @@ def _issue_mode(args: Namespace) -> dict[str, Any] | None:
             if value is not None
         ]
         if ignored:
+            verb = "does not apply" if len(ignored) == 1 else "do not apply"
             raise ConfigError(
-                f"{', '.join(ignored)} do not apply to --kind issue --mode open-pr; "
+                f"{', '.join(ignored)} {verb} to --kind issue --mode open-pr; "
                 "the issue branch comes from the claim"
             )
         return mode_issue_open_pr(
