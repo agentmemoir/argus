@@ -48,17 +48,23 @@ def _record(fixture: DriverPublication) -> dict[str, object] | None:
     return record
 
 
-def test_an_expired_own_claim_is_parked(driver_publication: DriverPublication) -> None:
+def test_an_expired_own_claim_waits_out_its_cooldown(
+    driver_publication: DriverPublication,
+) -> None:
+    # An expiry writes a cooldown that runs past the moment it was written. The
+    # board refuses a park reservation on a record still in cooldown, so the park
+    # waits: nothing is written, and the claim stays for the next run.
     fixture = driver_publication
     _token, run_dir = _prepare(fixture, "server-01")
     ReservationStore(fixture.root).expire_stale(now=FAR_FUTURE)
 
     result = fixture.tick("abandon", str(NUMBER))
 
-    assert result.returncode == 0, result.stderr
-    assert json.loads((run_dir / "abandoned.json").read_text())["phase"] == str(NUMBER)
+    assert result.returncode != 0
+    assert "could not take a park reservation" in result.stderr
+    assert not (run_dir / "abandoned.json").exists()
     assert not (run_dir / "abandoned.json.pending").exists()
-    assert not (fixture.state / "claim").exists()
+    assert (fixture.state / "claim").exists()
 
 
 def test_a_live_claim_by_another_machine_refuses_and_writes_nothing(
