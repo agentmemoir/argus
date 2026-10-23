@@ -165,9 +165,10 @@ release_refused_claim() {
 # Release uses the same writer to repair missing or stale saved reservations
 # from the shell claim the board just proved.
 #
-# The values are the ones the board has just confirmed, and the ids and the
-# generation are checked to be the shapes that cannot break the JSON. Anything
-# else writes nothing: a half-written reservation file would be read as a fence.
+# The values are the ones the board has just confirmed. Python's JSON encoder
+# writes them, so an id with a quote or a backslash still gives valid JSON. A
+# phase or generation that is not a number writes nothing: a half-written
+# reservation file would be read as a fence.
 #
 #   $1 the phase   $2 the reservation id   $3 the generation
 record_phase_reservation() {
@@ -179,8 +180,14 @@ record_phase_reservation() {
   [ -n "$dir" ] || return 1
   file="$dir/reservation.json"
   mkdir -p "$dir" 2>/dev/null || return 1
-  if ! printf '{\n  "phase": "%s",\n  "machine_id": "%s",\n  "reservation_id": "%s",\n  "generation": %s\n}\n' \
-      "$phase" "${PHASE_MACHINE_ID:-}" "$reservation_id" "$generation" >"$file" 2>/dev/null; then
+  if ! "$PYTHON" -c 'import json, sys
+phase, machine, reservation, generation, path = sys.argv[1:6]
+record = {"phase": phase, "machine_id": machine, "reservation_id": reservation,
+          "generation": int(generation)}
+with open(path, "w", encoding="utf-8") as handle:
+    json.dump(record, handle, indent=2)
+    handle.write("\n")' \
+      "$phase" "${PHASE_MACHINE_ID:-}" "$reservation_id" "$generation" "$file" 2>/dev/null; then
     log "claim: could not write the reservation file for ${work_kind:-phase} $phase (see $file); the fence reads nothing"
     return 1
   fi

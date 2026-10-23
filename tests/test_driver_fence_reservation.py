@@ -115,3 +115,19 @@ def test_the_fence_library_writes_the_file_the_fences_read() -> None:
     fence = (DRIVER / "lib-driver-fence.sh").read_text()
     body = fence.split("record_phase_reservation() {", 1)[1].split("\n}", 1)[0]
     assert "reservation.json" in body
+
+
+def test_reservation_ids_with_quotes_still_write_valid_json(tmp_path: Path) -> None:
+    root = tmp_path / "repo"
+    shell(
+        tmp_path,
+        f'phase_run_dir() {{ printf "%s\\n" "{root}/runs/phase-{PHASE:06d}"; }}\n'
+        "PHASE_MACHINE_ID='mach\"ine'\n"
+        f"record_phase_reservation {PHASE} 'rsv\"id' 3\n",
+    )
+    assert json.loads(_reservation_file(tmp_path).read_text()) == {
+        "phase": f"{PHASE:06d}",
+        "machine_id": 'mach"ine',
+        "reservation_id": 'rsv"id',
+        "generation": 3,
+    }
