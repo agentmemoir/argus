@@ -148,3 +148,12 @@ def test_a_failed_run_state_commit_is_not_summarized_as_ok(
     summary = summarize([failed_commit], "clean")
     assert summary.startswith("clean sync DEGRADED")
     assert "commit of run state failed" in summary
+
+
+def test_a_failed_run_state_commit_names_no_machine(
+    failed_commit: dict[str, object],
+) -> None:
+    warning = str(failed_commit["warning"])
+    assert "git exit 128" in warning
+    assert "alice" not in warning
+    assert "build-host" not in warning
