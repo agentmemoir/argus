@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from argus.conventions import board_repo, setting
+from argus.gitsync.summary import summarize
 
 FETCH_TIMEOUT_S = 180
 GIT_TIMEOUT_S = 60
@@ -334,15 +335,4 @@ def current_branch(repo: str | Path) -> str:
     return out if rc == 0 and out and out != "HEAD" else ""
 
 
-def summarize(results: list[dict[str, Any]], mode: str) -> str:
-    parts: list[str] = []
-    for r in results:
-        if r.get("ok"):
-            parts.append(f"{r['repo']}: {r.get('action', 'ok')}")
-        else:
-            parts.append(f"{r['repo']}: BLOCKED ({'; '.join(r.get('blockers', []))})")
-    head = f"{mode} sync {'ok' if all(r.get('ok') for r in results) else 'BLOCKED'}"
-    return f"{head}: " + "; ".join(parts)
-
-
-__all__ = ["_is_private_path", "degraded", "git_toplevel"]
+__all__ = ["_is_private_path", "degraded", "git_toplevel", "summarize"]
