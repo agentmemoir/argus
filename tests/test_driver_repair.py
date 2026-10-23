@@ -191,3 +191,20 @@ repair_worktree_add 7 feature/fixture || echo refused
     assert out.split() == ["refused", "removed"]
     events = tmp_path / "repo/state/runs/.driver/events"
     assert "NOTIFY Repair 7 did not start" in events.read_text(encoding="utf-8")
+
+
+def test_an_issue_tick_without_the_repair_pipeline_skips_the_snapshot(
+    tmp_path: Path,
+) -> None:
+    shell(
+        tmp_path,
+        """WORK_SOURCE=issues; REPAIR_PIPELINE="$TEST_ROOT/missing.yaml"
+issue_review_snapshot() { log "SNAPSHOT"; }
+repair_tick() { log "TICK"; }
+reconcile_group_ready() { :; }
+reconcile_pending_reviews
+""",
+    )
+    events = (tmp_path / "events").read_text(encoding="utf-8")
+    assert "SNAPSHOT" not in events and "TICK" not in events
+    assert "missing.yaml" in events

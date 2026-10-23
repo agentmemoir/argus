@@ -4,6 +4,7 @@ Notable changes to this project are documented here. The format follows [Keep a 
 
 ## [Unreleased]
 
+- An issue tick with no readable repair pipeline no longer lists the open pull requests of its issue run folders first. It names the missing file once and starts no repair round. `argus --check` reports a missing repair pipeline as MISSING. ([#210](https://github.com/agentmemoir/argus/issues/210))
 - The check for unpushed repair work asks the remote, not the local tracking refs, before a repair worktree is removed and before a repair round is judged to have made a commit. A fetch refspec that leaves the tracking refs behind no longer reports a pushed commit as unpushed, so no false notice is sent. ([#210](https://github.com/agentmemoir/argus/issues/210))
 - A CI repair attempt budget belongs to one pull request head commit. After the rounds are spent and Needs You is sent, the same head stays stopped with no further notice; a new head pushed to the branch starts a fresh budget of `repair.attempts` rounds. The remote's head of the branch is read each tick for this. ([#210](https://github.com/agentmemoir/argus/issues/210))
 - A CI repair round is counted before its tmux launch, so a launch that fails uses one of the `repair.attempts`. A round that cannot be counted does not launch. Before, a failed count let the round run uncounted, so rounds could repeat without a limit. ([#210](https://github.com/agentmemoir/argus/issues/210))

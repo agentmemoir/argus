@@ -79,6 +79,12 @@ reconcile_pending_reviews() {
     reconcile_group_ready
     local issue_rows
     [ -n "${REPAIR_PIPELINE:-}" ] && [ -z "${DRIVER_STUB_COORDINATION:-}" ] || return 0
+    # A missing pipeline ends the step before the snapshot, which would spend one
+    # gh read per issue run folder on a round that cannot start.
+    if [ ! -r "$REPAIR_PIPELINE" ]; then
+      log_changed repair-pipeline "repair: cannot read $REPAIR_PIPELINE; no repair round starts"
+      return 0
+    fi
     if issue_rows="$(issue_review_snapshot)"; then
       repair_tick "$issue_rows"
     else
