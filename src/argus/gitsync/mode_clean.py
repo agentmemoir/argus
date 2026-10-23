@@ -258,12 +258,12 @@ def mode_checkpoint(
             "phase branch, so the checkpoint is retried after the branch cut",
         )
     if paths:
-        rc, staged, err = git(
+        rc, staged, _ = git(
             root, "diff", "--cached", "--no-renames", "--name-only", "-z"
         )
         if rc:
             return degraded(info, "could not read staged paths; retrying next tick")
-        rc, scoped, err = git(
+        rc, scoped, _ = git(
             root, "diff", "--cached", "--no-renames", "--name-only", "-z", "--", *paths
         )
         if rc:
@@ -278,7 +278,7 @@ def mode_checkpoint(
                 "staged and the checkpoint is retried",
                 staged=outside,
             )
-        rc, selected, err = git(
+        rc, selected, _ = git(
             root,
             "ls-files",
             "-z",
