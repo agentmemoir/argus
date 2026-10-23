@@ -253,6 +253,25 @@ repair_observe() {
 # One repair round, inside the phase window. It runs the repair pipeline in the
 # round's worktree, pushes the agent's commit to the pull request branch (never
 # force; a moved branch rejects the push), and removes the worktree.
+# Bring a repair round's checkout up to its base before the repair agent starts.
+# Sets BASE_SYNC_STATE to clean, conflict, or failed. On a conflict, BASE_SYNC_NOTE
+# tells the agent to finish the merge that git left in progress.
+base_sync_repair() {  # <key> <worktree> <branch>
+  local key="$1" wt="$2" branch="$3" out rc=0 line
+  BASE_SYNC_STATE=failed BASE_SYNC_NOTE=""
+  out="$("$PYTHON" "$ARGUS/gitsync/base_sync_cli.py" "${ARGUS_CONFIG_ARGS[@]}" \
+    --repo "$wt" --pr-branch "$branch" 2>&1)" || rc=$?
+  while IFS= read -r line; do
+    if [ -n "$line" ]; then log "repair $key: $line"; fi
+  done <<<"$out"
+  case "$rc" in
+    0) BASE_SYNC_STATE=clean ;;
+    3)
+      BASE_SYNC_STATE=conflict
+      BASE_SYNC_NOTE="A merge of the base into this branch stopped on text conflicts. Run git status, resolve the conflicted files, and commit the merge before the other work. " ;;
+  esac
+}
+
 run_repair_session() {
   local key="$1" task="$2" branch="$3" wt rc=0
   wt="$(repair_worktree "$key")"
@@ -262,17 +281,24 @@ run_repair_session() {
   if ! cd "$wt"; then
     log "repair $key: its worktree is missing; the round ran nothing"
   else
-    # The pipeline's hooks read the configuration file this driver loaded.
-    ARGUS_CONFIG_FILE="$ARGUS_CONFIG_FILE" "$CMD_GLIDE" run --pipeline "$REPAIR_PIPELINE" \
-      --input "repair_id=$key" --input "repair_task=$task" || rc=$?
-    if [ "$rc" -ne 0 ]; then
-      log "repair $key: the run ended with rc=$rc and pushed nothing"
-    elif repair_pushed "$wt" "$("$CMD_GIT" -C "$wt" rev-parse HEAD 2>/dev/null)"; then
-      log "repair $key: the run made no commit; nothing pushed to $branch"
-    elif "$CMD_GIT" -C "$wt" push --quiet origin "HEAD:refs/heads/$branch" >/dev/null 2>&1; then
-      log "repair $key: pushed to $branch; the next tick reads the new checks"
+    # The start of the round, before the agent launches (belief 10): the branch is
+    # brought up to its base first, so the agent never starts on a stale branch.
+    base_sync_repair "$key" "$wt" "$branch"
+    if [ "$BASE_SYNC_STATE" = failed ]; then
+      log "repair $key: the base check failed, so this round ran no agent"
     else
-      log "repair $key: could not push to $branch (rc=$?)"
+      # The pipeline's hooks read the configuration file this driver loaded.
+      ARGUS_CONFIG_FILE="$ARGUS_CONFIG_FILE" "$CMD_GLIDE" run --pipeline "$REPAIR_PIPELINE" \
+        --input "repair_id=$key" --input "repair_task=$BASE_SYNC_NOTE$task" || rc=$?
+      if [ "$rc" -ne 0 ]; then
+        log "repair $key: the run ended with rc=$rc and pushed nothing"
+      elif repair_pushed "$wt" "$("$CMD_GIT" -C "$wt" rev-parse HEAD 2>/dev/null)"; then
+        log "repair $key: the run made no commit; nothing pushed to $branch"
+      elif "$CMD_GIT" -C "$wt" push --quiet origin "HEAD:refs/heads/$branch" >/dev/null 2>&1; then
+        log "repair $key: pushed to $branch; the next tick reads the new checks"
+      else
+        log "repair $key: could not push to $branch (rc=$?)"
+      fi
     fi
     cd "$REPO" || true
     repair_worktree_remove "$wt" || true

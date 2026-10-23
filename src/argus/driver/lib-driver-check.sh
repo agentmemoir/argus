@@ -42,6 +42,7 @@ check() {
       echo "$label: MISSING (from '$cmd')"; [ "$label" != glide ] || warned=1
     fi
   done
+  "$PYTHON" "$ARGUS/gitsync/git_version.py" "$CMD_GIT" || warned=1
   if "$PYTHON" -c 'import yaml' >/dev/null 2>&1; then
     echo "python3: $PYTHON (PyYAML OK)"
   else
