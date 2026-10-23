@@ -123,3 +123,24 @@ def write_config(
   }}
 }}
 """)
+
+
+def write_pipelines(project: Path, board: Path) -> Path:
+    """Write the pipeline and the repair pipeline in project; return the pipeline."""
+    pipeline = project / "pipeline.yaml"
+    pipeline.write_text(
+        """version: 1
+run_dir: RUN_TEMPLATE
+inputs:
+  ticket: {type: int, required: true}
+  document: {required: true}
+start: build
+ends: [completed, blocked]
+steps:
+  build: {stage: build.md, end: blocked}
+""".replace("RUN_TEMPLATE", str(board / "artifacts/item-{ticket:06d}"))
+    )
+    # The repair pipeline sits beside the pipeline, so the readiness report names no
+    # missing file. This exercise publishes no pull request, so no round reads it.
+    (project / "repair.yaml").write_text("version: 1\n")
+    return pipeline
