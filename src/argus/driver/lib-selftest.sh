@@ -320,7 +320,22 @@ driver_self_test() {
   set_config_args
   load_board_override() {
     local board_path="$1" config_path="$tmp/board-override-config.json"
+    # The run folder sits inside the board checkout, so the override puts it there.
+    # The board folder is made first, but it is not a git checkout, so the store
+    # still refuses on it before it reads anything, which is what these cases test.
+    mkdir -p "$board_path/history" 2>/dev/null || true
     selftest_write_config "$REPO" "$config_path" "$BOARD_DIR" "$board_path"
+    "$PYTHON" - "$config_path" "$board_path/history" <<'PY'
+import json
+import sys
+
+path, runs = sys.argv[1], sys.argv[2]
+with open(path, encoding="utf-8") as fh:
+    doc = json.load(fh)
+doc["driver"]["runs"] = runs
+with open(path, "w", encoding="utf-8") as fh:
+    fh.write(json.dumps(doc, indent=2) + "\n")
+PY
     load_fixture_config "$config_path"
   }
 
