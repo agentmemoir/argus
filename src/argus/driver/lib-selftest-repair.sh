@@ -140,7 +140,10 @@ selftest_repair_backup() {
   glide="$RUN_DIR/repair-glide-commit"
   printf '#!/bin/sh\ngit -c user.name=t -c user.email=t@t commit -q --allow-empty -m agent\necho edit >repair-edit.txt\n' >"$glide"
   chmod 700 "$glide"
-  ( CMD_GLIDE="$glide"; PIDFILE="$RUN_DIR/repair-pid"
+  # The base check has its own cases. Here the branch moves on purpose, so the
+  # check would refuse the round before the agent runs; this case stubs it clean.
+  ( base_sync_repair() { BASE_SYNC_STATE=clean BASE_SYNC_NOTE=""; }
+    CMD_GLIDE="$glide"; PIDFILE="$RUN_DIR/repair-pid"
     run_repair_session 79 "$RUN_DIR/repair-79.md" "$branch" ) >/dev/null 2>&1
   ref="$(git -C "$REPO" for-each-ref --format='%(refname)' 'refs/argus/repair-backup/79-*' | head -1)"
   if [ -n "$ref" ] && [ ! -e "$(repair_worktree 79)" ] && grep -qF "$ref" "$notes" \
