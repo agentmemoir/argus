@@ -72,6 +72,10 @@ Argus does not merge pull requests. A person merges them.
 
 A red check on an open issue pull request gets a CI repair round before new work, as a phase pull request does. Only the branch that an issue run folder records is read, and only a pull request from this repository counts. A fork pull request with the same branch name is ignored. See [CI repair rounds](running.md#ci-repair-rounds).
 
+## Ready sweep
+
+Each tick, the driver reads the same open issue pull requests as the CI repair step. It marks one ready for review only when every check that GitHub reports for it reads pass, and there is at least one check. A pending, failing, or missing check leaves it in draft, and the next tick asks again. The ready transition uses GitHub's ready/draft history as its once-only guard, so a pull request that was already readied, or that a person put back in draft, is not readied again. The sweep skips a pull request while its issue run or a repair round is running. It logs one line when it readies a pull request. Argus never merges it; a person does.
+
 ## Settings
 
 | Key under `issues` | Value |
@@ -103,7 +107,6 @@ A red check on an open issue pull request gets a CI repair round before new work
 
 These gaps are open in the Argus repository.
 
-- Issue pull requests stay draft until a person marks them ready. Argus has no ready sweep for them yet ([#198](https://github.com/agentmemoir/argus/issues/198)).
 - A pending limit for CI checks, based on measured CI durations, is not built yet ([#197](https://github.com/agentmemoir/argus/issues/197)).
 - Some host setup steps still run by hand ([#216](https://github.com/agentmemoir/argus/issues/216)).
 - `argus --check` does not run the `pre_run` hook. A refusal from that hook appears only when a tick launches the run ([#220](https://github.com/agentmemoir/argus/issues/220)).

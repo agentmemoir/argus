@@ -16,6 +16,7 @@ from argus.gitsync.group_publication import (
 from argus.gitsync.group_review import _group_pending, mark_group_pull_request_ready
 from argus.gitsync.publish import mark_phase_published
 from argus.gitsync.receipts import _phase_run_entries, phase_receipt
+from argus.gitsync.repair_cli import issue_pull_requests
 from argus.gitsync.tidy import return_to_integration, tidy_published_checkout
 
 
@@ -76,7 +77,56 @@ def _ready_one(
     return dict(ready, state="READY" if ready.get("ok") else "HELD")
 
 
-def mode_ready(root: str | Path) -> dict[str, Any]:
+def _issue_run_busy(run_dir: Path, number: int, pull_request: str) -> bool:
+    """Whether an issue run or a repair round is live for this pull request.
+
+    The driver writes the running work's number to ``current`` while it runs,
+    and a repair round keeps its worktree folder while it runs. A phase run that
+    shares the issue's number also counts: a skip only delays the ready, so it
+    is the safe side.
+    """
+    try:
+        marker = (run_dir / "current").read_text(encoding="utf-8").strip()
+    except OSError:
+        marker = ""
+    if marker == str(number):
+        return True
+    key = pull_request.rstrip("/").rsplit("/", 1)[-1]
+    return (run_dir / f"repair-worktree-{key}").exists()
+
+
+def _issue_ready_one(
+    root: Path, number: int, pull_request: str, run_dir: Path
+) -> dict[str, Any] | None:
+    """Try to ready one issue pull request through the group's ready transition.
+
+    The issue pull request has no group, so the group's transition runs with the
+    issue number as its only member and nothing pending. That reuses its checks
+    gate (every check reads ``pass``, with at least one row) and its GitHub
+    ready/draft history guard, so a pull request already readied is skipped and
+    no second ready call is made. A pull request that is not green yet is
+    reported as ``WAITING``, not ``HELD``: it stays draft, which is the normal
+    state while its checks run.
+    """
+    if _issue_run_busy(run_dir, number, pull_request):
+        return None
+    try:
+        ready = mark_group_pull_request_ready(root, number, [number], [], pull_request)
+    except Exception as exc:  # noqa: BLE001 - a ready fault must not stop the sweep
+        return {
+            "kind": "issue",
+            "phase": f"{number:06d}",
+            "state": "WAITING",
+            "pull_request": pull_request,
+            "detail": f"the issue ready could not run: {exc}",
+        }
+    if ready is None:
+        return None
+    state = "READY" if ready.get("ok") else "WAITING"
+    return dict(ready, kind="issue", state=state)
+
+
+def mode_ready(root: str | Path, run_dir: str | Path | None = None) -> dict[str, Any]:
     """Sweep every group receipt once and ready its pull request when it can.
 
     The last member of a reservation group makes the group's one pull request
@@ -106,6 +156,16 @@ def mode_ready(root: str | Path) -> dict[str, Any]:
         one = _ready_one(root, number, receipt)
         if one is not None:
             results.append(one)
+    # Issue pull requests have no receipt. They are swept from the same issue
+    # rows the CI repair tick reads, and only when the driver names its run
+    # folder: without it the live-run check cannot run, so nothing is readied.
+    if run_dir is not None:
+        for row in issue_pull_requests(root):
+            one = _issue_ready_one(
+                root, int(str(row["issue"])), str(row["pull_request"]), Path(run_dir)
+            )
+            if one is not None:
+                results.append(one)
     ok = all(one.get("state") != "HELD" for one in results)
     states = {str(one.get("state")) for one in results}
     if "READY" in states:
