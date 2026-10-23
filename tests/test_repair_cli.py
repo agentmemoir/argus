@@ -212,3 +212,75 @@ def test_an_unreadable_record_names_its_cause_and_starts_no_round(
         f"Needs You. The attempt record repair-7.json of {PR}"
     )
     assert "no repair round" in out["message"]
+
+
+PENDING_ROWS: list[dict[str, Any]] = [{"name": "CI", "bucket": "pending", "link": ""}]
+REPAIR_ARGV = [
+    "--pull-request",
+    PR,
+    "--run-dir",
+    "",
+    "--attempts",
+    "2",
+    "--wait",
+    "600",
+]
+
+
+def _pending_run(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+    head: str | None,
+    now: float,
+) -> tuple[int, dict[str, Any]]:
+    monkeypatch.setattr(
+        repair_cli, "gh_pull_request_checks", lambda *_a: (PENDING_ROWS, 8, "")
+    )
+    monkeypatch.setattr(repair_cli, "gh_pull_request_head", lambda *_a: head)
+    argv = [*REPAIR_ARGV[:3], str(tmp_path), *REPAIR_ARGV[4:]]
+    rc = repair_cli.main(argv, now=now)
+    return rc, json.loads(capsys.readouterr().out)
+
+
+def test_a_pending_check_with_an_unread_head_fails_closed(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+) -> None:
+    rc, out = _pending_run(monkeypatch, capsys, tmp_path, None, 1000.0)
+    assert (rc, out["action"], out["read"]) == (3, "unread", "head")
+    assert not (tmp_path / "pending-7.json").exists()
+
+
+def test_a_pending_check_names_its_notice_once_past_the_limit(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+) -> None:
+    head = "d" * 40
+    _rc, first = _pending_run(monkeypatch, capsys, tmp_path, head, 1000.0)
+    assert first == {"action": "none"}
+    _rc, second = _pending_run(monkeypatch, capsys, tmp_path, head, 2801.0)
+    assert second["notice"].startswith(f"Needs You. {PR} has a check pending")
+    _rc, third = _pending_run(monkeypatch, capsys, tmp_path, head, 3600.0)
+    assert "notice" not in third
+
+
+def test_an_unread_issue_pull_request_is_listed_for_the_caller(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+) -> None:
+    runs = tmp_path / "runs"
+    (runs / "issue-9").mkdir(parents=True)
+    tasks = ["runs/issue-9", "tasks/issue-9-docs.md"]
+    monkeypatch.setattr(repair_cli.conventions, "runs_dir", lambda _root: runs)
+    monkeypatch.setattr(repair_cli, "issue_scope", lambda _r, _n: (tmp_path, tasks))
+    monkeypatch.setattr(
+        repair_cli, "gh_pull_requests_for_branch", lambda _r, _b: (None, "detail")
+    )
+    unread: list[int] = []
+    assert repair_cli.issue_pull_requests(tmp_path, unread) == []
+    assert unread == [9]
+    assert "issue 9" in capsys.readouterr().err

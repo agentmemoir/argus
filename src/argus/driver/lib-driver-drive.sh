@@ -101,6 +101,8 @@ _drive() {
   if tmux_busy; then
     claim_renew
     check_stall
+    # The repair reads still run while the window is busy. A round waits for it.
+    repair_observe
     log "${work_kind:-phase} window is running; skip"
     return 0
   fi
@@ -134,7 +136,9 @@ _drive() {
   # gate still heartbeats the claim of a run this machine is driving. An idle or
   # manually stopped line returns above and does not renew.
   claim_renew
-  if [ "$PENDING_PUBLISHED" -gt 0 ]; then
+  # A launched repair round, or a failed repair read (repair_stop logged why),
+  # ends the tick before new work.
+  if [ "$PENDING_PUBLISHED" -gt 0 ] || [ "${REPAIR_STOP:-0}" = 1 ]; then
     return 0
   fi
 
