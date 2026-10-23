@@ -13,6 +13,8 @@ runs on the fixture's real local git board.
 import datetime as _datetime
 from pathlib import Path
 
+import pytest
+
 from argus.board.core import GROUP_HEARTBEAT_WINDOW_S
 from argus.board.store import ReservationStore
 from driver_maintenance_support import shell
@@ -135,3 +137,26 @@ def test_a_park_reservation_expires_on_its_own(
     )
 
     assert store.read()[0]["phases"][str(NUMBER)]["status"] == "expired"
+
+
+def test_the_next_claim_is_not_trapped_by_a_stopped_park(
+    driver_publication: DriverPublication, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The board times a park with two constants. Both are set to zero here, so the
+    # expiry and the next claim run in one step, without a wait. Once the stopped
+    # park has expired, the next claim takes the phase.
+    monkeypatch.setattr("argus.board.records.GROUP_HEARTBEAT_WINDOW_S", 0)
+    monkeypatch.setattr("argus.board.records.GROUP_COOLDOWN_S", 0)
+    fixture = driver_publication
+    add_phase(fixture, NUMBER, "stopped")
+    store = ReservationStore(fixture.root)
+    park = store.reserve(NUMBER, "server-01", status="running")
+    heartbeat = _datetime.datetime.fromisoformat(
+        str(store.read()[0]["phases"][str(NUMBER)]["heartbeat_at"])
+    )
+
+    store.expire_stale(now=heartbeat + _datetime.timedelta(microseconds=1))
+    claim = store.reserve(NUMBER, "server-01", status="claimed")
+
+    assert claim["reservation_id"] != park["reservation_id"]
+    assert claim["status"] == "claimed"
