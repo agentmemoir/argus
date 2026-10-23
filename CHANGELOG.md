@@ -18,7 +18,9 @@ Notable changes to this project are documented here. The format follows [Keep a 
 
 - The example issue pipeline's post_step hook now runs an example script that exists. It exits non-zero when the checkpoint or open-pr mode refuses, so the step stays incomplete. The open-pr refusal for --branch, --repo, or --phase names the flag and says it does not apply. ([#209](https://github.com/agentmemoir/argus/issues/209))
 
-- The ready sweep reads each pull request once per pass. A group has one pull request shared by every member, so the sweep used to read its timeline and checks once per member. The first answer is now kept by pull request URL for the rest of that pass, and a pull request readied in the pass is not readied again. Merged, closed, or already readied pull requests are still read on later passes. ([#181](https://github.com/agentmemoir/argus/issues/181))
+- The ready sweep reads each pull request once per pass. A group has one pull request shared by every member, so the sweep used to read its timeline and checks once per member. The first answer is now kept by pull request URL for the rest of that pass, and a pull request readied in the pass is not readied again. ([#181](https://github.com/agentmemoir/argus/issues/181))
+
+- The ready sweep lists the open pull requests of each repository once per pass, and reads the timeline only of open draft pull requests. A merged, closed, or non-draft pull request is no longer read on later passes. If the open list cannot be read, the sweep reports the pull request as held and reads none. A draft that was readied before, such as one a person re-drafted, is still read, and its timeline stays the guard against a second ready. ([#181](https://github.com/agentmemoir/argus/issues/181))
 
 - Docs: the repair section now states that a pull request head that was escalated gets no further repair round or notice, even when its checks turn red again, that a new head starts a fresh budget, and that an unreadable attempt record sends one notice and starts no round. ([#210](https://github.com/agentmemoir/argus/issues/210))
 
