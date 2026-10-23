@@ -32,8 +32,14 @@
 : "${TMUX_PHASE_WINDOW:=phase}"
 : "${TMUX_IDLE_SCRIPT:=phase-tmux-idle.sh}"
 
-# The tmux binary comes from the loaded configuration.
-TMUX_BIN="$CMD_TMUX"
+# The tmux binary comes from the loaded configuration. Every tmux call goes through
+# this wrapper. A tmux server keeps each descriptor of the client that starts it, so
+# a lock descriptor left open there stays locked for as long as the server lives.
+# Fd 9 is the driver's own lock (`exec 9>`). Fd 3 is the lock under cron, where
+# `flock -n <lock> <cmd>` opens the lock file on the lowest free descriptor and the
+# tick inherits it.
+tmux_lockfree() { "$CMD_TMUX" "$@" 3>&- 9>&-; }
+TMUX_BIN=tmux_lockfree
 
 tmux_session_exists() {
   "$TMUX_BIN" has-session -t "$SESSION" 2>/dev/null

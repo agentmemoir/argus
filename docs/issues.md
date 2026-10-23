@@ -109,4 +109,3 @@ These gaps are open in the Argus repository.
 
 - A pending limit for CI checks, based on measured CI durations, is not built yet ([#197](https://github.com/agentmemoir/argus/issues/197)).
 - Some host setup steps still run by hand ([#216](https://github.com/agentmemoir/argus/issues/216)).
-- `argus --check` does not run the `pre_run` hook. A refusal from that hook appears only when a tick launches the run ([#220](https://github.com/agentmemoir/argus/issues/220)).
