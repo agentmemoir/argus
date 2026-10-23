@@ -122,6 +122,7 @@ def main() -> int:
     ap.add_argument("--phases-directory", dest="config_phases_directory")
     ap.add_argument("--phase-glob", dest="config_phase_glob", action="append")
     ap.add_argument("--repo", default=None, help="sync one checkout instead of --root")
+    ap.add_argument("--run-dir", help="driver run folder; ready skips live runs")
     ap.add_argument(
         "--mode",
         choices=[
@@ -145,9 +146,8 @@ def main() -> int:
         "fast-forward; publish: claim-check and push a phase's "
         "branch; branch: put the public checkout on the phase "
         "branch; published: confirm a human merged the pull "
-        "request and mark the phase published; ready: sweep "
-        "every group receipt once and ready its pull request "
-        "when its checks pass; resync: merge the integration "
+        "request and mark the phase published; ready: sweep every group and issue "
+        "pull request once, ready it when checks pass; resync: merge the integration "
         "branch into the phase branch for the agent; tidy: "
         "return a checkout to the integration branch when the "
         "phase it is on is already recorded as published; "
@@ -271,7 +271,7 @@ def main() -> int:
                 raise ConfigError("--phase is required with --mode published")
             out = mode_published(args.root, args.phase)
         elif args.mode == "ready":
-            out = mode_ready(args.root)
+            out = mode_ready(args.root, args.run_dir)
         elif args.mode == "signals":
             if args.phase is None:
                 raise ConfigError("--phase is required with --mode signals")
