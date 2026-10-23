@@ -230,7 +230,7 @@ def test_helper_prints_nothing_it_cannot_read(tmp_path: Path) -> None:
     assert absent.stdout == ""
 
 
-def test_one_invocation_yields_state_and_error(tmp_path: Path) -> None:
+def test_one_invocation_yields_state_error_and_hook(tmp_path: Path) -> None:
     path = tmp_path / "session.log"
     path.write_text(SESSION_LOG, encoding="utf-8")
     result = subprocess.run(
@@ -245,7 +245,8 @@ def test_one_invocation_yields_state_and_error(tmp_path: Path) -> None:
     lines = result.stdout.splitlines()
     assert lines[0] == "state=config_error"
     assert lines[1].startswith("error=hook pre_run failed (exit 1):")
-    assert len(lines) == 2
+    assert lines[2] == "hook=pre_run"
+    assert len(lines) == 3
 
 
 def test_reads_no_more_than_the_window(tmp_path: Path) -> None:

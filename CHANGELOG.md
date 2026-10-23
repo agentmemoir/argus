@@ -4,7 +4,7 @@ Notable changes to this project are documented here. The format follows [Keep a 
 
 ## [Unreleased]
 
-- An issue run that fails before any stage starts (glide rc=2, such as a refused `pre_run` hook), or whose issue branch cannot be cut, is a launch fault. The driver keeps the claim and halts the line, so no tick takes another issue. Later ticks retry the same issue after 10 minutes, then every 20 minutes. A run that starts clears the halt with no hand step. After the third failed attempt, one Needs You names the cause, the action, and the check. The issue clean sweep skips a run folder that has no reservation file.
+- An issue run whose `pre_run` hook refuses it (glide records `config_error` at hook point `pre_run`), or whose issue branch cannot be cut, is a launch fault. Any other glide failure, including rc=2 inside a stage, keeps the failed-run path. The driver keeps the claim, renews it while halted, and halts the line, so no tick takes another issue. A claim given back by any path ends the fault. Later ticks retry the same issue after 10 minutes, then every 20 minutes. A run that starts clears the halt with no hand step. After the third failed attempt, one Needs You names the cause, the action, and the check. The issue clean sweep skips a run folder that has no reservation file.
 
 - When Argus cannot put an issue on its own branch, it no longer launches the run on the base branch. It keeps the board claim and halts as a launch fault (see the launch-fault entry above). A phase keeps the old repair path. In issues mode, the phases folder reads as empty instead of failing on an unset `PHASES_DIRECTORY`. ([#215](https://github.com/agentmemoir/argus/issues/215), [#218](https://github.com/agentmemoir/argus/issues/218))
 

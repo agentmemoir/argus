@@ -60,6 +60,7 @@ HALT_LOG_REASON=""
 halt_state_from_session() {   # <file> <offset>
   HALT_LOG_STATE=""
   HALT_LOG_REASON=""
+  HALT_LOG_HOOK=""
   local offset="${2:-}"
   case "$offset" in
     ''|*[!0-9]*) return 0 ;;
@@ -75,11 +76,13 @@ halt_state_from_session() {   # <file> <offset>
     case "$line" in
       state=*) HALT_LOG_STATE="${line#state=}" ;;
       error=*) HALT_LOG_REASON="${line#error=}" ;;
+      hook=*) HALT_LOG_HOOK="${line#hook=}" ;;
     esac
   done <<<"$out"
   # An empty state proves nothing, so the reason is dropped with it.
   if [ -z "$HALT_LOG_STATE" ]; then
     HALT_LOG_REASON=""
+    HALT_LOG_HOOK=""
     return 0
   fi
   HALT_LOG_STATE="$(cap_length "$HALT_LOG_STATE" 500)"

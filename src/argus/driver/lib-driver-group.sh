@@ -223,6 +223,13 @@ claim_renew() {
   if ! tmux_busy && [ ! -s "$GROUPFILE" ]; then
     return 0
   fi
+  claim_renew_now
+}
+
+# Renew the claim file's lease now, with no live-window check. A launch-fault
+# halt holds its claim with no window, so it renews through this.
+claim_renew_now() {
+  [ -s "$CLAIM" ] || return 0
   local claim_number reservation_id generation rc=0
   IFS=$'\t' read -r claim_number reservation_id generation <"$CLAIM" || true
   [ -n "$reservation_id" ] && [ -n "$generation" ] || return 0

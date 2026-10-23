@@ -401,7 +401,7 @@ except OSError:
     fi
   fi
   state="$(phase_state "$number" "$rel")"
-  [ "$rc" = 2 ] || launchfault_clear
+  local launch_fault=0; launchfault_is "$rc" "$session_log" "$session_log_offset" && launch_fault=1 || launchfault_clear
   local run_dir result_file result_state
   run_dir="$(phase_run_dir "$number" "$rel")"
   result_file="$run_dir/result.json"
@@ -462,7 +462,7 @@ print(f"{step}: {reason}" if step and reason else (reason or step))' \
     130) tmux_set_title "HALTED ${work_kind:-phase} $number (interrupted)"
          notify_phase "$rel" interrupted "the process received an interrupt signal" ;;
     *)   # An issue launch fault halts the line and keeps the claim.
-         if launchfault_is "$rc"; then
+         if [ "$launch_fault" = 1 ]; then
            launchfault_halt "$number" "$rel" "$run_dir" "$state" "$rc" \
              "$session_log" "$session_log_offset"
            rm -f "$CURRENT" "$PIDFILE"; exit 0

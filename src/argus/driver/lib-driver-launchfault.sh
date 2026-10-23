@@ -4,15 +4,16 @@
 #
 # The launch-fault halt of an issue run (belief 3, belief 8, hard line 4).
 #
-# A launch fault is a run that fails before any stage starts: glide exits with
-# rc=2 (a configuration error, such as a refused `pre_run` hook, or invalid
-# pipeline inputs), or the issue branch cannot be cut. It is a fault of this host, not of the issue, so the next
+# A launch fault is a run that fails before any stage starts, shown by evidence:
+# glide's session record says `config_error` at hook point `pre_run`, or the
+# issue branch cannot be cut. Glide also exits rc=2 for faults inside a stage,
+# so rc=2 alone is not a launch fault. It is a fault of this host, not of the issue, so the next
 # issue would fail the same way. The run keeps its claim and halts the line with
 # the D65 pattern: the `$HALT` marker plus `halt_record_write`. `_drive` reads
 # the marker before selection, so no tick claims another issue.
 #
-# The retry is the re-check. `launchfault_due` removes the marker once the
-# back-off has passed, and `_drive_resume` relaunches the same issue from the
+# The retry is the re-check. While halted, `launchfault_due` renews the claim
+# with `claim_renew_now`, and removes the marker once the back-off has passed, and `_drive_resume` relaunches the same issue from the
 # record. A run that starts clears the fault state; a run that fails at launch
 # again halts again. After the third failed attempt one Needs You goes out, and
 # the retries go on quietly at the last interval. No hand step resumes the line.
@@ -24,9 +25,11 @@ LAUNCHFAULT_PREFIX="launch fault:"
 
 launchfault_now() { date +%s; }
 
-# A failed issue run is a launch fault when glide stopped it before any stage.
-launchfault_is() {   # <rc>
-  [ "${work_kind:-phase}" = issue ] && [ "$1" = 2 ]
+# A failed issue run is a launch fault only when glide's own record shows that
+# its `pre_run` hook refused the run, so no stage started.
+launchfault_is() {   # <rc> <session log> <offset>
+  [ "${work_kind:-phase}" = issue ] && [ "$1" = 2 ] && halt_state_from_session "$2" "$3" \
+    && [ "$HALT_LOG_STATE" = config_error ] && [ "$HALT_LOG_HOOK" = pre_run ]
 }
 
 # Halt the line on a launch fault, keep the claim, and plan the next attempt.
@@ -61,8 +64,11 @@ launchfault_clear() {
   rm -f "$RUN_DIR/$LAUNCHFAULT_FILE_NAME"
 }
 
-# On a tick, lift a launch-fault halt whose back-off has passed, so the tick
-# resumes the same issue from the halt record. Any other halt is left alone.
+# On a tick, renew the held claim, and lift a launch-fault halt whose back-off
+# has passed, so the tick resumes the same issue from the halt record. A claim
+# given back by any path (release, abandon) ends the fault: its halt, record and
+# count go, so a later fault counts and notifies again. Any other halt is left
+# alone.
 launchfault_due() {
   local file="$RUN_DIR/$LAUNCHFAULT_FILE_NAME" number attempts next _notified
   [ -f "$HALT" ] && [ -f "$file" ] || return 0
@@ -71,6 +77,15 @@ launchfault_due() {
     *) return 0 ;;
   esac
   read -r number attempts next _notified <"$file" || return 0
+  if ! claim_read_fields "$CLAIM" || [ "$CLAIM_NUMBER" != "$number" ]; then
+    rm -f "$file" "$HALT"
+    if halt_record_read "$HALT_RECORD" && [ "$HALT_REC_PHASE" = "$number" ]; then
+      rm -f "$HALT_RECORD"
+    fi
+    log "launch-fault: issue $number no longer holds a claim; its halt and record are dropped"
+    return 0
+  fi
+  claim_renew_now
   case "$next" in ''|*[!0-9]*) return 0 ;; esac
   [ "$(launchfault_now)" -ge "$next" ] || return 0
   rm -f "$HALT"
