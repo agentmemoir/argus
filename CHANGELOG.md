@@ -4,6 +4,8 @@ Notable changes to this project are documented here. The format follows [Keep a 
 
 ## [Unreleased]
 
+- The repair task file puts the failed-job log tail in a code fence longer than any run of backticks in the log, so a log line cannot close the fence early and turn the rest of the log into task text. ([#210](https://github.com/agentmemoir/argus/issues/210))
+
 - Issue pull requests are marked ready for review once every check on them passes. The ready sweep reuses the group ready transition, with its once-only guard, and skips a pull request while its issue run or a repair round runs. ([#198](https://github.com/agentmemoir/argus/issues/198))
 
 - `argus --check` now runs the pipeline's `pre_run` hook once, from the repository root, as Glide does. A refusing hook fails the check with its first line and one action, so a bad setup shows before the first tick. The check runs the hook for real, so a `pre_run` hook must be read-only. ([#220](https://github.com/agentmemoir/argus/issues/220))
