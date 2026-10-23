@@ -13,7 +13,7 @@ from argus.board.files import reservation_file
 from argus.board.reservations import ReservationFenced
 from argus.gitsync.git import ConfigError, current_branch, git
 from argus.gitsync.issue_modes import mode_issue_branch, mode_issue_checkpoint
-from argus.gitsync.issue_paths import issue_branch
+from argus.gitsync.issue_paths import issue_branch, issue_scope
 from argus.gitsync.issue_runstate import mode_issue_clean
 from argus.gitsync.publish_issue import publish_issue
 from test_issue_publication_fixture import Publication
@@ -34,6 +34,22 @@ def test_issue_branch_contains_number_and_does_not_stack(
     assert (
         issue_branch(1234568, "issue-1234568-fix-input.md") == "issue/1234568-fix-input"
     )
+
+
+def test_in_progress_issue_keeps_its_recorded_long_branch(
+    publication: Publication,
+) -> None:
+    long = "backup-restore-refuses-a-backup-of-a-store-with-a-recorded-e"
+    _token, task = publication.claim(1234567, slug=long)
+    result = mode_issue_branch(publication.root, 1234567, task)
+    assert result["ok"], result
+    assert result["branch"] == f"issue/1234567-{long}"
+    # Resume and publish read the frozen task path, not the title.
+    assert (
+        issue_scope(publication.root, 1234567)[1][1]
+        == task.relative_to(publication.private).as_posix()
+    )
+    assert issue_branch(1234567, task) == f"issue/1234567-{long}"
 
 
 @pytest.mark.parametrize(

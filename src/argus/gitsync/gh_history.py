@@ -51,9 +51,9 @@ def gh_pull_request_stage_history(
         argv.extend(["--hostname", host])
     argv.extend(
         [
-            "-F",
+            "-f",
             f"owner={owner}",
-            "-F",
+            "-f",
             f"name={repo}",
             "-F",
             f"number={int(number)}",
@@ -63,7 +63,12 @@ def gh_pull_request_stage_history(
     )
     try:
         done = subprocess.run(
-            argv, capture_output=True, text=True, timeout=GH_TIMEOUT_S
+            argv,
+            capture_output=True,
+            stdin=subprocess.DEVNULL,
+            text=True,
+            encoding="utf-8",
+            timeout=GH_TIMEOUT_S,
         )
     except FileNotFoundError:
         return None, "gh is not installed"
