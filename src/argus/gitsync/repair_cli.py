@@ -155,7 +155,17 @@ def run(args: argparse.Namespace, now: float) -> tuple[int, dict[str, object]]:
     )
     if rows is None:
         return 3, {"action": "unread", "exit_code": code}
-    record = repair_round.load_record(record_path)
+    try:
+        record = repair_round.load_record(record_path)
+    except ValueError:
+        # A lost count must not read as zero attempts, so no round starts. The
+        # notice names the record, so the cause is not the checks.
+        message = (
+            f"Needs You. The attempt record {record_path.name} of "
+            f"{args.pull_request} cannot be read, so Argus starts no repair round "
+            "for it. Action: move that file aside, then the next tick starts the count again."
+        )
+        return 0, {"action": "unreadable", "message": message}
     action, due = repair_round.decide(
         rows, record, now=now, attempts=args.attempts, wait=args.wait
     )

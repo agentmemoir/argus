@@ -6,6 +6,16 @@ Notable changes to this project are documented here. The format follows [Keep a 
 
 - The ready sweep reads each pull request once per pass. A group has one pull request shared by every member, so the sweep used to read its timeline and checks once per member. The first answer is now kept by pull request URL for the rest of that pass, and a pull request readied in the pass is not readied again. Merged, closed, or already readied pull requests are still read on later passes. ([#181](https://github.com/agentmemoir/argus/issues/181))
 
+- Docs: the repair section now states that a pull request that was escalated gets no further repair round or notice, even when its checks turn red again, and that an unreadable attempt record sends one notice and starts no round. ([#210](https://github.com/agentmemoir/argus/issues/210))
+
+- A repair attempt record that cannot be read now sends one Needs You notice that names the record file and says no repair round starts. Before, the driver logged the checks as unreadable on every tick and sent no notice. ([#210](https://github.com/agentmemoir/argus/issues/210))
+
+- The repair task file puts the failed-job log tail in a code fence longer than any run of backticks in the log, so a log line cannot close the fence early and turn the rest of the log into task text. ([#210](https://github.com/agentmemoir/argus/issues/210))
+
+- The issue open-pr path re-reads its claim just before it creates the draft pull request, so a claim lost during the list read creates nothing. With `--kind issue --mode open-pr`, `--branch`, `--repo`, and `--phase` are refused by name, because the branch comes from the claim. The example issue stage names the open-pr command. ([#209](https://github.com/agentmemoir/argus/issues/209))
+
+- The resync step no longer merges the integration branch into the board checkout, which holds claims and is not a work checkout. A board on its claims branch is named as a skipped no-op. A merge that git refuses, such as one between unrelated histories, now reports as blocked, not continued. ([#219](https://github.com/agentmemoir/argus/issues/219))
+
 - Issue pull requests are marked ready for review once every check on them passes. The ready sweep reuses the group ready transition, with its once-only guard, and skips a pull request while its issue run or a repair round runs. ([#198](https://github.com/agentmemoir/argus/issues/198))
 
 - `argus --check` now runs the pipeline's `pre_run` hook once, from the repository root, as Glide does. A refusing hook fails the check with its first line and one action, so a bad setup shows before the first tick. The check runs the hook for real, so a `pre_run` hook must be read-only. ([#220](https://github.com/agentmemoir/argus/issues/220))

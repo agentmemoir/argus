@@ -179,6 +179,7 @@ STOP_ALLOWLIST = r"""
     gitsync/issue_modes.py	raise_config	fn:_issue_mode|raise ConfigError("issue branches do not accept phase groups")#1
     gitsync/issue_modes.py	raise_config	fn:_issue_mode|raise ConfigError("--phase is required with issue publish mode")#1
     gitsync/issue_modes.py	raise_config	fn:_issue_mode|raise ConfigError(#2
+    gitsync/issue_modes.py	raise_config	fn:_issue_mode|raise ConfigError(#3
     gitsync/issue_paths.py	raise_config	fn:issue_number|raise ConfigError(str(exc)) from exc#1
     gitsync/issue_paths.py	raise_config	fn:issue_branch|raise ConfigError("issue task filename does not match the issue number")#1
     gitsync/issue_paths.py	raise_config	fn:private_layout|raise ConfigError("issue publication needs a separate private checkout")#1
@@ -197,6 +198,7 @@ STOP_ALLOWLIST = r"""
     gitsync/main.py	raise_config	fn:main|raise ConfigError(#2
     gitsync/main.py	ok_false	fn:main|"ok": False,#1
     gitsync/merge.py	blocked_call	fn:_merge|return blocked(#1
+    gitsync/merge.py	blocked_call	fn:_merge|return blocked(#2
     gitsync/mode_clean.py	ok_false	fn:_clean_refusal|"ok": False,#1
     gitsync/mode_open_pr.py	raise_config	fn:resolve_branch|raise ConfigError(#1
     gitsync/mode_open_pr.py	raise_config	fn:resolve_branch|raise ConfigError(#2
