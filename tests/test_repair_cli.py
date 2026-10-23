@@ -248,15 +248,16 @@ def _pending_run(
     head: str | None,
     now: float,
 ) -> tuple[int, dict[str, Any]]:
-    monkeypatch.setattr(
-        repair_cli, "gh_pull_request_checks", lambda *_a: (PENDING_ROWS, 8, "")
-    )
+    def checks(*_a: object) -> tuple[list[dict[str, Any]] | None, int, str]:
+        return PENDING_ROWS, 8, ""
+
     real_setting = gitsync_git.setting
-    monkeypatch.setattr(
-        gitsync_git,
-        "setting",
-        lambda key: "gh" if key == "commands.gh" else real_setting(key),
-    )
+
+    def setting(key: str) -> Any:
+        return "gh" if key == "commands.gh" else real_setting(key)
+
+    monkeypatch.setattr(repair_cli, "gh_pull_request_checks", checks)
+    monkeypatch.setattr(gitsync_git, "setting", setting)
     monkeypatch.setattr(repair_cli.subprocess, "run", _gh_head(head))
     argv = [*REPAIR_ARGV[:3], str(tmp_path), *REPAIR_ARGV[4:]]
     rc = repair_cli.main(argv, now=now)
@@ -295,11 +296,19 @@ def test_an_unread_issue_pull_request_is_listed_for_the_caller(
     runs = tmp_path / "runs"
     (runs / "issue-9").mkdir(parents=True)
     tasks = ["runs/issue-9", "tasks/issue-9-docs.md"]
-    monkeypatch.setattr(repair_cli.conventions, "runs_dir", lambda _root: runs)
-    monkeypatch.setattr(repair_cli, "issue_scope", lambda _r, _n: (tmp_path, tasks))
-    monkeypatch.setattr(
-        repair_cli, "gh_pull_requests_for_branch", lambda _r, _b: (None, "detail")
-    )
+
+    def runs_dir(_root: object) -> Path:
+        return runs
+
+    def scope(_r: object, _n: int) -> tuple[Path, list[str]]:
+        return tmp_path, tasks
+
+    def listed(_r: object, _b: str) -> tuple[None, str]:
+        return None, "detail"
+
+    monkeypatch.setattr(repair_cli.conventions, "runs_dir", runs_dir)
+    monkeypatch.setattr(repair_cli, "issue_scope", scope)
+    monkeypatch.setattr(repair_cli, "gh_pull_requests_for_branch", listed)
     unread: list[int] = []
     assert repair_cli.issue_pull_requests(tmp_path, unread) == []
     assert unread == [9]

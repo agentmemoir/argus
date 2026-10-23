@@ -16,17 +16,19 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 PENDING_LIMIT_S = 30 * 60
 
 
 def _load(path: Path) -> dict[str, Any]:
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
+        data: object = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return {}
-    return data if isinstance(data, dict) else {}
+    if not isinstance(data, dict):
+        return {}
+    return cast("dict[str, Any]", data)
 
 
 def _save(path: Path, record: dict[str, Any]) -> None:
