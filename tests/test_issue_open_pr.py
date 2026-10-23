@@ -101,6 +101,19 @@ def test_issue_checkpoint_commits_with_the_wip_subject_past_an_ignore_rule(
     assert not any(name.startswith("vault/") for name in names.splitlines())
 
 
+def test_issue_checkpoint_refuses_a_branch_the_claim_did_not_record(
+    publication: Publication,
+) -> None:
+    _token, task = publication.claim(1234567)
+    mode_issue_branch(publication.root, 1234567, task)
+    other = "issue/1234567-other"
+    git(publication.root, "checkout", "-q", "-b", other)
+    (publication.root / "code.txt").write_text("partial fix\n", encoding="utf-8")
+    with pytest.raises(ConfigError, match="claimed issue branch"):
+        mode_issue_checkpoint(publication.root)
+    assert git(publication.remote, "branch", "--list", other)[1] == ""
+
+
 def test_issue_open_pr_refuses_a_branch_the_claim_did_not_record(
     publication: Publication, monkeypatch: pytest.MonkeyPatch
 ) -> None:
