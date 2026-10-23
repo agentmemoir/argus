@@ -82,13 +82,23 @@ def test_issue_open_pr_refuses_a_lost_claim(
 def test_issue_checkpoint_commits_with_the_wip_subject_past_an_ignore_rule(
     publication: Publication,
 ) -> None:
+    """Depends on the fixture's ignore rule for the private vault/ folder.
+
+    The rule keeps vault/ out of the commit, so the checkpoint adds no
+    exclude pathspec. The exclude path itself is not covered here.
+    """
     _token, task = publication.claim(1234567)
     branch = mode_issue_branch(publication.root, 1234567, task)["branch"]
     (publication.root / "code.txt").write_text("partial fix\n", encoding="utf-8")
+    (publication.private / "scratch.md").write_text("private note\n", encoding="utf-8")
     result = mode_issue_checkpoint(publication.root)
-    assert result["ok"], result
+    # A degraded result also sets ok to true, so the warning key is checked too.
+    assert result["ok"] and "warning" not in result, result
     subject = git(publication.remote, "log", "-1", "--format=%s", branch)[1]
     assert subject == f"wip: work in progress on {branch}"
+    names = git(publication.remote, "show", "--name-only", "--format=", branch)[1]
+    assert "code.txt" in names.splitlines()
+    assert not any(name.startswith("vault/") for name in names.splitlines())
 
 
 def test_issue_open_pr_refuses_a_branch_the_claim_did_not_record(
