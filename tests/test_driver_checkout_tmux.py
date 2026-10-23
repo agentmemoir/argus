@@ -20,13 +20,13 @@ import shlex
 import shutil
 import subprocess
 import sys
-import tempfile
 import time
 from collections.abc import Callable
 from pathlib import Path
 
 import pytest
 
+from argus.exec_tempdir import exec_tempdir
 from driver_checkout_support import LIB, make_checkout
 
 SESSION = "ar-checkout-lock"
@@ -93,7 +93,8 @@ def test_a_phase_window_releases_the_checkout_lock_for_the_tmux_server(
     repo = make_checkout(tmp_path / "repo")
     lock = repo / ".git" / "argus-driver-checkout.lock"
     lock.touch()
-    work = Path(tempfile.mkdtemp(prefix="ag-ck-"))
+    scratch = exec_tempdir(purpose="a tmux server socket")
+    work = Path(scratch.name)
     socket = work / "tmux.sock"
     out = work / "taken"
     config = tmp_path / "a" / "config-a.jsonc"
@@ -127,4 +128,4 @@ def test_a_phase_window_releases_the_checkout_lock_for_the_tmux_server(
         assert _lock_is_free(lock), "the tmux server keeps the checkout lock"
     finally:
         _tmux(tmux, socket, "kill-server")
-        shutil.rmtree(work, ignore_errors=True)
+        scratch.cleanup()
