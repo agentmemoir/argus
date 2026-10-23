@@ -66,18 +66,23 @@ def creates(monkeypatch: pytest.MonkeyPatch) -> list[list[str]]:
         calls.append([branch, base])
         return PR_URL, ""
 
+    def no_pull_requests(_root: object, _branch: str) -> tuple[list[Any], str]:
+        return [], ""
+
+    def no_fork(_root: object) -> None:
+        return None
+
+    def no_unpushed(_root: object, _branch: str) -> None:
+        return None
+
     monkeypatch.setattr(
-        "argus.gitsync.mode_open_pr.gh_pull_requests_for_branch",
-        lambda _root, _branch: ([], ""),
+        "argus.gitsync.mode_open_pr.gh_pull_requests_for_branch", no_pull_requests
     )
     monkeypatch.setattr(
         "argus.gitsync.mode_open_pr.gh_create_draft_pull_request", create
     )
-    monkeypatch.setattr("argus.gitsync.mode_open_pr.fork_refusal", lambda _root: None)
-    monkeypatch.setattr(
-        "argus.gitsync.mode_open_pr.unpushed_refusal",
-        lambda _root, _branch: None,
-    )
+    monkeypatch.setattr("argus.gitsync.mode_open_pr.fork_refusal", no_fork)
+    monkeypatch.setattr("argus.gitsync.mode_open_pr.unpushed_refusal", no_unpushed)
     return calls
 
 

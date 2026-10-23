@@ -46,8 +46,7 @@ def workspace(
 @pytest.fixture
 def held_phase(workspace: Workspace, monkeypatch: pytest.MonkeyPatch) -> None:
     """This machine holds phase 100440, and a board confirms that claim."""
-    monkeypatch.setitem(conventions._settings, "driver.runs", "runs")
-    monkeypatch.setitem(conventions._settings, "machine.id", "server-01")
+    conventions.override({"driver.runs": "runs", "machine.id": "server-01"})
     run = phase_run_dir(workspace.root, 100440)
     run.mkdir(parents=True, exist_ok=True)
     reservation = {
