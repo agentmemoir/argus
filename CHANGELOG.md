@@ -4,6 +4,8 @@ Notable changes to this project are documented here. The format follows [Keep a 
 
 ## [Unreleased]
 
+- Docs: the issue driver pages now state the trust rules, claim label, branch names, and launch-fault retries as the code runs them. A new page gives the setup steps for an issue driver host, and the known gaps are listed in the issue page.
+
 - When `gitsync --mode branch` crashes for a phase and writes no result, Argus no longer launches the phase on the current branch. The tick refuses the launch, keeps the claim, and sends one Needs You notice for that phase. The next tick retries the cut.
 
 - The timeline read from gh closes stdin, so gh cannot wait on the driver's terminal, and decodes its output as UTF-8 on every host. ([#179](https://github.com/agentmemoir/argus/issues/179))

@@ -4,11 +4,9 @@ Set `driver.provider` to `issues`. Configure `issues` and `board.issues-file` in
 
 The issue source reads one repository and uses the shared board for claims. It keeps phase state in `board.file` and issue state in a separate file on the same board branch.
 
-See [the example configuration](../examples/issue-config.jsonc). Create a separate board checkout and the configured run and task folders before starting the driver. Keep the task folder inside that board checkout.
+See [the example configuration](../examples/issue-config.jsonc). Create a separate board checkout and the configured run folder before starting the driver. Keep the task folder inside that board checkout. [Set up an issue driver host](issue-driver-setup.md) gives the steps for a new host.
 
 Configure a pipeline with the input names in `number-input` and `file-input`. [The example pipeline](../examples/project/issue-pipeline.yaml) has one step that does the fix, its review, and its publication.
-
-A `post_step` hook publishes issue work the same way as phase work. After each step, it runs `gitsync --kind issue --mode checkpoint`, which commits leftovers as a `wip:` commit and pushes them. Then it runs `gitsync --kind issue --mode open-pr --body-file FILE`, which opens or reuses the draft pull request for the issue branch and reads its draft state back. Both modes first check that this machine still holds the issue claim.
 
 Run `argus --config SETTINGS --check`, then `argus --config SETTINGS --dry-run`. Both read the backlog without taking a claim or writing a task file.
 
@@ -16,27 +14,63 @@ The report names the preference, skip reasons, capped results, the next issue, a
 
 ## Selection
 
-Every candidate must be open, pass the author trust gate, and match each label group.
+Argus takes the first candidate in the preference order that passes every check. A candidate must be open, pass the author trust gate, and match each label group.
 
-The default `trusted-associations` is `OWNER` and `MEMBER`. An account that joins the organization is trusted on the next read of issues, with no config change, so review this list when membership changes. To drop `MEMBER`, set the list to `OWNER` only. An empty list is a configuration error. `trusted-authors` adds named logins to the trusted set.
+`preference` sets the order. `hardest` starts with the last label in `difficulty-order`, and `easiest` starts with the first. `newest` starts with the most recent issue. `category` keeps only issues that carry one label, then picks the newest. `search` keeps GitHub's best-match order. When two issues tie, the lower issue number goes first. `category` and `search` can also filter the other preferences.
 
-A group with `cardinality: one` must match exactly one configured label. A `many` group must match at least one.
+A group with `cardinality: one` must match exactly one configured label. A `many` group must match at least one. `difficulty-order` must contain the same labels as the difficulty group.
 
-`difficulty-order` must contain the same labels as the difficulty group.
+## Trust
 
-`newest` orders by creation time. `easiest` and `hardest` order by the configured difficulty list.
+Outsider issues never reach the agent. An issue whose author is not trusted is skipped and counted as `untrusted_author`.
 
-`category` filters by one label and chooses the newest survivor. `search` uses GitHub's best-match order. `category` and `search` can also filter other preferences.
+An author is trusted when GitHub lists the association as `OWNER` or `MEMBER`. Those are the defaults for `trusted-associations`. An account that joins the organization is trusted on the next read, with no config change, so review this list when membership changes. To drop `MEMBER`, set the list to `OWNER` only. An empty list is a configuration error.
 
-Numeric issue order breaks ties. Blocked, claimed, and escalated work is skipped and counted. An issue that carries the claim label (`claim-label`, default `accepted`) is skipped and counted as `claim_label`, so a person can keep an issue by adding the label. When the board holds or has expired a claim on that issue, the board decides instead: a held claim resumes, and an expired claim can be claimed again.
+`trusted-authors` adds named logins. `codeowners-file` adds the users it lists as `@user`. Team entries in that file count only when `resolve-teams` is true. A bot is trusted only when `trusted-apps` lists its login.
 
-After the fresh read and the trust check, Argus reserves the issue on the board and then adds the claim label to it on GitHub. If the repository has no label with that name, Argus creates it once and logs `created label`. A failed label write is logged and keeps the claim, because the board reservation is the claim. Argus never removes the label.
+Outsider comments are dropped by default, because `untrusted-comments` defaults to `ignore`. With `data-only`, they reach the agent. Each one is marked as untrusted data, and the file tells the agent not to follow it.
 
-When an issue run fails or exhausts its remedy rounds, Argus gives its board claim back and keeps the label. The Needs You notice then says: remove the `accepted` label (or the configured name) from the issue to let Argus retry. While the label is there and the board has no record for the issue, the issue is skipped, so a failed issue does not loop. After the label is removed, a later tick can pick it again. If the board still holds the claim, because the release failed or the run stopped before it, the notice says so and does not ask for the label. After that claim expires and its cooldown passes, a later tick recovers it and picks the issue again, even while the label is there. Argus does not pick again an issue whose board record is completed, rejected, or accepted, even without the label. A held claim is left to the board, even without the label.
+The agent reads issue data only from its task file. Argus writes that file as a snapshot when it makes the claim, and the file does not change during the run. The example stage tells the agent to read issue data only from the task file.
 
-When an issue run cannot start, it is a launch fault: glide records `config_error` at hook point `pre_run` (the `pre_run` hook refused the run), or Argus cannot put the issue on its own branch. Any other glide failure, including exit code 2 inside a stage, keeps the failed-run path. No issue work lands on the base branch. Argus keeps the board claim, renews it on each tick while halted, and halts the line, so no tick takes another issue. When the claim is given back by any path, such as `--release`, the halt and its count are dropped, so a later fault notifies again. Later ticks retry the same issue after 10 minutes, then every 20 minutes. When a retry starts the run, the line resumes with no hand step. After the third failed attempt, one Needs You notice names the cause, the action (fix the cause), and the check (the next retry starts the run). A failure inside a stage keeps the failed-run path.
+## Claims
 
-A red check on an open issue pull request gets a CI repair round before new work, as for a phase pull request. Only the branch an issue run folder records is read, and only a pull request from this repository: a fork pull request with the same branch name is ignored. See [CI repair rounds](running.md#ci-repair-rounds).
+Argus picks an issue and reserves it on the board. After the reservation, Argus adds the claim label to the issue on GitHub. The label name is set by `issues.claim-label`, and its default is `accepted`. This is a GitHub label. It is not the board status named `accepted`.
+
+If the repository has no label with that name, Argus creates it once. Argus never removes the label. If the label write fails, Argus logs the failure and keeps the claim, because the board reservation is the claim.
+
+Argus skips any issue that carries the claim label, and counts it as `claim_label`. The name match ignores case. A person adds the label to keep Argus off an issue.
+
+The board decides when it holds a claim on the issue. A claim held by this machine resumes, even with the label present. A claim held by another machine is skipped. An expired claim can be claimed again once its cooldown passes, with or without the label.
+
+If two machines try to claim one issue at the same time, the board grants one claim. The other machine loses that race and skips the issue. Its attempt is lost work, and it starts no run.
+
+## Failed runs
+
+When an issue run fails, or uses up its remedy rounds, Argus gives back its board claim and keeps the label. The Needs You notice says to remove the label to retry.
+
+Removing the label lets a later tick claim the issue again. While the label is there, it keeps the issue out of the pick. If the board still holds the claim, because the release failed or the run stopped first, the notice says so and does not ask for the label. Once that claim expires and its cooldown passes, a later tick takes the issue again, even with the label present.
+
+An issue whose board record is completed, rejected, or accepted stays blocked.
+
+## Launch faults
+
+A launch fault is an issue run that cannot start. It happens when the `pre_run` hook refuses the run, or when Argus cannot cut the issue branch. A failure inside a stage is not a launch fault. It follows the failed-run path above.
+
+Argus keeps the claim on that issue, and it starts no other issue. It tries the same issue again 10 minutes after the first failure, and 20 minutes after each later failure. After the third failure, Argus sends one Needs You notice that names the cause. Fix the cause on the host. The next retry starts the run, and the line resumes with no other action. If the claim is given back by any path, the count starts again.
+
+Argus never starts an issue run on the base branch.
+
+## Branches and publication
+
+Each issue gets its own branch, named `issue/<number>-<first three title words>`. For example, issue 266 with the title "Backup restore refuses a stale board" gets `issue/266-backup-restore-refuses`. A title with no letters or digits gives `issue/<number>-task`. An issue already in progress keeps the branch that its run folder records.
+
+The publication worker makes a minimal first commit and opens the draft pull request early. The `post_step` hook then reuses that draft and reads its draft state back. The hook runs `gitsync --kind issue --mode checkpoint`, which commits leftovers as a `wip:` commit and pushes them. Then it runs `gitsync --kind issue --mode open-pr --body-file FILE`. Both modes first check that this machine still holds the claim.
+
+Argus does not merge pull requests. A person merges them.
+
+## CI repair
+
+A red check on an open issue pull request gets a CI repair round before new work, as a phase pull request does. Only the branch that an issue run folder records is read, and only a pull request from this repository counts. A fork pull request with the same branch name is ignored. See [CI repair rounds](running.md#ci-repair-rounds).
 
 ## Settings
 
@@ -64,3 +98,12 @@ A red check on an open issue pull request gets a CI repair round before new work
 | `claim-label` | The one label that marks a claimed issue; defaults to `accepted`. It is not the board status `accepted`. |
 
 `machine.settings-file` names an optional JSONC overlay.
+
+## Known gaps
+
+These gaps are open in the Argus repository.
+
+- Issue pull requests stay draft until a person marks them ready. Argus has no ready sweep for them yet ([#198](https://github.com/agentmemoir/argus/issues/198)).
+- A pending limit for CI checks, based on measured CI durations, is not built yet ([#197](https://github.com/agentmemoir/argus/issues/197)).
+- Some host setup steps still run by hand ([#216](https://github.com/agentmemoir/argus/issues/216)).
+- `argus --check` does not run the `pre_run` hook. A refusal from that hook appears only when a tick launches the run ([#220](https://github.com/agentmemoir/argus/issues/220)).
