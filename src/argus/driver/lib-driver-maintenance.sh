@@ -45,19 +45,24 @@ reconcile_group_ready() {
   [ -z "${DRIVER_STUB_COORDINATION:-}" ] || return 0
   mkdir -p "$RUN_DIR"
   "$PYTHON" "$ARGUS/gitsync/main.py" "${ARGUS_CONFIG_ARGS[@]}" --root "$REPO" \
-    --mode ready >"$RUN_DIR/group-ready.json" 2>/dev/null || true
+    --mode ready --run-dir "$RUN_DIR" >"$RUN_DIR/group-ready.json" 2>/dev/null || true
   state="$(selection_value state <"$RUN_DIR/group-ready.json" 2>/dev/null || true)"
   case "$state" in
     READY)
       # A pull request that an earlier tick readied is skipped, and its result
       # still reads READY. Log only a result that readied one on this tick.
+      # The kinds name what was readied: a group's shared pull request, or an
+      # issue pull request.
       newly="$("$PYTHON" -c 'import json, sys
-print(any(r.get("state") == "READY" and not r.get("skipped")
-          for r in json.load(sys.stdin).get("results", [])))' \
+print(" ".join(sorted({r.get("kind", "group") for r in json.load(sys.stdin).get("results", [])
+                       if r.get("state") == "READY" and not r.get("skipped")})))' \
         <"$RUN_DIR/group-ready.json" 2>/dev/null || true)"
-      if [ "$newly" = True ]; then
-        log "a group's shared pull request is ready; its checks passed"
-      fi
+      case " $newly " in
+        *" group "*) log "a group's shared pull request is ready; its checks passed" ;;
+      esac
+      case " $newly " in
+        *" issue "*) log "an issue pull request is ready; its checks passed" ;;
+      esac
       ;;
     HELD)
       log_changed group-ready "group ready: a group pull request is held; the next tick retries"
@@ -69,7 +74,9 @@ print(any(r.get("state") == "READY" and not r.get("skipped")
 reconcile_pending_reviews() {
   PENDING_PUBLISHED=0
   if [ "${WORK_SOURCE:-phases}" = issues ]; then
-    # Issue pull requests have no receipt to settle; red CI is still repaired.
+    # Issue pull requests have no receipt to settle; the ready sweep reads their
+    # rows, and red CI is still repaired.
+    reconcile_group_ready
     local issue_rows
     [ -n "${REPAIR_PIPELINE:-}" ] && [ -z "${DRIVER_STUB_COORDINATION:-}" ] || return 0
     if issue_rows="$(issue_review_snapshot)"; then

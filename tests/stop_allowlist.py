@@ -198,6 +198,7 @@ STOP_ALLOWLIST = r"""
     gitsync/main.py	raise_config	fn:main|raise ConfigError(#2
     gitsync/main.py	ok_false	fn:main|"ok": False,#1
     gitsync/merge.py	blocked_call	fn:_merge|return blocked(#1
+    gitsync/merge.py	blocked_call	fn:_merge|return blocked(#2
     gitsync/mode_clean.py	ok_false	fn:_clean_refusal|"ok": False,#1
     gitsync/mode_open_pr.py	raise_config	fn:resolve_branch|raise ConfigError(#1
     gitsync/mode_open_pr.py	raise_config	fn:resolve_branch|raise ConfigError(#2
