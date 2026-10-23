@@ -48,6 +48,13 @@ glide_run_once() {
   local prior_state="" fresh_args=() run_dir map_file driver_map
   run_dir="$(phase_run_dir "$number" "$rel")"
   prior_state="$(terminal_state_of_file "$run_dir/run.json")"
+  # run.json is the marker glide writes first, and the --fresh decision below
+  # reads it. A failed.json with no run.json beside it is residue from a glide
+  # stop before that marker. glide does not archive it, so the new run would
+  # keep it and the selector would skip the phase. Clear it before the run starts.
+  if [ ! -f "$run_dir/run.json" ]; then
+    rm -f "$run_dir/failed.json"
+  fi
   if [ "${CLIO_RESUME:-}" != 1 ] && [ -n "$prior_state" ]; then
     fresh_args+=(--fresh)
     log "${work_kind:-phase} $number run is terminal ($prior_state); restarting it with --fresh"

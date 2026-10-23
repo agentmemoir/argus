@@ -41,6 +41,7 @@ from argus.gitsync.gh_checks import gh_pull_request_checks
 from argus.gitsync.gh_read import gh_pull_requests_for_branch
 from argus.gitsync.git import GH_TIMEOUT_S, ConfigError, gh_binary
 from argus.gitsync.issue_paths import issue_branch, issue_scope
+from argus.gitsync.receipts import pull_request_ref
 
 # A GitHub Actions job link: the repository and the job id are all gh needs.
 _JOB_LINK = re.compile(r"https://([^/]+)/([^/]+/[^/]+)/actions/runs/\d+/job/(\d+)")
@@ -142,7 +143,16 @@ def run(args: argparse.Namespace, now: float) -> tuple[int, dict[str, object]]:
         record["attempts"] = [*record.get("attempts", []), now]
         repair_round.save_record(record_path, record)
         return 0, {"action": "counted"}
-    rows, code, _detail = gh_pull_request_checks(args.run_dir, args.pull_request)
+    # The repository is the one the pull request URL names. The driver passes the
+    # URL that gh listed for the issue branch; a bare number is refused by gh_checks.
+    ref = pull_request_ref(args.pull_request) or {}
+    rows, code, _detail = gh_pull_request_checks(
+        args.run_dir,
+        args.pull_request,
+        ref.get("owner"),
+        ref.get("repo"),
+        ref.get("host"),
+    )
     if rows is None:
         return 3, {"action": "unread", "exit_code": code}
     record = repair_round.load_record(record_path)
