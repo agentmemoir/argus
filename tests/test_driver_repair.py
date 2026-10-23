@@ -243,3 +243,26 @@ repair_worktree_remove "$wt"
 """,
     )
     assert out.split() == ["kept"]
+
+
+def test_check_names_a_missing_repair_pipeline_and_does_not_fail(
+    tmp_path: Path,
+) -> None:
+    out = shell(
+        tmp_path,
+        """. "$TEST_DRIVER/lib-driver-check.sh"
+REPAIR_PIPELINE="$TEST_ROOT/missing.yaml"; check_repair_pipeline; echo "rc=$?"
+""",
+    )
+    assert "MISSING: " in out and "missing.yaml" in out
+    assert out.rstrip().endswith("rc=0")
+
+
+def test_check_is_silent_when_the_repair_pipeline_exists(tmp_path: Path) -> None:
+    out = shell(
+        tmp_path,
+        """. "$TEST_DRIVER/lib-driver-check.sh"
+: >"$TEST_ROOT/repair.yaml"; REPAIR_PIPELINE="$TEST_ROOT/repair.yaml"; check_repair_pipeline
+""",
+    )
+    assert "MISSING" not in out
