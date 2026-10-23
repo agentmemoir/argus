@@ -4,6 +4,10 @@ Notable changes to this project are documented here. The format follows [Keep a 
 
 ## [Unreleased]
 
+- The timeline read from gh closes stdin, so gh cannot wait on the driver's terminal, and decodes its output as UTF-8 on every host. ([#179](https://github.com/agentmemoir/argus/issues/179))
+
+- The ready sweep sends the timeline read's owner and repository name to gh as strings, so an all-digit name no longer fails GraphQL and blocks a ready pull request. ([#176](https://github.com/agentmemoir/argus/issues/176))
+
 - Issue task files, and so issue branch names, use only the first three words of the issue title, for example `issue/266-backup-restore-refuses`. An issue already in progress keeps the branch recorded in its frozen task snapshot, so resume and publish do not rename it.
 
 - An issue run whose `pre_run` hook refuses it (glide records `config_error` at hook point `pre_run`), or whose issue branch cannot be cut, is a launch fault. Any other glide failure, including rc=2 inside a stage, keeps the failed-run path. The driver keeps the claim, renews it while halted, and halts the line, so no tick takes another issue. A claim given back by any path ends the fault. Later ticks retry the same issue after 10 minutes, then every 20 minutes. A run that starts clears the halt with no hand step. After the third failed attempt, one Needs You names the cause, the action, and the check. The issue clean sweep skips a run folder that has no reservation file.
