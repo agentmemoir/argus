@@ -1,8 +1,10 @@
 """A tmux server must not keep the driver lock after the driver exits.
 
-The driver holds its lock on descriptor 9. A tmux server started while that
-descriptor is open inherits it, so the lock stays held for as long as the server
-lives, and every later tick stops at the lock check.
+The driver holds its lock on descriptor 9. Under cron the lock is held on the
+descriptor that `flock -n <lock> <cmd>` opens, which is the lowest free one, 3.
+A tmux server started while either descriptor is open inherits it, so the lock
+stays held for as long as the server lives, and every later tick stops at the
+lock check.
 """
 
 from __future__ import annotations
@@ -21,12 +23,15 @@ REPO = Path(__file__).resolve().parents[1]
 PHASE_TMUX = REPO / "src/argus/driver/phase-tmux.sh"
 SESSION = "ar-lock-fd-test"
 
-# The snippet takes the lock on fd 9 and then calls the real session-ensure path
-# with no close on fd 9 at the call site. The function must close it for tmux.
-# `cat` stands in for the idle script, so the session lives until the test ends.
+# The snippet takes the lock on one descriptor and then calls the real
+# session-ensure path with no close on that descriptor at the call site. The
+# function must close it for tmux. `@OPEN@` and `@FD@` are filled per case: `9>`
+# is the driver's own lock, `3<` is the read-only descriptor cron's `flock -n`
+# holds. `cat` stands in for the idle script, so the session lives until the test
+# ends.
 SNIPPET = r"""
-exec 9>"$LOCK"
-"$PY" -c 'import fcntl; fcntl.flock(9, fcntl.LOCK_EX | fcntl.LOCK_NB)' || exit 3
+exec @OPEN@"$LOCK"
+"$PY" -c 'import fcntl; fcntl.flock(@FD@, fcntl.LOCK_EX | fcntl.LOCK_NB)' || exit 3
 tmux_wrap() { command "$TMUX_REAL" -S "$SOCK" "$@"; }
 CMD_TMUX=tmux_wrap
 SESSION="$SESSION_NAME"
@@ -57,13 +62,22 @@ def _lock_is_free(lock: Path) -> bool:
     return True
 
 
-def test_session_ensure_leaves_the_driver_lock_free() -> None:
+@pytest.mark.parametrize(
+    ("fd", "open_redirect"),
+    [(9, "9>"), (3, "3<")],
+    ids=["driver-fd9", "cron-fd3"],
+)
+def test_session_ensure_leaves_the_driver_lock_free(
+    fd: int, open_redirect: str
+) -> None:
     tmux = shutil.which("tmux")
     if tmux is None:
         pytest.skip("tmux is needed to start the server that could keep the lock")
+    script = SNIPPET.replace("@OPEN@", open_redirect).replace("@FD@", str(fd))
     with tempfile.TemporaryDirectory(prefix="ag-tl-") as work_name:
         work = Path(work_name)
         lock = work / "driver.lock"
+        lock.touch()
         socket = work / "tmux.sock"
         env = {key: value for key, value in os.environ.items() if key != "TMUX"}
         env.update(
@@ -77,7 +91,7 @@ def test_session_ensure_leaves_the_driver_lock_free() -> None:
         )
         try:
             run = subprocess.run(
-                ["bash", "-c", SNIPPET],
+                ["bash", "-c", script],
                 env=env,
                 capture_output=True,
                 text=True,
