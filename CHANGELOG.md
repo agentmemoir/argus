@@ -4,6 +4,8 @@ Notable changes to this project are documented here. The format follows [Keep a 
 
 ## [Unreleased]
 
+- The ready sweep reads each pull request once per pass. A group has one pull request shared by every member, so the sweep used to read its timeline and checks once per member. The first answer is now kept by pull request URL for the rest of that pass, and a pull request readied in the pass is not readied again. Merged, closed, or already readied pull requests are still read on later passes. ([#181](https://github.com/agentmemoir/argus/issues/181))
+
 - Issue pull requests are marked ready for review once every check on them passes. The ready sweep reuses the group ready transition, with its once-only guard, and skips a pull request while its issue run or a repair round runs. ([#198](https://github.com/agentmemoir/argus/issues/198))
 
 - `argus --check` now runs the pipeline's `pre_run` hook once, from the repository root, as Glide does. A refusing hook fails the check with its first line and one action, so a bad setup shows before the first tick. The check runs the hook for real, so a `pre_run` hook must be read-only. ([#220](https://github.com/agentmemoir/argus/issues/220))
