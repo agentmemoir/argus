@@ -15,6 +15,7 @@ from entrypoint_fixture import (
     require,
     run,
     write_config,
+    write_pipelines,
 )
 
 
@@ -62,22 +63,7 @@ def exercise(package: Path, base: Path) -> None:
     (phases / "index.md").write_text("Plan ready\n")
     runs = board / "runs"
     runs.mkdir()
-    pipeline = project / "pipeline.yaml"
-    pipeline.write_text(
-        """version: 1
-run_dir: RUN_TEMPLATE
-inputs:
-  ticket: {type: int, required: true}
-  document: {required: true}
-start: build
-ends: [completed, blocked]
-steps:
-  build: {stage: build.md, end: blocked}
-""".replace("RUN_TEMPLATE", str(board / "artifacts/item-{ticket:06d}"))
-    )
-    # The repair pipeline sits beside the pipeline, so the readiness report names no
-    # missing file. This exercise publishes no pull request, so no round reads it.
-    (project / "repair.yaml").write_text("version: 1\n")
+    pipeline = write_pipelines(project, board)
     binary = base / "bin"
     result = run(["make", "install", f"BINDIR={binary}"], package, env)
     require(result.returncode == 0, "development install", result.stderr)
