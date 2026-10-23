@@ -4,6 +4,8 @@ Notable changes to this project are documented here. The format follows [Keep a 
 
 ## [Unreleased]
 
+- The resync step no longer merges the integration branch into the board checkout, which holds claims and is not a work checkout. A board on its claims branch is named as a skipped no-op. A merge that git refuses, such as one between unrelated histories, now reports as blocked, not continued. ([#219](https://github.com/agentmemoir/argus/issues/219))
+
 - `argus --check` now runs the pipeline's `pre_run` hook once, from the repository root, as Glide does. A refusing hook fails the check with its first line and one action, so a bad setup shows before the first tick. The check runs the hook for real, so a `pre_run` hook must be read-only. ([#220](https://github.com/agentmemoir/argus/issues/220))
 
 - The check read of a pull request now names the repository it reads. The peek-ci mode and the CI repair step take the owner, repo, and host from the pull request URL. A read with no owner or no repo is refused, and gh is not run. A bare pull request number gets no check read in those two steps, so its result says the repository is missing. ([#180](https://github.com/agentmemoir/argus/issues/180))
