@@ -143,6 +143,16 @@ def test_open_pr_refuses_an_expired_fence_before_the_create(
     assert out["state"] == "FENCED"
 
 
+def test_open_pr_for_a_held_phase_passes_the_fence_and_creates(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, creates: list[list[str]]
+) -> None:
+    root = make_repo(tmp_path, monkeypatch)
+    make_claim(root, monkeypatch)
+    out = _open_pr_for_phase(root)
+    assert creates == [[BRANCH, "main"]]
+    assert out.get("state") not in {"FENCED", "COORDINATION_UNAVAILABLE"}
+
+
 def test_open_pr_refuses_an_unreadable_board_before_the_create(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, creates: list[list[str]]
 ) -> None:

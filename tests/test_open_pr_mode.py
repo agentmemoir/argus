@@ -2,12 +2,16 @@
 # SPDX-License-Identifier: Apache-2.0
 """The open-pr mode: one draft for a branch, reused rather than duplicated."""
 
+import json
 from pathlib import Path
 
 import pytest
 
+from argus import conventions
+from argus.conventions import phase_run_dir
 from argus.gitsync.git import ConfigError, git
 from argus.gitsync.mode_open_pr import mode_open_pr
+from driver_fence_fixture import Board
 from gh_mode_support import (
     BRANCH,
     CREATED,
@@ -37,6 +41,23 @@ def workspace(
         },
         branch=BRANCH,
     )
+
+
+@pytest.fixture
+def held_phase(workspace: Workspace, monkeypatch: pytest.MonkeyPatch) -> None:
+    """This machine holds phase 100440, and a board confirms that claim."""
+    monkeypatch.setitem(conventions._settings, "driver.runs", "runs")
+    monkeypatch.setitem(conventions._settings, "machine.id", "server-01")
+    run = phase_run_dir(workspace.root, 100440)
+    run.mkdir(parents=True, exist_ok=True)
+    reservation = {
+        "machine_id": "server-01",
+        "reservation_id": "rsv-fixture",
+        "generation": 2,
+        "phase": "100440",
+    }
+    (run / "reservation.json").write_text(json.dumps(reservation), encoding="utf-8")
+    monkeypatch.setattr("argus.board.reservations.ReservationStore", Board)
 
 
 def test_creates_a_draft_and_reports_what_the_read_back_says(
@@ -190,6 +211,7 @@ def test_a_phase_with_no_phases_file_is_refused(workspace: Workspace) -> None:
     assert workspace.commands() == []
 
 
+@pytest.mark.usefixtures("held_phase")
 def test_the_phase_file_names_the_branch(workspace: Workspace, body_file: Path) -> None:
     (workspace.phases / "phase-100440-backup-archive-format.md").write_text("# x\n")
     # The phase branch exists here: a phase whose branch was never created is
@@ -203,6 +225,7 @@ def test_the_phase_file_names_the_branch(workspace: Workspace, body_file: Path) 
     assert out["ok"] is True, out
 
 
+@pytest.mark.usefixtures("held_phase")
 def test_a_phase_whose_branch_was_never_created_is_refused_by_name(
     workspace: Workspace,
 ) -> None:
@@ -222,6 +245,7 @@ def test_a_phase_whose_branch_was_never_created_is_refused_by_name(
     assert workspace.commands() == []
 
 
+@pytest.mark.usefixtures("held_phase")
 def test_an_explicit_branch_beats_the_phase_branch(
     workspace: Workspace, body_file: Path
 ) -> None:

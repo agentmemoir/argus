@@ -4,6 +4,8 @@ Notable changes to this project are documented here. The format follows [Keep a 
 
 ## [Unreleased]
 
+- The open-pr mode for a phase creates its draft pull request only when the board confirms this machine's claim. Before, it created the pull request with no board read, so a foreign or expired claim, or an unreadable board, could still publish the phase. A refused fence creates nothing. ([#164](https://github.com/agentmemoir/argus/issues/164))
+
 - The CI repair step reads the checks of each open driver pull request on every tick, also while a phase window runs; a repair round still waits for the window. A failed checks read, head read, or pull request listing now ends the tick before new work. A check that stays pending for more than 30 minutes on one head sends one Needs You notice for that head, and the notice clears when no check is pending. ([#197](https://github.com/agentmemoir/argus/issues/197))
 
 - The example issue pipeline's post_step hook now runs an example script that exists. It exits non-zero when the checkpoint or open-pr mode refuses, so the step stays incomplete. The open-pr refusal for --branch, --repo, or --phase names the flag and says it does not apply. ([#209](https://github.com/agentmemoir/argus/issues/209))
