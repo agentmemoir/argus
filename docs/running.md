@@ -87,6 +87,8 @@ Before a CI repair round starts its agent, the round checks its pull request bra
 - A text conflict: it leaves the merge in progress and lists the conflicted paths, with exit code 3. A repair round passes the merge to its agent. The issue hook exits 1, so glide does not record the step as complete.
 - A failed read, merge, or push: exit code 1, with one line that names the failure. A failed read is never reported as no conflict, and a repair round whose check fails runs no agent.
 
+The check needs git 2.38 or newer. `argus --check` refuses an older git and names the version it found.
+
 The phase driver still merges the base once at launch. The phase pipeline declares its stage hooks, so a pipeline that wants the check at its stage boundaries runs the same command from those hooks.
 
 ## Two drivers on one machine

@@ -4,6 +4,8 @@ Notable changes to this project are documented here. The format follows [Keep a 
 
 ## [Unreleased]
 
+- `argus --check` refuses a git older than 2.38, which `merge-tree --write-tree` needs, and names the version it found and the version needed. ([#248](https://github.com/agentmemoir/argus/issues/248))
+
 - Base sync: a CI repair round checks its pull request branch against the base branch before its agent starts, and the example issue post-step hook does the same before it opens the pull request. A clean merge is one merge commit and one normal push. A text conflict stays in progress for the agent, and a failed read is a failure, never no conflict. The command is `gitsync/base_sync_cli.py`. ([#248](https://github.com/agentmemoir/argus/issues/248))
 
 - `abandon` takes a short park reservation on the board before it parks a phase that no machine holds. Before, it parked after one board read, so another machine could reserve the phase in between. A live claim by another machine, a board that cannot answer, or a claim still in its cooldown refuses the park and writes nothing. A park that stops before its release expires on its own. ([#182](https://github.com/agentmemoir/argus/issues/182))
