@@ -5,11 +5,13 @@
 from argparse import Namespace
 from pathlib import Path
 from typing import Any
+from unittest.mock import ANY
 
 import pytest
 
 from argus.board.reservations import ReservationFenced
 from argus.gitsync import issue_modes
+from argus.gitsync import mode_open_pr as open_pr_module
 from argus.gitsync.git import ConfigError, git
 from argus.gitsync.issue_modes import (
     issue_mode,
@@ -50,6 +52,7 @@ def test_issue_open_pr_reuses_the_phase_mode_on_the_owned_branch(
             "title_file": None,
             "body_file": body,
             "base": None,
+            "before_create": ANY,
         }
     ]
 
@@ -98,6 +101,30 @@ def test_issue_open_pr_refuses_a_branch_the_claim_did_not_record(
     with pytest.raises(ConfigError, match="claimed issue branch"):
         mode_issue_open_pr(publication.root)
     assert calls == []
+
+
+def test_issue_open_pr_refuses_a_claim_lost_after_the_list_read(
+    publication: Publication, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    token, task = publication.claim(1234567)
+    mode_issue_branch(publication.root, 1234567, task)
+    creates: list[tuple[Any, ...]] = []
+
+    def list_then_lose_claim(*_args: Any) -> tuple[list[dict[str, Any]], str]:
+        publication.store.release_group(token)
+        return [], ""
+
+    def create(*args: Any, **_kwargs: Any) -> tuple[None, str]:
+        creates.append(args)
+        return None, "create reached"
+
+    monkeypatch.setattr(
+        open_pr_module, "gh_pull_requests_for_branch", list_then_lose_claim
+    )
+    monkeypatch.setattr(open_pr_module, "gh_create_draft_pull_request", create)
+    with pytest.raises(ReservationFenced):
+        mode_issue_open_pr(publication.root, body_file=task)
+    assert creates == []
 
 
 def test_issue_open_pr_dispatch_fences_a_lost_claim(

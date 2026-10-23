@@ -123,8 +123,18 @@ def mode_issue_open_pr(
     owned = _owned_issue_branch(root)
     if owned is None:
         return degraded({"repo": str(root)}, "open-pr needs an issue branch")
+    branch, store, reservation = owned
+
+    def recheck_claim() -> None:
+        store.assert_owner(reservation)
+
     return mode_open_pr(
-        root, branch=owned[0], title_file=title_file, body_file=body_file, base=base
+        root,
+        branch=branch,
+        title_file=title_file,
+        body_file=body_file,
+        base=base,
+        before_create=recheck_claim,
     )
 
 
