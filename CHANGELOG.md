@@ -4,6 +4,8 @@ Notable changes to this project are documented here. The format follows [Keep a 
 
 ## [Unreleased]
 
+- The CI repair step reads the checks of each open driver pull request on every tick, also while a phase window runs; a repair round still waits for the window. A failed checks read, head read, or pull request listing now ends the tick before new work. A check that stays pending for more than 30 minutes on one head sends one Needs You notice for that head, and the notice clears when no check is pending. ([#197](https://github.com/agentmemoir/argus/issues/197))
+
 - The example issue pipeline's post_step hook now runs an example script that exists. It exits non-zero when the checkpoint or open-pr mode refuses, so the step stays incomplete. The open-pr refusal for --branch, --repo, or --phase names the flag and says it does not apply. ([#209](https://github.com/agentmemoir/argus/issues/209))
 
 - The ready sweep reads each pull request once per pass. A group has one pull request shared by every member, so the sweep used to read its timeline and checks once per member. The first answer is now kept by pull request URL for the rest of that pass, and a pull request readied in the pass is not readied again. Merged, closed, or already readied pull requests are still read on later passes. ([#181](https://github.com/agentmemoir/argus/issues/181))

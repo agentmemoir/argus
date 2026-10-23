@@ -73,17 +73,13 @@ print(" ".join(sorted({r.get("kind", "group") for r in json.load(sys.stdin).get(
 
 reconcile_pending_reviews() {
   PENDING_PUBLISHED=0
+  REPAIR_STOP=0
   if [ "${WORK_SOURCE:-phases}" = issues ]; then
     # Issue pull requests have no receipt to settle; the ready sweep reads their
     # rows, and red CI is still repaired.
     reconcile_group_ready
-    local issue_rows
     [ -n "${REPAIR_PIPELINE:-}" ] && [ -z "${DRIVER_STUB_COORDINATION:-}" ] || return 0
-    if issue_rows="$(issue_review_snapshot)"; then
-      repair_tick "$issue_rows"
-    else
-      log "repair: issue pull requests could not be listed; the next tick retries"
-    fi
+    repair_issue_reads
     return 0
   fi
   # Before the receipts are read, and independent of them. A receipt that
