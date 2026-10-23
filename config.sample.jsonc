@@ -62,15 +62,17 @@
     // File names to ignore, matched exactly. Optional.
     "exclude": ["phase-100499.md"],
 
-    // Where run state goes: session logs, the ledger, the receipts. Required.
-    // It may sit outside the project. Run state is committed and pushed only
-    // in the checkout that holds this folder; here it is under /tmp, so nothing
-    // is written into the project.
-    "runs": "/tmp/argus/history",
+    // Where run state goes: session logs, the ledger, the receipts. Required
+    // unless "board" is set, and then it defaults to "runs" inside the board
+    // checkout. With a board, it must sit inside that checkout. Run state is
+    // committed and pushed only in the checkout that holds this folder, so here
+    // it is "history" in the board checkout, and nothing is written into the
+    // project.
+    "runs": "history",
 
     // The folder inside driver.runs holding the driver's own state: the log,
     // the lock, the halt marker, the pid file. Required. A name, not a path, so
-    // the log lands in /tmp/argus/history/driver-state here.
+    // the log lands in history/driver-state here.
     "state": "driver-state",
 
     // Seconds without agent output before a run counts as stalled. Required.

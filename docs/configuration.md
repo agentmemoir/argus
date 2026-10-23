@@ -18,7 +18,7 @@ The file's rules:
 - `number-input`, `file-input` — the pipeline input names that carry the work-item number and file. Optional, but a pipeline that declares those inputs needs them named.
 - `driver.provider` — the work source. Required. An `issues` block that holds only the trust keys (`trusted-authors`, `trusted-apps`, `trusted-associations`, `codeowners-file`, `resolve-teams`, `comment-trust`, `untrusted-comments`) is allowed for any provider; the issue-source keys still require the `issues` provider.
 - `driver.include` — the work-item file globs. Required. `driver.exclude` — file names to ignore. Optional.
-- `driver.runs` — the run-state folder, holding session logs, the ledger, and the receipts. Required. The folder must exist before a tick starts.
+- `driver.runs` — the run-state folder, holding session logs, the ledger, and the receipts. Required unless `board` is set. With a board, it defaults to a `runs` folder inside `board.repo`, and a folder outside the board checkout is refused by name. The folder must exist before a tick starts.
 - `driver.state` — the folder inside `driver.runs` that holds the driver's own log, lock, halt marker, and pid file. Required. A name, not a path.
 - `driver.stale-after` — seconds without agent output before a run counts as stalled. Required.
 - `driver.outage-stale` — the longer bound used when a merge check could not answer at all, so a host outage is not reported as a stalled phase. Required.

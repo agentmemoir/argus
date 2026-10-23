@@ -4,6 +4,8 @@ Notable changes to this project are documented here. The format follows [Keep a 
 
 ## [Unreleased]
 
+- A configuration with a `board` object defaults `driver.runs` to a `runs` folder inside the board checkout, and it refuses a run folder set outside that checkout, naming the key. ([#216](https://github.com/agentmemoir/argus/issues/216))
+
 - Argus runs each Glide stage with TMPDIR and BUN_TMPDIR set to a stage folder under the run state, so a host whose default temporary folder is mounted noexec does not need them set by hand. `--check` creates that folder and runs a file in it, and it names the cause and the action when the folder refuses to run files. ([#216](https://github.com/agentmemoir/argus/issues/216))
 
 - The CI repair step reads the checks of each open driver pull request on every tick, also while a phase window runs; a repair round still waits for the window. A failed checks read, head read, or pull request listing now ends the tick before new work. A check that stays pending for more than 30 minutes on one head sends one Needs You notice for that head, and the notice clears when no check is pending. ([#197](https://github.com/agentmemoir/argus/issues/197))
