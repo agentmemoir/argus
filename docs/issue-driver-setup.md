@@ -22,17 +22,11 @@ Set `repo-root` to `<work-checkout>` in the configuration file. Give this driver
 
 Clone the private board repository to `<board-checkout>`. Set `board.repo` to that checkout.
 
-Create the run folder before the first tick. A tick does not start while it is missing. Put the task folder inside the board checkout.
+Create the run folder before the first tick. A tick does not start while it is missing. Leave `driver.runs` unset to use a `runs` folder inside the board checkout. If you set it, the folder must be inside that checkout, and `--check` names the key when it is not.
 
-## 4. Use a temporary folder that allows execution
+## 4. Check the temporary folder
 
-If `/tmp` is mounted `noexec`, set `TMPDIR` to a private folder on storage that allows execution. Export it in the environment of the cron job too.
-
-```sh
-export TMPDIR=<private-tmp>
-```
-
-Argus reads `TMPDIR`. If the pipeline runs Bun, also set `BUN_TMPDIR`. Argus does not read that variable.
+Argus runs each Glide stage with `TMPDIR` and `BUN_TMPDIR` set to a stage folder under the run state. You do not set either variable. `--check` creates that folder and starts a file in it. If the folder refuses to run files, `--check` fails and names the cause and the action.
 
 ## 5. Install the git hooks in the work checkout
 
