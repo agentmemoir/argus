@@ -269,3 +269,44 @@ def test_the_cli_runs_the_sweep_through_the_real_argument_parser(
     assert code == 0, out
     assert out["mode"] == "ready" and out["state"] == "READY", out
     assert _ready_calls(state) == [READY], "the command did not ready the pull request"
+
+
+def _calls(state: Path, head: list[str]) -> list[list[str]]:
+    lines = (state / "argv.jsonl").read_text(encoding="utf-8").splitlines()
+    calls = [json.loads(line) for line in lines]
+    return [call for call in calls if call[: len(head)] == head]
+
+
+def test_a_group_reads_its_pull_request_once_per_sweep(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Both members carry one pull request, so one sweep reads it once.
+
+    Before the per-sweep memo, each member's receipt read the timeline and the
+    checks again. The second read is the cost this test names.
+    """
+    pub, _run_dir, state = _group_fixture(tmp_path, monkeypatch)
+
+    result = mode_ready(pub)
+
+    assert len(_calls(state, ["api", "graphql"])) == 1, (
+        "the timeline was read per member"
+    )
+    assert len(_calls(state, ["pr", "checks"])) == 1, "the checks were read per member"
+    assert result["state"] == "HELD", result
+
+
+def test_a_green_group_is_readied_once_with_one_timeline_read(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pub, _run_dir, state = _group_fixture(tmp_path, monkeypatch)
+    _github(state, **_checks(GREEN, 0))
+
+    result = mode_ready(pub)
+
+    assert _ready_calls(state) == [READY], "the green group was not readied once"
+    assert len(_calls(state, ["api", "graphql"])) == 1, (
+        "the timeline was read per member"
+    )
+    assert [r["state"] for r in result["results"]] == ["READY", "READY"], result
+    assert any(r.get("skipped") is True for r in result["results"]), result["results"]
