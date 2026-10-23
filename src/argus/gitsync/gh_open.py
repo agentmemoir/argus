@@ -56,7 +56,9 @@ def gh_open_pull_request_numbers(
     rows = cast("list[object]", parsed)
     numbers: set[int] = set()
     for row in rows:
-        number = row.get("number") if isinstance(row, dict) else None
+        if not isinstance(row, dict):
+            return None, "gh listed a row without a pull request number"
+        number = cast("dict[str, object]", row).get("number")
         if not isinstance(number, int):
             return None, "gh listed a row without a pull request number"
         numbers.add(number)

@@ -74,6 +74,16 @@ def sweep(
         issue_rows: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
         found = receipts or {}
+
+        def receipt_of(_root: Path, number: int) -> dict[str, Any] | None:
+            return found.get(number)
+
+        def entries_of(_root: Path) -> list[tuple[int, dict[str, Any]]]:
+            return [(number, {}) for number in found]
+
+        def rows_of(_root: Path) -> list[dict[str, Any]]:
+            return list(issue_rows or [])
+
         monkeypatch.setattr(
             group_review, "gh_open_pull_request_numbers", github.listing
         )
@@ -82,14 +92,10 @@ def sweep(
         )
         monkeypatch.setattr(group_review, "gh_pull_request_checks", github.checks)
         monkeypatch.setattr(group_review, "gh_mark_pull_request_ready", github.mark)
-        monkeypatch.setattr(group_review, "phase_receipt", lambda _r, n: found.get(n))
-        monkeypatch.setattr(modes, "phase_receipt", lambda _r, n: found.get(n))
-        monkeypatch.setattr(
-            modes, "_phase_run_entries", lambda _r: [(n, {}) for n in found]
-        )
-        monkeypatch.setattr(
-            modes, "issue_pull_requests", lambda _r: list(issue_rows or [])
-        )
+        monkeypatch.setattr(group_review, "phase_receipt", receipt_of)
+        monkeypatch.setattr(modes, "phase_receipt", receipt_of)
+        monkeypatch.setattr(modes, "_phase_run_entries", entries_of)
+        monkeypatch.setattr(modes, "issue_pull_requests", rows_of)
         run_dir = tmp_path / "run"
         run_dir.mkdir(exist_ok=True)
         return modes.mode_ready(tmp_path, run_dir)
