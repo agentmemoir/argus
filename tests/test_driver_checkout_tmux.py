@@ -22,6 +22,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -53,7 +54,7 @@ def _tmux(tmux: str, socket: Path, *args: str) -> subprocess.CompletedProcess[st
     )
 
 
-def _wait_for(predicate, seconds: float = 30.0) -> bool:
+def _wait_for(predicate: Callable[[], bool], seconds: float = 30.0) -> bool:
     deadline = time.monotonic() + seconds
     while time.monotonic() < deadline:
         if predicate():
