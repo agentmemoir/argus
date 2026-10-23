@@ -24,7 +24,7 @@ Use `BINDIR` to choose another folder. Edits in the tree are live.
 
 Pass one mode flag:
 
-- `--check` — the readiness report. It prints every configured value with the flag-or-file source it came from, checks the commands and folders the tick will use, runs Argus's own self-tests, and exits nonzero when it finds a problem.
+- `--check` — the readiness report. It prints every configured value with the flag-or-file source it came from, checks the commands and folders the tick will use, runs the pipeline's `pre_run` hook once, runs Argus's own self-tests, and exits nonzero when it finds a problem. A refusing `pre_run` hook fails the check with the hook's first line and the action to take. The check runs the hook for real, so a `pre_run` hook must be read-only: Glide passes no flag or variable that marks a check call. The check runs the hook from the repository root with `GLIDE_HOOK_POINT`, `GLIDE_PIPELINE`, and `GLIDE_STATE` set as a run sets them; `GLIDE_RUN_DIR` and `GLIDE_RUN_ID` are not set, because no run exists yet. The host override file `glide/hooks.toml` in the XDG config folder replaces the pipeline's `pre_run`, as it does for Glide.
 - `--dry-run` — what the tick would do, without launching anything.
 - `--merge-check-only` — settle phase merges and group readiness without selecting or launching work.
 - `--self-test` — the driver's own test. It needs no configuration file and starts no agent.

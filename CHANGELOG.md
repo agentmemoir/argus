@@ -4,6 +4,8 @@ Notable changes to this project are documented here. The format follows [Keep a 
 
 ## [Unreleased]
 
+- `argus --check` now runs the pipeline's `pre_run` hook once, from the repository root, as Glide does. A refusing hook fails the check with its first line and one action, so a bad setup shows before the first tick. The check runs the hook for real, so a `pre_run` hook must be read-only. ([#220](https://github.com/agentmemoir/argus/issues/220))
+
 - Docs: the issue driver pages now state the trust rules, claim label, branch names, and launch-fault retries as the code runs them. A new page gives the setup steps for an issue driver host, and the known gaps are listed in the issue page.
 
 - A run-state commit or push that fails no longer reads as a clean sync. The sync summary says `DEGRADED` and names the failed step, and the driver log says the run state did not land. The result gives git's step and exit code, not git's error text, so no machine name reaches output or the run folder. The phase reservation file is written by a JSON encoder, so an id with a quote still makes valid JSON. ([#174](https://github.com/agentmemoir/argus/issues/174), [#175](https://github.com/agentmemoir/argus/issues/175), [#178](https://github.com/agentmemoir/argus/issues/178))
