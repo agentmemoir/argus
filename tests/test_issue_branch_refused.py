@@ -121,6 +121,8 @@ def test_the_notice_names_one_cause_and_one_action(held: bool) -> None:
     assert "Action: fix the cause." in text
     retry = "Remove the `taken` label from issue #23 to let Argus retry."
     assert (retry in text) is not held
+    assert "No action is needed" not in text
+    assert text.count("Action:") == 1
 
 
 def test_issues_mode_reads_no_phases_folder() -> None:

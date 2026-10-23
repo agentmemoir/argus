@@ -34,6 +34,8 @@ After the fresh read and the trust check, Argus reserves the issue on the board 
 
 When an issue run fails or exhausts its remedy rounds, Argus gives its board claim back and keeps the label. The Needs You notice then says: remove the `accepted` label (or the configured name) from the issue to let Argus retry. While the label is there and the board has no record for the issue, the issue is skipped, so a failed issue does not loop. After the label is removed, a later tick can pick it again. If the board still holds the claim, because the release failed or the run stopped before it, the notice says so and does not ask for the label. After that claim expires and its cooldown passes, a later tick recovers it and picks the issue again, even while the label is there. Argus does not pick again an issue whose board record is completed, rejected, or accepted, even without the label. A held claim is left to the board, even without the label.
 
+When Argus cannot put an issue on its own branch, it does not start the run, so no issue work lands on the base branch. A resume refuses the same way. At a tick, Argus gives its board claim back and keeps the label. The Needs You notice names the cause and one action: fix the cause, then remove the label to let Argus retry. If the claim release failed, the notice says so, and a later tick retries the issue after the claim expires and its cooldown passes.
+
 A red check on an open issue pull request gets a CI repair round before new work, as for a phase pull request. Only the branch an issue run folder records is read, and only a pull request from this repository: a fork pull request with the same branch name is ignored. See [CI repair rounds](running.md#ci-repair-rounds).
 
 ## Settings
