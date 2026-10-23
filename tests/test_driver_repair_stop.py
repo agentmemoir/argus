@@ -47,8 +47,16 @@ def test_a_failed_head_read_names_the_head_and_ends_the_tick(tmp_path: Path) -> 
     assert any(e.startswith("repair: the head of") for e in events)
 
 
-def test_a_clean_read_still_selects_new_work(tmp_path: Path) -> None:
-    events = _events(tmp_path, 'DECISION=\'{"action":"none"}\'\n_drive\n')
+def test_a_cleared_notice_is_logged_and_new_work_still_selects(tmp_path: Path) -> None:
+    cleared = (
+        "Argus cleared the pending-check notice for "
+        "https://example.test/pull/1: no check is pending."
+    )
+    events = _events(
+        tmp_path,
+        f'DECISION=\'{{"action":"none","cleared":"{cleared}"}}\'\n_drive\n',
+    )
+    assert cleared in events
     assert "SELECT" in events
     assert not any("could not be read" in e for e in events)
 

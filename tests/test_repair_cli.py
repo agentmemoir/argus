@@ -10,6 +10,7 @@ from typing import Any
 import pytest
 
 from argus.gitsync import gh_read, repair_cli
+from argus.gitsync import git as gitsync_git
 
 RED: list[dict[str, Any]] = [{"name": "lint", "bucket": "fail", "link": "https://ci/1"}]
 PR = "https://github.com/o/r/pull/7"
@@ -227,6 +228,19 @@ REPAIR_ARGV = [
 ]
 
 
+def _gh_head(head: str | None) -> Any:
+    """A gh stub: the one pr view answers with the head, or fails when head is None."""
+
+    def run(argv: list[str], **_kw: Any) -> Any:
+        assert argv[1:3] == ["pr", "view"], argv
+        if head is None:
+            return type("Done", (), {"returncode": 1, "stdout": ""})()
+        payload = json.dumps({"headRefOid": head})
+        return type("Done", (), {"returncode": 0, "stdout": payload})()
+
+    return run
+
+
 def _pending_run(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
@@ -237,7 +251,13 @@ def _pending_run(
     monkeypatch.setattr(
         repair_cli, "gh_pull_request_checks", lambda *_a: (PENDING_ROWS, 8, "")
     )
-    monkeypatch.setattr(repair_cli, "gh_pull_request_head", lambda *_a: head)
+    real_setting = gitsync_git.setting
+    monkeypatch.setattr(
+        gitsync_git,
+        "setting",
+        lambda key: "gh" if key == "commands.gh" else real_setting(key),
+    )
+    monkeypatch.setattr(repair_cli.subprocess, "run", _gh_head(head))
     argv = [*REPAIR_ARGV[:3], str(tmp_path), *REPAIR_ARGV[4:]]
     rc = repair_cli.main(argv, now=now)
     return rc, json.loads(capsys.readouterr().out)
