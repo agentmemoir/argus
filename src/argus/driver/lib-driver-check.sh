@@ -96,6 +96,13 @@ check() {
   local stage_rc=0
   "$PYTHON" "$ARGUS/stage_tmpdir.py" "$RUN_DIR/stage-tmp" || stage_rc=$?
   [ "$stage_rc" -eq 0 ] || warned=1
+  # The tick schedule is read from the crontab and never edited. A missing line is
+  # reported with the exact line to install; it does not fail the readiness report,
+  # because a machine without a schedule still has a true report. The self-test
+  # does not read the host's crontab.
+  if [ "${SELF_TEST_MODE:-0}" = 0 ]; then
+    "$PYTHON" "$ARGUS/schedule_check.py" "${ARGUS_CONFIG_FILE:-}" "$RUN_DIR" "${ARGUS_ENTRY:-}" || true
+  fi
   echo "work source: ${WORK_SOURCE:-phases}"
   # A halt, and the record a resume reads, in the report an operator runs when
   # the line will not advance. The record is named separately because it survives
