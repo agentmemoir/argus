@@ -257,7 +257,9 @@ _drive_cut_branch() {
       --phases-directory "$(phases_dir)" \
       "${GROUP_ARGS[@]+"${GROUP_ARGS[@]}"}" \
       >"$RUN_DIR/phase-branch.json" 2>/dev/null
-    local branch_rc=$? branch_state branch_reason
+    local branch_rc=$? branch_state branch_reason prior_crash
+    prior_crash="$(cat "$RUN_DIR/branch-crash" 2>/dev/null || true)"
+    rm -f "$RUN_DIR/branch-crash"
     if [ "$branch_rc" -ne 0 ]; then
       # A fence refusal is not a branch failure. The board does not confirm
       # this machine owns the phase, so a launch would run another owner's
@@ -278,6 +280,19 @@ _drive_cut_branch() {
         log "issue $number: could not put the issue on its own branch; no launch, nothing ran on the base branch (see $RUN_DIR/phase-branch.json)"
         launchfault_halt "$number" "$rel" "$(phase_run_dir "$number" "$rel")" \
           "${branch_state:-}" "$branch_rc" "" "" "$(launchfault_branch_reason "$branch_reason")"
+        _DRIVE_RC=1
+        return 0
+      fi
+      # A phase cut that crashes writes no result, so its state is empty. Nothing
+      # says the cut was a known repairable failure, so launch nothing: the same
+      # refusal as a fence, with one notice. The marker keeps a crash that repeats
+      # on later ticks from sending the notice again.
+      if [ -z "$branch_state" ]; then
+        log "phase $number: gitsync crashed on the branch cut and wrote no result; no launch (see $RUN_DIR/phase-branch.json)"
+        if [ "$prior_crash" != "$number" ]; then
+          notify_phase "$rel" branch-refused "gitsync exited with rc=$branch_rc and wrote no result"
+        fi
+        printf '%s' "$number" >"$RUN_DIR/branch-crash"
         _DRIVE_RC=1
         return 0
       fi
