@@ -51,9 +51,9 @@ def gh_pull_request_stage_history(
         argv.extend(["--hostname", host])
     argv.extend(
         [
-            "-F",
+            "-f",
             f"owner={owner}",
-            "-F",
+            "-f",
             f"name={repo}",
             "-F",
             f"number={int(number)}",
