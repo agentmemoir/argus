@@ -208,3 +208,38 @@ reconcile_pending_reviews
     events = (tmp_path / "events").read_text(encoding="utf-8")
     assert "SNAPSHOT" not in events and "TICK" not in events
     assert "missing.yaml" in events
+
+
+def test_a_hostile_branch_name_is_only_an_argument(tmp_path: Path) -> None:
+    _checkout(tmp_path, "/state\n")
+    hostile = 'x"$(touch_PWNED)"'
+    out = shell(
+        tmp_path,
+        WORKTREE
+        + f"""
+git -C "$REPO" push -q origin 'HEAD:refs/heads/{hostile}'
+head="$(git -C "$REPO" rev-parse HEAD)"
+[ "$(repair_remote_head '{hostile}')" = "$head" ] && echo found
+[ -z "$(repair_remote_head 'feature/*')" ] && echo nomatch
+[ -e "$TEST_ROOT/touch_PWNED" ] && echo injected
+echo done
+""",
+    )
+    assert out.split() == ["found", "nomatch", "done"]
+
+
+def test_a_commit_only_on_a_pull_ref_is_not_kept_as_pushed(tmp_path: Path) -> None:
+    _checkout(tmp_path, "/state\n")
+    out = shell(
+        tmp_path,
+        WORKTREE
+        + """
+repair_worktree_add 7 feature/fixture
+wt="$RUN_DIR/repair-worktree-7"
+git -C "$wt" -c user.name=t -c user.email=t@t commit -q --allow-empty -m edit
+git -C "$wt" push -q origin HEAD:refs/pull/7/head
+repair_worktree_remove "$wt"
+[ -n "$(git -C "$REPO" for-each-ref refs/argus/repair-backup)" ] && echo kept
+""",
+    )
+    assert out.split() == ["kept"]

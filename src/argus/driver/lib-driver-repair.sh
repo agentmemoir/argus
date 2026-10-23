@@ -35,7 +35,8 @@ repair_worktree() { printf '%s/repair-worktree-%s' "$RUN_DIR" "$1"; }
 # not the local tracking refs, so a clone whose fetch refspec leaves them behind does
 # not see a pushed commit as unpushed. No answer counts as not pushed, so the work is kept.
 repair_pushed() {
-  "$CMD_GIT" -C "$1" ls-remote origin 2>/dev/null | awk -v s="$2" '$1 == s { found = 1 } END { exit !found }'
+  "$CMD_GIT" -C "$1" ls-remote origin 2>/dev/null \
+    | S="$2" awk 'index($2, "refs/heads/") == 1 && $1 == ENVIRON["S"] { found = 1 } END { exit !found }'
 }
 
 # Remove one repair worktree. Work that never reached the remote is saved first
@@ -132,7 +133,8 @@ repair_launch() {
 
 # The head commit of one branch, as the remote reports it. Empty when it cannot answer.
 repair_remote_head() {
-  "$CMD_GIT" -C "$REPO" ls-remote origin "refs/heads/$1" 2>/dev/null | awk 'NR == 1 { print $1 }'
+  "$CMD_GIT" -C "$REPO" ls-remote origin "refs/heads/$1" 2>/dev/null \
+    | R="refs/heads/$1" awk '$2 == ENVIRON["R"] { print $1; exit }'
 }
 
 # The tick's repair step. $1 is the pending-review snapshot. A launched round
