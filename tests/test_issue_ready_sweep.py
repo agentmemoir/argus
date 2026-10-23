@@ -57,9 +57,9 @@ def gh(monkeypatch: pytest.MonkeyPatch) -> FakeGitHub:
     return fake
 
 
-def _open_list(*_args: Any) -> tuple[set[int], str]:
-    """GitHub lists the issue's pull request as open."""
-    return {77}, ""
+def _open_list(*_args: Any) -> tuple[dict[int, bool], str]:
+    """GitHub lists the issue's pull request as open and a draft."""
+    return {77: True}, ""
 
 
 def _no_phase_runs(_root: Path) -> list[Any]:

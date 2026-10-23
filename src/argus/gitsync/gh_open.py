@@ -15,14 +15,15 @@ from argus.gitsync.git import GH_TIMEOUT_S, gh_binary
 
 def gh_open_pull_request_numbers(
     root: Path, owner: str | None, repo: str | None, host: str | None
-) -> tuple[set[int] | None, str]:
-    """The numbers of the repository's open pull requests, or why they are unknown.
+) -> tuple[dict[int, bool] | None, str]:
+    """The repository's open pull requests and whether each is a draft, or why not.
 
-    Returns the set and an empty detail, or ``None`` and the reason. ``None``
-    covers a failed call, a reply that is not a list of numbered rows, and a
-    reply that fills the row limit: that list may be cut short, and a cut list
-    would read a live pull request as closed. An empty set really means no
-    pull request is open.
+    Returns a map from pull request number to its draft state, and an empty
+    detail, or ``None`` and the reason. ``None`` covers a failed call, a reply
+    that is not a list of rows with a number and a draft state, and a reply that
+    fills the row limit: that list may be cut short, and a cut list would read a
+    live pull request as closed. An empty map really means no pull request is
+    open.
     """
     argv = [
         gh_binary(),
@@ -35,7 +36,7 @@ def gh_open_pull_request_numbers(
         "--limit",
         str(PR_LIST_LIMIT),
         "--json",
-        "number",
+        "number,isDraft",
     ]
     try:
         done = subprocess.run(
@@ -54,17 +55,18 @@ def gh_open_pull_request_numbers(
     if not isinstance(parsed, list):
         return None, "gh returned JSON that is not a list"
     rows = cast("list[object]", parsed)
-    numbers: set[int] = set()
+    drafts: dict[int, bool] = {}
     for row in rows:
         if not isinstance(row, dict):
-            return None, "gh listed a row without a pull request number"
-        number = cast("dict[str, object]", row).get("number")
-        if not isinstance(number, int):
-            return None, "gh listed a row without a pull request number"
-        numbers.add(number)
+            return None, "gh listed a row without a pull request number or draft state"
+        fields = cast("dict[str, object]", row)
+        number, draft = fields.get("number"), fields.get("isDraft")
+        if not isinstance(number, int) or not isinstance(draft, bool):
+            return None, "gh listed a row without a pull request number or draft state"
+        drafts[number] = draft
     if len(rows) >= PR_LIST_LIMIT:
         return None, "gh filled the row limit, so the open list may be cut short"
-    return numbers, ""
+    return drafts, ""
 
 
 __all__ = ["gh_open_pull_request_numbers"]

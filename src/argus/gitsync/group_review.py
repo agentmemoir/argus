@@ -219,18 +219,19 @@ def mark_group_pull_request_ready(
 class OpenPullRequests:
     """One sweep's view of GitHub's open pull requests, listed once per repository.
 
-    A pull request missing from its repository's open list is merged or closed,
-    so no ready can apply to it and the sweep never reads its timeline. Each list
-    is read on first use, so a sweep with no candidate makes no call. A list that
-    cannot be read stays unreadable for the rest of the sweep.
+    Only an open draft can take a ready. A pull request missing from the open
+    list is merged or closed, and a listed pull request that is not a draft has
+    nothing to ready. Neither is read, so no timeline read is made for them.
+    Each list is read on first use, so a sweep with no candidate makes no call.
+    A list that cannot be read stays unreadable for the rest of the sweep.
     """
 
     def __init__(self, root: Path) -> None:
         self._root = root
-        self._lists: dict[str, tuple[set[int] | None, str]] = {}
+        self._lists: dict[str, tuple[dict[int, bool] | None, str]] = {}
 
     def check(self, pull_request: str) -> tuple[bool | None, str]:
-        """Whether to read this pull request: True or False, or None and the reason."""
+        """True for an open draft, False for any other, None and why when unreadable."""
         ref = pull_request_ref(pull_request)
         if not ref:
             return False, ""
@@ -239,10 +240,10 @@ class OpenPullRequests:
             self._lists[target] = gh_open_pull_request_numbers(
                 self._root, ref["owner"], ref["repo"], ref["host"]
             )
-        numbers, why = self._lists[target]
-        if numbers is None:
+        drafts, why = self._lists[target]
+        if drafts is None:
             return None, why
-        return ref["number"] in numbers, ""
+        return drafts.get(ref["number"], False), ""
 
 
 def _ready_once(
@@ -262,9 +263,9 @@ def _ready_once(
     checks are read once, and a pull request readied by the first member is
     never readied again. Only an answer is kept: a fault is asked again.
 
-    A pull request that is not in its repository's open list is merged or closed,
-    so it returns ``None`` before any timeline read. An open list that cannot be
-    read returns a failure, so no pull request is read as closed by mistake.
+    Only an open draft is read. A merged, closed, or non-draft pull request returns
+    ``None`` before any timeline read. An open list that cannot be read returns a
+    failure, so no pull request is read as closed by mistake.
     """
     prior = decided.get(pull_request)
     if prior is not None:

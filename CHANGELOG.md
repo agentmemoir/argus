@@ -12,7 +12,7 @@ Notable changes to this project are documented here. The format follows [Keep a 
 
 - The ready sweep reads each pull request once per pass. A group has one pull request shared by every member, so the sweep used to read its timeline and checks once per member. The first answer is now kept by pull request URL for the rest of that pass, and a pull request readied in the pass is not readied again. ([#181](https://github.com/agentmemoir/argus/issues/181))
 
-- The ready sweep lists the open pull requests of each repository once per pass, and reads only those. A merged or closed pull request is no longer read on later passes. If the open list cannot be read, the sweep reports the pull request as held and reads none. An open pull request that is already ready is still read on each pass, and its timeline stays the guard against a second ready. ([#181](https://github.com/agentmemoir/argus/issues/181))
+- The ready sweep lists the open pull requests of each repository once per pass, and reads the timeline only of open draft pull requests. A merged, closed, or non-draft pull request is no longer read on later passes. If the open list cannot be read, the sweep reports the pull request as held and reads none. A draft that was readied before, such as one a person re-drafted, is still read, and its timeline stays the guard against a second ready. ([#181](https://github.com/agentmemoir/argus/issues/181))
 
 - Docs: the repair section now states that a pull request that was escalated gets no further repair round or notice, even when its checks turn red again, and that an unreadable attempt record sends one notice and starts no round. ([#210](https://github.com/agentmemoir/argus/issues/210))
 

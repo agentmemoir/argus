@@ -179,7 +179,9 @@ def pending_checks(pub: Path, results: list[tuple[str, object, str]]) -> None:
         if list(argv[1:3]) == ["api", "graphql"]:
             return prior_ready if state["ready"] else draft
         if list(argv[1:3]) == ["pr", "list"]:
-            return {"returncode": 0, "stdout": json.dumps([{"number": 7}])}
+            is_draft = not state["ready"]
+            listed = [{"number": 7, "isDraft": is_draft}]
+            return {"returncode": 0, "stdout": json.dumps(listed)}
         if list(argv[1:3]) == ["pr", "checks"]:
             return green
         return {"returncode": 1}
@@ -210,14 +212,11 @@ def pending_checks(pub: Path, results: list[tuple[str, object, str]]) -> None:
         again = mode_ready(pub)
     results.append(
         (
-            "a later sweep takes no second ready and says why",
-            again.get("state") == "READY"
+            "a later sweep takes no second ready and reads no timeline",
+            again.get("state") == "IDLE"
             and _ready_calls(later.calls) == 0
-            and all(
-                one.get("skipped") is True
-                for one in again["results"]
-                if one.get("state") == "READY"
-            ),
+            and not again["results"]
+            and not any(list(argv[1:3]) == ["api", "graphql"] for argv in later.calls),
             f"again={again} calls={later.calls}",
         )
     )

@@ -64,7 +64,8 @@ if args[:2] == ["api", "graphql"]:
     sys.exit(0)
 if args[:2] == ["pr", "list"]:
     open_now = plan["pull_request"]["state"] == "OPEN"
-    print(json.dumps([{{"number": 7}}] if open_now else []))
+    is_draft = plan["pull_request"]["isDraft"]
+    print(json.dumps([{{"number": 7, "isDraft": is_draft}}] if open_now else []))
     sys.exit(0)
 if args[:2] == ["pr", "checks"]:
     print(json.dumps(plan["checks"]["rows"]))
@@ -193,19 +194,26 @@ def test_green_checks_ready_the_pull_request_exactly_once(
     assert result["ok"] is True, result
 
 
-def test_a_later_tick_is_skipped_because_github_records_a_ready(
+def _graphql_calls(state: Path) -> int:
+    lines = (state / "argv.jsonl").read_text(encoding="utf-8").splitlines()
+    return sum(1 for line in lines if json.loads(line)[:2] == ["api", "graphql"])
+
+
+def test_a_later_tick_reads_no_timeline_once_github_lists_it_ready(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """The readied pull request is not a draft, so the sweep never reads it."""
     pub, _run_dir, state = _group_fixture(tmp_path, monkeypatch)
     _github(state, **_checks(GREEN, 0))
     mode_ready(pub)
     assert _ready_calls(state) == [READY]
+    reads_before = _graphql_calls(state)
 
     third = mode_ready(pub)
 
     assert _ready_calls(state) == [READY], "a readied pull request was readied again"
-    assert any(r.get("skipped") is True for r in third["results"]), third["results"]
-    assert any("prior ready" in str(r.get("detail")) for r in third["results"])
+    assert _graphql_calls(state) == reads_before, "the timeline was read again"
+    assert third["results"] == [], third["results"]
 
 
 def test_a_check_report_that_finishes_three_ticks_later_readies_once(
