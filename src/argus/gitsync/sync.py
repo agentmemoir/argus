@@ -247,6 +247,29 @@ def sync_all(root: str | Path, mode: str, branch: str | None = None) -> dict[str
     }
 
 
+def _resync_board(repo: Path) -> dict[str, Any]:
+    """Name the board checkout as a no-op unless it is on the integration branch.
+
+    The board checkout holds claims, not phase work, so the integration branch
+    is never merged into its claims branch. A board already on the integration
+    branch has nothing to merge, and resync_integration reports it that way.
+    """
+    here = current_branch(repo)
+    base = integration_branch(repo)
+    if here == base:
+        return resync_integration(repo)
+    return {
+        "repo": str(repo),
+        "mode": "resync",
+        "base": base,
+        "branch": here,
+        "ok": True,
+        "action": "skipped-board-checkout",
+        "hint": f"{here or 'a detached HEAD'} is the board checkout's branch; "
+        "the board is not a work checkout, so nothing is merged into it",
+    }
+
+
 def mode_resync(root: str | Path) -> dict[str, Any]:
     """Merge the integration branch into every checkout's current branch."""
     root = Path(root).resolve()
@@ -264,7 +287,9 @@ def mode_resync(root: str | Path) -> dict[str, Any]:
     runstate = runstate_repo(root)
     if runstate is not None and runstate not in targets and is_git_repo(runstate):
         targets.append(runstate)
-    repos = [resync_integration(r) for r in targets]
+    repos = [
+        _resync_board(r) if r == nested else resync_integration(r) for r in targets
+    ]
     ok = all(r["ok"] for r in repos)
     return {
         "ok": ok,
