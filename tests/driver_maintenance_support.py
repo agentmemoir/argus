@@ -13,7 +13,7 @@ DRIVER = Path(__file__).resolve().parents[1] / "src/argus/driver"
 def shell(tmp_path: Path, body: str) -> str:
     script = """
 set -euo pipefail
-for name in lib-driver-drive lib-driver-control lib-driver-select lib-driver-group lib-driver-resume \
+for name in lib-driver-checkout lib-driver-drive lib-driver-control lib-driver-select lib-driver-group lib-driver-resume \
     lib-driver-select-flow lib-driver-issues lib-driver-config lib-driver-run lib-driver-fence \
     lib-driver-repair lib-driver-launchfault; do
   . "$TEST_DRIVER/$name.sh"

@@ -4,6 +4,8 @@ One configuration file per tick, and one command. The file names every value the
 
 Argus needs Bash, Git, tmux, and a Python with PyYAML. The publisher uses the configured `gh`; notifications are optional.
 
+Each driver needs its own checkout. Give every driver config its own `repo-root`. Argus refuses a second driver on a checkout that another driver's phase holds. See [Two drivers on one machine](#two-drivers-on-one-machine).
+
 ## Install
 
 ```sh
@@ -93,7 +95,9 @@ The phase driver still merges the base once at launch. The phase pipeline declar
 
 ## Two drivers on one machine
 
-Two drivers must never share one checkout, the path in `repo-root`. A tick of one driver can switch the branch of that checkout, or commit leftover work on its current branch, while the other driver's agent edits the same files. The per-config lock does not prevent this. It covers one config's run folder and tick, not a checkout that another config uses. This rule follows from how the code works. A test does not confirm it.
+Two drivers must never share one checkout, the path in `repo-root`. A tick of one driver can switch the branch of that checkout, or commit leftover work on its current branch, while the other driver's agent edits the same files.
+
+Argus enforces this. A phase holds an exclusive lock on the checkout for its whole run. The lock file is `argus-driver-checkout.lock` in the repository's Git common directory, so every worktree of that repository shares it. A tick of another driver refuses before it cuts a branch, and `--check` reports the holder. The refusal names the holding config's file name, and the one action: give each driver its own checkout. The per-config lock does not cover this. It covers one config's run folder and tick. The OS releases the checkout lock when the phase exits, so a crash does not leave it held.
 
 Give each driver its own clone of the repository, its own `driver.runs` and `driver.state`, and its own `tmux.session`. The steps for an issue driver host are in [Set up an issue driver host](issue-driver-setup.md). For example, run each driver under its own Linux user or on its own machine. The example configurations use the same `repo-root` and the same tmux session, so change both before you run a second driver from them.
 

@@ -202,6 +202,9 @@ done
 # The reservation group: its member array, its one branch, and its renewal.
 # shellcheck disable=SC1091
 . "$ARGUS_DIR/lib-driver-group.sh"
+# The checkout lock: one checkout, one driver (issue 199).
+# shellcheck disable=SC1091
+. "$ARGUS_DIR/lib-driver-checkout.sh"
 # The readiness report (`--check`).
 # shellcheck disable=SC1091
 . "$ARGUS_DIR/lib-driver-check.sh"
@@ -299,6 +302,9 @@ case "${1:-}" in
     # One phase runs only under a live claim. A tick already holds one and passes
     # its fence in the environment; a hand-started session takes one here. A
     # refusal writes no claim and opens no window.
+    # One checkout, one driver (issue 199): take the checkout lock before the claim,
+    # so a refused phase writes no claim and opens no work.
+    driver_checkout_take || { driver_checkout_refusal >&2; exit 1; }
     session_claim_ensure "$2" "$3" || exit 1
     run_session "$2" "$3"
     ;;
