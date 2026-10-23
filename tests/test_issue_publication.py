@@ -9,6 +9,7 @@ from typing import Any, cast
 import pytest
 
 from argus import conventions
+from argus.board.files import reservation_file
 from argus.board.reservations import ReservationFenced
 from argus.gitsync.git import ConfigError, current_branch, git
 from argus.gitsync.issue_modes import mode_issue_branch, mode_issue_checkpoint
@@ -96,6 +97,20 @@ def test_issue_cleanup_sweep_finds_seven_digit_issue_runs(
     assert result["ok"], result
     assert {r["issue"] for r in result["repos"]} == {1234567, 1234568}
     assert git(publication.private, "status", "--porcelain")[1] == ""
+
+
+def test_issue_cleanup_sweep_skips_a_run_folder_with_no_reservation(
+    publication: Publication,
+) -> None:
+    publication.claim(1234567)
+    runs = reservation_file(publication.root, 1234567, kind="issue").parent.parent
+    leftover = runs / "issue-1234569"
+    leftover.mkdir()
+    (leftover / "failed.json").write_text('{"rc": 2}\n')
+    result = mode_issue_clean(publication.root)
+    assert result["ok"], result
+    assert {r["issue"] for r in result["repos"]} == {1234567}
+    assert (leftover / "failed.json").exists()
 
 
 def test_issue_clean_reports_what_its_push_did(publication: Publication) -> None:

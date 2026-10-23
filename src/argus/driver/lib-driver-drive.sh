@@ -112,6 +112,7 @@ _drive() {
   # A receipt read that fails is a repair; a blocked tidy is a narrow own-state
   # or lost-work stop, so that one return still stops the tick.
   reconcile_pending_reviews || return 1
+  launchfault_due
   if [ -f "$HALT" ]; then
     log_changed halted "halted ($(tr '\n' ' ' <"$HALT")); no new work"
     return 0

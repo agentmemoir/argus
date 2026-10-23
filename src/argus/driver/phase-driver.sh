@@ -226,6 +226,7 @@ done
 # shellcheck disable=SC1091
 . "$ARGUS_DIR/lib-driver-halt-record.sh"
 # shellcheck disable=SC1091
+. "$ARGUS_DIR/lib-driver-launchfault.sh"
 # shellcheck disable=SC1091
 . "$ARGUS_DIR/lib-driver-fence.sh"
 # shellcheck disable=SC1091

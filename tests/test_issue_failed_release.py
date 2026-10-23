@@ -27,7 +27,7 @@ def run_issue_session(tmp_path: Path, state: str, released: bool) -> str:
     (run_dir / "go").touch()
     script = """
 set -euo pipefail
-for name in lib-driver-log lib-driver-run lib-driver-halt-record; do
+for name in lib-driver-log lib-driver-run lib-driver-halt-record lib-driver-launchfault; do
   . "$TEST_DRIVER/$name.sh"
 done
 PYTHON="$TEST_PYTHON"

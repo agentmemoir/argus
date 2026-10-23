@@ -401,13 +401,12 @@ except OSError:
     fi
   fi
   state="$(phase_state "$number" "$rel")"
+  [ "$rc" = 2 ] || launchfault_clear
   local run_dir result_file result_state
   run_dir="$(phase_run_dir "$number" "$rel")"
   result_file="$run_dir/result.json"
-  # Glide writes one atomic `result.json` for every state. Its repair tick is
-  # `repair_pending`: a no-launch, resumable tick that must not archive or
-  # finalize the run, even though glide exits 0 and writes no run.json. The rc=2
-  # invalid-input halt keeps its own path.
+  # `repair_pending` in `result.json` is a no-launch, resumable tick that must
+  # not archive or finalize the run. The rc=2 halt keeps its own path.
   if [ "$rc" != 2 ] && [ -f "$result_file" ]; then
     result_state="$("$PYTHON" -c 'import json,sys
 try:
@@ -462,10 +461,15 @@ print(f"{step}: {reason}" if step and reason else (reason or step))' \
     3)   : ;;
     130) tmux_set_title "HALTED ${work_kind:-phase} $number (interrupted)"
          notify_phase "$rel" interrupted "the process received an interrupt signal" ;;
-    *)   if [ "$job_failed" = 1 ] || [ "${work_kind:-phase}" = issue ]; then
-           # Record the failure so the operator can see it and let the line
-           # continue. A phase keeps its claim, which resumes through its own
-           # expiry windows plus the cooldown; an issue gives its claim back.
+    *)   # An issue launch fault halts the line and keeps the claim.
+         if launchfault_is "$rc"; then
+           launchfault_halt "$number" "$rel" "$run_dir" "$state" "$rc" \
+             "$session_log" "$session_log_offset"
+           rm -f "$CURRENT" "$PIDFILE"; exit 0
+         fi
+         if [ "$job_failed" = 1 ] || [ "${work_kind:-phase}" = issue ]; then
+           # Record the failure and let the line continue. A phase keeps its
+           # claim; an issue gives its claim back.
            failure_residue_write "$number" "$rel" "$state" "$rc" "$(job_retries)"
            release_failed_issue "$number"
            log "job-failed: ${work_kind:-phase} $number rc=$rc state=${state:-unknown}; retries exhausted, recorded as failed; continuing"
@@ -474,12 +478,8 @@ print(f"{step}: {reason}" if step and reason else (reason or step))' \
            rm -f "$CURRENT" "$PIDFILE"
            exit 0
          fi
-          # glide can exit before writing run.json, as a configuration error
-          # does. A run.json that exists but does not parse is a damaged
-          # result, not a missing one: `phase_state` returns empty for both, so
-          # the file is tested here by name.
-          local run_dir
-          run_dir="$(phase_run_dir "$number" "$rel")"
+          # glide can exit before writing run.json. A damaged run.json is not a
+          # missing one, so `$run_dir` (set above) is tested here by name.
           if [ "$rc" = 2 ]; then
             # D65: invalid pipeline inputs. This is a start-time configuration
             # halt, and it names the fix. Only an absent run.json may take its

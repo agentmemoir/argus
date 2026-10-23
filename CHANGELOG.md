@@ -4,6 +4,8 @@ Notable changes to this project are documented here. The format follows [Keep a 
 
 ## [Unreleased]
 
+- An issue run that fails before any stage starts (glide rc=2, such as a refused `pre_run` hook) is a launch fault. The driver keeps the claim and halts the line, so no tick takes another issue. Later ticks retry the same issue after 10 minutes, then every 20 minutes. A run that starts clears the halt with no hand step. After the third failed attempt, one Needs You names the cause, the action, and the check. The issue clean sweep skips a run folder that has no reservation file.
+
 - A failed or escalated issue run now gives its board claim back and keeps the claim label. Its Needs You notice says: remove the label from issue #N to let Argus retry. While the label is there and no board record holds the issue, it is skipped; once a person removes the label, a later tick can pick the issue again. If the release fails, the notice says the claim could not be given back, and the issue is picked again after the claim expires and its cooldown passes, even with the label. Completed, rejected, and accepted issues stay blocked. ([#203](https://github.com/agentmemoir/argus/issues/203))
 
 - `gitsync --mode open-pr` and `--mode peek-ci` use a pull request for the branch only when its head branch is in this repository and has the same name. A row with a missing value is not used.
