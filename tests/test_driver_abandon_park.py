@@ -28,7 +28,8 @@ SCAN_NO_CLAIM = (
     '"status": null, "reason": "no_claim"}]}'
 )
 TAKEN = (
-    'printf \'%s\' \'{"state": "OK", "reservation_id": "rsv-park", "generation": 1}\''
+    'printf \'%s\' \'{"state": "OK", "reservation": '
+    '{"reservation_id": "rsv-park", "generation": 1}}\''
 )
 FOREIGN = (
     'printf \'%s\' \'{"state": "FENCED", "error": "phase 100020 is already '

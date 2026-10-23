@@ -10,6 +10,7 @@ file cannot reuse another function's row.
 STOP_ALLOWLIST = r"""
     driver/lib-driver-abandon.sh	return_nonzero	fn:abandon_board_reason|case "${DRIVER_STUB_BOARD_FENCE:-}" in fail) return 1 ;; esac#1
     driver/lib-driver-abandon.sh	return_nonzero	fn:abandon_board_reason|2>"$RUN_DIR/abandon-scan-$1.err")" || return 1#1
+    driver/lib-driver-abandon.sh	return_nonzero	fn:abandon_park_reserve|2>"$RUN_DIR/abandon-park-$1.err")" || return 1#1
     driver/lib-driver-abandon.sh	exit_nonzero	fn:abandon_cmd|exit 2#1
     driver/lib-driver-abandon.sh	exit_nonzero	fn:abandon_cmd|exit 2 ;;#1
     driver/lib-driver-abandon.sh	exit_nonzero	fn:abandon_cmd|exit 2 ;;#2
@@ -24,6 +25,7 @@ STOP_ALLOWLIST = r"""
     driver/lib-driver-abandon.sh	exit_nonzero	fn:abandon_cmd|exit 1 ;;#3
     driver/lib-driver-abandon.sh	exit_nonzero	fn:abandon_cmd|exit 1#5
     driver/lib-driver-abandon.sh	exit_nonzero	fn:abandon_cmd|exit 1#6
+    driver/lib-driver-abandon.sh	exit_nonzero	fn:abandon_cmd|exit 1#7
     driver/lib-driver-check.sh	return_nonzero	fn:check|return 1#1
     driver/lib-driver-check.sh	return_nonzero	fn:check|return 1#2
     driver/lib-driver-check.sh	return_nonzero	fn:check|[ "$prerun_rc" -eq 0 ] || return 1#1

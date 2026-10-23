@@ -4,6 +4,8 @@ Notable changes to this project are documented here. The format follows [Keep a 
 
 ## [Unreleased]
 
+- `abandon` takes a short park reservation on the board before it parks a phase that no machine holds. Before, it parked after one board read, so another machine could reserve the phase in between. A live claim by another machine, a board that cannot answer, or a claim still in its cooldown refuses the park and writes nothing. A park that stops before its release expires on its own. ([#182](https://github.com/agentmemoir/argus/issues/182))
+
 - The open-pr mode for a phase creates its draft pull request only when the board confirms this machine's claim. Before, it created the pull request with no board read, so a foreign or expired claim, or an unreadable board, could still publish the phase. A refused fence creates nothing. ([#164](https://github.com/agentmemoir/argus/issues/164))
 
 - The CI repair step reads the checks of each open driver pull request on every tick, also while a phase window runs; a repair round still waits for the window. A failed checks read, head read, or pull request listing now ends the tick before new work. A check that stays pending for more than 30 minutes on one head sends one Needs You notice for that head, and the notice clears when no check is pending. ([#197](https://github.com/agentmemoir/argus/issues/197))
