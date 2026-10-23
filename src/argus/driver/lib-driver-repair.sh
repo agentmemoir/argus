@@ -31,6 +31,13 @@ PY
 
 repair_worktree() { printf '%s/repair-worktree-%s' "$RUN_DIR" "$1"; }
 
+# Whether the remote has this commit as one of its branch heads. The remote answers,
+# not the local tracking refs, so a clone whose fetch refspec leaves them behind does
+# not see a pushed commit as unpushed. No answer counts as not pushed, so the work is kept.
+repair_pushed() {
+  "$CMD_GIT" -C "$1" ls-remote origin 2>/dev/null | awk -v s="$2" '$1 == s { found = 1 } END { exit !found }'
+}
+
 # Remove one repair worktree. Work that never reached the remote is saved first
 # (hard line 2): uncommitted edits become one commit on top of HEAD, and a ref
 # under refs/argus/repair-backup/ keeps it. Argus never pushes or deletes that
@@ -48,7 +55,7 @@ repair_worktree_remove() {
       || tip=""
     [ -n "$tip" ] || { notify "Repair $key: Argus could not save the edits in $wt, so it kept the worktree. Copy what you need from it; the next tick tries again."; return 1; }
   fi
-  if [ -n "$tip" ] && [ -n "$("$CMD_GIT" -C "$wt" log --oneline "$tip" --not --remotes 2>/dev/null | head -1)" ]; then
+  if [ -n "$tip" ] && ! repair_pushed "$wt" "$tip"; then
     ref="refs/argus/repair-backup/$key-$(date +%s)"
     "$CMD_GIT" -C "$REPO" update-ref "$ref" "$tip" \
       || { notify "Repair $key: Argus could not save the work in $wt, so it kept the worktree. Copy what you need from it; the next tick tries again."; return 1; }
@@ -198,7 +205,7 @@ run_repair_session() {
       --input "repair_id=$key" --input "repair_task=$task" || rc=$?
     if [ "$rc" -ne 0 ]; then
       log "repair $key: the run ended with rc=$rc and pushed nothing"
-    elif [ -z "$("$CMD_GIT" -C "$wt" log --oneline --not --remotes | head -1)" ]; then
+    elif repair_pushed "$wt" "$("$CMD_GIT" -C "$wt" rev-parse HEAD 2>/dev/null)"; then
       log "repair $key: the run made no commit; nothing pushed to $branch"
     elif "$CMD_GIT" -C "$wt" push --quiet origin "HEAD:refs/heads/$branch" >/dev/null 2>&1; then
       log "repair $key: pushed to $branch; the next tick reads the new checks"

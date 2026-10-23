@@ -142,6 +142,42 @@ repair_worktree_prune
     )
 
 
+def test_a_commit_the_remote_lacks_is_kept_even_with_a_tracking_ref(
+    tmp_path: Path,
+) -> None:
+    _checkout(tmp_path, "/state\n")
+    out = shell(
+        tmp_path,
+        WORKTREE
+        + """
+repair_worktree_add 7 feature/fixture
+wt="$RUN_DIR/repair-worktree-7"
+git -C "$wt" -c user.name=t -c user.email=t@t commit -q --allow-empty -m edit
+git -C "$REPO" update-ref refs/remotes/origin/stale "$(git -C "$wt" rev-parse HEAD)"
+repair_worktree_remove "$wt"
+[ -n "$(git -C "$REPO" for-each-ref refs/argus/repair-backup)" ] && echo kept
+""",
+    )
+    assert out.split() == ["kept"]
+
+
+def test_a_commit_the_remote_has_is_not_kept(tmp_path: Path) -> None:
+    _checkout(tmp_path, "/state\n")
+    out = shell(
+        tmp_path,
+        WORKTREE
+        + """
+repair_worktree_add 7 feature/fixture
+wt="$RUN_DIR/repair-worktree-7"
+git -C "$wt" -c user.name=t -c user.email=t@t commit -q --allow-empty -m edit
+git -C "$wt" push -q origin HEAD:refs/heads/feature/fixture
+repair_worktree_remove "$wt"
+[ -z "$(git -C "$REPO" for-each-ref refs/argus/repair-backup)" ] && echo none
+""",
+    )
+    assert out.split() == ["none"]
+
+
 def test_a_link_git_would_commit_refuses_the_round(tmp_path: Path) -> None:
     _checkout(tmp_path, "other\n")
     out = shell(
