@@ -92,6 +92,16 @@ check() {
     fi
   done
   check_repair_pipeline
+  # The work checkout's git hooks are made ready before the pre_run hook is run
+  # here, because that hook refuses a checkout whose hooks are missing or stale.
+  # Argus installs them only when commands.hooks-install names the install command.
+  # The self-test runs in its own throwaway checkout, so it skips this step.
+  if [ "${SELF_TEST_MODE:-0}" = 0 ] && [ -r "$PIPELINE" ]; then
+    local hooks_out hooks_rc=0
+    hooks_out="$("$PYTHON" "$ARGUS/hooks_setup.py" "$RUN_DIR" --repo "$REPO" "${ARGUS_CONFIG_ARGS[@]}" 2>&1)" || hooks_rc=$?
+    [ -z "$hooks_out" ] || printf '%s\n' "$hooks_out"
+    [ "$hooks_rc" -eq 0 ] || warned=1
+  fi
   # The pipeline's pre_run hook gates every run. Glide runs it from the repository
   # root before a run starts, so run it here once too: a refusing hook fails the
   # check before the first tick. A missing pipeline is already reported above.

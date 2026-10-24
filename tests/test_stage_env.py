@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -27,6 +28,10 @@ number=1
 rel=phase.md
 glide_inputs=(--input ticket=1)
 RUN_DIR="$STAGE_ROOT"
+REPO="$STAGE_ROOT"
+PYTHON="$PY"
+ARGUS="$STUBS"
+ARGUS_CONFIG_ARGS=(--config config.json)
 glide_run_once
 """
 
@@ -34,9 +39,21 @@ glide_run_once
 def test_glide_gets_the_stage_folder_as_tmpdir_and_bun_tmpdir(tmp_path: Path) -> None:
     state = tmp_path / "state"
     stage = state / "stage-tmp"
+    stubs = tmp_path / "stubs"
+    stubs.mkdir()
+    # The hook setup is a stub that accepts the checkout, so the launch goes on.
+    (stubs / "hooks_setup.py").write_text(
+        "print('hooks: present (stub)')\n", encoding="utf-8"
+    )
     done = subprocess.run(
         ["bash", "-c", SCRIPT, "bash", str(JOB_LIB)],
-        env={**os.environ, "STAGE_ROOT": str(state), "TMPDIR": str(tmp_path / "x")},
+        env={
+            **os.environ,
+            "STAGE_ROOT": str(state),
+            "TMPDIR": str(tmp_path / "x"),
+            "PY": sys.executable,
+            "STUBS": str(stubs),
+        },
         capture_output=True,
         text=True,
         encoding="utf-8",

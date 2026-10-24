@@ -1,0 +1,1 @@
+The readiness report and each Glide launch make the work checkout's git hooks ready first. Argus runs the command named by `commands.hooks-install` only when the pipeline's `pre_run` hook refuses the checkout, and it copies the hooks folder into the run state before it runs that command. Without the command, a refused checkout is reported as Needs You, and the launch stops.
