@@ -6,7 +6,8 @@ The driver runs it the way it runs ``board/remedy.py``: ``"$PYTHON" "$ARGUS/
 gitsync/repair_cli.py" ...``. It reads the checks and the merge state once,
 decides with ``repair_round.decide``, and prints one JSON object: ``action``
 (``none``, ``wait``, ``repair``, ``escalate``), plus ``task`` on repair and
-``message`` on escalate. A repair decision writes the task file but counts
+``message`` on escalate, and ``waiting`` while the pull request still needs the
+driver. A repair decision writes the task file but counts
 nothing. The driver runs the command again with ``--launched`` once the repair
 run has started, and only that call counts the round, so a launch that fails can
 never use up a round or lead to a false escalation.
@@ -57,6 +58,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--attempts", required=True, type=int)
     parser.add_argument("--wait", required=True, type=int)
     parser.add_argument("--head", required=True, help="the pull request head commit")
+    parser.add_argument("--draft", choices=("yes", "no"), default="no")
     parser.add_argument(
         "--launched", action="store_true", help="count one round; read nothing"
     )
@@ -136,10 +138,22 @@ def issue_pull_requests(
         # gh_pull_requests_for_branch is the one filter: it keeps only this
         # repository's rows on the branch, so a fork's checks and logs never arrive.
         for pr in found:
-            if pr["state"] == "OPEN":
-                rows.append(
-                    {"issue": number, "branch": branch, "pull_request": pr["url"]}
-                )
+            if pr["state"] != "OPEN":
+                continue
+            if pr["isDraft"] is None:
+                # gh gave no draft flag, so the tick cannot tell whether to wait.
+                print(f"repair: issue {number}: draft state unread", file=sys.stderr)
+                if unread is not None:
+                    unread.append(number)
+                break
+            rows.append(
+                {
+                    "issue": number,
+                    "branch": branch,
+                    "pull_request": pr["url"],
+                    "draft": pr["isDraft"],
+                }
+            )
     return rows
 
 
@@ -227,11 +241,22 @@ def run(args: argparse.Namespace, now: float) -> tuple[int, dict[str, object]]:
         out["message"] = repair_round.escalation_text(
             args.pull_request, args.attempts, failing, conflict=conflict
         )
-    out.update(
-        pending_limit.step(
-            args.run_dir / f"pending-{key}.json", args.pull_request, head, rows, now
-        )
+    pending_path = args.run_dir / f"pending-{key}.json"
+    out.update(pending_limit.step(pending_path, args.pull_request, head, rows, now))
+    # A draft whose pending check passed the limit has raised its Needs You notice,
+    # so it counts as escalated. One stuck check must not stall the driver.
+    waiting = repair_round.waiting_reason(
+        rows,
+        draft=args.draft == "yes",
+        mergeable=mergeable,
+        escalated=(
+            action == "escalate"
+            or bool(record.get("escalated"))
+            or pending_limit.noticed(pending_path, head)
+        ),
     )
+    if waiting:
+        out["waiting"] = waiting
     return 0, out
 
 

@@ -80,6 +80,31 @@ def for_head(record: dict[str, Any], head: str) -> dict[str, Any]:
     return {"head": head, "attempts": []}
 
 
+def waiting_reason(
+    rows: list[dict[str, Any]],
+    *,
+    draft: bool,
+    mergeable: str,
+    escalated: bool,
+) -> str | None:
+    """Why an open driver pull request still needs the driver, or None.
+
+    An escalated pull request is Needs You and does not block. A failing check
+    or a conflict blocks while its repair budget lasts. A draft blocks until its
+    ready mark, whatever its checks say. A pull request ready for review does not.
+    """
+    if escalated:
+        return None
+    state = checks_state(rows, bucket_counts(rows))
+    if state == "FAILING":
+        return "with failing checks, repair budget left"
+    if mergeable == "CONFLICTING":
+        return "conflicting with base, repair budget left"
+    if draft:
+        return f"in draft, checks {state.lower()}"
+    return None
+
+
 def load_record(path: Path) -> dict[str, Any]:
     """The attempt record, or an empty one when none was written yet.
 

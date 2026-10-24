@@ -14,7 +14,11 @@ from argus.gitsync import git as gitsync_git
 
 RED: list[dict[str, Any]] = [{"name": "lint", "bucket": "fail", "link": "https://ci/1"}]
 PR = "https://github.com/o/r/pull/7"
-SAME: dict[str, Any] = {"headRefName": "issue/7-fix-ci", "isCrossRepository": False}
+SAME: dict[str, Any] = {
+    "headRefName": "issue/7-fix-ci",
+    "isCrossRepository": False,
+    "isDraft": False,
+}
 HEAD_A = "a" * 40
 HEAD_B = "b" * 40
 
@@ -58,6 +62,7 @@ def test_red_repairs_then_waits_then_escalates_once(
     assert _run(monkeypatch, capsys, tmp_path, RED, 1500.0)[1] == {
         "action": "wait",
         "due": 1600.0,
+        "waiting": "with failing checks, repair budget left",
     }
     assert _run(monkeypatch, capsys, tmp_path, RED, 1600.0)[1]["action"] == "repair"
     _rc, out = _run(monkeypatch, capsys, tmp_path, RED, 9999.0)
@@ -171,6 +176,7 @@ def test_issue_pull_requests_reads_only_recorded_branches(
             "issue": 7,
             "branch": "issue/7-fix-ci",
             "pull_request": "https://g/o/r/pull/70",
+            "draft": False,
         }
     ]
     err = capsys.readouterr().err
