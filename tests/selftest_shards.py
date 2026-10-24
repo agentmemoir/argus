@@ -6,6 +6,9 @@ Some driver cases need the state the cases before them leave, so scripts/driver_
 runs each ordered group in one process, in declared order. A shard must keep each group
 whole, or a case would run without the state it needs. This module takes the units from
 that script, so the grouping has one source of truth.
+
+The ordered group that runs as one shard is tracked in #270, until its cases are
+independent and the group can be split.
 """
 
 from __future__ import annotations
