@@ -1,0 +1,1 @@
+Each driver self-test case now builds the state it needs, so the cases that ran as one ordered group run as separate jobs and shards. Their checks are unchanged. ([#270](https://github.com/agentmemoir/argus/issues/270))

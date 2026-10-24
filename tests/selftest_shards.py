@@ -6,9 +6,6 @@ Some driver cases need the state the cases before them leave, so scripts/driver_
 runs each ordered group in one process, in declared order. A shard must keep each group
 whole, or a case would run without the state it needs. This module takes the units from
 that script, so the grouping has one source of truth.
-
-The ordered group that runs as one shard is tracked in #270, until its cases are
-independent and the group can be split.
 """
 
 from __future__ import annotations
@@ -23,14 +20,19 @@ DRIVER_CASES = ROOT / "scripts" / "driver_cases.py"
 _Jobs = Callable[[list[str]], list[tuple[str, ...]]]
 
 
-def driver_units(names: list[str]) -> list[list[str]]:
+def driver_units(
+    names: list[str], groups: list[tuple[str, ...]] | None = None
+) -> list[list[str]]:
     """The units a driver run takes, as scripts/driver_cases.py forms them: one per case
-    outside an ordered group, and one per ordered group in declared order."""
+    outside an ordered group, and one per ordered group in declared order. ``groups``
+    replaces the script's own groups, so a test can check the grouping with a group."""
     spec = importlib.util.spec_from_file_location("driver_cases", DRIVER_CASES)
     if spec is None or spec.loader is None:
         raise ImportError(f"cannot load {DRIVER_CASES}")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
+    if groups is not None:
+        module.ORDERED_GROUPS = groups
     jobs = cast(_Jobs, module.jobs)
     return [list(unit) for unit in jobs(names)]
 
