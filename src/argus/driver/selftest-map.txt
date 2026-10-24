@@ -35,6 +35,7 @@
 @unplaced src/argus/config/cli.py
 @unplaced src/argus/config/render.py
 @unplaced src/argus/estimate.py
+@unplaced src/argus/issues/leftover.py
 @unplaced src/argus/issues/order.py
 @unplaced src/argus/issues/report.py
 @unplaced src/argus/issues/selftest.py
