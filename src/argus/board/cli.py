@@ -128,6 +128,12 @@ def main(argv: list[str] | None = None) -> int:
         command = sub.add_parser(name, help=help_text)
         _add_store_args(command)
         _add_reservation_args(command)
+        if name == "assert-owner":
+            command.add_argument(
+                "--no-wait",
+                action="store_true",
+                help="refuse at once if a fetch holds the board lock",
+            )
         if name == "set-status":
             command.add_argument("--status", required=True, choices=sorted(STATUSES))
             command.add_argument(
@@ -235,7 +241,7 @@ def main(argv: list[str] | None = None) -> int:
             if args.command == "renew":
                 result = store.renew(reservation)
             elif args.command == "assert-owner":
-                result = store.assert_owner(reservation)
+                result = store.assert_owner(reservation, wait=not args.no_wait)
             else:
                 result = store.set_status(
                     reservation,

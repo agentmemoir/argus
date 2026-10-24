@@ -28,10 +28,14 @@ def _fetch_lock_file(private: str | Path) -> Path:
 
 
 @contextmanager
-def fetch_serialized(private: str | Path) -> Generator[None]:
-    """Hold the checkout's fetch lock, waiting at most one fetch timeout for it."""
+def fetch_serialized(private: str | Path, *, wait: bool = True) -> Generator[None]:
+    """Hold the checkout's fetch lock, waiting at most one fetch timeout for it.
+
+    With wait=False the lock is tried once. A caller that must not queue behind a
+    running fetch, such as a stop, then fails closed at once.
+    """
     lock_path = _fetch_lock_file(private)
-    deadline = time.monotonic() + FETCH_TIMEOUT_S
+    deadline = time.monotonic() + (FETCH_TIMEOUT_S if wait else 0.0)
     with lock_path.open("a+", encoding="utf-8") as handle:
         while True:
             try:
