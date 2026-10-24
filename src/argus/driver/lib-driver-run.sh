@@ -560,10 +560,30 @@ tmux_busy() {
 # step at most.
 check_stall() {
   [ -f "$STALL" ] && return 0
-  local n phase_dir newest now age phase_file
+  local n phase_dir newest now age phase_file issue_file
   n="$(cat "$CURRENT" 2>/dev/null || true)"
   [ -n "$n" ] || return 0
-  phase_dir="$(phase_run_dir "$n")"
+  if [ "${work_kind:-phase}" = issue ]; then
+    # An issue run's input is its frozen task file in issues.task-dir.
+    issue_file="$("$PYTHON" - "$ARGUS" "$REPO" "$n" "${ARGUS_CONFIG_ARGS[@]}" <<'PY'
+import sys
+from pathlib import Path
+sys.path.insert(0, sys.argv[1])
+import _bootstrap
+from argus import conventions
+conventions.configure_from_cli(sys.argv[4:])
+from argus.conventions import resolve_issue_file
+print(resolve_issue_file(sys.argv[2], int(sys.argv[3])) or "")
+PY
+    )"
+    if [ -z "$issue_file" ]; then
+      log "issue $n has no task file; the pipeline input ${PHASE_FILE_INPUT:-phase_file} is missing, so the stall check is skipped"
+      return 0
+    fi
+    phase_dir="$(phase_run_dir "$n" "$issue_file")"
+  else
+    phase_dir="$(phase_run_dir "$n")"
+  fi
   newest="$(phase_activity_mtime "$phase_dir")"
   [ "$newest" -gt 0 ] || return 0
   now="$(date +%s)"; age=$((now - newest))

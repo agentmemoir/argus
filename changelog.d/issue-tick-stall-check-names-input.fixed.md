@@ -1,0 +1,1 @@
+An issue tick no longer raises a `ValueError` traceback for a missing `issue_file` input. Its stall check now finds the issue task file in the issue task folder, and when no task file exists it logs one line that names the input and skips the check. ([#255](https://github.com/agentmemoir/argus/issues/255))
