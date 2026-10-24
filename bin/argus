@@ -9,4 +9,6 @@ from pathlib import Path
 
 args = sys.argv[1:]
 driver = Path(__file__).resolve().parents[1] / "src/argus/driver/phase-driver.sh"
+# The readiness report names this entry point in the crontab line it suggests.
+os.environ.setdefault("ARGUS_ENTRY", str(Path(__file__).resolve()))
 os.execvp("bash", ["bash", str(driver), *args])

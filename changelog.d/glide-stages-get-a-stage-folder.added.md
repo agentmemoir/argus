@@ -1,0 +1,1 @@
+Argus runs each Glide stage with TMPDIR and BUN_TMPDIR set to a stage folder under the run state, so a host whose default temporary folder is mounted noexec does not need them set by hand. `--check` creates that folder and runs a file in it, and it names the cause and the action when the folder refuses to run files. ([#216](https://github.com/agentmemoir/argus/issues/216))

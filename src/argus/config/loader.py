@@ -211,6 +211,19 @@ def _build(
             sources[key] = source
         elif required:
             raise ConfigError(f"missing required key '{field.key}'")
+    # A board keeps its run folder inside its own checkout. Unset, the folder is
+    # `runs` in that checkout; set anywhere else, the config is refused by name.
+    if board is not None:
+        board_repo = cast("Path", values["board.repo"])
+        if "driver.runs" not in values:
+            values["driver.runs"] = board_repo / "runs"
+            sources["driver.runs"] = "default"
+        runs = cast("Path", values["driver.runs"])
+        if runs == board_repo or not runs.is_relative_to(board_repo):
+            raise ConfigError(
+                "invalid value for key 'driver.runs': the folder must be inside "
+                f"board.repo ({board_repo}), or unset to use its runs folder"
+            )
     # The repair pipeline sits beside the work pipeline unless the file names it.
     if "repair.pipeline" not in values:
         values["repair.pipeline"] = Path(str(values["pipeline"])).parent / "repair.yaml"
@@ -255,6 +268,8 @@ def _is_required(
         return issues is not None and provider == "issues"
     if field.required == "runstate":
         return runstate is not None
+    if field.required == "runs":
+        return board is None
     return False
 
 

@@ -285,16 +285,17 @@ argus_init() {
   if [ "$SELF_TEST_MODE" = 0 ]; then
     WORK_SOURCE_FLAGS=(--source "$WORK_SOURCE")
 
-    # The run-state folder must exist, and is asked for rather than created. A
-    # tick that makes the folder it was told to use is not a tick that noticed the
-    # folder was wrong: `mkdir -p` on a mistyped path succeeds, and the driver then
-    # runs out of a directory it invented while the real one sits unread.
+    # The run-state folder and the driver's state folder inside it are folders Argus
+    # owns, so a missing one is made, and the line says so. The folder under them
+    # is not Argus's to make, and the readiness check reports it when it is absent.
+    "$PYTHON" "$ARGUS/owned_folder.py" "run-state folder" "$WF" || true
     [ -d "$WF" ] || {
       printf 'argus: run-state folder %s is missing or unreadable\n' "$WF" >&2
       exit 3
     }
     DRIVER_RUN_DIR="$WF/$DRIVER_STATE"
     RUN_DIR="$DRIVER_RUN_DIR"
+    "$PYTHON" "$ARGUS/owned_folder.py" "driver state folder" "$RUN_DIR" || true
     LOCK="$RUN_DIR/driver.lock"
     HALT="$RUN_DIR/halted"
     # The halt's own record, written beside the marker at the run-end halt and

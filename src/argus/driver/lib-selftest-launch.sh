@@ -46,8 +46,13 @@ selftest_case_launch() {
     && echo "ok: busy run skipped" || { echo "FAIL: busy run not skipped"; fail=1; }
   sleep 1
   start_count="$(grep -c 'Phase .* started\.' "$LOG" || true)"
+  # A launch that never starts usually left a reason in the driver log: the claim
+  # check that refused it. Show that reason with the failure, so one failing run
+  # names its cause without a rerun.
   [ "$start_count" = 1 ] \
-    && echo "ok: one start notification logged" || { echo "FAIL: expected one start notification, got $start_count"; fail=1; }
+    && echo "ok: one start notification logged" \
+    || { echo "FAIL: expected one start notification, got $start_count"; fail=1; \
+         grep -h 'claim check refused' "$LOG" 2>/dev/null | sed 's/^/  driver log: /' || true; }
   grep -q '\[clio\]' "$LOG" \
     && { echo "FAIL: old notification prefix remains"; fail=1; } \
     || echo "ok: notification prefix removed"

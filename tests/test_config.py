@@ -229,7 +229,7 @@ def test_sample_loads_with_every_schema_key():
             if (
                 field.key.startswith("issues.")
                 or field.required in ("issues", "runstate")
-                or field.key == "machine.settings-file"
+                or field.key in ("machine.settings-file", "commands.hooks-install")
             ):
                 continue
             key = cfgmod._REPORT_KEY.get(field.key, field.key)

@@ -59,9 +59,9 @@ selftest_case_reasons() {
   # because that is all the --dry-run entry point does.
   #
   # The answer comes from the selector itself rather than from the stub, because
-  # the stub is read on the tick path only. A private coordination checkout that
-  # is not there is the selector's own way of saying the board cannot be reached,
-  # and the store refuses on the folder before it fetches anything, so no board
+  # the stub is read on the tick path only. A private coordination folder that is
+  # not a git checkout is the selector's own way of saying the board cannot be
+  # reached, and the store refuses on it before it fetches anything, so no board
   # is contacted.
   #
   # The selector's flag array is saved and restored by a copy that expands it in
@@ -78,7 +78,7 @@ selftest_case_reasons() {
   # twice.
   old_work_source_flags=("${WORK_SOURCE_FLAGS[@]+"${WORK_SOURCE_FLAGS[@]}"}")
   WORK_SOURCE_FLAGS=(--source phases)
-  load_board_override "$tmp/absent-board-checkout"
+  load_board_override "$tmp/unavailable-board-checkout"
   # The tick's own answer is planted first, so the case can tell a dry run that
   # left it alone from one that wrote over it. It is the file an outage
   # notification points the operator at, and a dry run answers a different

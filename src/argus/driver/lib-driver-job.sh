@@ -71,7 +71,20 @@ glide_run_once() {
       log "${work_kind:-phase} $number owner-edited $map_file detected before the --fresh restart; glide keeps and fills only the missing fields"
     fi
   fi
-  "$CMD_GLIDE" run --pipeline "$PIPELINE" \
+  # The pre_run hook refuses a run while this checkout's git hooks are missing or
+  # stale, so they are made ready before glide starts. A refusal that remains stops
+  # this launch, as a refused pre_run hook does, and the line says why.
+  local hooks_out hooks_rc=0
+  hooks_out="$("$PYTHON" "$ARGUS/hooks_setup.py" "$RUN_DIR" --repo "$REPO" "${ARGUS_CONFIG_ARGS[@]}" 2>&1)" || hooks_rc=$?
+  [ -z "$hooks_out" ] || log "$hooks_out"
+  [ "$hooks_rc" -eq 0 ] || return 1
+  # Glide and its stages take their temporary folder from the run state, not from
+  # the caller's TMPDIR, so a host whose default folder is mounted noexec still
+  # starts a stage. The readiness check probes the folder.
+  local stage_tmp="$RUN_DIR/stage-tmp"
+  mkdir -p "$stage_tmp"
+  log "stage temp dir: $stage_tmp (TMPDIR and BUN_TMPDIR for glide)"
+  TMPDIR="$stage_tmp" BUN_TMPDIR="$stage_tmp" "$CMD_GLIDE" run --pipeline "$PIPELINE" \
     "${fresh_args[@]+"${fresh_args[@]}"}" "${glide_inputs[@]}"
 }
 

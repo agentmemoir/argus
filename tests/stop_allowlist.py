@@ -80,6 +80,7 @@ STOP_ALLOWLIST = r"""
     driver/lib-driver-issues.sh	return_nonzero	fn:issue_preflight|return 1#2
     driver/lib-driver-issues.sh	return_nonzero	fn:issue_preflight|return 1#3
     driver/lib-driver-issues.sh	return_nonzero	fn:issue_preflight|return 1#4
+    driver/lib-driver-job.sh	return_nonzero	fn:glide_run_once|[ "$hooks_rc" -eq 0 ] || return 1#1
     driver/lib-driver-launch.sh	drive_rc_nonzero	fn:_drive_launch||| { notify "${work_kind:-phase} $number failed to create tmux session '$SESSION'"; { _DRIVE_RC=1; return 0; }; }#1
     driver/lib-driver-launch.sh	drive_rc_nonzero	fn:_drive_launch||| { notify "${work_kind:-phase} $number failed to launch in tmux"; { _DRIVE_RC=1; return 0; }; }#1
     driver/lib-driver-launchfault.sh	halt_marker	fn:launchfault_halt|"$number" "$attempts" "$rc" "${state:-unknown}" "$(ts)" >"$HALT"#1

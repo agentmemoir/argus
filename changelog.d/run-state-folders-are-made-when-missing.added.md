@@ -1,0 +1,1 @@
+The run-state folder and the driver's state folder inside it are made when they are missing, and the driver says so in one line for each. A folder that Argus does not own, such as a board or phases checkout, is still not made. ([#216](https://github.com/agentmemoir/argus/issues/216))

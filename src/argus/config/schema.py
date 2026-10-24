@@ -20,7 +20,9 @@ class Field(NamedTuple):
 #   "phases"   - required only when the work source is the phase source;
 #   "notify"   - required only when the `notify` object is present;
 #   "issues"   - required only when the `issues` object is present;
-#   "runstate" - required only when the `runstate` object is present.
+#   "runstate" - required only when the `runstate` object is present;
+#   "runs"     - required only when the `board` object is absent: with a board,
+#                it defaults to `runs` inside `board.repo`.
 SCHEMA = (
     Field("repo-root", "path", "required"),
     Field("pipeline", "path", "required"),
@@ -36,7 +38,7 @@ SCHEMA = (
     Field("driver.provider", "str", "required"),
     Field("driver.include", "str-list", "required"),
     Field("driver.exclude", "str-list", "optional"),
-    Field("driver.runs", "path", "required"),
+    Field("driver.runs", "path", "runs"),
     Field("driver.state", "str", "required"),
     Field("driver.stale-after", "int", "required"),
     Field("driver.outage-stale", "int", "required"),
@@ -52,6 +54,9 @@ SCHEMA = (
     Field("commands.python", "str", "required"),
     Field("commands.hermes", "str", "required"),
     Field("commands.gh", "str", "required"),
+    # The argument list that installs this project's git hooks. No default: Argus
+    # cannot guess it, and it runs only when the pre_run hook refuses the checkout.
+    Field("commands.hooks-install", "str-list", "optional"),
     Field("tmux.session", "str", "required"),
     Field("tmux.width", "int", "required"),
     Field("tmux.height", "int", "required"),
@@ -138,6 +143,7 @@ SHELL_VARS = {
     "commands.python": "CMD_PYTHON",
     "commands.hermes": "CMD_HERMES",
     "commands.gh": "CMD_GH",
+    "commands.hooks-install": "CMD_HOOKS_INSTALL",
     "tmux.session": "SESSION_NAME",
     "tmux.width": "TMUX_WIDTH",
     "tmux.height": "TMUX_HEIGHT",

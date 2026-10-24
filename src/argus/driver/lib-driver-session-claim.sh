@@ -152,6 +152,9 @@ session_claim_ensure() {   # <number> <rel>
         --machine-id "$PHASE_MACHINE_ID" \
         --reservation-id "$CLIO_RESERVATION_ID" \
         --generation "$CLIO_RESERVATION_GENERATION" 2>/dev/null)"; then
+      # The reason the board gave goes to the driver log, so a refused launch can be
+      # read after the fact without the tmux pane. The answer is one line of JSON.
+      log "claim check refused ${work_kind:-phase} $number: $(printf '%s' "${out:-no answer from the board read}" | tr '\n' ' ')"
       printf 'argus: %s\n' "$(session_claim_refusal "$number" "$out")" >&2
       return 1
     fi
