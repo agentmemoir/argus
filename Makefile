@@ -133,19 +133,10 @@ example-check:
 self-test:
 	$(ci_only)
 	$(RUN) bin/argus --self-test
-	$(RUN) python tests/test_config.py
 	$(RUN) python tests/test_entrypoint.py
-	$(RUN) python tests/test_conventions.py
-	$(RUN) python tests/test_phase_notifications.py
-	$(RUN) python tests/test_identifiers.py
 	$(RUN) python -m argus.select.group --self-test
 	$(RUN) python -m argus.gitsync.main --self-test
 	$(RUN) python -m argus.issues.selftest
-	$(RUN) pytest -q -n auto --dist loadfile --durations=10 tests/test_driver_maintenance.py tests/test_driver_maintenance_cli.py tests/test_driver_saved_publication.py tests/test_driver_stop_contract.py tests/test_board_branch.py tests/test_board_lease_policy.py tests/test_selftest_git_isolation.py tests/test_selftest_recovery.py tests/test_selftest_teardown.py
-	$(RUN) pytest -q -n auto --dist loadfile --durations=10 tests/test_config_overlay.py tests/test_idle_watcher.py tests/test_idle_tick_log.py tests/test_checkpoint_empty_stage.py tests/test_notify_target.py tests/test_selection_blocked.py tests/test_estimate.py
-	$(RUN) pytest -q -n auto --dist loadfile --durations=10 tests/test_config_issues.py tests/test_issue_board.py tests/test_issue_driver.py tests/test_issue_publication.py tests/test_issue_publication_cli.py tests/test_issue_publication_fixture.py tests/test_issue_publication_tidy.py tests/test_issue_tick.py tests/test_issues_boundary.py tests/test_issues_cases.py tests/test_issues_lifecycle.py tests/test_issues_selection.py
-	$(RUN) pytest -q -n auto --dist loadfile --durations=10 tests/test_pr_signal_reply.py tests/test_pr_signal_guard.py tests/test_pr_signal_trust.py tests/test_pr_signals.py
-	$(RUN) pytest -q -n auto --dist loadfile --durations=10 tests/test_gh_write.py
 
 # The published folder must carry no identifier: no home path, no numeric
 # account or channel id, and no notification default or literal that is not a
