@@ -3,6 +3,7 @@
 """Which open driver pull requests still need the driver, from the reads a tick makes."""
 
 import json
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -17,6 +18,15 @@ PR = "https://github.com/o/r/pull/7"
 HEAD = "a" * 40
 
 
+def _const(value: object) -> Callable[..., object]:
+    """A stand-in that answers every call with one value."""
+
+    def answer(*_args: object, **_kwargs: object) -> object:
+        return value
+
+    return answer
+
+
 def _run(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
@@ -29,8 +39,8 @@ def _run(
         return rows, 1, ""
 
     monkeypatch.setattr(repair_cli, "gh_pull_request_checks", checks)
-    monkeypatch.setattr(repair_cli, "gh_pull_request_mergeable", lambda *_a: mergeable)
-    monkeypatch.setattr(repair_cli, "gh_pull_request_head", lambda *_a: HEAD)
+    monkeypatch.setattr(repair_cli, "gh_pull_request_mergeable", _const(mergeable))
+    monkeypatch.setattr(repair_cli, "gh_pull_request_head", _const(HEAD))
     argv = ["--pull-request", PR, "--run-dir", str(tmp_path)]
     argv += ["--attempts", "2", "--wait", "600", "--head", HEAD]
     argv += ["--draft", "yes" if draft else "no"]
@@ -117,15 +127,11 @@ def test_an_issue_listing_without_a_draft_flag_is_unread(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     (tmp_path / "issue-7").mkdir()
-    monkeypatch.setattr(repair_cli.conventions, "runs_dir", lambda _root: tmp_path)
-    monkeypatch.setattr(
-        repair_cli, "issue_scope", lambda *_a: (None, (None, "issue/7-x"))
-    )
-    monkeypatch.setattr(repair_cli, "issue_branch", lambda *_a: "issue/7-x")
+    monkeypatch.setattr(repair_cli.conventions, "runs_dir", _const(tmp_path))
+    monkeypatch.setattr(repair_cli, "issue_scope", _const((None, (None, "issue/7-x"))))
+    monkeypatch.setattr(repair_cli, "issue_branch", _const("issue/7-x"))
     listed = [{"number": 7, "url": PR, "state": "OPEN", "isDraft": None}]
-    monkeypatch.setattr(
-        repair_cli, "gh_pull_requests_for_branch", lambda *_a: (listed, "")
-    )
+    monkeypatch.setattr(repair_cli, "gh_pull_requests_for_branch", _const((listed, "")))
     unread: list[int] = []
     assert repair_cli.issue_pull_requests(tmp_path, unread) == []
     assert unread == [7]
@@ -135,15 +141,11 @@ def test_an_issue_listing_carries_the_draft_flag(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     (tmp_path / "issue-7").mkdir()
-    monkeypatch.setattr(repair_cli.conventions, "runs_dir", lambda _root: tmp_path)
-    monkeypatch.setattr(
-        repair_cli, "issue_scope", lambda *_a: (None, (None, "issue/7-x"))
-    )
-    monkeypatch.setattr(repair_cli, "issue_branch", lambda *_a: "issue/7-x")
+    monkeypatch.setattr(repair_cli.conventions, "runs_dir", _const(tmp_path))
+    monkeypatch.setattr(repair_cli, "issue_scope", _const((None, (None, "issue/7-x"))))
+    monkeypatch.setattr(repair_cli, "issue_branch", _const("issue/7-x"))
     listed = [{"number": 7, "url": PR, "state": "OPEN", "isDraft": True}]
-    monkeypatch.setattr(
-        repair_cli, "gh_pull_requests_for_branch", lambda *_a: (listed, "")
-    )
+    monkeypatch.setattr(repair_cli, "gh_pull_requests_for_branch", _const((listed, "")))
     rows = repair_cli.issue_pull_requests(tmp_path)
     assert rows == [
         {"issue": 7, "branch": "issue/7-x", "pull_request": PR, "draft": True}
