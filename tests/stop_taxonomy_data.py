@@ -6,6 +6,8 @@ Regenerate by importing the test module's scanner and writing its rows.
 """
 
 ALLOWLIST_ROWS = r"""
+    board/fetch_lock.py	raise_coordination	raise CoordinationUnavailable("the board checkout has no git directory to lock")
+    board/fetch_lock.py	raise_coordination	raise CoordinationUnavailable(
     board/branch.py	raise_coordination	raise CoordinationUnavailable("reservation board repository is not configured")
     board/branch.py	raise_coordination	raise CoordinationUnavailable(
     board/branch.py	raise_coordination	raise CoordinationUnavailable(
