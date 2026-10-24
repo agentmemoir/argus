@@ -16,6 +16,29 @@
 @shared src/argus/driver/lib-selftest-recover.sh
 @shared src/argus/driver/selftest-support.sh
 @shared src/argus/driver/phase-driver.sh
+@shared src/argus/driver/lib-driver-log.sh
+@shared src/argus/driver/lib-stat.sh
+@shared src/argus/driver/phase-tmux.sh
+@shared src/argus/driver/phase-tmux-idle.sh
+
+# Files no case names, and no reach finds. A change to one of these runs the full
+# driver set until it is placed. tests/test_selftest_tiers.py fails when this list
+# and the placed files disagree.
+@unplaced src/argus/driver/lib-driver-dryrun.sh
+@unplaced src/argus/driver/lib-driver-estimate.sh
+@unplaced src/argus/driver/lib-driver-issues.sh
+@unplaced src/argus/driver/lib-driver-launchfault.sh
+@unplaced src/argus/driver/lib-driver-maintenance.sh
+@unplaced src/argus/driver/lib-driver-select-real.sh
+@unplaced src/argus/driver/session_state.py
+@unplaced src/argus/cli.py
+@unplaced src/argus/config/cli.py
+@unplaced src/argus/config/render.py
+@unplaced src/argus/estimate.py
+@unplaced src/argus/issues/order.py
+@unplaced src/argus/issues/report.py
+@unplaced src/argus/issues/selftest.py
+@unplaced src/argus/issues/source.py
 
 launch src/argus/driver/lib-selftest-launch.sh
 launch src/argus/driver/lib-driver-launch.sh
