@@ -39,7 +39,7 @@ PY
 
 phase_state() {
   local file
-  file="$(run_dir_of "$1" "${2:-}")"; file="${file:+$file/run.json}"
+  file="$(phase_run_dir "$1" "${2:-}")/run.json"
   "$PYTHON" -c 'import json,sys;print(json.load(open(sys.argv[1])).get("state",""))' \
     "$file" 2>/dev/null || true
 }
@@ -376,7 +376,7 @@ except OSError:
     # A moved state is evidence to repair from, not a reason to write the halt
     # marker from the child.
     local resume_run_dir resume_state resume_reason
-    resume_run_dir="$(run_dir_of "$number" "$rel")"
+    resume_run_dir="$(phase_run_dir "$number" "$rel")"
     resume_state="$(phase_state "$number" "$rel")"
     resume_reason="$(resume_gate_reason "$resume_state" "$resume_run_dir")" || \
       log "resume gate: phase $number: $resume_reason; continuing for the repair"
@@ -423,12 +423,12 @@ except OSError:
       # glide_run_once recomputes that per attempt. A `blocked` run is resumable
       # and is left alone, and a missing run.json means there is nothing to archive.
       local prior_state
-      prior_state="$(terminal_state_of_file "$(run_dir_of "$number" "$rel")/run.json")"
+      prior_state="$(terminal_state_of_file "$(phase_run_dir "$number" "$rel")/run.json")"
       # A run that continues an earlier one measures only part of the phase, so
       # the estimate factor skips it (estimate_run=1 marks it resumed).
       estimate_run=0
       if [ "${CLIO_RESUME:-}" = 1 ] \
-        || { [ -z "$prior_state" ] && [ -f "$(run_dir_of "$number" "$rel")/run.json" ]; }; then
+        || { [ -z "$prior_state" ] && [ -f "$(phase_run_dir "$number" "$rel")/run.json" ]; }; then
         estimate_run=1
       fi
       if [ "${CLIO_RESUME:-}" = 1 ]; then
@@ -447,7 +447,7 @@ except OSError:
   state="$(phase_state "$number" "$rel")"
   local launch_fault=0; launchfault_is "$rc" "$session_log" "$session_log_offset" && launch_fault=1 || launchfault_clear
   local run_dir result_file result_state
-  run_dir="$(run_dir_of "$number" "$rel")"
+  run_dir="$(phase_run_dir "$number" "$rel")"
   result_file="$run_dir/result.json"
   # `repair_pending` in `result.json` is a no-launch, resumable tick that must
   # not archive or finalize the run. The rc=2 halt keeps its own path.

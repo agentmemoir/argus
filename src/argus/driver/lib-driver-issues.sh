@@ -17,13 +17,13 @@ bind_selection_kind() {
   fi
 }
 
-# The run directory of the work this tick runs. An issue run is named by its
-# frozen task file in issues.task-dir, so its lookup passes that file, never a
-# phase file. With no task file it logs one line naming issue_file and prints
-# nothing: the caller must not guess a folder.
+# The run directory of the work this tick runs. A given file is used as it is.
+# An issue run given no file looks up its frozen task file in issues.task-dir.
+# With none there, it logs one line naming issue_file and prints nothing: the
+# caller must not guess a folder.
 run_dir_of() {   # <number> <rel>
   local number="$1" rel="$2" file
-  if [ "${work_kind:-phase}" = issue ]; then
+  if [ "${work_kind:-phase}" = issue ] && [ -z "$rel" ]; then
     file="$(issue_task_file_of "$number")"
     if [ -z "$file" ]; then
       log "issue $number has no task file; the pipeline input ${PHASE_FILE_INPUT:-issue_file} is missing; no run directory"

@@ -137,6 +137,7 @@ STOP_ALLOWLIST = r"""
     driver/lib-driver-select-flow.sh	drive_rc_zero_refusal	fn:_drive_choose_selection|{ _DRIVE_RC=0; return 0; }#3
     driver/lib-driver-select-flow.sh	drive_rc_nonzero	fn:_drive_choose_selection|{ _DRIVE_RC=1; return 0; }#6
     driver/lib-driver-select-flow.sh	drive_rc_zero_refusal	fn:_drive_choose_selection|{ _DRIVE_RC=0; return 0; }#4
+    driver/lib-driver-select-flow.sh	drive_rc_zero_refusal	fn:_drive_choose_selection|{ _DRIVE_RC=0; return 0; }#5
     driver/lib-driver-select-flow.sh	drive_rc_nonzero	fn:_drive_choose_selection|{ _DRIVE_RC=1; return 0; }#7
     driver/lib-driver-select-real.sh	drive_rc_nonzero	fn:_drive_real_selection|{ _DRIVE_RC=1; return 0; }#1
     driver/lib-driver-select.sh	return_nonzero	fn:tidy_published_checkout|return 1#1
