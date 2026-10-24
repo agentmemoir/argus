@@ -186,3 +186,17 @@ wheel:
 # console script passes the example readiness report.
 install-check: wheel
 	@$(RUN) python scripts/check_install.py "$$(ls -1t dist/*.whl | head -1)"
+
+# The quick tier: the driver self-test cases and guard faults that a change affects,
+# with the reason each one ran. BASE is the ref the change starts from. Pull requests
+# run these. The full targets above run everything, on a schedule and on main.
+# The guard run patches driver source in place, as the full run does, so it takes
+# the same CI-only guard and the same ARGUS_ALLOW_LOCAL override.
+BASE ?= origin/main
+.PHONY: self-test-quick guard-faults-quick
+self-test-quick:
+	$(RUN) python tests/selftest_tiers.py driver --base "$(BASE)"
+
+guard-faults-quick:
+	$(ci_only)
+	$(RUN) python tests/selftest_tiers.py guard --base "$(BASE)"

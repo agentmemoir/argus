@@ -1,0 +1,102 @@
+# Driver self-test map, read by tests/selftest_tiers.py for the quick tier.
+#
+# A line `<case> <path>` says that case exercises that file. A changed code file
+# that no line names runs the full driver set, so a missing line costs time, not
+# coverage. tests/test_selftest_tiers.py fails when a case has no line here, when
+# a line names a case that does not exist, or when a named path does not exist.
+#
+# `@smoke <case>` runs with every quick run. `@shared <path>` means a change to
+# that file runs the full driver set, because every case uses it.
+
+@smoke launch
+@shared bin/argus
+@shared src/argus/driver/lib-selftest.sh
+@shared src/argus/driver/lib-selftest-timing.sh
+@shared src/argus/driver/lib-selftest-fixture.sh
+@shared src/argus/driver/lib-selftest-recover.sh
+@shared src/argus/driver/selftest-support.sh
+@shared src/argus/driver/phase-driver.sh
+
+launch src/argus/driver/lib-selftest-launch.sh
+launch src/argus/driver/lib-driver-launch.sh
+launch src/argus/driver/lib-driver-check.sh
+launch src/argus/driver/lib-driver-config.sh
+launch src/argus/driver/lib-driver-select.sh
+launch src/argus/driver/lib-driver-notify.sh
+locks_stall src/argus/driver/lib-selftest-launch.sh
+locks_stall src/argus/driver/lib-driver-checkout.sh
+locks_stall src/argus/driver/lib-driver-fence.sh
+git_ceiling src/argus/driver/lib-selftest-flow.sh
+git_ceiling src/argus/driver/lib-driver-checkout.sh
+lost_repo src/argus/driver/lib-selftest-flow.sh
+lost_repo src/argus/driver/lib-driver-checkout.sh
+flow src/argus/driver/lib-selftest-flow.sh
+flow src/argus/driver/lib-driver-select-flow.sh
+flow src/argus/driver/lib-driver-run.sh
+flow src/argus/driver/lib-driver-drive.sh
+flow src/argus/driver/lib-driver-session-claim.sh
+flow src/argus/notify/notifications.py
+release src/argus/driver/lib-selftest-flow.sh
+release src/argus/driver/lib-driver-run.sh
+release src/argus/driver/lib-driver-control.sh
+unavailable src/argus/driver/lib-selftest-unavailable.sh
+unavailable src/argus/driver/lib-driver-check.sh
+unavailable src/argus/driver/lib-driver-select.sh
+reasons src/argus/driver/lib-selftest-reasons.sh
+reasons src/argus/driver/lib-driver-select.sh
+reasons src/argus/driver/lib-driver-select-stub.sh
+reasons src/argus/driver/lib-driver-check.sh
+recovery_sources src/argus/driver/lib-selftest-recovery.sh
+recovery_sources src/argus/driver/lib-driver-config.sh
+recovery_sources src/argus/driver/lib-driver-select.sh
+recovery_sources src/argus/phases/select.py
+merge_orphan src/argus/driver/lib-selftest-merge.sh
+merge_orphan src/argus/driver/lib-driver-select.sh
+merge_orphan src/argus/select/next_phase.py
+stranding src/argus/driver/lib-selftest-stranding.sh
+stranding src/argus/driver/lib-driver-drive.sh
+stranding src/argus/driver/lib-driver-run.sh
+stranding src/argus/notify/notifications.py
+group_run src/argus/driver/lib-selftest-group.sh
+group_run src/argus/driver/lib-driver-group.sh
+group_run src/argus/driver/lib-driver-select-flow.sh
+group_run src/argus/driver/lib-driver-drive.sh
+group_run src/argus/select/group.py
+group_run src/argus/board/store_group.py
+group_run src/argus/board/reservations.py
+group_run src/argus/gitsync/mode_branch.py
+group_partial src/argus/driver/lib-selftest-group.sh
+group_partial src/argus/driver/lib-driver-group.sh
+group_partial src/argus/driver/lib-driver-select-flow.sh
+group_partial src/argus/driver/lib-driver-drive.sh
+group_partial src/argus/select/group.py
+group_partial src/argus/board/store_group.py
+group_partial src/argus/board/reservations.py
+group_partial src/argus/gitsync/mode_branch.py
+group_release src/argus/driver/lib-selftest-group.sh
+group_release src/argus/driver/lib-driver-group.sh
+group_release src/argus/driver/lib-driver-control.sh
+group_release src/argus/driver/lib-driver-run.sh
+group_release src/argus/board/reservations.py
+group_resume src/argus/driver/lib-selftest-resume.sh
+group_resume src/argus/driver/lib-driver-resume.sh
+group_resume src/argus/driver/lib-driver-group.sh
+group_resume src/argus/gitsync/main.py
+resume src/argus/driver/lib-selftest-resume.sh
+resume src/argus/driver/lib-selftest-resume-guards.sh
+resume src/argus/driver/lib-driver-resume.sh
+resume src/argus/driver/lib-driver-drive.sh
+resume src/argus/gitsync/main.py
+abandon src/argus/driver/lib-selftest-abandon.sh
+abandon src/argus/driver/lib-driver-abandon.sh
+clear_halt src/argus/driver/lib-selftest-clear-halt.sh
+clear_halt src/argus/driver/lib-driver-halt-record.sh
+job_failure src/argus/driver/lib-selftest-job.sh
+job_failure src/argus/driver/lib-driver-job.sh
+job_fresh_keeps_edit src/argus/driver/lib-selftest-job.sh
+job_fresh_keeps_edit src/argus/driver/lib-driver-job.sh
+job_stale_failed src/argus/driver/lib-selftest-job.sh
+job_stale_failed src/argus/driver/lib-driver-job.sh
+repair_round src/argus/driver/lib-selftest-repair.sh
+repair_round src/argus/driver/lib-driver-repair.sh
+repair_round src/argus/gitsync/repair_cli.py

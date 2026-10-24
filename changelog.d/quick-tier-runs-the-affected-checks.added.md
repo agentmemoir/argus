@@ -1,0 +1,1 @@
+Added a quick tier: `make self-test-quick` and `make guard-faults-quick` run only the driver self-test cases and guard faults that a change affects, and print the reason for each one, while `make self-test` and `make guard-faults` still run everything.
