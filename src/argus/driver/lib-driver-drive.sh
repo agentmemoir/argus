@@ -170,10 +170,16 @@ _drive() {
   local selection selection_rc=0 selection_state unknown_state
 
   # A cleared marker with a record beside it is a resume; `_drive_resume` runs it.
+  # An issue GitHub reports closed has nothing to resume: its record goes and the
+  # tick selects again. A state that cannot be checked refuses the tick.
   if [ ! -f "$HALT" ] && [ -f "$HALT_RECORD" ]; then
-    RESUME_FROM_TICK=1
-    _drive_resume
-    return $?
+    local leftover_rc=0
+    issue_leftover_release || leftover_rc=$?
+    case "$leftover_rc" in
+      0) ;;
+      2) return 1 ;;
+      *) RESUME_FROM_TICK=1; _drive_resume; return $? ;;
+    esac
   fi
 
   # Everything that can refuse a launch because of how this machine is

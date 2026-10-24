@@ -147,6 +147,10 @@ class IssuesSource(_Reports, WorkSource):
             self.details[number] = detail
         return self.details[number]
 
+    def _closed(self, row: dict[str, Any]) -> bool:
+        """Ask GitHub whether the issue is still open; the search row can be stale."""
+        return self.client.view(row["number"], row)["state"].lower() != "open"
+
     def _cleanup(self, machine: str, reserve: bool) -> dict[str, Any] | None:
         for key, record in list(self.records.items()):
             if record.get("machine_id") != machine or not claims.held(record):
@@ -199,6 +203,13 @@ class IssuesSource(_Reports, WorkSource):
                 continue
             if record is not None and claims.held(record):
                 if record.get("machine_id") == machine:
+                    if self._closed(row):
+                        # GitHub, not the search snapshot, says the issue is closed:
+                        # its leftover claim is released here and never resumed.
+                        if reserve:
+                            release_closed(self.store, number, record)
+                            self.records.pop(f"{number:06d}", None)
+                        continue
                     if run_failed(self.repo, number, task_path(self.directory, row)):
                         # The job failed and left its claim; skip it so the line
                         # continues to another issue while the claim waits to
@@ -332,3 +343,30 @@ class IssuesSource(_Reports, WorkSource):
                 )
         self._base("NO_PHASE")
         return 0
+
+
+def release_closed(store: Any, number: int, record: dict[str, Any] | None) -> None:
+    """Give back a leftover claim for a closed issue, and say so in one line."""
+    if record is not None:
+        store.release_group(claims.token(number, record))
+    print(f"issue {number} is closed; leftover run released", file=sys.stderr)
+
+
+def release_if_closed(repo: str | Path, number: int, machine: str | None) -> bool:
+    """Release this machine's leftover run when GitHub reports the issue closed.
+
+    Returns False while the issue is open. Raises when GitHub or the board
+    cannot answer, so the caller refuses rather than resume unchecked work.
+    """
+    client = IssueClient()
+    if client.view(number)["state"].lower() == "open":
+        return False
+    store = ReservationStore(Path(repo).resolve(), issues=True)
+    state, _ = store.read()
+    record = state["phases"].get(f"{number:06d}")
+    if record is not None and (
+        record.get("machine_id") != machine or not claims.held(record)
+    ):
+        record = None
+    release_closed(store, number, record)
+    return True
