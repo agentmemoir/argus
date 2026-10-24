@@ -138,6 +138,9 @@ def mode_issue_open_pr(
     )
 
 
+PHASE_ONLY_MODES = frozenset({"signals", "signal-reply", "peek-ci"})
+
+
 def issue_mode(args: Namespace) -> dict[str, Any] | None:
     try:
         return _issue_mode(args)
@@ -154,6 +157,12 @@ def issue_mode(args: Namespace) -> dict[str, Any] | None:
 
 
 def _issue_mode(args: Namespace) -> dict[str, Any] | None:
+    # These modes read phase pull requests and phase run folders. Without a
+    # phase run for an issue they have nothing to read, so they refuse by name.
+    if args.mode in PHASE_ONLY_MODES:
+        raise ConfigError(
+            f"--mode {args.mode} is phase-only; run it without --kind issue"
+        )
     if args.mode == "branch":
         if args.phase is None or not args.phases:
             raise ConfigError(

@@ -205,6 +205,24 @@ def resolve_phase_file(repo: str | Path, number: int) -> Path | None:
     return None
 
 
+def resolve_issue_file(repo: str | Path, number: int) -> Path | None:
+    """Find the frozen task file the issue source wrote for ``number``.
+
+    Issue tasks live in ``issues.task-dir``, never in the phases folder.
+    """
+    folder = setting("issues.task-dir", None)
+    if folder is None:
+        return None
+    base = Path(folder)
+    if not base.is_absolute():
+        base = Path(repo) / base
+    prefix = f"issue-{int(number):06d}"
+    for path in sorted(base.glob(f"{prefix}*.md")):
+        if path.stem == prefix or path.stem.startswith(prefix + "-"):
+            return path
+    return None
+
+
 def _pipeline(repo: str | Path) -> dict[str, Any] | None:
     configured = setting("pipeline", None)
     if configured is None:
