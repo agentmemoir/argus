@@ -132,7 +132,7 @@ example-check:
 
 self-test:
 	$(ci_only)
-	$(RUN) bin/argus --self-test
+	$(RUN) python scripts/driver_cases.py
 	$(RUN) python tests/test_entrypoint.py
 	$(RUN) python -m argus.select.group --self-test
 	$(RUN) python -m argus.gitsync.main --self-test
