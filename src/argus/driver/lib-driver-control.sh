@@ -27,7 +27,9 @@ stop() {
   # The board is the authority for the hold: a claim file alone proves
   # nothing, because an expired, released, or taken-over reservation still
   # reads live to the machine that held it once.
-  elif ! board_assert_owner "$CLAIM_NUMBER" "$CLAIM_ID" "$CLAIM_GEN"; then
+  # A stop must not queue behind a running board fetch. When the checkout's fetch
+  # lock is busy, the check refuses at once and the stop records no stopped claim.
+  elif ! board_assert_owner "$CLAIM_NUMBER" "$CLAIM_ID" "$CLAIM_GEN" nowait; then
     log "stop: the board does not confirm the fence for ${work_kind:-phase} $CLAIM_NUMBER; wrote the halt marker and recorded no stopped claim (see $RUN_DIR/assert-owner-$CLAIM_NUMBER.json)"
   else
     stopped_phase="$CLAIM_NUMBER"

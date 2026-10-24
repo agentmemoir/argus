@@ -204,8 +204,9 @@ with open(path, "w", encoding="utf-8") as handle:
 # Run the board assert-owner call under a bounded timeout, so a hung board
 # cannot hold the driver lock (fd 9) forever. Any non-zero status (including a
 # timeout kill) is a refusal: the caller must treat the fence as unproved.
-board_assert_owner_cmd() {   # <phase> <reservation_id> <generation>
-  local timeout_cmd=""
+board_assert_owner_cmd() {   # <phase> <reservation_id> <generation> [nowait]
+  local timeout_cmd="" wait_arg=""
+  if [ "${4:-}" = nowait ]; then wait_arg="--no-wait"; fi
   if command -v timeout >/dev/null 2>&1; then
     timeout_cmd="timeout"
   elif command -v gtimeout >/dev/null 2>&1; then
@@ -216,7 +217,7 @@ board_assert_owner_cmd() {   # <phase> <reservation_id> <generation>
       "${ARGUS_CONFIG_ARGS[@]}" "${BOARD_KIND_ARGS[@]+"${BOARD_KIND_ARGS[@]}"}" \
       --repo-root "$REPO" --machine-id "$PHASE_MACHINE_ID" \
       --phase "$1" --reservation-id "$2" \
-      --generation "$3" \
+      --generation "$3" ${wait_arg:+"$wait_arg"} \
       >"$RUN_DIR/assert-owner-$1.json" 2>&1
     return
   fi
@@ -230,14 +231,15 @@ board_assert_owner_cmd() {   # <phase> <reservation_id> <generation>
 # status is still returned, so the normal path is unchanged. A child still alive
 # after ARGUS_FENCE_TIMEOUT_S is sent SIGTERM, re-checked briefly, then killed,
 # and the call refuses. No path returns with the child alive.
-board_assert_owner_bounded() {   # <phase> <reservation_id> <generation>
-  local out="$RUN_DIR/assert-owner-$1.json" pid="" ticks=0 limit=0 grace=0
+board_assert_owner_bounded() {   # <phase> <reservation_id> <generation> [nowait]
+  local out="$RUN_DIR/assert-owner-$1.json" pid="" ticks=0 limit=0 grace=0 wait_arg=""
   limit=$((ARGUS_FENCE_TIMEOUT_S * 5))
+  if [ "${4:-}" = nowait ]; then wait_arg="--no-wait"; fi
   "$PYTHON" "$ARGUS/board/reservations.py" assert-owner \
     "${ARGUS_CONFIG_ARGS[@]}" "${BOARD_KIND_ARGS[@]+"${BOARD_KIND_ARGS[@]}"}" \
     --repo-root "$REPO" --machine-id "$PHASE_MACHINE_ID" \
     --phase "$1" --reservation-id "$2" \
-    --generation "$3" \
+    --generation "$3" ${wait_arg:+"$wait_arg"} \
     >"$out" 2>&1 &
   pid=$!
   while kill -0 "$pid" 2>/dev/null; do
@@ -261,7 +263,7 @@ board_assert_owner_bounded() {   # <phase> <reservation_id> <generation>
   wait "$pid"
 }
 
-board_assert_owner() {   # <phase> <reservation_id> <generation>
+board_assert_owner() {   # <phase> <reservation_id> <generation> [nowait]
   local phase="$1" reservation_id="$2" generation="$3"
   [ -n "$reservation_id" ] && [ -n "$generation" ] || return 1
   # The phase names the run state and the board key; a non-number here would
@@ -273,7 +275,7 @@ board_assert_owner() {   # <phase> <reservation_id> <generation>
     # Successful fence stubs stand in for their matching board response.
     renew|reserve|assert) return 0 ;;
   esac
-  board_assert_owner_cmd "$phase" "$reservation_id" "$generation"
+  board_assert_owner_cmd "$phase" "$reservation_id" "$generation" "${4:-}"
 }
 
 # The launch path for a phase number, in the repo-relative shape the selector

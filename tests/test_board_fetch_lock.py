@@ -77,6 +77,24 @@ def test_a_busy_lock_fails_closed_without_fetching(
     assert git.fetch_calls == 0
 
 
+def test_a_no_wait_read_refuses_at_once_while_the_lock_is_busy(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    private = _checkout(tmp_path)
+    git = ScriptedGit([(0, "", "")])
+    monkeypatch.setattr(branch, "_git", git)
+    monkeypatch.setattr(fetch_lock, "_git", git)
+    monkeypatch.setattr(fetch_lock, "FETCH_TIMEOUT_S", 30)
+    monkeypatch.setattr(fetch_lock, "FETCH_LOCK_POLL_S", 0.01)
+    with (private / ".git" / fetch_lock.FETCH_LOCK_NAME).open("a+") as holder:
+        fcntl.flock(holder.fileno(), fcntl.LOCK_EX)
+        started = time.monotonic()
+        with pytest.raises(CoordinationUnavailable, match="holds the board fetch lock"):
+            branch._fetch_branch_ref(private, "origin", "fixture-claims", wait=False)
+        assert time.monotonic() - started < 5
+    assert git.fetch_calls == 0
+
+
 def test_a_failed_fetch_is_reported_once(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

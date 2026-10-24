@@ -90,9 +90,11 @@ class _StoreBase:
             and not _claim_window_passed(record, _datetime.datetime.now(_datetime.UTC))
         )
 
-    def read(self) -> tuple[dict[str, Any], str]:
+    def read(self, *, wait: bool = True) -> tuple[dict[str, Any], str]:
         try:
-            ref, commit = _fetch_branch_ref(self.private, self.remote, self.branch)
+            ref, commit = _fetch_branch_ref(
+                self.private, self.remote, self.branch, wait=wait
+            )
         except CoordinationUnavailable:
             # A board that was never created reads as empty, because the remote
             # answered for both its branch and its backup. A read never creates the

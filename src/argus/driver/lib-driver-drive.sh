@@ -141,6 +141,15 @@ _drive() {
   if [ "$PENDING_PUBLISHED" -gt 0 ] || [ "${REPAIR_STOP:-0}" = 1 ]; then
     return 0
   fi
+  # One action per tick. A pull request the ready sweep just readied, or an open
+  # issue pull request that still needs the driver, ends the tick before new work.
+  if [ "${READY_MARKED:-0}" = 1 ]; then
+    return 0
+  fi
+  if [ "${WORK_SOURCE:-phases}" = issues ] && [ -n "${WAITING_PR:-}" ]; then
+    log "waiting: PR #$WAITING_PR $WAITING_STATE; no new work this tick"
+    return 0
+  fi
 
   # No live phase: clear per-session state a hard kill may have left behind.
   rm -f "$CURRENT" "$STALL"

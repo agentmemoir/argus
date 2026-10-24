@@ -103,7 +103,8 @@ class RecordedBoard(ReservationStore):
         self.kind = "phase"
         self._key = _phase_key
 
-    def read(self) -> tuple[dict[str, Any], str]:
+    def read(self, *, wait: bool = True) -> tuple[dict[str, Any], str]:
+        del wait  # the stub has no board fetch to queue behind
         if self.records is None:
             raise CoordinationUnavailable("cannot read coordination state")
         return {"phases": dict(self.records)}, "fixture"

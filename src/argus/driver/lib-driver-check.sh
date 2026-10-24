@@ -199,7 +199,7 @@ check() {
   fi
   echo "heartbeat: ${HEARTBEAT_URL:-unset}"
   echo "stall threshold: ${STALE_AFTER_SEC}s"
-  echo "tmux geometry: ${TMUX_WIDTH}x${TMUX_HEIGHT} (pinned with window-size manual; a display attached with -r cannot change it)"
+  echo "tmux detached default size: ${TMUX_WIDTH}x${TMUX_HEIGHT} (windows follow the attached client)"
   if tmux_session_exists; then
     echo "tmux session '$SESSION': present (persistent, outlives every phase)"
     tmux_window_exists \

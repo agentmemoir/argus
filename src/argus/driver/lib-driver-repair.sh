@@ -156,7 +156,7 @@ repair_stop() {
 # same way. While REPAIR_HOLD_LAUNCH is 1 (the phase window runs), the reads and
 # notices still run, and no round starts.
 repair_tick() {
-  local rows pr branch key out rc msg notice cleared what pr_head
+  local rows pr branch draft key out rc msg notice cleared what pr_head waiting
   [ -n "${REPAIR_PIPELINE:-}" ] || return 0
   [ -z "${DRIVER_STUB_COORDINATION:-}" ] || return 0
   [ ! -f "$HALT" ] || return 0
@@ -169,9 +169,9 @@ repair_tick() {
   rows="$(printf '%s' "$1" | "$PYTHON" -c 'import json, sys
 for row in json.load(sys.stdin).get("awaiting_review", []):
     if row.get("pull_request") and row.get("branch"):
-        print(row["pull_request"], row["branch"])')" \
+        print(row["pull_request"], row["branch"], "yes" if row.get("draft") else "no")')" \
     || { repair_stop "the pull request list could not be read"; return 0; }
-  while read -r pr branch; do
+  while read -r pr branch draft; do
     [ -n "$pr" ] || continue
     key="${pr%/}"; key="${key##*/}"
     pr_head="$(repair_remote_head "$branch")"
@@ -179,7 +179,8 @@ for row in json.load(sys.stdin).get("awaiting_review", []):
     rc=0
     out="$("$PYTHON" "$ARGUS/gitsync/repair_cli.py" "${ARGUS_CONFIG_ARGS[@]}" \
       --pull-request "$pr" --run-dir "$RUN_DIR" --head "$pr_head" \
-      --attempts "$REPAIR_ATTEMPTS" --wait "$REPAIR_WAIT" </dev/null)" || rc=$?
+      --attempts "$REPAIR_ATTEMPTS" --wait "$REPAIR_WAIT" --draft "${draft:-no}" \
+      </dev/null)" || rc=$?
     if [ "$rc" -ne 0 ]; then
       what="$(selection_value read <<<"$out")"
       repair_stop "the ${what:-checks} of $pr could not be read (rc=$rc)"
@@ -189,6 +190,11 @@ for row in json.load(sys.stdin).get("awaiting_review", []):
     [ -z "$notice" ] || notify "$notice"
     cleared="$(selection_value cleared <<<"$out")"
     [ -z "$cleared" ] || log "$cleared"
+    # The first pull request that still needs the driver names the tick's wait.
+    waiting="$(selection_value waiting <<<"$out")"
+    if [ -n "$waiting" ] && [ -z "${WAITING_PR:-}" ]; then
+      WAITING_PR="$key"; WAITING_STATE="$waiting"
+    fi
     case "$(selection_value action <<<"$out")" in
       escalate) notify "$(selection_value message <<<"$out")" ;;
       unreadable)

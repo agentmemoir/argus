@@ -256,7 +256,9 @@ def _backfill_backup(private: str | Path, remote: str, branch: str) -> None:
         _push_backup(private, remote, branch, commit.strip())
 
 
-def _fetch_branch_ref(private: str | Path, remote: str, branch: str) -> tuple[str, str]:
+def _fetch_branch_ref(
+    private: str | Path, remote: str, branch: str, *, wait: bool = True
+) -> tuple[str, str]:
     """Fetch one branch and return its remote-tracking ref and commit.
 
     A branch the remote does not have is the single most common answer here on a
@@ -268,7 +270,7 @@ def _fetch_branch_ref(private: str | Path, remote: str, branch: str) -> tuple[st
     """
     remote_ref = f"refs/remotes/{remote}/{branch}"
     refspec = f"+refs/heads/{branch}:{remote_ref}"
-    with fetch_serialized(private):
+    with fetch_serialized(private, wait=wait):
         rc, out, err = _git(
             private, "fetch", "--prune", remote, refspec, timeout=FETCH_TIMEOUT_S
         )

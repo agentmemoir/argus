@@ -1,0 +1,1 @@
+A stop no longer waits behind a board fetch that another process is running. Its ownership check tries the checkout's fetch lock once. When the lock is busy, the check refuses at once: the stop writes its halt marker, records no new stopped claim, and says the board did not confirm the fence. Before this, the stop waited up to the fetch timeout for the lock.
