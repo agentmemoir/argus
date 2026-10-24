@@ -165,6 +165,10 @@ def test_issue_run_dir_without_task_file_logs_one_line(issue_driver: Path) -> No
     for name in ("state.err", "residue.err"):
         assert "Traceback" not in (issue_driver / name).read_text(encoding="utf-8")
     events = (issue_driver / "events").read_text(encoding="utf-8").splitlines()
-    named = [line for line in events if "issue 255 has no task file" in line and "issue_file" in line]
+    named = [
+        line
+        for line in events
+        if "issue 255 has no task file" in line and "issue_file" in line
+    ]
     assert len(named) == 2
     assert not (issue_driver / "runs" / "issue-000255").exists()
