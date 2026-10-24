@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+import threading
 from pathlib import Path
 
 import pytest
@@ -78,6 +79,29 @@ def test_a_probe_the_kernel_refuses_is_a_refusal(
     monkeypatch.setattr(exec_tempdir.subprocess, "run", refuse)
     assert can_execute(str(tmp_path)) is False
     assert refuses_execution(str(tmp_path)) is True
+
+
+def test_eight_probes_on_threads_at_once_all_run(exec_dir: Path) -> None:
+    """Probes started together in one directory all run, none refused by ETXTBSY.
+
+    Each thread writes and starts its own probe while the other threads fork. A
+    probe written by this process can be inherited by a fork and then fail to
+    start, so the directory would look unusable to a caller that is not at fault.
+    """
+    count = 8
+    barrier = threading.Barrier(count)
+    results = [False] * count
+
+    def probe(index: int) -> None:
+        barrier.wait()
+        results[index] = can_execute(str(exec_dir))
+
+    threads = [threading.Thread(target=probe, args=(i,)) for i in range(count)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    assert results == [True] * count
 
 
 def test_a_probe_that_times_out_is_unprobed_not_a_refusal(
