@@ -174,7 +174,7 @@ print(record.get("reservation_id", ""), record.get("generation", ""))
               rel="$GROUP_MEMBER_REL"
               log "recovered group [$(printf '%s' "$GROUP_MEMBERS" | tr '\n' ' ')] on ${work_kind:-phase} $wait_phase for $PHASE_MACHINE_ID"
             fi
-            if [ -z "$rel" ]; then
+            if [ -z "$rel" ] && [ "$work_kind" != issue ]; then
               log "claim recovery for $wait_phase returned no launch path from the work source; refusing to launch"
               { _DRIVE_RC=1; return 0; }
             fi
@@ -188,6 +188,12 @@ print(record.get("reservation_id", ""), record.get("generation", ""))
             if [ -z "$reservation_id" ] || [ -z "$reservation_generation" ]; then
               log "claim recovery for $wait_phase returned no new fence; refusing to launch (see $RUN_DIR/claim-recovery-$wait_phase.json)"
               { _DRIVE_RC=1; return 0; }
+            fi
+            if [ "$work_kind" = issue ]; then
+              rel="$(issue_task_for_tick "$wait_phase" "$reservation_id" "$reservation_generation")"
+              if [ -z "$rel" ]; then
+                { _DRIVE_RC=0; return 0; }
+              fi
             fi
             log "recovered ${work_kind:-phase} $number ($rel) on $reservation_id generation $reservation_generation; continuing"
           else
