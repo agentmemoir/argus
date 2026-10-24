@@ -25,6 +25,7 @@ def _run(
     now: float,
     launched: bool = True,
     head: str = HEAD_A,
+    attempts: int = 2,
 ) -> tuple[int, dict[str, Any]]:
     def checks(*_a: object) -> tuple[list[dict[str, Any]] | None, int, str]:
         return rows, 1, ""
@@ -36,7 +37,7 @@ def _run(
 
     monkeypatch.setattr(repair_cli, "gh_pull_request_mergeable", merge)
     argv = ["--pull-request", PR, "--run-dir", str(tmp_path)]
-    argv += ["--attempts", "2", "--wait", "600", "--head", head]
+    argv += ["--attempts", str(attempts), "--wait", "600", "--head", head]
     rc = repair_cli.main(argv, now=now)
     out = json.loads(capsys.readouterr().out)
     if launched and out["action"] == "repair":
@@ -99,6 +100,29 @@ def test_unread_checks_fail_closed_and_record_nothing(
     rc, out = _run(monkeypatch, capsys, tmp_path, None, 1000.0)
     assert (rc, out["action"]) == (3, "unread")
     assert list(tmp_path.iterdir()) == []
+
+
+def test_a_failed_base_check_is_named_when_the_budget_runs_out(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+) -> None:
+    # Each round counts one attempt, even when its base check fails before the agent.
+    cause = "base-sync: configuration error: invalid value for key 'issues.task-dir'"
+    for now in (1000.0, 1600.0, 2200.0):
+        _rc, out = _run(monkeypatch, capsys, tmp_path, RED, now, attempts=3)
+        assert out["action"] == "repair"
+    (tmp_path / "repair-7.base").write_text(cause + "\n", encoding="utf-8")
+    _rc, out = _run(monkeypatch, capsys, tmp_path, RED, 9999.0, attempts=3)
+    assert out["action"] == "escalate"
+    assert out["message"] == (
+        f"Needs You. {PR} is still red after 3 repair round(s): lint failed. "
+        f"The base check failed on the last round: {cause}. "
+        "Action: fix the cause named above, push the branch, or close the pull request."
+    )
+    assert _run(monkeypatch, capsys, tmp_path, RED, 9999.0, attempts=3)[1] == {
+        "action": "none"
+    }
 
 
 def test_pull_request_without_number_is_refused(

@@ -73,6 +73,31 @@ def test_failed_base_check_runs_no_agent(tmp_path: Path) -> None:
     assert "repair k1: the base check failed, so this round ran no agent" in events
 
 
+def _base_note(tmp_path: Path, base_rc: int, base_out: str, before: str) -> str:
+    body = (
+        STUBS
+        + f"""
+BASE_RC={base_rc}
+BASE_OUT={shlex.quote(base_out)}
+mkdir -p "$RUN_DIR/repair-worktree-k1"
+printf '%s' {shlex.quote(before)} >"$RUN_DIR/repair-k1.base"
+( run_repair_session k1 "fix the checks" feature/x ) || true
+cat "$RUN_DIR/repair-k1.base" 2>/dev/null || echo NO_NOTE
+"""
+    )
+    return shell(tmp_path, body)
+
+
+def test_a_failed_base_check_leaves_its_cause_for_the_notice(tmp_path: Path) -> None:
+    text = _base_note(tmp_path, 1, "base-sync: failed: git fetch origin failed", "")
+    assert text.strip() == "base-sync: failed: git fetch origin failed"
+
+
+def test_a_clean_base_check_clears_an_older_cause(tmp_path: Path) -> None:
+    text = _base_note(tmp_path, 0, "base-sync: no conflict with master", "old cause")
+    assert text.strip() == "NO_NOTE"
+
+
 def test_branch_is_one_argument_even_when_hostile(tmp_path: Path) -> None:
     name = "x;touch MARKER"
     events = _round(tmp_path, 0, "base-sync: no conflict with master", name)

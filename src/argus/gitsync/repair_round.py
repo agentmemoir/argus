@@ -176,19 +176,28 @@ def escalation_text(
     attempts: int,
     failing: list[dict[str, str]],
     conflict: bool = False,
+    base: str | None = None,
 ) -> str:
-    """The Needs You line: one cause and one action."""
+    """The Needs You line: one cause and one action. ``base`` is the failure
+    the base check left on the last round, when that check failed."""
     if conflict:
-        return (
-            f"Needs You. {pull_request} still conflicts with its base after "
-            f"{attempts} repair round(s). Action: resolve the conflict on the "
-            "branch, or close the pull request."
+        cause = (
+            f"{pull_request} still conflicts with its base after "
+            f"{attempts} repair round(s)."
         )
-    names = ", ".join(c["name"] for c in failing) or "a check"
+        action = "resolve the conflict on the branch, or close the pull request."
+    else:
+        names = ", ".join(c["name"] for c in failing) or "a check"
+        cause = (
+            f"{pull_request} is still red after {attempts} repair "
+            f"round(s): {names} failed."
+        )
+        action = "fix the failing check on the branch, or close the pull request."
+    if base is None:
+        return f"Needs You. {cause} Action: {action}"
     return (
-        f"Needs You. {pull_request} is still red after {attempts} repair "
-        f"round(s): {names} failed. Action: fix the failing check on the "
-        "branch, or close the pull request."
+        f"Needs You. {cause} The base check failed on the last round: {base}. "
+        "Action: fix the cause named above, push the branch, or close the pull request."
     )
 
 

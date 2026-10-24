@@ -73,6 +73,15 @@ def _key(pull_request: str) -> str:
     return tail
 
 
+def _base_failure(run_dir: Path, key: str) -> str | None:
+    """The base check's failure line that the last round left, if one did."""
+    try:
+        text = (run_dir / f"repair-{key}.base").read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return None
+    return text.strip() or None
+
+
 def save_failed_log(
     run_dir: Path, key: str, failing: list[dict[str, str]]
 ) -> tuple[list[str], str | None]:
@@ -239,7 +248,11 @@ def run(args: argparse.Namespace, now: float) -> tuple[int, dict[str, object]]:
         record["escalated"] = True
         repair_round.save_record(record_path, record)
         out["message"] = repair_round.escalation_text(
-            args.pull_request, args.attempts, failing, conflict=conflict
+            args.pull_request,
+            args.attempts,
+            failing,
+            conflict=conflict,
+            base=_base_failure(args.run_dir, key),
         )
     pending_path = args.run_dir / f"pending-{key}.json"
     out.update(pending_limit.step(pending_path, args.pull_request, head, rows, now))
