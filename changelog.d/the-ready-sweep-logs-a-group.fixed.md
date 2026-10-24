@@ -1,0 +1,1 @@
+The ready sweep logs `a group's shared pull request is ready; its checks passed` only on the tick that readies a pull request. A pull request that an earlier tick readied is skipped, and its result still reads `READY`, so that line is no longer repeated for it on every tick.

@@ -1,0 +1,1 @@
+The sync self-test and the fault harness remove their scratch directories instead of leaving them behind, and every scratch directory now carries the pid of the process that made it, so a run killed before its cleanup is reclaimed by the next run rather than waiting for the hour-old age rule.

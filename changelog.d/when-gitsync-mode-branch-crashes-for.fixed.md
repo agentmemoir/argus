@@ -1,0 +1,1 @@
+When `gitsync --mode branch` crashes for a phase and writes no result, Argus no longer launches the phase on the current branch. The tick refuses the launch, keeps the claim, and sends one Needs You notice for that phase. The next tick retries the cut.

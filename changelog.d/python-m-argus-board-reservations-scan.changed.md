@@ -1,0 +1,1 @@
+`python -m argus.board.reservations scan` reports each phase whose run directory holds `run.json`, `resume.json`, or a `session-*.log` but whose claim is missing, expired, held by another machine, or terminal. It is a read-only board read that writes nothing, takes optional `--phase` and `--machine-id`, and exits 2 when the board is unreadable.

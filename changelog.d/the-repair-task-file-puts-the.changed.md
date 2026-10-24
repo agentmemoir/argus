@@ -1,0 +1,1 @@
+The repair task file puts the failed-job log tail in a code fence longer than any run of backticks in the log, so a log line cannot close the fence early and turn the rest of the log into task text. ([#210](https://github.com/agentmemoir/argus/issues/210))

@@ -1,0 +1,1 @@
+`argus --check` now runs the pipeline's `pre_run` hook once, from the repository root, as Glide does. A refusing hook fails the check with its first line and one action, so a bad setup shows before the first tick. The check runs the hook for real, so a `pre_run` hook must be read-only. ([#220](https://github.com/agentmemoir/argus/issues/220))

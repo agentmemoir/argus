@@ -1,0 +1,1 @@
+Publishing a group member merges the open pull requests that target the group branch when they are ready, from this repository, mergeable, not blocked by a review, and green, so a fix for a bug an earlier member left lands before the next member starts. The new `--mode gate --phase NUMBER` runs the same step by hand.

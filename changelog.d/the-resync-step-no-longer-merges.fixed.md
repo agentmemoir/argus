@@ -1,0 +1,1 @@
+The resync step no longer merges the integration branch into the board checkout, which holds claims and is not a work checkout. A board on its claims branch is named as a skipped no-op. A merge that git refuses, such as one between unrelated histories, now reports as blocked, not continued. ([#219](https://github.com/agentmemoir/argus/issues/219))

@@ -1,0 +1,1 @@
+A `failed.json` left by a glide stop before `run.json` was written is cleared before the next run starts in that folder. It no longer stays beside the new run, where the selector read it as a failed phase. ([#214](https://github.com/agentmemoir/argus/issues/214))

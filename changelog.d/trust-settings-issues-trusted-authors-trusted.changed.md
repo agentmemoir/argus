@@ -1,0 +1,1 @@
+Trust settings (`issues.trusted-authors`, `trusted-apps`, `trusted-associations`, `codeowners-file`, `resolve-teams`, `comment-trust`, `untrusted-comments`) load for any `driver.provider` when the `issues` block holds only those keys.

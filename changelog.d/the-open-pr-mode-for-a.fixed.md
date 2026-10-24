@@ -1,0 +1,1 @@
+The open-pr mode for a phase creates its draft pull request only when the board confirms this machine's claim. Before, it created the pull request with no board read, so a foreign or expired claim, or an unreadable board, could still publish the phase. A refused fence creates nothing. ([#164](https://github.com/agentmemoir/argus/issues/164))

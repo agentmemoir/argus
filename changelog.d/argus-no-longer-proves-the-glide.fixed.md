@@ -1,0 +1,1 @@
+Argus no longer proves the glide ledger or auto-pins its step commits on resume. Completion proof lives in glide's ledger; a resume gate that met a terminal or moved run, or a damaged run result, logs the reason and continues on the phase's own branch for glide to repair. ([#157](https://github.com/agentmemoir/argus/pull/157))

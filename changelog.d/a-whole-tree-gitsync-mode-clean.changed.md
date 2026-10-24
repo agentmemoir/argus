@@ -1,0 +1,1 @@
+A whole-tree `gitsync --mode clean` that skips every phase now reports not ok and exits 1. A sweep that lands at least one phase still succeeds, and its summary names each skipped phase with its phase number, state, and reason. ([#164](https://github.com/agentmemoir/argus/issues/164))
