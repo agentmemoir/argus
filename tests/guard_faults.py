@@ -64,10 +64,18 @@ restored. With --list, 0 always.
 import argparse
 import random
 import sys
+import time
 from pathlib import Path
 
 from faults import FAULTS
 from guard_faults_engine import DRIVER, RestoreError, check_fault
+
+
+def print_slowest(timings: list[tuple[float, str]]) -> None:
+    """Name the ten slowest faults, slowest first, so a slow one is easy to find."""
+    print("fault time: slowest 10")
+    for seconds, name in sorted(timings, reverse=True)[:10]:
+        print(f"fault time:   {seconds:7.1f} s  {name}")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -131,26 +139,31 @@ def main(argv: list[str] | None = None) -> int:
     )
     missed = 0
     stale = 0
+    timings: list[tuple[float, str]] = []
     for fault in selected:
         sys.stdout.write(f"  {fault['name']} ... ")
         sys.stdout.flush()
+        started = time.monotonic()
         try:
             caught, detail = check_fault(repo, driver, fault)
         except RestoreError as exc:
             print("NOT RESTORED")
             print(f"    {exc}", file=sys.stderr)
             return 2
+        elapsed = time.monotonic() - started
+        timings.append((elapsed, fault["name"]))
         if caught is None:
             # Its own line, its own count, and its own sentence in the summary. A
             # stale anchor reads as an uncovered guard otherwise, and the reader
             # goes looking for a defect in the driver that is not there.
             stale += 1
-            print(f"NOT APPLICABLE\n    {detail}")
+            print(f"NOT APPLICABLE ({elapsed:.1f} s)\n    {detail}")
         elif caught:
-            print(f"ok\n    {detail}")
+            print(f"ok ({elapsed:.1f} s)\n    {detail}")
         else:
             missed += 1
-            print(f"UNDETECTED\n    {detail}")
+            print(f"UNDETECTED ({elapsed:.1f} s)\n    {detail}")
+    print_slowest(timings)
     if missed or stale:
         # Both sentences, both counts, every run. Reporting only the undetected
         # one is how a stale anchor survives: the run fails, the reader fixes a

@@ -159,7 +159,7 @@ for helper in \
   lib-driver-select-stub.sh lib-driver-select-real.sh lib-driver-maintenance.sh lib-driver-repair.sh lib-driver-launch.sh \
   lib-driver-halt-record.sh lib-driver-fence.sh \
   lib-driver-resume.sh lib-driver-abandon.sh lib-driver-estimate.sh \
-  lib-selftest.sh lib-selftest-launch.sh lib-selftest-flow.sh \
+  lib-selftest-timing.sh lib-selftest.sh lib-selftest-launch.sh lib-selftest-flow.sh \
   lib-selftest-unavailable.sh lib-selftest-reasons.sh lib-selftest-recovery.sh \
   lib-selftest-merge.sh lib-selftest-stranding.sh lib-selftest-group.sh \
   lib-selftest-resume.sh lib-selftest-resume-guards.sh \
@@ -236,6 +236,9 @@ done
 . "$ARGUS_DIR/lib-driver-resume.sh"
 # shellcheck disable=SC1091
 . "$ARGUS_DIR/lib-driver-abandon.sh"
+# The self-test's per-case timing, read by lib-selftest.sh.
+# shellcheck disable=SC1091
+. "$ARGUS_DIR/lib-selftest-timing.sh"
 # The self-test and its case stages.
 # shellcheck disable=SC1091
 . "$ARGUS_DIR/lib-selftest.sh"
