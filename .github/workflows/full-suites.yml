@@ -113,11 +113,13 @@ jobs:
           if-no-files-found: ignore
 
   # One open issue holds the failure. A run that fails adds a comment to it, and a
-  # green run closes it. Runs queue, so one report acts at a time.
+  # green run closes it. Runs queue, so one report acts at a time. Only a run of
+  # main reports: a run by hand on a branch must not close or comment on the issue
+  # for main before that branch is merged.
   report:
     name: report the result
     needs: [self-test, guard-faults]
-    if: always()
+    if: always() && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -159,7 +161,10 @@ jobs:
             printf 'Results: self-test %s, guard-faults %s\n\n' "$SELF_TEST" "$GUARD"
             printf 'Failing lines, by run log:\n'
             for log in $logs; do
-              hits=$(grep -i -E 'FAIL|uncovered|undetected|not caught' "$log" | head -n 40 || true)
+              # A fault that was caught prints "caught:" with its check, so those lines
+              # are passes and stay out. FAIL is matched in capitals: the case output
+              # says "failed" in passing checks too.
+              hits=$(grep -E 'FAIL|uncovered|undetected|not caught' "$log" | grep -v 'caught:' | head -n 40 || true)
               if [ -n "$hits" ]; then
                 printf '%s\n' "$hits" | sed "s|^|$(basename "$(dirname "$log")"): |"
               fi
