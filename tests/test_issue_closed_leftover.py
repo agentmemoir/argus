@@ -34,6 +34,7 @@ def configured(
     previous = conventions.override(settings(tmp_path, binary))
     board = Board()
     monkeypatch.setattr("argus.issues.source.ReservationStore", board_store(board))
+    monkeypatch.setattr("argus.issues.leftover.ReservationStore", board_store(board))
     yield tmp_path, board
     conventions.configure(previous)
 
