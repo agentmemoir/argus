@@ -1,0 +1,1 @@
+The publication path no longer blocks on git history, merge-base, tree, commit-id, or receipt gates, and a tick no longer runs the GitHub group gate, the repair loop, or the pull-request lifecycle reads; commit, push, and opening the pull request stay. ([#156](https://github.com/agentmemoir/argus/pull/156))

@@ -1,0 +1,1 @@
+A repair attempt record that cannot be read now sends one Needs You notice that names the record file and says no repair round starts. Before, the driver logged the checks as unreadable on every tick and sent no notice. ([#210](https://github.com/agentmemoir/argus/issues/210))

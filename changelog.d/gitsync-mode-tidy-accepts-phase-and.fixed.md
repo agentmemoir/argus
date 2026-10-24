@@ -1,0 +1,1 @@
+`gitsync --mode tidy` accepts `--phase` and proves the fence before it moves a checkout, and `--mode branch` proves it before the branch cut. The pre-selection tidy call has no phase to name, so it stays unfenced and keeps its dirty-tree refusal; only the branch cut's call, which knows the phase, passes it. ([#164](https://github.com/agentmemoir/argus/issues/164))

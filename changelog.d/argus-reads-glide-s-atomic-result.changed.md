@@ -1,0 +1,1 @@
+Argus reads glide's atomic `result.json` for every state. A `repair_pending` result is a resumable no-launch tick: the driver logs the step and the reason, writes no halt, and neither archives nor finalizes the run; the next tick continues it. ([#157](https://github.com/agentmemoir/argus/pull/157))

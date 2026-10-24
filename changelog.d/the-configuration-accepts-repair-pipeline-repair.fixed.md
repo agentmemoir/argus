@@ -1,0 +1,1 @@
+The configuration accepts `repair.pipeline`, `repair.attempts`, and `repair.wait` for the CI repair round, and passes them to the driver as `REPAIR_*` variables. With no `repair` object, the defaults are `repair.yaml` beside `pipeline`, 3 attempts, and 600 seconds. A `repair` object no longer warns as stale. ([#195](https://github.com/agentmemoir/argus/issues/195))

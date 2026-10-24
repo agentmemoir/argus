@@ -1,0 +1,1 @@
+A failed glide job is retried with capped full jitter and, when the retries run out, recorded as `failed.json` beside the run directory; the selector skips that phase and the line continues to the next job instead of halting until a person clears it. The retry count is `ARGUS_JOB_RETRIES`, 3 retries (4 attempts) by default. ([#156](https://github.com/agentmemoir/argus/pull/156))

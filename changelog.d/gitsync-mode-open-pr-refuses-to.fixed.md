@@ -1,0 +1,1 @@
+`gitsync --mode open-pr` refuses to create a draft pull request without `--body-file`, so a draft is never opened with an empty body that could be published before a later pass filled it; reusing an open pull request needs no body file, and the title still defaults to the branch name. ([#167](https://github.com/agentmemoir/argus/issues/167))

@@ -1,0 +1,1 @@
+A plan's open decision gate no longer stops the line. `BLOCKED_ON_GATE` is gone from the selector, the driver, and `next_phase.py` `STATE_EXIT`; the gate is reported under `needs_decision` and every later phase still gets its turn. ([#157](https://github.com/agentmemoir/argus/pull/157))

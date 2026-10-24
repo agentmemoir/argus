@@ -1,0 +1,1 @@
+`abandon` and `resume` are tested against a real local board and the real `assert_owner` fence. Under another machine's live claim, each refuses and leaves the claim and the board unchanged; under this machine's fence, abandon parks the phase and resume passes the fence check.

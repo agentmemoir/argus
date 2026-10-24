@@ -1,0 +1,1 @@
+When Argus claims an issue, it adds the claim label to the issue on GitHub after the trust check. It creates the label once when the repository lacks it and logs that. A failed label write keeps the claim. Argus never removes the label. ([#184](https://github.com/agentmemoir/argus/issues/184))

@@ -1,0 +1,1 @@
+A stale config key (`roadmap-dir`, `phases-dir`, `repair`) and an unknown key, nested ones included, warn once with the exact replacement and continue. An unacceptable value still stops and names the fix. ([#157](https://github.com/agentmemoir/argus/pull/157))

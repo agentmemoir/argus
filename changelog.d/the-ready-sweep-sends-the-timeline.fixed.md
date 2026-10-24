@@ -1,0 +1,1 @@
+The ready sweep sends the timeline read's owner and repository name to gh as strings, so an all-digit name no longer fails GraphQL and blocks a ready pull request. ([#176](https://github.com/agentmemoir/argus/issues/176))

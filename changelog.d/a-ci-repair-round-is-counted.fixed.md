@@ -1,0 +1,1 @@
+A CI repair round is counted before its tmux launch, so a launch that fails uses one of the `repair.attempts`. A round that cannot be counted does not launch. Before, a failed count let the round run uncounted, so rounds could repeat without a limit. ([#210](https://github.com/agentmemoir/argus/issues/210))

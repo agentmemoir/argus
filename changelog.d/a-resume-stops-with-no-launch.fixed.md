@@ -1,0 +1,1 @@
+A resume stops with no launch when the board fence refuses the branch cut, and the resume now cuts the branch after it renews or takes its fence and records its claim. A group declaration the resume cannot read is still refused before the fence, so that refusal takes no reservation. Every other branch failure is still a repair.

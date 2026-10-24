@@ -1,0 +1,1 @@
+Estimate factor: with an `estimate` object in the configuration, a phase that finishes from a fresh start moves its developer harness's factor toward phase hours / (ideal days × 2), at most 20% per phase, and the driver commits and pushes the factor file alone. A resumed run is skipped, a harness with no factor starts from the slowest one, and a failed commit puts the file back.

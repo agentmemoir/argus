@@ -1,0 +1,1 @@
+CI runs the whole test suite in the affected-checks job, so a test in any file can fail the build. A guard test fails if the workflow narrows back to a hand-written file list that misses a test file. ([#170](https://github.com/agentmemoir/argus/issues/170))

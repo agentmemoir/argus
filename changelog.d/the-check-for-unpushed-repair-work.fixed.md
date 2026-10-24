@@ -1,0 +1,1 @@
+The check for unpushed repair work asks the remote, not the local tracking refs, before a repair worktree is removed and before a repair round is judged to have made a commit. A fetch refspec that leaves the tracking refs behind no longer reports a pushed commit as unpushed, so no false notice is sent. ([#210](https://github.com/agentmemoir/argus/issues/210))

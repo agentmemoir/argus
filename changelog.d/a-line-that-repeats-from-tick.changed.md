@@ -1,0 +1,1 @@
+A line that repeats from tick to tick (the configuration, a renewed claim, a waiting pull request, the selector's warnings, an empty queue, a halt) is logged when it changes, not on every tick. The log is still touched on each tick.

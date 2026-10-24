@@ -1,0 +1,1 @@
+A publication lock left behind by a publish that died stops blocking after the 30 minute heartbeat window, so claim recovery and other phases' publishes proceed. A fresh lock still blocks both; `release-publication` still frees one early.

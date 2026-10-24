@@ -1,0 +1,1 @@
+Issue selection skips an open issue that carries the claim label, set by `issues.claim-label` with the default `accepted`. A person can keep an issue by adding the label. A held or expired board claim still decides for its own issue. The skip counters gain `claim_label`. ([#186](https://github.com/agentmemoir/argus/issues/186))

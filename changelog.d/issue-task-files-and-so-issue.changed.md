@@ -1,0 +1,1 @@
+Issue task files, and so issue branch names, use only the first three words of the issue title, for example `issue/266-backup-restore-refuses`. An issue already in progress keeps the branch recorded in its frozen task snapshot, so resume and publish do not rename it.

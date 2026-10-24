@@ -1,0 +1,1 @@
+The ready sweep writes no phase state, holds no claim, and never changes a published or merge verdict. The transition is once per pull request and GitHub's own ready/draft timeline is the guard: any ready event skips the retry, so a person who re-drafts the pull request is never overridden, and a pending or empty check report takes no transition.

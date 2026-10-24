@@ -1,0 +1,1 @@
+The example issue pipeline's post_step hook now runs an example script that exists. It exits non-zero when the checkpoint or open-pr mode refuses, so the step stays incomplete. The open-pr refusal for --branch, --repo, or --phase names the flag and says it does not apply. ([#209](https://github.com/agentmemoir/argus/issues/209))
