@@ -70,6 +70,7 @@ resume_fence_renew() {   # <phase> <reservation_id> <generation>
     --reservation-id "$reservation_id" --generation "$generation" \
     --status running >"$RUN_DIR/claim-renew-$phase.json" 2>&1 || rc=$?
   if [ "$rc" -ne 0 ]; then
+    log "claim: renewal of ${work_kind:-phase} $phase refused, trying a fresh reservation: $(tr '\n' ' ' <"$RUN_DIR/claim-renew-$phase.json") (see $RUN_DIR/claim-renew-$phase.json)"
     return 1
   fi
   RESUME_RESERVATION_ID="$reservation_id"
