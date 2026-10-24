@@ -1,0 +1,55 @@
+# Copyright 2026 Agent Memoir (https://agentmemoir.com/)
+# SPDX-License-Identifier: Apache-2.0
+"""The merge state of one pull request, read once from gh."""
+
+from __future__ import annotations
+
+import json
+import subprocess
+from pathlib import Path
+
+from argus.gitsync.gh_target import repo_target
+from argus.gitsync.git import GH_TIMEOUT_S, gh_binary
+
+# GitHub's own words for the merge state. UNKNOWN means GitHub is still computing it.
+MERGE_STATES = ("MERGEABLE", "CONFLICTING", "UNKNOWN")
+
+
+def gh_pull_request_mergeable(
+    root: Path,
+    target: int | str,
+    owner: str | None = None,
+    repo: str | None = None,
+    host: str | None = None,
+) -> str | None:
+    """The merge state of one pull request, or ``None`` when it is unread.
+
+    A missing owner or repo, a failed call, a timeout, or an answer that is not
+    one of ``MERGE_STATES`` all return ``None``, so the caller stops the tick.
+    gh's stderr is never read into the result or a log.
+    """
+    if not owner or not repo:
+        return None
+    argv = [
+        gh_binary(),
+        "pr",
+        "view",
+        str(target),
+        "--json",
+        "mergeable",
+        "--repo",
+        repo_target(owner, repo, host),
+    ]
+    try:
+        done = subprocess.run(
+            argv, cwd=root, capture_output=True, text=True, timeout=GH_TIMEOUT_S
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if done.returncode:
+        return None
+    try:
+        state = json.loads(done.stdout).get("mergeable")
+    except (ValueError, AttributeError):
+        return None
+    return state if state in MERGE_STATES else None

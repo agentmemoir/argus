@@ -106,3 +106,51 @@ def test_escalation_has_one_cause_and_one_action() -> None:
         "Needs You. #7 is still red after 3 repair round(s): lint failed. "
         "Action: fix the failing check on the branch, or close the pull request."
     )
+
+
+GREEN = [{"name": "test", "bucket": "pass", "link": "https://ci/2"}]
+
+
+def _merge(rows: list[dict[str, Any]], mergeable: str, started: list[float]) -> Any:
+    record = {"attempts": started}
+    return decide(rows, record, now=9999.0, attempts=3, wait=WAIT, mergeable=mergeable)
+
+
+def test_a_conflict_starts_a_round_even_when_checks_are_green() -> None:
+    assert _merge(GREEN, "CONFLICTING", []) == ("repair", None)
+
+
+def test_an_unknown_merge_state_starts_no_conflict_round() -> None:
+    assert _merge(GREEN, "UNKNOWN", []) == ("none", None)
+
+
+def test_an_unknown_merge_state_does_not_block_red_ci() -> None:
+    assert _merge(RED, "UNKNOWN", []) == ("repair", None)
+
+
+def test_a_mergeable_pull_request_keeps_the_check_logic() -> None:
+    assert _merge(GREEN, "MERGEABLE", []) == ("none", None)
+    assert _merge(RED, "MERGEABLE", []) == ("repair", None)
+
+
+def test_conflict_rounds_share_the_budget_and_escalate_once() -> None:
+    spent = [1000.0, 1600.0, 2200.0]
+    assert _merge(GREEN, "CONFLICTING", spent) == ("escalate", None)
+    record = {"attempts": spent, "escalated": True}
+    assert decide(
+        GREEN, record, now=9999.0, attempts=3, wait=WAIT, mergeable="CONFLICTING"
+    ) == ("none", None)
+
+
+def test_a_conflict_task_names_its_cause() -> None:
+    text = task_text("#7", [], [], None, conflict=True)
+    assert "# Repair #7: it conflicts with base" in text
+    assert "Cause: this pull request conflicts with base." in text
+    assert "- none" in text
+
+
+def test_a_conflict_escalation_names_its_cause() -> None:
+    assert escalation_text("#7", 3, [], conflict=True) == (
+        "Needs You. #7 still conflicts with its base after 3 repair round(s). "
+        "Action: resolve the conflict on the branch, or close the pull request."
+    )

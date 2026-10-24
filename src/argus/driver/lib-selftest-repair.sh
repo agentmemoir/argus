@@ -30,6 +30,7 @@ selftest_repair_round_body() {
   stub="$RUN_DIR/repair-gh"
   cat >"$stub" <<'SH'
 #!/bin/sh
+if [ "$1 $2" = "pr view" ]; then echo '{"mergeable":"MERGEABLE"}'; exit 0; fi
 echo '[{"name":"ci","bucket":"fail","state":"FAILURE","link":"https://example/check/1"}]'
 exit 1
 SH
