@@ -16,7 +16,7 @@ from pathlib import Path
 
 from argus.exec_tempdir import exec_tempdir
 from entrypoint_exercise import exercise
-from entrypoint_fixture import ARGUS
+from entrypoint_fixture import ARGUS, print_slowest
 
 
 def main():
@@ -37,6 +37,8 @@ def main():
         print(f"FAIL: {exc}")
         print("entrypoint self-test: FAIL")
         return 1
+    finally:
+        print_slowest()
     print("entrypoint self-test: pass")
     return 0
 

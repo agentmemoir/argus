@@ -75,7 +75,7 @@ jobs:
       - name: Temporary-storage rule and the whole suite
         run: |
           make noexecscan
-          uv run pytest -q tests/
+          uv run pytest -q -n auto --dist loadfile tests/
           uv run python -m argus.board.reservations self-test
           uv run python -m argus.select.group --self-test
           uv run python -m argus.gitsync.main --self-test

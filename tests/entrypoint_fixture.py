@@ -4,6 +4,7 @@
 
 import re
 import subprocess
+import time
 from collections.abc import Mapping
 from pathlib import Path
 
@@ -13,12 +14,35 @@ ARGUS = Path(__file__).resolve().parents[1]
 CONFIG_ENV_NAMES = frozenset(SHELL_VARS.values())
 
 
+#: Wall time of each command the entrypoint test ran, as (seconds, label).
+TIMINGS: list[tuple[float, str]] = []
+
+
+def _label(command: list[str]) -> str:
+    """Name a command for the log. A path shows only its last part."""
+    parts = [Path(part).name if "/" in str(part) else str(part) for part in command]
+    return " ".join(parts)[:80]
+
+
 def run(
     command: list[str], cwd: str | Path, env: Mapping[str, str]
 ) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
+    started = time.monotonic()
+    result = subprocess.run(
         command, cwd=cwd, env=env, text=True, capture_output=True, timeout=180
     )
+    elapsed = time.monotonic() - started
+    label = _label(command)
+    TIMINGS.append((elapsed, label))
+    print(f"entrypoint time: {elapsed:7.2f} s  {label}")
+    return result
+
+
+def print_slowest(count: int = 10) -> None:
+    """Print the slowest commands of this run, slowest first."""
+    print("entrypoint time: slowest 10 commands")
+    for seconds, label in sorted(TIMINGS, reverse=True)[:count]:
+        print(f"entrypoint time:   {seconds:7.2f} s  {label}")
 
 
 def require(ok: object, message: str, detail: object = "") -> None:

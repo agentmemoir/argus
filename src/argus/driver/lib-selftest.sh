@@ -69,7 +69,7 @@ PY
 # fault runs only the case that catches it instead of all twelve. A name typo
 # skips a case, which shows up as the missing FAIL line, not as a pass.
 selftest_run_case() {
-  local name="$1"
+  local name="$1" started rc
   if [ -n "${SELFTEST_CASES:-}" ]; then
     case " $SELFTEST_CASES " in
       *" $name "*) ;;
@@ -84,7 +84,11 @@ selftest_run_case() {
   # it never asked for. The marker is left alone: the cases that halt manage it
   # themselves, and clearing it here would change what they assert.
   rm -f "$HALT_RECORD"
+  started="$(selftest_clock)"
   "selftest_case_$name"
+  rc=$?
+  selftest_record_case "$name" "$started"
+  return "$rc"
 }
 
 driver_self_test() {
@@ -432,6 +436,7 @@ PROBE
   # `tmux kill-session` is guarded. Removing the fixture and disarming the trap
   # from here instead would mean the tripwire never runs on a successful run,
   # which is the only kind of run most of them are.
+  selftest_print_slowest
   echo "driver self-test: $([ "$fail" = 0 ] && echo pass || echo FAIL)"
   return "$fail"
 }
