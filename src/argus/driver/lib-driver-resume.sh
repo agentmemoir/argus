@@ -36,6 +36,51 @@ print(path)
 PY
 }
 
+# Release the leftover run of an issue that GitHub reports closed.
+#
+# Exit 0 when it was released, 1 while the issue is open, 2 when GitHub or the
+# board could not answer. The check reports a failure by exit code only, so no
+# gh text reaches the log.
+issue_leftover_check() {   # <number>
+  "$PYTHON" - "$ARGUS" "$REPO" "$1" "${ARGUS_CONFIG_ARGS[@]}" <<'PY'
+import sys
+sys.path.insert(0, sys.argv[1])
+import _bootstrap
+from argus import conventions
+conventions.configure_from_cli(sys.argv[4:])
+from argus.board.reservations import CoordinationError
+from argus.issues.leftover import release_if_closed
+from argus.issues.transport import IssuesUnavailable
+try:
+    closed = release_if_closed(
+        sys.argv[2], int(sys.argv[3]), conventions.setting("machine.id", None)
+    )
+except (CoordinationError, IssuesUnavailable):
+    print(f"issue {sys.argv[3]}: GitHub state could not be read; no resume this tick",
+          file=sys.stderr)
+    raise SystemExit(2)
+raise SystemExit(0 if closed else 1)
+PY
+}
+
+# A leftover halt record with no halt marker, for an issue only.
+#
+# Exit 0 when the issue is closed and its record is removed, so the tick goes on
+# to selection. Exit 1 when the record is not released, so the resume runs. Exit
+# 2 when the state could not be checked, so the tick refuses and resumes nothing.
+issue_leftover_release() {
+  local rc=0
+  if [ "${work_kind:-phase}" != issue ] || ! halt_record_read "$HALT_RECORD"; then
+    return 1
+  fi
+  issue_leftover_check "$HALT_REC_PHASE" || rc=$?
+  case "$rc" in
+    0) rm -f "$HALT_RECORD"; return 0 ;;
+    1) return 1 ;;
+    *) return 2 ;;
+  esac
+}
+
 # Put the checkout on the phase branch before the resumed launch.
 #
 # The tick's own cut also runs a resync. Only the branch half runs here. A
@@ -165,6 +210,15 @@ _drive_resume() {   # [<number>]
     number="$HALT_REC_PHASE"
     target="$number"
     rel="$HALT_REC_PHASE_FILE"
+    if [ -z "$rel" ] && [ "${work_kind:-phase}" = issue ]; then
+      # The record names no task file: use the frozen one, or refuse in one line.
+      rel="$(resume_phase_file_of "$number")" || rel=""
+      if [ -z "$rel" ]; then
+        printf 'argus resume: issue %s has no task file; the pipeline input %s is missing; nothing resumed\n' \
+          "$number" "${PHASE_FILE_INPUT:-phase_file}" >&2
+        return 1
+      fi
+    fi
   fi
   RESUME_PHASE_FILE="$rel"
 
