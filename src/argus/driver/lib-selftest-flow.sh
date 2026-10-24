@@ -56,6 +56,7 @@ selftest_case_flow() {
   rm -f "$HALT"
   local stop_wait="$tmp/stop-wait" stop_ready="$tmp/stop-ready" stop_waited=0
   rm -f "$stop_wait" "$stop_ready"
+  local stop_old_sleep="$DRIVER_STUB_SLEEP"
   DRIVER_STUB_RC=0; DRIVER_STUB_SLEEP=20
   DRIVER_STUB_WAIT_FILE="$stop_wait"; DRIVER_STUB_READY_FILE="$stop_ready"
   export DRIVER_STUB_RC DRIVER_STUB_SLEEP DRIVER_STUB_WAIT_FILE DRIVER_STUB_READY_FILE
@@ -86,7 +87,12 @@ selftest_case_flow() {
   unset DRIVER_STUB_COORDINATION
   unset DRIVER_STUB_WAIT_FILE DRIVER_STUB_READY_FILE
   RECOVER_OWN_CLAIM=0; export RECOVER_OWN_CLAIM
-  rm -f "$stop_wait" "$stop_ready"
+  # The stop's sleep and stub hooks must not reach later cases, including tmux panes.
+  DRIVER_STUB_SLEEP="$stop_old_sleep"; export DRIVER_STUB_SLEEP
+  tmux set-environment -gu DRIVER_STUB_WAIT_FILE 2>/dev/null || true; tmux set-environment -gu DRIVER_STUB_READY_FILE 2>/dev/null || true
+  tmux set-environment -g DRIVER_STUB_SLEEP "$stop_old_sleep" 2>/dev/null || true
+  # Clears the halt marker and manual-stop hold this stop left for later cases.
+  rm -f "$stop_wait" "$stop_ready" "$HALT" "$RUN_DIR/stopped-claim"
 
   # Coordination failure: the normal driver path must refuse before tmux launch.
   # Reservable but unsyncable: a real fixture board so the tick reaches the

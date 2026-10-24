@@ -1,0 +1,1 @@
+Each driver self-test case now runs as its own job and shard. A case that left state for later cases clears it, and the case checks are unchanged. ([#270](https://github.com/agentmemoir/argus/issues/270))
