@@ -1,0 +1,1 @@
+A configuration with a `board` object defaults `driver.runs` to a `runs` folder inside the board checkout, and it refuses a run folder set outside that checkout, naming the key. ([#216](https://github.com/agentmemoir/argus/issues/216))

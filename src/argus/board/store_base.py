@@ -13,6 +13,7 @@ from argus.board.branch import (
     _remote_setting,
     _resolve_private_repo,
     _state_initialized,
+    board_never_created,
 )
 from argus.board.core import (
     ACTIVE_STATUSES,
@@ -90,7 +91,16 @@ class _StoreBase:
         )
 
     def read(self) -> tuple[dict[str, Any], str]:
-        ref, commit = _fetch_branch_ref(self.private, self.remote, self.branch)
+        try:
+            ref, commit = _fetch_branch_ref(self.private, self.remote, self.branch)
+        except CoordinationUnavailable:
+            # A board that was never created reads as empty, because the remote
+            # answered for both its branch and its backup. A read never creates the
+            # branch; the first claim write does, through the write path. Any other
+            # failure to read, including a deleted board, stays a failure.
+            if board_never_created(self.private, self.remote, self.branch):
+                return _empty_state(), ""
+            raise
         initialized = _state_initialized(self.private, ref, issues=self.issues)
         exists_rc, _, _ = _git(
             self.private,

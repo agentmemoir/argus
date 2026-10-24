@@ -49,7 +49,7 @@ HELPER_STOPS = {"resume_refuse", "driver_orphan_check", "on_stop"}
 
 REASONS = {
     "exit_nonzero": "operator command, usage, broken install, or manual resume; not a tick stop",
-    "return_nonzero": "a helper signal, an owned check, an issue resume whose branch cut failed, or the narrow lost-work stop at an unpreservable tidy",
+    "return_nonzero": "a helper signal, an owned check, an issue resume whose branch cut failed, the narrow lost-work stop at an unpreservable tidy, or a git hook setup that fails before a Glide launch, so the launch stops and the reason is logged",
     "drive_rc_nonzero": "an owned check, an issue branch cut that failed (no launch on the base branch), a phase branch cut that crashed and wrote no result (no launch), or the narrow lost-work stop at an unpreservable tidy",
     "drive_rc_zero_refusal": "a no-launch tick that warns and continues",
     "halt_marker": "operator stop, signal to a running job, orphaned run, or configuration halt",

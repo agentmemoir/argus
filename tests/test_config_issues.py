@@ -259,6 +259,7 @@ def test_issue_board_symlink_cannot_reach_outside_board(tmp_path: Path) -> None:
     board.mkdir()
     (board / "outside").symlink_to(tmp_path, target_is_directory=True)
     document["board"]["repo"] = "board"
+    document["driver"]["runs"] = "board/runs"
     document["board"]["issues-file"] = "outside/issues.json"
     with pytest.raises(
         cfgmod.ConfigError, match="board.issues-file.*inside board.repo"

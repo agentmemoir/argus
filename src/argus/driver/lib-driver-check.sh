@@ -92,6 +92,16 @@ check() {
     fi
   done
   check_repair_pipeline
+  # The work checkout's git hooks are made ready before the pre_run hook is run
+  # here, because that hook refuses a checkout whose hooks are missing or stale.
+  # Argus installs them only when commands.hooks-install names the install command.
+  # The self-test runs in its own throwaway checkout, so it skips this step.
+  if [ "${SELF_TEST_MODE:-0}" = 0 ] && [ -r "$PIPELINE" ]; then
+    local hooks_out hooks_rc=0
+    hooks_out="$("$PYTHON" "$ARGUS/hooks_setup.py" "$RUN_DIR" --repo "$REPO" "${ARGUS_CONFIG_ARGS[@]}" 2>&1)" || hooks_rc=$?
+    [ -z "$hooks_out" ] || printf '%s\n' "$hooks_out"
+    [ "$hooks_rc" -eq 0 ] || warned=1
+  fi
   # The pipeline's pre_run hook gates every run. Glide runs it from the repository
   # root before a run starts, so run it here once too: a refusing hook fails the
   # check before the first tick. A missing pipeline is already reported above.
@@ -100,6 +110,19 @@ check() {
     prerun_out="$(cd "$REPO" && "$PYTHON" "$ARGUS/prerun_hook.py" --pipeline "$PIPELINE" 2>&1)" || prerun_rc=$?
     [ -z "$prerun_out" ] || printf '%s\n' "$prerun_out"
     [ "$prerun_rc" -eq 0 ] || return 1
+  fi
+  # Glide runs each stage with TMPDIR and BUN_TMPDIR set to the stage folder, so a
+  # stage does not depend on the default temporary folder. The folder must run a
+  # file here, or no stage can start on this machine.
+  local stage_rc=0
+  "$PYTHON" "$ARGUS/stage_tmpdir.py" "$RUN_DIR/stage-tmp" || stage_rc=$?
+  [ "$stage_rc" -eq 0 ] || warned=1
+  # The tick schedule is read from the crontab and never edited. A missing line is
+  # reported with the exact line to install; it does not fail the readiness report,
+  # because a machine without a schedule still has a true report. The self-test
+  # does not read the host's crontab.
+  if [ "${SELF_TEST_MODE:-0}" = 0 ]; then
+    "$PYTHON" "$ARGUS/schedule_check.py" "${ARGUS_CONFIG_FILE:-}" "$RUN_DIR" "${ARGUS_ENTRY:-}" || true
   fi
   echo "work source: ${WORK_SOURCE:-phases}"
   # A halt, and the record a resume reads, in the report an operator runs when

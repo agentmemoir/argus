@@ -18,7 +18,7 @@ The file's rules:
 - `number-input`, `file-input` — the pipeline input names that carry the work-item number and file. Optional, but a pipeline that declares those inputs needs them named.
 - `driver.provider` — the work source. Required. An `issues` block that holds only the trust keys (`trusted-authors`, `trusted-apps`, `trusted-associations`, `codeowners-file`, `resolve-teams`, `comment-trust`, `untrusted-comments`) is allowed for any provider; the issue-source keys still require the `issues` provider.
 - `driver.include` — the work-item file globs. Required. `driver.exclude` — file names to ignore. Optional.
-- `driver.runs` — the run-state folder, holding session logs, the ledger, and the receipts. Required. The folder must exist before a tick starts.
+- `driver.runs` — the run-state folder, holding session logs, the ledger, and the receipts. Required unless `board` is set. With a board, it defaults to a `runs` folder inside `board.repo`, and a folder outside the board checkout is refused by name. The folder must exist before a tick starts.
 - `driver.state` — the folder inside `driver.runs` that holds the driver's own log, lock, halt marker, and pid file. Required. A name, not a path.
 - `driver.stale-after` — seconds without agent output before a run counts as stalled. Required.
 - `driver.outage-stale` — the longer bound used when a merge check could not answer at all, so a host outage is not reported as a stalled phase. Required.
@@ -30,6 +30,7 @@ The file's rules:
 - `machine.settings-file` — an overlay file this machine loads before the flags. Optional. See [Overrides](#overrides).
 - `commands.glide`, `commands.git`, `commands.tmux`, `commands.python`, `commands.hermes`, `commands.gh` — the external commands, named rather than searched for. Required.
 - `commands.reply-check` — a command that reads a draft pull request reply on stdin and exits non-zero to refuse it. Optional; an empty string disables the check.
+- `commands.hooks-install` — the argument list that installs this project's git hooks in the work checkout, for example `["make", "hooks"]`. A list, never a shell string. Optional, with no default. Argus runs it only when the pipeline's `pre_run` hook refuses the checkout, and it first copies the checkout's hooks folder into the run state. Without it, a refused checkout is reported as Needs You.
 - `tmux.session`, `tmux.width`, `tmux.height`, `tmux.idle-window`, `tmux.phase-window`, `tmux.idle-script`, `tmux.refresh` — the tmux session and its geometry. Required.
 - `board.repo`, `board.file`, `board.branch`, `board.remote` — the shared board. Required only when the `board` object is present. `board.backup-branch` — names the backup ref that mirrors the board branch; optional, and defaults to `<board.branch>--argus-backup`.
 - `runstate.repo`, `runstate.remote`, `runstate.branch` — where run state is committed and confirmed: the checkout that holds `driver.runs`, the remote to push and confirm against, and the integration branch carrying the receipt. Optional as a whole; when absent Argus derives the checkout from the run directory and resolves the remote on that checkout. Required only when the `runstate` object is present.
