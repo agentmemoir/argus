@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parent.parent
 MAKE = shutil.which("make") or "make"
 # The first suite command each target runs once the guard lets it through.
 TARGETS = [
-    ("self-test", "bin/argus --self-test"),
+    ("self-test", "python scripts/driver_cases.py"),
     ("guard-faults", "python tests/guard_faults.py"),
 ]
 CLEARED = ("CI", "ARGUS_ALLOW_LOCAL", "MAKEFLAGS", "MAKELEVEL")
