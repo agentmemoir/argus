@@ -9,7 +9,7 @@ can still show an issue as open after GitHub has closed it.
 import os
 import subprocess
 import sys
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Any
 
@@ -33,9 +33,16 @@ def configured(
     binary = fake_gh(tmp_path, [issue()], add_cleanup=request.addfinalizer)
     previous = conventions.override(settings(tmp_path, binary))
     board = Board()
-    monkeypatch.setattr("argus.issues.source.ReservationStore", lambda *_a, **_k: board)
+    monkeypatch.setattr("argus.issues.source.ReservationStore", board_store(board))
     yield tmp_path, board
     conventions.configure(previous)
+
+
+def board_store(board: Board) -> Callable[..., Board]:
+    def make(*_args: object, **_kwargs: object) -> Board:
+        return board
+
+    return make
 
 
 def leftover(board: Board) -> None:
@@ -53,11 +60,13 @@ def github_says(
     monkeypatch: pytest.MonkeyPatch, row: dict[str, Any], state: str
 ) -> None:
     seen = {**row, "state": state}
-    monkeypatch.setattr(
-        IssueClient,
-        "view",
-        lambda self, number, metadata=None: seen,  # noqa: ARG005
-    )
+
+    def view(
+        _self: IssueClient, _number: int, _metadata: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        return seen
+
+    monkeypatch.setattr(IssueClient, "view", view)
 
 
 def test_a_leftover_claim_on_a_closed_issue_is_released_and_not_selected(
