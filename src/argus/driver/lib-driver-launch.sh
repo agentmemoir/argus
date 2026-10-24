@@ -41,11 +41,10 @@ _drive_launch() {
   done
   local launch="${envs:+$envs }bash $self_quoted$config_arg --session $number_quoted $rel_quoted"
 
-  # Geometry: the session is created once at TMUX_WIDTH x TMUX_HEIGHT with
-  # `window-size manual`, so it holds that size even when a smaller display
-  # attaches. runner.py copies the pane size into each harness pty, so this is
-  # what the agent actually works at. The phase window is then sized explicitly,
-  # because new-window has no -x/-y and inherits the session size instead.
+  # Geometry: no window has a fixed size. The phase window follows the attached
+  # client (`window-size latest`), so the agent works at the size of the screen
+  # it is shown on. TMUX_WIDTH x TMUX_HEIGHT is only the size used when no client
+  # is attached.
   #
   # The session is ensured first and never killed, so a display attached to the
   # idle window survives the launch. 9>&- drops the flock fd, as before.

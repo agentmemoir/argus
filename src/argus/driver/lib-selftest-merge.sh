@@ -121,18 +121,16 @@ selftest_case_merge_orphan() {
   rm -f "$orphan_release" "$orphan_ready"
 
   # A session outlives every phase, so it is created once and reused forever.
-  # That means a settings change, or a hand-made session, would otherwise keep
-  # whatever size it was born with. Assert the reconcile path fixes that.
-  tmux resize-window -t "$SESSION:$TMUX_IDLE_WINDOW" -x 100 -y 30 2>/dev/null || true
-  idle_geom_stale="$(tmux display-message -p -t "$SESSION:$TMUX_IDLE_WINDOW" \
-    '#{window_width}x#{window_height}' 2>/dev/null || true)"
+  # A session left with a fixed size would otherwise keep it. Assert the
+  # reconcile path puts the size options back to `latest`.
+  tmux set-option -t "$SESSION" -w window-size manual 2>/dev/null || true
+  size_stale="$(tmux show-options -w -t "$SESSION" -v window-size 2>/dev/null || true)"
   tmux_session_ensure
-  idle_geom="$(tmux display-message -p -t "$SESSION:$TMUX_IDLE_WINDOW" \
-    '#{window_width}x#{window_height}' 2>/dev/null || true)"
-  if [ "$idle_geom" = "${TMUX_WIDTH}x${TMUX_HEIGHT}" ]; then
-    echo "ok: idle window reconciled ${idle_geom_stale} -> ${idle_geom}"
+  size_now="$(tmux show-options -w -t "$SESSION" -v window-size 2>/dev/null || true)"
+  if [ "$size_now" = "latest" ]; then
+    echo "ok: window size option reconciled ${size_stale} -> ${size_now}"
   else
-    echo "FAIL: idle window stuck at ${idle_geom:-gone}, want ${TMUX_WIDTH}x${TMUX_HEIGHT}"; fail=1
+    echo "FAIL: window size option stuck at ${size_now:-gone}, want latest"; fail=1
   fi
 
   # The status bar must stay high-contrast: the tmux default is dim grey on
