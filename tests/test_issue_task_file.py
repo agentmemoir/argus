@@ -86,6 +86,40 @@ def test_issue_abandon_finds_task_file_in_issue_folder(issue_driver: Path) -> No
     assert "no run directory at" in err and "issue-000255" in err
 
 
+def resume_issue(root: Path, call: str) -> str:
+    body = (
+        '. "$TEST_DRIVER/lib-driver-halt-record.sh"\n'
+        '. "$TEST_DRIVER/lib-driver-resume.sh"\n'
+        "work_kind=issue; PHASE_FILE_INPUT=issue_file; RESUME_FROM_TICK=0\n"
+        f"{call}\n"
+        "printf 'done\\n'\n"
+    )
+    return shell(root, body)
+
+
+def test_issue_resume_without_task_file_refuses_before_any_state(
+    issue_driver: Path,
+) -> None:
+    call = '(_drive_resume 255) 2>"$RUN_DIR/resume.err" || true'
+    assert "done" in resume_issue(issue_driver, call)
+    err = (issue_driver / "resume.err").read_text(encoding="utf-8")
+    assert "Traceback" not in err
+    assert "issue 255 has no task file" in err and "issue_file" in err
+    assert not (issue_driver / "halted").exists()
+
+
+def test_issue_resume_lookup_finds_task_file_in_issue_folder(
+    issue_driver: Path,
+) -> None:
+    folder = issue_driver / "runs" / "issue-tasks"
+    folder.mkdir(parents=True)
+    (folder / TASK).write_text("frozen task\n", encoding="utf-8")
+    call = 'resume_phase_file_of 255 > "$RUN_DIR/rel.txt"'
+    assert "done" in resume_issue(issue_driver, call)
+    rel = (issue_driver / "rel.txt").read_text(encoding="utf-8").strip()
+    assert rel == f"runs/issue-tasks/{TASK}"
+
+
 @pytest.fixture
 def configured(tmp_path: Path):
     previous = conventions.configure(

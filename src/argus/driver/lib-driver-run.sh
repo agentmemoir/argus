@@ -27,7 +27,13 @@ import _bootstrap
 from argus import conventions
 conventions.configure_from_cli(sys.argv[4:])
 from argus.conventions import resolve_issue_file
-print(resolve_issue_file(sys.argv[2], int(sys.argv[3])) or "")
+path = resolve_issue_file(sys.argv[2], int(sys.argv[3]))
+if path is not None:
+    try:
+        path = path.resolve().relative_to(Path(sys.argv[2]).resolve())
+    except ValueError:
+        pass
+print(path or "")
 PY
 }
 
