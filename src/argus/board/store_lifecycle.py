@@ -296,7 +296,8 @@ class _LifecycleOps(_StoreBase):
             raise CoordinationError("reservation must be an object")
         reservation = cast("dict[str, Any]", reservation)
         key, _number = self._key(reservation.get(self.kind))
-        state, _commit = self.read(wait=wait)
+        # The default keeps the plain read() call that test doubles implement.
+        state, _commit = self.read() if wait else self.read(wait=False)
         record: dict[str, Any] | None = state["phases"].get(key)
         if record is None or not _owner_matches(
             record,
