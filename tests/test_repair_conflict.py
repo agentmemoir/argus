@@ -31,7 +31,11 @@ def _run(
         return rows, 1, ""
 
     monkeypatch.setattr(repair_cli, "gh_pull_request_checks", checks)
-    monkeypatch.setattr(repair_cli, "gh_pull_request_mergeable", lambda *_a: mergeable)
+
+    def merge(*_a: object) -> str | None:
+        return mergeable
+
+    monkeypatch.setattr(repair_cli, "gh_pull_request_mergeable", merge)
     argv = ["--pull-request", PR, "--run-dir", str(tmp_path)]
     argv += ["--attempts", "2", "--wait", "600", "--head", HEAD]
     rc = repair_cli.main(argv, now=now)
