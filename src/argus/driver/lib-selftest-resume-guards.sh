@@ -23,6 +23,7 @@ selftest_resume_gate_cases() {
     echo "ok: a damaged run.json is named and passed to the repair"
   else
     echo "FAIL: a damaged run.json stopped the resume instead of repairing it"; fail=1
+    echo "--- resume driver.log ---"; tail -n 30 "$LOG" | sed 's/^/    /'
   fi
   # The repair launched a phase, so let that window close before the next case.
   wait_phase_window_gone
