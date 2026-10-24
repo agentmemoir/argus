@@ -3,16 +3,16 @@
 """Command entry for one tick's CI repair step on one pull request.
 
 The driver runs it the way it runs ``board/remedy.py``: ``"$PYTHON" "$ARGUS/
-gitsync/repair_cli.py" ...``. It reads the checks once, decides with
-``repair_round.decide``, and prints one JSON object: ``action`` (``none``,
-``wait``, ``repair``, ``escalate``), plus ``task`` on repair and ``message``
-on escalate. A repair decision writes the task file but counts nothing. The
-driver runs the command again with ``--launched`` once the repair run has
-started, and only that call counts the round, so a launch that fails can never
-use up a round or lead to a false escalation.
+gitsync/repair_cli.py" ...``. It reads the checks and the merge state once,
+decides with ``repair_round.decide``, and prints one JSON object: ``action``
+(``none``, ``wait``, ``repair``, ``escalate``), plus ``task`` on repair and
+``message`` on escalate. A repair decision writes the task file but counts
+nothing. The driver runs the command again with ``--launched`` once the repair
+run has started, and only that call counts the round, so a launch that fails can
+never use up a round or lead to a false escalation.
 
-A checks read that fails exits 3 and changes nothing: an unread pull request
-is not a green one.
+A checks read or a merge-state read that fails exits 3 and changes nothing: an
+unread pull request is not a green one.
 
 ``issue_pull_requests`` lists the open pull requests of ``issues`` work for the
 driver's tick. It reads only branches that Argus recorded in an issue run
@@ -42,6 +42,7 @@ from argus.gitsync.gh_read import gh_pull_requests_for_branch
 from argus.gitsync.git import GH_TIMEOUT_S, ConfigError, gh_binary
 from argus.gitsync.issue_paths import issue_branch, issue_scope
 from argus.gitsync.pr_head import gh_pull_request_head
+from argus.gitsync.pr_mergeable import gh_pull_request_mergeable
 from argus.gitsync.receipts import pull_request_ref
 
 # A GitHub Actions job link: the repository and the job id are all gh needs.
@@ -162,6 +163,17 @@ def run(args: argparse.Namespace, now: float) -> tuple[int, dict[str, object]]:
     )
     if rows is None:
         return 3, {"action": "unread", "read": "checks", "exit_code": code}
+    # A conflict starts a round even when no check is red, so the merge state is
+    # read on every tick. A failed read stops the tick, as a failed checks read does.
+    mergeable = gh_pull_request_mergeable(
+        args.run_dir,
+        args.pull_request,
+        ref.get("owner"),
+        ref.get("repo"),
+        ref.get("host"),
+    )
+    if mergeable is None:
+        return 3, {"action": "unread", "read": "mergeable"}
     # The head is read only while a check is pending: the pending limit needs it,
     # and a failed read stops the tick like any other unread state.
     head: str | None = None
@@ -187,8 +199,14 @@ def run(args: argparse.Namespace, now: float) -> tuple[int, dict[str, object]]:
         )
         return 0, {"action": "unreadable", "message": message}
     action, due = repair_round.decide(
-        rows, record, now=now, attempts=args.attempts, wait=args.wait
+        rows,
+        record,
+        now=now,
+        attempts=args.attempts,
+        wait=args.wait,
+        mergeable=mergeable,
     )
+    conflict = mergeable == "CONFLICTING"
     failing = repair_round.failing_checks(rows)
     out: dict[str, object] = {"action": action}
     if action == "wait":
@@ -197,7 +215,9 @@ def run(args: argparse.Namespace, now: float) -> tuple[int, dict[str, object]]:
         task = args.run_dir / f"repair-{key}.md"
         tail, log_path = save_failed_log(args.run_dir, key, failing)
         task.write_text(
-            repair_round.task_text(args.pull_request, failing, tail, log_path),
+            repair_round.task_text(
+                args.pull_request, failing, tail, log_path, conflict=conflict
+            ),
             encoding="utf-8",
         )
         out["task"] = str(task)
@@ -205,7 +225,7 @@ def run(args: argparse.Namespace, now: float) -> tuple[int, dict[str, object]]:
         record["escalated"] = True
         repair_round.save_record(record_path, record)
         out["message"] = repair_round.escalation_text(
-            args.pull_request, args.attempts, failing
+            args.pull_request, args.attempts, failing, conflict=conflict
         )
     out.update(
         pending_limit.step(
