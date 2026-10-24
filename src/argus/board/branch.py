@@ -2,11 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """The board branch: settings, resolution, and branch refs."""
 
-import fcntl
 import sys
-import time
-from collections.abc import Generator
-from contextlib import contextmanager
 from pathlib import Path
 
 from argus import conventions
@@ -18,16 +14,10 @@ from argus.board.core import (
     _validate_branch,
     _validate_remote,
 )
+from argus.board.fetch_lock import _fetch_serialized
 from argus.board.git import _git, _is_git_repo
 from argus.board.state import state_rel
 from argus.conventions import board_repo
-
-# Two processes that fetch one board branch at the same moment race on one reference
-# lock: git refuses the second update with "cannot lock ref", and the read that needed
-# it stops. One lock per board checkout serializes each fetch and the read of its
-# reference. A lock that stays busy past the fetch timeout fails closed.
-FETCH_LOCK_NAME = "argus-board-fetch.lock"
-FETCH_LOCK_POLL_S = 0.05
 
 
 def _branch_setting(branch: str | None) -> str:
@@ -264,36 +254,6 @@ def _backfill_backup(private: str | Path, remote: str, branch: str) -> None:
     rc, commit, _err = _git(private, "rev-parse", "--verify", remote_ref)
     if rc == 0 and commit.strip():
         _push_backup(private, remote, branch, commit.strip())
-
-
-def _fetch_lock_file(private: str | Path) -> Path:
-    """The lock file in the board checkout's git directory, shared by its worktrees."""
-    rc, out, _err = _git(private, "rev-parse", "--git-common-dir")
-    if rc != 0 or not out.strip():
-        raise CoordinationUnavailable("the board checkout has no git directory to lock")
-    return Path(private, out.strip(), FETCH_LOCK_NAME)
-
-
-@contextmanager
-def _fetch_serialized(private: str | Path) -> Generator[None]:
-    """Hold the checkout's fetch lock, waiting at most one fetch timeout for it."""
-    lock_path = _fetch_lock_file(private)
-    deadline = time.monotonic() + FETCH_TIMEOUT_S
-    with lock_path.open("a+", encoding="utf-8") as handle:
-        while True:
-            try:
-                fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-                break
-            except BlockingIOError:
-                if time.monotonic() >= deadline:
-                    raise CoordinationUnavailable(
-                        "another process holds the board fetch lock; no fetch was made"
-                    ) from None
-                time.sleep(FETCH_LOCK_POLL_S)
-        try:
-            yield
-        finally:
-            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
 
 def _fetch_branch_ref(private: str | Path, remote: str, branch: str) -> tuple[str, str]:

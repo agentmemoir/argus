@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from argus.board import branch
+from argus.board import branch, fetch_lock
 from argus.board.core import CoordinationUnavailable
 
 REF = "refs/remotes/origin/fixture-claims"
@@ -49,11 +49,12 @@ def test_a_fetch_takes_the_checkout_lock_and_releases_it(
     private = _checkout(tmp_path)
     git = ScriptedGit([(0, "", "")])
     monkeypatch.setattr(branch, "_git", git)
+    monkeypatch.setattr(fetch_lock, "_git", git)
     found = branch._fetch_branch_ref(private, "origin", "fixture-claims")
     assert found == (REF, "c0ffee")
     assert git.fetch_calls == 1
     # The lock is released, so another handle can take it at once.
-    with (private / ".git" / branch.FETCH_LOCK_NAME).open("a+") as handle:
+    with (private / ".git" / fetch_lock.FETCH_LOCK_NAME).open("a+") as handle:
         fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
 
 
@@ -63,9 +64,10 @@ def test_a_busy_lock_fails_closed_without_fetching(
     private = _checkout(tmp_path)
     git = ScriptedGit([(0, "", "")])
     monkeypatch.setattr(branch, "_git", git)
-    monkeypatch.setattr(branch, "FETCH_TIMEOUT_S", 0.2)
-    monkeypatch.setattr(branch, "FETCH_LOCK_POLL_S", 0.01)
-    with (private / ".git" / branch.FETCH_LOCK_NAME).open("a+") as holder:
+    monkeypatch.setattr(fetch_lock, "_git", git)
+    monkeypatch.setattr(fetch_lock, "FETCH_TIMEOUT_S", 0.2)
+    monkeypatch.setattr(fetch_lock, "FETCH_LOCK_POLL_S", 0.01)
+    with (private / ".git" / fetch_lock.FETCH_LOCK_NAME).open("a+") as holder:
         fcntl.flock(holder.fileno(), fcntl.LOCK_EX)
         with pytest.raises(CoordinationUnavailable, match="holds the board fetch lock"):
             branch._fetch_branch_ref(private, "origin", "fixture-claims")
@@ -78,6 +80,7 @@ def test_a_failed_fetch_is_reported_once(
     private = _checkout(tmp_path)
     git = ScriptedGit([(1, "", "fatal: unable to access the remote")])
     monkeypatch.setattr(branch, "_git", git)
+    monkeypatch.setattr(fetch_lock, "_git", git)
     with pytest.raises(CoordinationUnavailable, match="coordination fetch failed"):
         branch._fetch_branch_ref(private, "origin", "fixture-claims")
     assert git.fetch_calls == 1
