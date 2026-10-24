@@ -282,8 +282,10 @@ class _LifecycleOps(_StoreBase):
             issues=self.issues,
         )
 
-    def assert_owner(self, reservation: Any) -> dict[str, Any]:
+    def assert_owner(self, reservation: Any, *, wait: bool = True) -> dict[str, Any]:
         """Fetch the latest board and verify the three-part fence.
+
+        With wait=False a fetch that holds the board lock refuses the check at once.
 
         An expired record fails the check on every board kind: the window
         closed and the group returned to the queue, so a fence held past expiry
@@ -294,7 +296,7 @@ class _LifecycleOps(_StoreBase):
             raise CoordinationError("reservation must be an object")
         reservation = cast("dict[str, Any]", reservation)
         key, _number = self._key(reservation.get(self.kind))
-        state, _commit = self.read()
+        state, _commit = self.read(wait=wait)
         record: dict[str, Any] | None = state["phases"].get(key)
         if record is None or not _owner_matches(
             record,
