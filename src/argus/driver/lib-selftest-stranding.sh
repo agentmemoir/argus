@@ -20,6 +20,12 @@ selftest_case_stranding() {
 strand_diagnose() {
   echo "--- strand driver.log ---"
   sed 's/^/    /' "$LOG" 2>/dev/null || echo "    (no log)"
+  for record in run-state-leftovers.json phase-branch.json; do
+    [ -f "$RUN_DIR/$record" ] || continue
+    echo "--- strand $record ---"
+    sed 's/^/    /' "$RUN_DIR/$record" | head -c 3000
+    echo
+  done
   if [ -f "$RUN_DIR/coordination-sync.json" ]; then
     echo "--- strand coordination-sync.json ---"
     "$PYTHON" -c 'import json,sys
