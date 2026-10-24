@@ -178,14 +178,15 @@ def _run_probe(directory: str) -> _ProbeOutcome:
     # A short-lived shell writes the probe and exits before this process starts it.
     # Written here, the file would be open for writing in this process, and a thread
     # that forks meanwhile hands its child that open file; starting the probe then
-    # fails with ETXTBSY. No other process of this one ever holds the shell's file.
+    # fails with ETXTBSY. The shell only uses printf, a builtin, so it needs no
+    # command found on PATH; the mode is set here, after the shell has exited.
     try:
         written = (
             subprocess.call(
                 [
                     "/bin/sh",
                     "-c",
-                    'printf "#!/bin/sh\\nexit 0\\n" > "$1" && chmod 755 "$1"',
+                    'printf "#!/bin/sh\\nexit 0\\n" > "$1"',
                     "probe",
                     probe,
                 ],
@@ -195,6 +196,8 @@ def _run_probe(directory: str) -> _ProbeOutcome:
             )
             == 0
         )
+        if written:
+            os.chmod(probe, 0o755)
     except (OSError, subprocess.SubprocessError):
         written = False
     if not written:

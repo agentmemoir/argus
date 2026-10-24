@@ -81,6 +81,19 @@ def test_a_probe_the_kernel_refuses_is_a_refusal(
     assert refuses_execution(str(tmp_path)) is True
 
 
+def test_a_probe_needs_no_command_on_the_search_path(
+    exec_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A probe runs when the search path names no directory at all.
+
+    The probe is written by a shell, and a shell finds a command such as `chmod`
+    by searching PATH. A driver run can start with a PATH that has no such command,
+    and the probe must not depend on one.
+    """
+    monkeypatch.setenv("PATH", "")
+    assert can_execute(str(exec_dir)) is True
+
+
 def test_eight_probes_on_threads_at_once_all_run(exec_dir: Path) -> None:
     """Probes started together in one directory all run, none refused by ETXTBSY.
 
