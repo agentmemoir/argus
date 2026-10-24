@@ -41,6 +41,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+import threading
 import unittest
 from collections.abc import Callable, Iterator, Sequence
 from pathlib import Path
@@ -171,7 +172,9 @@ def _run_probe(directory: str) -> _ProbeOutcome:
     directory refuses execution; the second is a failure to find out, and reading
     it as a refusal turns a skip into a false answer.
     """
-    probe = os.path.join(directory, "_probe.sh")
+    # One name per thread and process. Parallel callers probe the same directory,
+    # and a shared name lets one caller delete or overwrite another caller's probe.
+    probe = os.path.join(directory, f"_probe-{os.getpid()}-{threading.get_ident()}.sh")
     try:
         with open(probe, "w", encoding="utf-8") as handle:
             handle.write("#!/bin/sh\nexit 0\n")
