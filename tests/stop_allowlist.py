@@ -26,6 +26,7 @@ STOP_ALLOWLIST = r"""
     driver/lib-driver-abandon.sh	exit_nonzero	fn:abandon_cmd|exit 1#5
     driver/lib-driver-abandon.sh	exit_nonzero	fn:abandon_cmd|exit 1#6
     driver/lib-driver-abandon.sh	exit_nonzero	fn:abandon_cmd|exit 1#7
+    driver/lib-driver-abandon.sh	exit_nonzero	fn:abandon_cmd|exit 1#8
     driver/lib-driver-check.sh	return_nonzero	fn:check|return 1#1
     driver/lib-driver-check.sh	return_nonzero	fn:check|return 1#2
     driver/lib-driver-check.sh	return_nonzero	fn:check|[ "$prerun_rc" -eq 0 ] || return 1#1
@@ -184,6 +185,7 @@ STOP_ALLOWLIST = r"""
     gitsync/issue_modes.py	raise_config	fn:_issue_mode|raise ConfigError("--phase is required with issue publish mode")#1
     gitsync/issue_modes.py	raise_config	fn:_issue_mode|raise ConfigError(#2
     gitsync/issue_modes.py	raise_config	fn:_issue_mode|raise ConfigError(#3
+    gitsync/issue_modes.py	raise_config	fn:_issue_mode|raise ConfigError(#4
     gitsync/issue_paths.py	raise_config	fn:issue_number|raise ConfigError(str(exc)) from exc#1
     gitsync/issue_paths.py	raise_config	fn:issue_branch|raise ConfigError("issue task filename does not match the issue number")#1
     gitsync/issue_paths.py	raise_config	fn:private_layout|raise ConfigError("issue publication needs a separate private checkout")#1

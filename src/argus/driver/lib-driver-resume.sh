@@ -12,6 +12,11 @@
 # throw away.
 
 resume_phase_file_of() {   # <number>
+  # An issue run's file is its frozen task file in issues.task-dir, not a phase.
+  if [ "${work_kind:-phase}" = issue ]; then
+    issue_task_file_of "$1"
+    return 0
+  fi
   "$PYTHON" - "$ARGUS" "$REPO" "$1" "${ARGUS_CONFIG_ARGS[@]}" <<'PY'
 import sys
 from pathlib import Path
@@ -143,7 +148,13 @@ _drive_resume() {   # [<number>]
     number="$requested"
     rel="$(resume_phase_file_of "$number")" || true
     if [ -z "$rel" ]; then
-      resume_refuse "$target" "no phase file found for phase $number"
+      # An issue with no task file refuses with one line and writes no marker.
+      if [ "${work_kind:-phase}" = issue ]; then
+        printf 'argus resume: issue %s has no task file; the pipeline input %s is missing; nothing resumed\n' \
+          "$number" "${PHASE_FILE_INPUT:-phase_file}" >&2
+      else
+        resume_refuse "$target" "no phase file found for phase $number"
+      fi
       return 1
     fi
   else
