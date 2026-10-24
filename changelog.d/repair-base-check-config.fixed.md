@@ -1,0 +1,1 @@
+A repair round's base check no longer reads its worktree path as the repo root, so a valid config stops failing every round, and a failed base check now names its cause in the Needs You notice. ([#276](https://github.com/agentmemoir/argus/issues/276))

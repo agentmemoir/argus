@@ -265,6 +265,7 @@ repair_observe() {
 base_sync_repair() {  # <key> <worktree> <branch>
   local key="$1" wt="$2" branch="$3" out rc=0 line
   BASE_SYNC_STATE=failed BASE_SYNC_NOTE=""
+  rm -f "$RUN_DIR/repair-$key.base"
   out="$("$PYTHON" "$ARGUS/gitsync/base_sync_cli.py" "${ARGUS_CONFIG_ARGS[@]}" \
     --repo "$wt" --pr-branch "$branch" 2>&1)" || rc=$?
   while IFS= read -r line; do
@@ -276,6 +277,10 @@ base_sync_repair() {  # <key> <worktree> <branch>
       BASE_SYNC_STATE=conflict
       BASE_SYNC_NOTE="A merge of the base into this branch stopped on text conflicts. Run git status, resolve the conflicted files, and commit the merge before the other work. " ;;
   esac
+  # A failed check keeps its first line, so the Needs You notice can name it.
+  if [ "$BASE_SYNC_STATE" = failed ]; then
+    head -n 1 <<<"$out" >"$RUN_DIR/repair-$key.base"
+  fi
 }
 
 run_repair_session() {
