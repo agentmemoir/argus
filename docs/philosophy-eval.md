@@ -1,6 +1,6 @@
 # Argus Philosophy Evaluation
 
-**What this is.** Twenty scenarios that test whether a behaviour follows `docs/philosophy.md`. Run them by hand now; wire them into CI later.
+**What this is.** Twenty scenarios that test whether a behaviour follows `PHILOSOPHY.md`. Run them by hand now; wire them into CI later.
 
 **How to score.** Run the scenario. Compare the observable result with the expected line. A pass meets the expected result and breaks no belief. A fail names the belief number it broke.
 
@@ -29,6 +29,6 @@
 
 **Status.** This is a manual rubric. It is not wired to CI, and no run has been recorded yet. The first recorded run becomes the baseline.
 
-**A fail is information.** Fix the behaviour or change the belief through the recorded decision in `docs/philosophy.md`. Do not quietly edit the expected result.
+**A fail is information.** Fix the behaviour or change the belief through the recorded decision in `PHILOSOPHY.md`. Do not quietly edit the expected result.
 
-Next: `docs/philosophy.md` for the beliefs, and `docs/running.md` for the operator path.
+Next: `PHILOSOPHY.md` for the beliefs, and `docs/running.md` for the operator path.
