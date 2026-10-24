@@ -54,15 +54,14 @@ _drive_choose_selection() {
       RESERVED)
         number="$(printf '%s' "$selection" | selection_value "$item_key")"
         rel="$(printf '%s' "$selection" | selection_value path)"
+        reservation_id="$(printf '%s' "$selection" | selection_value reservation_id)"
+        reservation_generation="$(printf '%s' "$selection" | selection_value generation)"
         if [ "$work_kind" = issue ]; then
-          rel="$(issue_task_file_of "$number")"
+          rel="$(issue_task_for_tick "$number" "$reservation_id" "$reservation_generation")"
           if [ -z "$rel" ]; then
-            log "issue $number has no task file; the pipeline input ${PHASE_FILE_INPUT:-issue_file} is missing; no launch"
             { _DRIVE_RC=0; return 0; }
           fi
         fi
-        reservation_id="$(printf '%s' "$selection" | selection_value reservation_id)"
-        reservation_generation="$(printf '%s' "$selection" | selection_value generation)"
         if [ "$work_kind" = issue ]; then group_take_selection ""; else group_take_selection "$selection"; fi
         if group_active; then
           # The board claimed the whole group under one reservation id, and this

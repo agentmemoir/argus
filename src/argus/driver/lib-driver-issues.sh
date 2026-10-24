@@ -34,6 +34,48 @@ run_dir_of() {   # <number> <rel>
   phase_run_dir "$number" "$rel"
 }
 
+# Render an issue's task file again with the first-selection renderer. Prints its
+# path relative to the checkout; prints nothing when the render fails, and the
+# reason goes to stderr.
+issue_rerender() {   # <number>
+  "$PYTHON" - "$ARGUS" "$REPO" "$1" "${ARGUS_CONFIG_ARGS[@]}" <<'PY'
+import sys
+from pathlib import Path
+sys.path.insert(0, sys.argv[1])
+import _bootstrap
+from argus import conventions
+conventions.configure_from_cli(sys.argv[4:])
+from argus.issues.rerender import rerender_task
+try:
+    path = rerender_task(sys.argv[2], int(sys.argv[3]))
+except Exception as exc:
+    print(f"issue {sys.argv[3]}: task file render failed: {exc}", file=sys.stderr)
+else:
+    print(path.resolve().relative_to(Path(sys.argv[2]).resolve()).as_posix())
+PY
+}
+
+# The task file an issue tick launches from. A missing file is rendered again;
+# when the render also fails, the claim goes back to the queue so the next tick
+# can move on. Prints the path, or nothing when the claim was returned.
+issue_task_for_tick() {   # <number> <reservation id> <generation>
+  local number="$1" file
+  file="$(issue_task_file_of "$number")"
+  if [ -n "$file" ]; then
+    printf '%s\n' "$file"
+    return 0
+  fi
+  file="$(issue_rerender "$number" 2>"$RUN_DIR/rerender-$number.err")"
+  if [ -n "$file" ]; then
+    log "issue $number: task file missing; re-rendered"
+    printf '%s\n' "$file"
+    return 0
+  fi
+  log "issue $number: task file missing; re-render failed (see $RUN_DIR/rerender-$number.err)"
+  release_refused_claim "$number" "$2" "$3" task-file-missing
+  return 0
+}
+
 issue_preflight() {
   if ! command -v "$CMD_GH" >/dev/null 2>&1 \
       && { [ ! -f "$CMD_GH" ] || [ ! -x "$CMD_GH" ]; }; then

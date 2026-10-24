@@ -171,3 +171,40 @@ def test_issue_run_dir_without_task_file_logs_one_line(issue_driver: Path) -> No
     ]
     assert len(named) == 1
     assert not (issue_driver / "runs" / "issue-000255").exists()
+
+
+def task_for_tick(root: Path, stub: str) -> str:
+    body = (
+        "work_kind=issue; PHASE_FILE_INPUT=issue_file\n"
+        'release_refused_claim() { printf \'%s %s %s %s\\n\' "$@" >>"$RUN_DIR/released"; }\n'
+        f"{stub}\n"
+        'rel="$(issue_task_for_tick 255 r1 2)"\n'
+        "printf 'rel=[%s]\\n' \"$rel\"\n"
+    )
+    return shell(root, body)
+
+
+def test_missing_task_file_is_rendered_again_and_the_tick_continues(
+    issue_driver: Path,
+) -> None:
+    stub = "issue_rerender() { printf 'runs/issue-tasks/issue-000255-fix-api.md\\n'; }"
+    out = task_for_tick(issue_driver, stub)
+    assert "rel=[runs/issue-tasks/issue-000255-fix-api.md]" in out
+    events = (issue_driver / "events").read_text(encoding="utf-8").splitlines()
+    assert "issue 255: task file missing; re-rendered" in events
+    assert not (issue_driver / "released").exists()
+
+
+def test_missing_task_file_and_failed_render_releases_the_claim(
+    issue_driver: Path,
+) -> None:
+    out = task_for_tick(issue_driver, "issue_rerender() { :; }")
+    assert "rel=[]" in out
+    events = (issue_driver / "events").read_text(encoding="utf-8").splitlines()
+    assert any(
+        line.startswith("issue 255: task file missing; re-render failed")
+        for line in events
+    )
+    assert "issue 255: task file missing; re-rendered" not in events
+    released = (issue_driver / "released").read_text(encoding="utf-8").splitlines()
+    assert released == ["255 r1 2 task-file-missing"]
