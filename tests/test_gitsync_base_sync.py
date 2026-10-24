@@ -4,7 +4,9 @@
 one push, a text conflict leaves the merge for an agent, and a failed read or a
 hostile branch name is a failure, never "no conflict"."""
 
+import json
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -12,6 +14,8 @@ import pytest
 from argus import conventions
 from argus.gitsync import base_sync as bs
 from argus.gitsync import base_sync_cli
+from config_fixture import write as write_config
+from config_issue_fixture import issue_document
 
 BRANCH = "issue/248-driver-checks-for"
 
@@ -163,3 +167,31 @@ def test_cli_prints_one_line_and_maps_the_exit_code(
     code = base_sync_cli.main(["--repo", str(repos["work"]), "--pr-branch", BRANCH])
     assert code == 3
     assert "base-sync: conflicted path feature.txt" in capsys.readouterr().out
+
+
+def test_config_check_ignores_the_checkout_flag(tmp_path: Path) -> None:
+    # The driver passes the repair worktree as --repo, and runs from it. The config
+    # reader must not take --repo for --repo-root by prefix.
+    config = write_config(tmp_path / "root", json.dumps(issue_document()))
+    checkout = tmp_path / "checkout"
+    checkout.mkdir()
+    script = Path(__file__).resolve().parents[1] / "src/argus/gitsync/base_sync_cli.py"
+    done = subprocess.run(
+        [
+            sys.executable,
+            str(script),
+            "--config",
+            str(config),
+            "--repo",
+            str(checkout),
+            "--pr-branch",
+            BRANCH,
+        ],
+        cwd=checkout,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert "configuration error" not in done.stdout
+    assert done.stdout.startswith("base-sync: failed:")
+    assert done.returncode == 1

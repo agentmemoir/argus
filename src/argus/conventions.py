@@ -65,7 +65,9 @@ def configure_from_cli(argv: list[str]) -> "Config":
     """Load shared settings from CLI flags embedded in a helper invocation."""
     import argparse
 
-    parser = argparse.ArgumentParser(add_help=False)
+    # Exact flag names only. A caller's own flag, such as --repo, must not match
+    # --repo-root by prefix and set the repo root.
+    parser = argparse.ArgumentParser(add_help=False, allow_abbrev=False)
     parser.add_argument("--config")
     parser.add_argument("--repo-root", dest="config_repo_root")
     parser.add_argument("--phases-directory", dest="config_phases_directory")
