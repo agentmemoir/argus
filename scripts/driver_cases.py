@@ -9,10 +9,10 @@ per case gets the isolation the single run gives it, and the processes can run s
 by side. The leftover sweep only touches fixtures whose owning process is dead, so
 a live job's fixture is never swept.
 
-ORDERED_GROUPS names cases that run in one process, in declared order. It is empty:
-each case builds the state it needs, so each case runs as its own job. A case that
-cannot build its own state belongs in a group, and the shard planner keeps a group
-whole.
+ORDERED_GROUPS names cases that run in one process, in declared order. The first
+ten cases form one group. Run alone in CI, five of them failed, because they need
+the state the cases before them leave. The group keeps the single run's order, so
+each of them sees that state. The other cases passed alone and run as their own jobs.
 
 Each job has a timeout and a log. The pool has one worker per CPU.
 """
@@ -33,7 +33,20 @@ DRIVER = ROOT / "bin" / "argus"
 #: Hang guard for one job. A job that runs past it fails with a reason.
 JOB_TIMEOUT_S = 900
 #: Cases that run in one process, in declared order. See the docstring.
-ORDERED_GROUPS: list[tuple[str, ...]] = []
+ORDERED_GROUPS: list[tuple[str, ...]] = [
+    (
+        "launch",
+        "locks_stall",
+        "git_ceiling",
+        "lost_repo",
+        "flow",
+        "release",
+        "unavailable",
+        "reasons",
+        "recovery_sources",
+        "merge_orphan",
+    ),
+]
 PASS_LINE = "driver self-test: pass"
 
 
