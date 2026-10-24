@@ -1,0 +1,1 @@
+A leftover claim or run for an issue that GitHub reports closed is released, with one line that says so, and the tick goes on. Selection no longer resumes a closed issue. A resume of an issue with no task file refuses with one line, not a traceback. ([#275](https://github.com/agentmemoir/argus/issues/275))

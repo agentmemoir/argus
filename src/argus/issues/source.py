@@ -18,6 +18,7 @@ from argus.issues import claims
 from argus.issues.client import IssueClient
 from argus.issues.evidence import Evidence, escalated, pending, signals
 from argus.issues.filter import eligible, label_claimed
+from argus.issues.leftover import release_closed
 from argus.issues.order import PREFERENCES, ordering
 from argus.issues.report import _Reports
 from argus.issues.task import render, task_directory, task_path, write
@@ -147,6 +148,10 @@ class IssuesSource(_Reports, WorkSource):
             self.details[number] = detail
         return self.details[number]
 
+    def _closed(self, row: dict[str, Any]) -> bool:
+        """Ask GitHub whether the issue is still open; the search row can be stale."""
+        return self.client.view(row["number"], row)["state"].lower() != "open"
+
     def _cleanup(self, machine: str, reserve: bool) -> dict[str, Any] | None:
         for key, record in list(self.records.items()):
             if record.get("machine_id") != machine or not claims.held(record):
@@ -199,6 +204,13 @@ class IssuesSource(_Reports, WorkSource):
                 continue
             if record is not None and claims.held(record):
                 if record.get("machine_id") == machine:
+                    if self._closed(row):
+                        # GitHub, not the search snapshot, says the issue is closed:
+                        # its leftover claim is released here and never resumed.
+                        if reserve:
+                            release_closed(self.store, number, record)
+                            self.records.pop(f"{number:06d}", None)
+                        continue
                     if run_failed(self.repo, number, task_path(self.directory, row)):
                         # The job failed and left its claim; skip it so the line
                         # continues to another issue while the claim waits to
