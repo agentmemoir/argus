@@ -5,6 +5,9 @@
 from __future__ import annotations
 
 import fcntl
+import subprocess
+import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -84,3 +87,40 @@ def test_a_failed_fetch_is_reported_once(
     with pytest.raises(CoordinationUnavailable, match="coordination fetch failed"):
         branch._fetch_branch_ref(private, "origin", "fixture-claims")
     assert git.fetch_calls == 1
+
+
+HOLDER = """
+import fcntl, sys, time
+with open(sys.argv[1], "a+") as handle:
+    fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+    print("locked", flush=True)
+    time.sleep(60)
+"""
+
+
+def test_a_holder_in_another_process_past_the_wait_fails_closed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    private = _checkout(tmp_path)
+    git = ScriptedGit([(0, "", "")])
+    monkeypatch.setattr(branch, "_git", git)
+    monkeypatch.setattr(fetch_lock, "_git", git)
+    monkeypatch.setattr(fetch_lock, "FETCH_TIMEOUT_S", 0.5)
+    monkeypatch.setattr(fetch_lock, "FETCH_LOCK_POLL_S", 0.01)
+    lock_path = private / ".git" / fetch_lock.FETCH_LOCK_NAME
+    holder = subprocess.Popen(
+        [sys.executable, "-c", HOLDER, str(lock_path)],
+        stdout=subprocess.PIPE,
+        text=True,
+    )
+    try:
+        assert holder.stdout is not None
+        assert holder.stdout.readline().strip() == "locked"
+        started = time.monotonic()
+        with pytest.raises(CoordinationUnavailable, match="holds the board fetch lock"):
+            branch._fetch_branch_ref(private, "origin", "fixture-claims")
+        assert time.monotonic() - started < 10
+    finally:
+        holder.kill()
+        holder.wait()
+    assert git.fetch_calls == 0
