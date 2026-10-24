@@ -1,1 +1,0 @@
-A board read that loses a race for a git reference lock is retried twice more before it fails. Before, two processes that fetched the same board branch at once could stop a launch. A read that keeps failing still refuses.

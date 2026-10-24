@@ -1,0 +1,83 @@
+# Copyright 2026 Agent Memoir (https://agentmemoir.com/)
+# SPDX-License-Identifier: Apache-2.0
+"""Board fetches of one checkout take turns on one lock; a busy lock fails closed."""
+
+from __future__ import annotations
+
+import fcntl
+from pathlib import Path
+
+import pytest
+
+from argus.board import branch
+from argus.board.core import CoordinationUnavailable
+
+REF = "refs/remotes/origin/fixture-claims"
+
+
+class ScriptedGit:
+    """Answer each fetch from a script, say the branch exists, and resolve a commit."""
+
+    def __init__(self, fetches: list[tuple[int, str, str]]) -> None:
+        self.fetches = list(fetches)
+        self.fetch_calls = 0
+
+    def __call__(
+        self, _private: object, *args: str, **_options: object
+    ) -> tuple[int, str, str]:
+        if args[:1] == ("fetch",):
+            self.fetch_calls += 1
+            if not self.fetches:
+                raise AssertionError("more fetches than the script allows")
+            return self.fetches.pop(0)
+        if args[:2] == ("rev-parse", "--verify"):
+            return 0, "c0ffee", ""
+        if args[:1] == ("rev-parse",):
+            return 0, ".git", ""
+        return 0, "", ""
+
+
+def _checkout(tmp_path: Path) -> Path:
+    private = tmp_path / "board"
+    (private / ".git").mkdir(parents=True)
+    return private
+
+
+def test_a_fetch_takes_the_checkout_lock_and_releases_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    private = _checkout(tmp_path)
+    git = ScriptedGit([(0, "", "")])
+    monkeypatch.setattr(branch, "_git", git)
+    found = branch._fetch_branch_ref(private, "origin", "fixture-claims")
+    assert found == (REF, "c0ffee")
+    assert git.fetch_calls == 1
+    # The lock is released, so another handle can take it at once.
+    with (private / ".git" / branch.FETCH_LOCK_NAME).open("a+") as handle:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+
+def test_a_busy_lock_fails_closed_without_fetching(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    private = _checkout(tmp_path)
+    git = ScriptedGit([(0, "", "")])
+    monkeypatch.setattr(branch, "_git", git)
+    monkeypatch.setattr(branch, "FETCH_TIMEOUT_S", 0.2)
+    monkeypatch.setattr(branch, "FETCH_LOCK_POLL_S", 0.01)
+    with (private / ".git" / branch.FETCH_LOCK_NAME).open("a+") as holder:
+        fcntl.flock(holder.fileno(), fcntl.LOCK_EX)
+        with pytest.raises(CoordinationUnavailable, match="holds the board fetch lock"):
+            branch._fetch_branch_ref(private, "origin", "fixture-claims")
+    assert git.fetch_calls == 0
+
+
+def test_a_failed_fetch_is_reported_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    private = _checkout(tmp_path)
+    git = ScriptedGit([(1, "", "fatal: unable to access the remote")])
+    monkeypatch.setattr(branch, "_git", git)
+    with pytest.raises(CoordinationUnavailable, match="coordination fetch failed"):
+        branch._fetch_branch_ref(private, "origin", "fixture-claims")
+    assert git.fetch_calls == 1

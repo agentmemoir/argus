@@ -1,0 +1,1 @@
+Board reads of one checkout no longer fetch the board branch at the same moment. Two fetches could race on one git reference lock, and the losing read stopped a launch. A read now waits its turn for the checkout's fetch lock, and it fails closed if the lock stays busy.

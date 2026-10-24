@@ -2,8 +2,11 @@
 # SPDX-License-Identifier: Apache-2.0
 """The board branch: settings, resolution, and branch refs."""
 
+import fcntl
 import sys
 import time
+from collections.abc import Generator
+from contextlib import contextmanager
 from pathlib import Path
 
 from argus import conventions
@@ -19,11 +22,12 @@ from argus.board.git import _git, _is_git_repo
 from argus.board.state import state_rel
 from argus.conventions import board_repo
 
-# Two fetches of one board branch can meet on the same reference lock. Git refuses
-# the second with this message, and it succeeds a moment later. Only that message is
-# retried, and only this many times. A lock that keeps failing still fails closed.
-LOCK_CONTENTION = "cannot lock ref"
-LOCK_RETRY_DELAYS_S = (0.1, 0.3)
+# Two processes that fetch one board branch at the same moment race on one reference
+# lock: git refuses the second update with "cannot lock ref", and the read that needed
+# it stops. One lock per board checkout serializes each fetch and the read of its
+# reference. A lock that stays busy past the fetch timeout fails closed.
+FETCH_LOCK_NAME = "argus-board-fetch.lock"
+FETCH_LOCK_POLL_S = 0.05
 
 
 def _branch_setting(branch: str | None) -> str:
@@ -230,6 +234,36 @@ def _backfill_backup(private: str | Path, remote: str, branch: str) -> None:
         _push_backup(private, remote, branch, commit.strip())
 
 
+def _fetch_lock_file(private: str | Path) -> Path:
+    """The lock file in the board checkout's git directory, shared by its worktrees."""
+    rc, out, _err = _git(private, "rev-parse", "--git-common-dir")
+    if rc != 0 or not out.strip():
+        raise CoordinationUnavailable("the board checkout has no git directory to lock")
+    return Path(private, out.strip(), FETCH_LOCK_NAME)
+
+
+@contextmanager
+def _fetch_serialized(private: str | Path) -> Generator[None]:
+    """Hold the checkout's fetch lock, waiting at most one fetch timeout for it."""
+    lock_path = _fetch_lock_file(private)
+    deadline = time.monotonic() + FETCH_TIMEOUT_S
+    with lock_path.open("a+", encoding="utf-8") as handle:
+        while True:
+            try:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError:
+                if time.monotonic() >= deadline:
+                    raise CoordinationUnavailable(
+                        "another process holds the board fetch lock; no fetch was made"
+                    ) from None
+                time.sleep(FETCH_LOCK_POLL_S)
+        try:
+            yield
+        finally:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+
+
 def _fetch_branch_ref(private: str | Path, remote: str, branch: str) -> tuple[str, str]:
     """Fetch one branch and return its remote-tracking ref and commit.
 
@@ -242,29 +276,23 @@ def _fetch_branch_ref(private: str | Path, remote: str, branch: str) -> tuple[st
     """
     remote_ref = f"refs/remotes/{remote}/{branch}"
     refspec = f"+refs/heads/{branch}:{remote_ref}"
-    rc, out, err = _git(
-        private, "fetch", "--prune", remote, refspec, timeout=FETCH_TIMEOUT_S
-    )
-    for delay in LOCK_RETRY_DELAYS_S:
-        if rc == 0 or LOCK_CONTENTION not in (err or ""):
-            break
-        time.sleep(delay)
+    with _fetch_serialized(private):
         rc, out, err = _git(
             private, "fetch", "--prune", remote, refspec, timeout=FETCH_TIMEOUT_S
         )
-    if rc != 0:
-        if not _board_branch_exists(private, remote, branch):
+        if rc != 0:
+            if not _board_branch_exists(private, remote, branch):
+                raise CoordinationUnavailable(
+                    f"coordination branch {branch!r} does not exist on {remote}"
+                )
+            raise CoordinationUnavailable(
+                f"coordination fetch failed: {_safe_detail(err or out)}"
+            )
+        rc, commit, err = _git(private, "rev-parse", "--verify", remote_ref)
+        if rc != 0 or not commit:
             raise CoordinationUnavailable(
                 f"coordination branch {branch!r} does not exist on {remote}"
             )
-        raise CoordinationUnavailable(
-            f"coordination fetch failed: {_safe_detail(err or out)}"
-        )
-    rc, commit, err = _git(private, "rev-parse", "--verify", remote_ref)
-    if rc != 0 or not commit:
-        raise CoordinationUnavailable(
-            f"coordination branch {branch!r} does not exist on {remote}"
-        )
     return remote_ref, commit
 
 
