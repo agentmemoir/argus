@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import pytest
 
+import selftest_shards
 import selftest_tiers as tiers
 from faults import FAULTS
 from selftest_closure import case_reach
@@ -128,11 +129,27 @@ def test_a_fault_harness_change_runs_the_full_fault_set():
     assert plan.full
 
 
-def test_the_shards_cover_every_name_once():
-    names = [f"n{i}" for i in range(13)]
-    shards = tiers.shard_names(names, 6)
+def test_the_shards_cover_every_driver_case_once():
+    units = selftest_shards.driver_units(CASES)
+    shards = selftest_shards.shard_units(units, 6)
     assert len(shards) == 6
-    assert sorted(name for group in shards for name in group) == sorted(names)
+    assert sorted(name for shard in shards for name in shard) == sorted(CASES)
+
+
+def test_an_ordered_group_stays_in_one_shard():
+    units = selftest_shards.driver_units(CASES)
+    shards = selftest_shards.shard_units(units, 6)
+    groups = [unit for unit in units if len(unit) > 1]
+    assert groups, "scripts/driver_cases.py declares no ordered group"
+    for group in groups:
+        homes = {i for i, shard in enumerate(shards) for name in group if name in shard}
+        assert len(homes) == 1, f"ordered group split across shards: {group}"
+
+
+def test_a_member_of_an_ordered_group_brings_the_whole_group():
+    units = selftest_shards.driver_units(["flow"])
+    assert len(units) == 1
+    assert "launch" in units[0] and "flow" in units[0]
 
 
 def test_every_fault_names_a_file_that_exists():

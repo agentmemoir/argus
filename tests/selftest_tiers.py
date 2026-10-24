@@ -34,6 +34,7 @@ from pathlib import Path
 from typing import TextIO, cast
 
 from selftest_closure import case_reach
+from selftest_shards import driver_units, guard_units, shard_units
 
 ROOT = Path(__file__).resolve().parent.parent
 MAP_FILE = ROOT / "src/argus/driver/selftest-map.txt"
@@ -211,12 +212,6 @@ def plan_guard(
     return Plan(names=names, why=chosen, full=False, notes=[])
 
 
-def shard_names(names: list[str], count: int) -> list[list[str]]:
-    """Split names into at most ``count`` shards, dealt round-robin in declared order."""
-    size = max(1, min(count, len(names)))
-    return [names[i::size] for i in range(size)]
-
-
 def changed_files(base: str, root: Path = ROOT) -> list[str]:
     """Files changed since the base, in the branch, the work tree, and untracked."""
     commands = (
@@ -307,7 +302,12 @@ def main(argv: list[str] | None = None) -> int:
         else:
             plan = plan_guard(changed, faults, driver_map, reach)
     if args.matrix:
-        shards = shard_names(plan.names, SHARDS[args.area])
+        units = (
+            driver_units(plan.names)
+            if args.area == "driver"
+            else guard_units(plan.names)
+        )
+        shards = shard_units(units, SHARDS[args.area])
         _print_plan(args.area, plan, total, sys.stderr)
         print(
             json.dumps(
