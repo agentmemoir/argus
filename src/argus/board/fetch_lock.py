@@ -28,7 +28,7 @@ def _fetch_lock_file(private: str | Path) -> Path:
 
 
 @contextmanager
-def _fetch_serialized(private: str | Path) -> Generator[None]:
+def fetch_serialized(private: str | Path) -> Generator[None]:
     """Hold the checkout's fetch lock, waiting at most one fetch timeout for it."""
     lock_path = _fetch_lock_file(private)
     deadline = time.monotonic() + FETCH_TIMEOUT_S

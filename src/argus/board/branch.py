@@ -14,7 +14,7 @@ from argus.board.core import (
     _validate_branch,
     _validate_remote,
 )
-from argus.board.fetch_lock import _fetch_serialized
+from argus.board.fetch_lock import fetch_serialized
 from argus.board.git import _git, _is_git_repo
 from argus.board.state import state_rel
 from argus.conventions import board_repo
@@ -268,7 +268,7 @@ def _fetch_branch_ref(private: str | Path, remote: str, branch: str) -> tuple[st
     """
     remote_ref = f"refs/remotes/{remote}/{branch}"
     refspec = f"+refs/heads/{branch}:{remote_ref}"
-    with _fetch_serialized(private):
+    with fetch_serialized(private):
         rc, out, err = _git(
             private, "fetch", "--prune", remote, refspec, timeout=FETCH_TIMEOUT_S
         )
