@@ -151,7 +151,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"    {exc}", file=sys.stderr)
             return 2
         elapsed = time.monotonic() - started
-        timings.append((elapsed, fault["name"]))
+        timings.append((elapsed, str(fault["name"])))
         if caught is None:
             # Its own line, its own count, and its own sentence in the summary. A
             # stale anchor reads as an uncovered guard otherwise, and the reader
