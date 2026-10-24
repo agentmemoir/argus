@@ -81,9 +81,71 @@ jobs:
           uv run python -m argus.gitsync.main --self-test
           uv run python -m argus.issues.selftest
 
-  self-test:
-    name: self-test
-    # A pull request runs the quick tier. Main runs the full suites in full-suites.yml.
+  # The quick tier, split into shards. The plan job reads the change and deals the
+  # selected cases and faults into shards. A change the map cannot place selects the
+  # whole area, and that set is split the same way. Each shard runs on its own runner,
+  # so the gate's wall time is its longest shard. See tests/selftest_tiers.py.
+  plan:
+    name: plan the quick tier
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      driver: ${{ steps.plan.outputs.driver }}
+      guard: ${{ steps.plan.outputs.guard }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Fetch the base branch
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: git fetch --no-tags origin "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}"
+      - name: Plan the shards
+        id: plan
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          {
+            echo "driver=$(python3 tests/selftest_tiers.py driver --base "origin/${BASE_REF}" --matrix)"
+            echo "guard=$(python3 tests/selftest_tiers.py guard --base "origin/${BASE_REF}" --matrix)"
+          } >> "$GITHUB_OUTPUT"
+
+  self-test-shard:
+    name: self-test shard ${{ matrix.id }}
+    needs: plan
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.plan.outputs.driver) }}
+    steps:
+      - name: Mount temporary storage
+        run: |
+          sudo mkdir -p /mnt/noexec
+          sudo mount -t tmpfs -o noexec,nosuid,nodev,mode=1777 tmpfs /mnt/noexec
+          sudo mount -t tmpfs -o noexec,nosuid,nodev,mode=1777 tmpfs /dev/shm
+          echo "TMPDIR=/mnt/noexec" >> "$GITHUB_ENV"
+
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+      - name: Install the project
+        run: uv sync --frozen
+      - name: Install tmux
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq tmux
+      - name: Run the shard
+        env:
+          NAMES: ${{ matrix.names }}
+        run: |
+          started=$(date +%s)
+          uv run python tests/selftest_tiers.py driver --cases "$NAMES" --shard "${{ matrix.id }}"
+          echo "self-test shard ${{ matrix.id }} wall seconds: $(( $(date +%s) - started ))"
+
+  self-test-static:
+    name: self-test static checks
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -96,8 +158,6 @@ jobs:
           echo "TMPDIR=/mnt/noexec" >> "$GITHUB_ENV"
 
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
       - name: Install uv
         uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
       - name: Install the project
@@ -110,23 +170,38 @@ jobs:
         run: make example-check
       - name: Check the installed package
         run: make install-check
-      - name: Run the quick self-test tier
-        env:
-          BASE_REF: ${{ github.base_ref }}
-        run: |
-          git fetch --no-tags origin "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}"
-          started=$(date +%s)
-          make self-test-quick BASE="origin/${BASE_REF}"
-          echo "quick self-test elapsed seconds: $(( $(date +%s) - started ))"
 
-  guard-faults:
-    name: guard-faults
-    # A pull request runs the quick tier. Main runs the full suites in full-suites.yml.
+  # The verdict for the self-test check. It runs no tests: it passes only when the
+  # plan and every shard passed.
+  self-test:
+    name: self-test
+    needs: [plan, self-test-shard, self-test-static]
+    if: always() && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require every shard and static check to pass
+        env:
+          PLAN: ${{ needs.plan.result }}
+          SHARDS: ${{ needs.self-test-shard.result }}
+          STATIC: ${{ needs.self-test-static.result }}
+        run: |
+          echo "plan $PLAN, shards $SHARDS, static checks $STATIC"
+          if [ "$PLAN" != success ] || [ "$SHARDS" != success ] || [ "$STATIC" != success ]; then
+            echo "::error::quick self-test did not pass"
+            exit 1
+          fi
+
+  guard-faults-shard:
+    name: guard-faults shard ${{ matrix.id }}
+    needs: plan
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
-    # A cap for the current harness, which reruns a full driver self-test per
-    # fault; tighten it after the scoped runs are measured on this runner.
-    timeout-minutes: 90
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.plan.outputs.guard) }}
     steps:
       - name: Mount temporary storage
         run: |
@@ -136,19 +211,34 @@ jobs:
           echo "TMPDIR=/mnt/noexec" >> "$GITHUB_ENV"
 
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
       - name: Install uv
         uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
       - name: Install the project
         run: uv sync --frozen
       - name: Install tmux
         run: sudo apt-get update -qq && sudo apt-get install -y -qq tmux
-      - name: Run the quick guard-faults tier
+      - name: Run the shard
         env:
-          BASE_REF: ${{ github.base_ref }}
+          NAMES: ${{ matrix.names }}
         run: |
-          git fetch --no-tags origin "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}"
           started=$(date +%s)
-          CI=true make guard-faults-quick BASE="origin/${BASE_REF}"
-          echo "quick guard-faults elapsed seconds: $(( $(date +%s) - started ))"
+          CI=true uv run python tests/selftest_tiers.py guard --cases "$NAMES" --shard "${{ matrix.id }}"
+          echo "guard-faults shard ${{ matrix.id }} wall seconds: $(( $(date +%s) - started ))"
+
+  guard-faults:
+    name: guard-faults
+    needs: [plan, guard-faults-shard]
+    if: always() && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require every shard to pass
+        env:
+          PLAN: ${{ needs.plan.result }}
+          SHARDS: ${{ needs.guard-faults-shard.result }}
+        run: |
+          echo "plan $PLAN, shards $SHARDS"
+          if [ "$PLAN" != success ] || [ "$SHARDS" != success ]; then
+            echo "::error::quick guard-faults did not pass"
+            exit 1
+          fi
