@@ -10,7 +10,7 @@
 #
 estimate_update() {   # <number> <rel> <started epoch> <resumed: 0|1>
   local line
-  line="$("$PYTHON" - "$ARGUS" "$1" "$(phase_run_dir "$1" "$2")" \
+  line="$("$PYTHON" - "$ARGUS" "$1" "$(run_dir_of "$1" "$2")" \
     "$(($(date +%s) - $3))" "$4" "${ARGUS_CONFIG_ARGS[@]}" <<'PY'
 import sys
 from pathlib import Path
