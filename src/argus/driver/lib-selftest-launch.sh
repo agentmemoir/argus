@@ -118,6 +118,7 @@ selftest_case_locks_stall() {
   # do writes a line and leaves, so the log grows either way, whereas a tick that
   # never started would leave it untouched and pass the lock check for the wrong
   # reason.
+  selftest_replay_log
   sub_lines_before="$(wc -l <"$LOG" | tr -d '[:space:]')"
   _captured="$(drive --self-test 2>&1)" || true
   sub_lines_after="$(wc -l <"$LOG" | tr -d '[:space:]')"

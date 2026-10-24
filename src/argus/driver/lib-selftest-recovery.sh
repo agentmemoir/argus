@@ -16,6 +16,7 @@ selftest_case_recovery_sources() {
   RECOVER_OWN_CLAIM=0
   export RECOVER_OWN_CLAIM
 
+  selftest_replay_log
   launches="$(grep -c 'launched phase' "$LOG" || true)"
   DRIVER_STUB_COORDINATION=fence drive --self-test || true
   if grep -q "WAIT_FOR_CLAIM for phase 100010" "$LOG" \

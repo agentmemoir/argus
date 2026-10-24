@@ -420,3 +420,12 @@ selftest_group_end() {
   WORK_SOURCE_FLAGS=(--source phases)
 }
 
+# The driver log that the cases below count before their own first tick. Launch
+# used to create it, so a case run alone found no file, its baseline count came
+# back empty, and the comparison after the tick could never hold. A case calls
+# this first. It creates the log if it is absent and leaves it alone otherwise,
+# so a count before the tick reads zero.
+selftest_replay_log() {
+  mkdir -p "$RUN_DIR"
+  : >>"$LOG"
+}
