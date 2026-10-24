@@ -49,7 +49,7 @@ import _bootstrap
 from argus import conventions
 conventions.configure_from_cli(sys.argv[4:])
 from argus.board.reservations import CoordinationError
-from argus.issues.source import release_if_closed
+from argus.issues.leftover import release_if_closed
 from argus.issues.transport import IssuesUnavailable
 try:
     closed = release_if_closed(

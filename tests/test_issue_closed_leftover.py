@@ -103,7 +103,7 @@ def test_release_if_closed_releases_only_a_closed_issue(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    from argus.issues.source import release_if_closed
+    from argus.issues.leftover import release_if_closed
 
     repo, board = configured
     row = issue(100002, labels=HARD, state="OPEN")
