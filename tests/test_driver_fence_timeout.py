@@ -109,25 +109,28 @@ def _run(tmp_path: Path) -> tuple[subprocess.CompletedProcess[str], float]:
 def test_a_hung_board_is_killed_and_refused(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    # The bound is 5 s and the stub sleeps 60 s. A 1 s bound could fire before a
+    # loaded machine starts the stub, which then never records its pid. The stub
+    # outlives the bound by far, and the run's own 30 s timeout stays the hang guard.
     state = _probe(
         tmp_path,
         monkeypatch,
-        FENCE_STUB_SLEEP="5",
+        FENCE_STUB_SLEEP="60",
         FENCE_STUB_EXIT="0",
-        ARGUS_FENCE_TIMEOUT_S="1",
+        ARGUS_FENCE_TIMEOUT_S="5",
     )
 
     done, elapsed = _run(tmp_path)
 
     assert done.returncode == 0, done.stderr
     assert "rc=124" in done.stdout, done.stdout
-    assert elapsed < 3, f"the bound did not fire in time: {elapsed:.1f}s"
+    assert elapsed < 15, f"the bound did not fire in time: {elapsed:.1f}s"
     pid = int((state / "pid").read_text())
     with pytest.raises(ProcessLookupError):
         os.kill(pid, 0)
     assert not (state / "finished").exists(), "the killed board call ran to the end"
     assert (
-        "did not answer within 1s"
+        "did not answer within 5s"
         in (tmp_path / "assert-owner-100020.json").read_text()
     )
 

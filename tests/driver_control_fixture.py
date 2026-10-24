@@ -16,6 +16,12 @@ from pathlib import Path
 from argus.gitsync.git import git
 from driver_publication_fixture import DRIVER, PHASE, DriverPublication
 
+# The longest the test side waits for the driver to reach a gate, and for the gate
+# to answer. The driver runs several commands before the gated one, and a loaded
+# machine takes far longer than a quiet one. The bound only stops a hang: a driver
+# that never reaches the gate still fails the test.
+GATE_WAIT_S = 120
+
 
 def blocked_run(fixture: DriverPublication) -> None:
     """Keep the real claim and branch, but prepare work that can be resumed."""
@@ -81,7 +87,7 @@ def resume_barrier(
     with socket.socket() as server:
         server.bind(("127.0.0.1", 0))
         server.listen(1)
-        server.settimeout(20)
+        server.settimeout(GATE_WAIT_S)
         wrapper = exec_dir / f"gated-{command}"
         wrapper.write_text(
             f"#!{sys.executable}\n"
@@ -89,7 +95,7 @@ def resume_barrier(
             f"once = Path({str(fixture.state / 'gate-used')!r})\n"
             f"if {match!r} in sys.argv[1:] and not once.exists():\n"
             "    once.touch()\n"
-            f"    with socket.create_connection({server.getsockname()!r}, timeout=20) as gate:\n"
+            f"    with socket.create_connection({server.getsockname()!r}, timeout={GATE_WAIT_S}) as gate:\n"
             "        gate.sendall(b'r')\n"
             "        assert gate.recv(1) == b'1', 'barrier not released'\n"
             f"os.execv({executable!r}, [{executable!r}, *sys.argv[1:]])\n"
@@ -128,7 +134,7 @@ def resume_barrier(
                     log.read_text() if log.exists() else "no driver log"
                 ) from exc
             with connection:
-                connection.settimeout(20)
+                connection.settimeout(GATE_WAIT_S)
                 assert connection.recv(1) == b"r"
                 yield process, connection
         finally:
