@@ -7,11 +7,11 @@ from argparse import Namespace
 import pytest
 
 from argus.gitsync.git import ConfigError
-from argus.gitsync.issue_modes import _issue_mode
+from argus.gitsync.issue_modes import issue_mode
 
 
 @pytest.mark.parametrize("mode", ["signals", "signal-reply", "peek-ci"])
 def test_phase_only_mode_refuses_issue_kind(mode: str) -> None:
     args = Namespace(mode=mode, root=".", phase="255", phases=None, group=None)
     with pytest.raises(ConfigError, match=f"--mode {mode} is phase-only"):
-        _issue_mode(args)
+        issue_mode(args)
