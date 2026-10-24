@@ -61,7 +61,7 @@ def count_runs(steps: Iterable[Step], makefile: str) -> Counter[str]:
 def test_every_test_file_runs_exactly_once() -> None:
     makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
     counts = count_runs(workflow_steps(), makefile)
-    problems = []
+    problems: list[str] = []
     for path in sorted(TESTS.glob("test_*.py")):
         name = rel(path)
         want = 1 if name not in SKIPPED or name in SCRIPT_ONLY else 0
