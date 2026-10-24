@@ -27,9 +27,9 @@ Two rules make the result mean something:
   re-aiming. Passing because a fault was silently not applied would turn this
   harness into the thing it exists to replace.
 
-The harness patches the driver's source files in place and restores them in a
-``finally`` block. It checks each restored digest. Run it from a disposable
-copy of the Argus repository, so a fault cannot touch a live driver. The
+The harness patches a copy of the driver's source files, one copy per fault, and
+checks that each copy is restored byte for byte. The checkout is only read, so no
+fault can touch a live driver. The copies run side by side, one per CPU. The
 self-test creates its own project, board, and run state; project history is not
 needed.
 
@@ -51,24 +51,57 @@ are already scoped by their check name.
 ``--order`` runs the same faults in reverse or shuffled order. A guard suite
 that only passes in one order is order-dependent, and the fault that failed in
 declared order and passed alone is what that costs: the run has to be probeable
-for it, not just observed once.
+for it, not just observed once. The report lists the faults in that order, not
+in the order they finished.
 
-Each fault runs in its own temporary directory and its own tmux server. The
-child process drops all config settings from its environment, so the fixture
-must pass its config file to every tool.
+Each fault runs in its own copy of the repository, in its own temporary directory,
+with its own tmux server. The child process drops all config settings from its
+environment, so the fixture must pass its config file to every tool.
 
-Exit status is 1 when any fault went undetected, 2 when the driver could not be
-restored. With --list, 0 always.
+Exit status is 1 when any fault went undetected, 2 when a fault could not run or
+the driver could not be restored. With --list, 0 always.
 """
 
 import argparse
+import os
 import random
+import shutil
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
+from typing import Any
 
+from argus.exec_tempdir import make_exec_dir
 from faults import FAULTS
 from guard_faults_engine import DRIVER, RestoreError, check_fault
+
+#: What a fault's copy leaves out: version control, caches and build output. A
+#: fault needs source files only, and the copies stay small. A `target` folder is
+#: also where the self-test may put its own scratch, so it must not be copied.
+COPY_IGNORE = shutil.ignore_patterns(
+    ".git",
+    ".venv",
+    "__pycache__",
+    "dist",
+    "target",
+    ".pytest_cache",
+    ".ruff_cache",
+    ".mypy_cache",
+)
+
+
+@dataclass(frozen=True)
+class Outcome:
+    """One fault's verdict. `failure` names a harness problem, not a verdict."""
+
+    name: str
+    caught: bool | None
+    detail: str
+    seconds: float
+    failure: str = ""
 
 
 def print_slowest(timings: list[tuple[float, str]]) -> None:
@@ -76,6 +109,43 @@ def print_slowest(timings: list[tuple[float, str]]) -> None:
     print("fault time: slowest 10")
     for seconds, name in sorted(timings, reverse=True)[:10]:
         print(f"fault time:   {seconds:7.1f} s  {name}")
+
+
+def run_in_copy(repo: Path, fault: dict[str, Any]) -> Outcome:
+    """Run one fault in its own copy of the repository, then discard the copy.
+
+    The copy is made in a scratch directory the host lets programs run from, so the
+    self-test that runs against it can start its tools there. The checkout is only
+    read, and no two faults share a copy.
+    """
+    name = str(fault["name"])
+    scratch = make_exec_dir()
+    if not scratch:
+        return Outcome(
+            name,
+            None,
+            "no executable temporary directory on this host",
+            0.0,
+            "NOT RUN",
+        )
+    tree = Path(scratch) / "repo"
+    try:
+        shutil.copytree(repo, tree, ignore=COPY_IGNORE)
+    except OSError as exc:
+        shutil.rmtree(scratch, ignore_errors=True)
+        return Outcome(
+            name, None, f"could not copy the repository: {exc}", 0.0, "NOT RUN"
+        )
+    try:
+        started = time.monotonic()
+        try:
+            caught, detail = check_fault(tree, tree / DRIVER, fault)
+        except RestoreError as exc:
+            elapsed = time.monotonic() - started
+            return Outcome(name, None, str(exc), elapsed, "NOT RESTORED")
+        return Outcome(name, caught, detail, time.monotonic() - started)
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -133,37 +203,39 @@ def main(argv: list[str] | None = None) -> int:
         print(f"error: no driver at {driver}", file=sys.stderr)
         return 2
 
+    workers = os.cpu_count() or 1
     print(
         f"fault injection: {len(selected)} fault(s), order={args.order}, "
-        f"each on the real code, restored after every run"
+        f"each in its own copy of the repository, {workers} at a time"
     )
     missed = 0
     stale = 0
+    failures = 0
     timings: list[tuple[float, str]] = []
-    for fault in selected:
-        sys.stdout.write(f"  {fault['name']} ... ")
-        sys.stdout.flush()
-        started = time.monotonic()
-        try:
-            caught, detail = check_fault(repo, driver, fault)
-        except RestoreError as exc:
-            print("NOT RESTORED")
-            print(f"    {exc}", file=sys.stderr)
-            return 2
-        elapsed = time.monotonic() - started
-        timings.append((elapsed, str(fault["name"])))
-        if caught is None:
-            # Its own line, its own count, and its own sentence in the summary. A
-            # stale anchor reads as an uncovered guard otherwise, and the reader
-            # goes looking for a defect in the driver that is not there.
-            stale += 1
-            print(f"NOT APPLICABLE ({elapsed:.1f} s)\n    {detail}")
-        elif caught:
-            print(f"ok ({elapsed:.1f} s)\n    {detail}")
-        else:
-            missed += 1
-            print(f"UNDETECTED ({elapsed:.1f} s)\n    {detail}")
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        # map yields in the chosen order, even when a later fault finishes first.
+        for outcome in pool.map(partial(run_in_copy, repo), selected):
+            sys.stdout.write(f"  {outcome.name} ... ")
+            if outcome.failure:
+                failures += 1
+                print(outcome.failure)
+                print(f"    {outcome.detail}", file=sys.stderr)
+                continue
+            timings.append((outcome.seconds, outcome.name))
+            if outcome.caught is None:
+                # Its own line, its own count, and its own sentence in the summary. A
+                # stale anchor reads as an uncovered guard otherwise, and the reader
+                # goes looking for a defect in the driver that is not there.
+                stale += 1
+                print(f"NOT APPLICABLE ({outcome.seconds:.1f} s)\n    {outcome.detail}")
+            elif outcome.caught:
+                print(f"ok ({outcome.seconds:.1f} s)\n    {outcome.detail}")
+            else:
+                missed += 1
+                print(f"UNDETECTED ({outcome.seconds:.1f} s)\n    {outcome.detail}")
     print_slowest(timings)
+    if failures:
+        return 2
     if missed or stale:
         # Both sentences, both counts, every run. Reporting only the undetected
         # one is how a stale anchor survives: the run fails, the reader fixes a
