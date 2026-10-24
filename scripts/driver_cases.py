@@ -9,10 +9,10 @@ per case gets the isolation the single run gives it, and the processes can run s
 by side. The leftover sweep only touches fixtures whose owning process is dead, so
 a live job's fixture is never swept.
 
-ORDERED_GROUPS names cases that must run in declared order in one process. It is
-empty: no case reads what another case wrote, and the fault harness already runs
-single cases through SELFTEST_CASES. A case that needs another case's state goes
-in a group here.
+ORDERED_GROUPS names cases that run in one process, in declared order. The first
+ten cases form one group. Run alone in CI, five of them failed, because they need
+the state the cases before them leave. The group keeps the single run's order, so
+each of them sees that state. The other cases passed alone and run as their own jobs.
 
 Each job has a timeout and a log. The pool has one worker per CPU.
 """
@@ -32,8 +32,21 @@ CASES_FILE = ROOT / "src" / "argus" / "driver" / "lib-selftest.sh"
 DRIVER = ROOT / "bin" / "argus"
 #: Hang guard for one job. A job that runs past it fails with a reason.
 JOB_TIMEOUT_S = 900
-#: Cases that must run in declared order, one job each. Empty: see the docstring.
-ORDERED_GROUPS: list[tuple[str, ...]] = []
+#: Cases that run in one process, in declared order. See the docstring.
+ORDERED_GROUPS: list[tuple[str, ...]] = [
+    (
+        "launch",
+        "locks_stall",
+        "git_ceiling",
+        "lost_repo",
+        "flow",
+        "release",
+        "unavailable",
+        "reasons",
+        "recovery_sources",
+        "merge_orphan",
+    ),
+]
 PASS_LINE = "driver self-test: pass"
 
 
