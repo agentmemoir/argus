@@ -29,12 +29,6 @@ from argus.conventions import board_repo
 FETCH_LOCK_NAME = "argus-board-fetch.lock"
 FETCH_LOCK_POLL_S = 0.05
 
-# Two fetches of one board branch can meet on the same reference lock. Git refuses
-# the second with this message, and it succeeds a moment later. Only that message is
-# retried, and only this many times. A lock that keeps failing still fails closed.
-LOCK_CONTENTION = "cannot lock ref"
-LOCK_RETRY_DELAYS_S = (0.1, 0.3)
-
 
 def _branch_setting(branch: str | None) -> str:
     """Resolve the board's branch.
@@ -318,13 +312,6 @@ def _fetch_branch_ref(private: str | Path, remote: str, branch: str) -> tuple[st
         rc, out, err = _git(
             private, "fetch", "--prune", remote, refspec, timeout=FETCH_TIMEOUT_S
         )
-        for delay in LOCK_RETRY_DELAYS_S:
-            if rc == 0 or LOCK_CONTENTION not in (err or ""):
-                break
-            time.sleep(delay)
-            rc, out, err = _git(
-                private, "fetch", "--prune", remote, refspec, timeout=FETCH_TIMEOUT_S
-            )
         if rc != 0:
             if not _board_branch_exists(private, remote, branch):
                 raise CoordinationUnavailable(
