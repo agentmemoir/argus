@@ -8,12 +8,12 @@ from pathlib import Path
 from typing import Any
 
 from argus.board.branch import (
-    _board_never_created,
     _branch_setting,
     _fetch_branch_ref,
     _remote_setting,
     _resolve_private_repo,
     _state_initialized,
+    board_never_created,
 )
 from argus.board.core import (
     ACTIVE_STATUSES,
@@ -98,7 +98,7 @@ class _StoreBase:
             # answered for both its branch and its backup. A read never creates the
             # branch; the first claim write does, through the write path. Any other
             # failure to read, including a deleted board, stays a failure.
-            if _board_never_created(self.private, self.remote, self.branch):
+            if board_never_created(self.private, self.remote, self.branch):
                 return _empty_state(), ""
             raise
         initialized = _state_initialized(self.private, ref, issues=self.issues)

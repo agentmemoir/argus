@@ -147,7 +147,7 @@ def _branch_confirmed_absent(private: str | Path, remote: str, branch: str) -> b
     return rc == 2
 
 
-def _board_never_created(private: str | Path, remote: str, branch: str) -> bool:
+def board_never_created(private: str | Path, remote: str, branch: str) -> bool:
     """Whether the board was never created: no board branch and no backup either.
 
     A backup ref means the board existed and was deleted. That is a broken board,

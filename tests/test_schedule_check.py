@@ -68,11 +68,12 @@ def test_an_unreadable_crontab_is_unknown_not_present(
 
 
 def test_no_crontab_for_the_user_reads_as_none(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        subprocess,
-        "run",
-        lambda *_a, **_k: _completed(1, stderr="no crontab for user\n"),
-    )
+    def no_crontab(
+        *_args: object, **_kwargs: object
+    ) -> subprocess.CompletedProcess[str]:
+        return _completed(1, stderr="no crontab for user\n")
+
+    monkeypatch.setattr(subprocess, "run", no_crontab)
     assert schedule_check.read_crontab() == ("none", "")
 
 
@@ -80,7 +81,11 @@ def test_the_exact_line_uses_flock_when_it_is_installed(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     config = tmp_path / "argus.jsonc"
-    monkeypatch.setattr(schedule_check.shutil, "which", lambda _name: "/usr/bin/flock")
+
+    def flock_installed(_name: str) -> str:
+        return "/usr/bin/flock"
+
+    monkeypatch.setattr(schedule_check.shutil, "which", flock_installed)
     line = schedule_check.exact_line(config, tmp_path / "state", ENTRY)
     assert line == (
         f"*/5 * * * * flock -n {(tmp_path / 'state').resolve() / 'cron.lock'} "

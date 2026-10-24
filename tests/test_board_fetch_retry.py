@@ -38,9 +38,13 @@ class ScriptedGit:
         return 0, "", ""
 
 
+def _no_sleep(_seconds: float) -> None:
+    return None
+
+
 @pytest.fixture
 def no_wait(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(branch.time, "sleep", lambda _seconds: None)
+    monkeypatch.setattr(branch.time, "sleep", _no_sleep)
 
 
 @pytest.mark.usefixtures("no_wait")
