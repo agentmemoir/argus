@@ -32,7 +32,7 @@ def driver_units(
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     if groups is not None:
-        module.ORDERED_GROUPS = groups
+        module.__dict__["ORDERED_GROUPS"] = groups
     jobs = cast(_Jobs, module.jobs)
     return [list(unit) for unit in jobs(names)]
 
