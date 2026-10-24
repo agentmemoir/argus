@@ -48,6 +48,8 @@ jobs:
         run: make lines
       - name: Check one-paragraph-per-line prose
         run: make prose
+      - name: Check changelog fragments
+        run: make changelog-check
       - name: Check the temporary-storage rule
         run: make noexecscan
 
