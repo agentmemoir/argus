@@ -68,12 +68,16 @@ def resume_barrier(
     driver: Path = DRIVER,
     modes: tuple[str, ...] = ("--resume", str(PHASE)),
 ) -> Generator[tuple[subprocess.Popen[str], socket.socket], None, None]:
-    """Pause a real resume at Git fetch or tmux new-window; never patch internals."""
+    """Pause a real resume before its board fetch takes the fetch lock, or at tmux new-window.
+
+    The git gate pauses at the lock's own rev-parse, which runs before the lock is
+    taken, so an overlapping process can still read the board while the resume waits.
+    """
     tmux = control_tmux(fixture, exec_dir)
     command = "git" if boundary == "before-consume" else "tmux"
     executable = shutil.which("git") if command == "git" else str(tmux)
     assert executable is not None
-    match = "fetch" if command == "git" else "new-window"
+    match = "--git-common-dir" if command == "git" else "new-window"
     with socket.socket() as server:
         server.bind(("127.0.0.1", 0))
         server.listen(1)
