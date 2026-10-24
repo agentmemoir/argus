@@ -17,6 +17,20 @@ print(phase_run_dir(sys.argv[2], int(sys.argv[3]), sys.argv[4] or None))
 PY
 }
 
+# The frozen task file of an issue, from issues.task-dir. Empty when none exists.
+issue_task_file_of() {   # <number>
+  "$PYTHON" - "$ARGUS" "$REPO" "$1" "${ARGUS_CONFIG_ARGS[@]}" <<'PY'
+import sys
+from pathlib import Path
+sys.path.insert(0, sys.argv[1])
+import _bootstrap
+from argus import conventions
+conventions.configure_from_cli(sys.argv[4:])
+from argus.conventions import resolve_issue_file
+print(resolve_issue_file(sys.argv[2], int(sys.argv[3])) or "")
+PY
+}
+
 phase_state() {
   local file
   file="$(phase_run_dir "$1" "${2:-}")/run.json"
@@ -565,17 +579,7 @@ check_stall() {
   [ -n "$n" ] || return 0
   if [ "${work_kind:-phase}" = issue ]; then
     # An issue run's input is its frozen task file in issues.task-dir.
-    issue_file="$("$PYTHON" - "$ARGUS" "$REPO" "$n" "${ARGUS_CONFIG_ARGS[@]}" <<'PY'
-import sys
-from pathlib import Path
-sys.path.insert(0, sys.argv[1])
-import _bootstrap
-from argus import conventions
-conventions.configure_from_cli(sys.argv[4:])
-from argus.conventions import resolve_issue_file
-print(resolve_issue_file(sys.argv[2], int(sys.argv[3])) or "")
-PY
-    )"
+    issue_file="$(issue_task_file_of "$n")"
     if [ -z "$issue_file" ]; then
       log "issue $n has no task file; the pipeline input ${PHASE_FILE_INPUT:-phase_file} is missing, so the stall check is skipped"
       return 0

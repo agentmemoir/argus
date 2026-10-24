@@ -26,6 +26,7 @@ STOP_ALLOWLIST = r"""
     driver/lib-driver-abandon.sh	exit_nonzero	fn:abandon_cmd|exit 1#5
     driver/lib-driver-abandon.sh	exit_nonzero	fn:abandon_cmd|exit 1#6
     driver/lib-driver-abandon.sh	exit_nonzero	fn:abandon_cmd|exit 1#7
+    driver/lib-driver-abandon.sh	exit_nonzero	fn:abandon_cmd|exit 1#8
     driver/lib-driver-check.sh	return_nonzero	fn:check|return 1#1
     driver/lib-driver-check.sh	return_nonzero	fn:check|return 1#2
     driver/lib-driver-check.sh	return_nonzero	fn:check|[ "$prerun_rc" -eq 0 ] || return 1#1

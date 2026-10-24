@@ -134,7 +134,18 @@ abandon_cmd() {   # <number> [--reason TEXT]
   # A live recorded pid with no phase window is an orphaned run, not a phase to
   # park. Refusing leaves the marker and the run evidence for the operator.
   driver_orphan_check || { printf 'argus abandon: a phase run is alive with no window (orphaned); not abandoning\n' >&2; exit 1; }
-  rel="$(resume_phase_file_of "$number")" || true
+  if [ "${work_kind:-phase}" = issue ]; then
+    # An issue run's input is its frozen task file in issues.task-dir. Without it
+    # the run directory cannot be named, so refuse before any state changes.
+    rel="$(issue_task_file_of "$number")" || rel=""
+    if [ -z "$rel" ]; then
+      printf 'argus abandon: issue %s has no task file; the pipeline input %s is missing; nothing abandoned\n' \
+        "$number" "${PHASE_FILE_INPUT:-phase_file}" >&2
+      exit 1
+    fi
+  else
+    rel="$(resume_phase_file_of "$number")" || true
+  fi
   run_dir="$(phase_run_dir "$number" "${rel:-}")"
   if [ ! -d "$run_dir" ]; then
     printf 'argus abandon: no run directory at %s; nothing to abandon\n' "$run_dir" >&2

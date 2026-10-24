@@ -57,6 +57,35 @@ def test_issue_tick_finds_task_file_in_issue_folder(issue_driver: Path) -> None:
     assert not (issue_driver / "events").exists()
 
 
+def abandon_issue(root: Path) -> str:
+    body = (
+        '. "$TEST_DRIVER/lib-driver-abandon.sh"\n'
+        "work_kind=issue; PHASE_FILE_INPUT=issue_file\n"
+        '(abandon_cmd 255) 2>"$RUN_DIR/abandon.err" || true\n'
+        "printf 'done\\n'\n"
+    )
+    return shell(root, body)
+
+
+def test_issue_abandon_without_task_file_refuses_in_one_line(
+    issue_driver: Path,
+) -> None:
+    assert "done" in abandon_issue(issue_driver)
+    err = (issue_driver / "abandon.err").read_text(encoding="utf-8")
+    assert "Traceback" not in err
+    assert "issue 255 has no task file" in err and "issue_file" in err
+
+
+def test_issue_abandon_finds_task_file_in_issue_folder(issue_driver: Path) -> None:
+    folder = issue_driver / "runs" / "issue-tasks"
+    folder.mkdir(parents=True)
+    (folder / TASK).write_text("frozen task\n", encoding="utf-8")
+    assert "done" in abandon_issue(issue_driver)
+    err = (issue_driver / "abandon.err").read_text(encoding="utf-8")
+    assert "Traceback" not in err
+    assert "no run directory at" in err and "issue-000255" in err
+
+
 @pytest.fixture
 def configured(tmp_path: Path):
     previous = conventions.configure(
