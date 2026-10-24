@@ -20,11 +20,13 @@
 # A retargeted `send-keys` is the difference between Ctrl-C reaching a running
 # agent and Ctrl-C reaching the log tail.
 #
-# Geometry: `new-window` has no -x/-y, so a new window inherits the session
-# size. `window-size manual` holds the session at TMUX_WIDTH x TMUX_HEIGHT even
-# when a smaller client attaches, which keeps the harness pty size stable
-# (runner.py copies the pane size into each harness pty). `resize-window` sets a
-# window explicitly and works on a non-active window.
+# Geometry: no window has a fixed size. `window-size latest` makes each window
+# follow the client that was used most recently, and `aggressive-resize on` keeps
+# that rule per window. An attached terminal therefore sets the size of the
+# agent's pane. TMUX_WIDTH x TMUX_HEIGHT is only the `default-size`, which is
+# used when no client is attached. The harness must not pin its own size:
+# runner.py copies the pane size into each harness pty, and tmux sends SIGWINCH
+# when that pane is resized.
 
 # The two window names. A window whose command exits closes that window, so the
 # phase window disappearing is the completion signal.
@@ -99,37 +101,38 @@ tmux_session_ensure() {
   fi
   # A new tmux server inherits every open descriptor. 9>&- keeps the driver lock
   # (fd 9) out of it, so the lock is released when the driver exits.
-  9>&- "$TMUX_BIN" new-session -d -s "$SESSION" -x "$TMUX_WIDTH" -y "$TMUX_HEIGHT" -c "$REPO" \
+  9>&- "$TMUX_BIN" new-session -d -s "$SESSION" -c "$REPO" \
     -n "$TMUX_IDLE_WINDOW" "$ARGUS_DRIVER/$TMUX_IDLE_SCRIPT" "${ARGUS_CONFIG_ARGS[@]}" \
     || { log "failed to create tmux session '$SESSION'"; return 1; }
-  # Hold the geometry. Without this, a client attaching at any other size
-  # resizes the windows, and the harness pty size changes with them.
-  "$TMUX_BIN" set-option -t "$SESSION" -w window-size manual 2>/dev/null || true
+  # tmux gives a new detached session no default size of its own, and a global
+  # default-size needs a running server. So the idle window takes the default
+  # size once, here. resize-window also sets window-size to manual, so the size
+  # options are applied after it.
+  "$TMUX_BIN" resize-window -t "$SESSION:$TMUX_IDLE_WINDOW" -x "$TMUX_WIDTH" -y "$TMUX_HEIGHT" 2>/dev/null || true
+  tmux_apply_size_options
   "$TMUX_BIN" set-option -t "$SESSION" set-titles on 2>/dev/null || true
   return 0
+}
+
+# Size options: no window has a fixed size. Windows follow the attached client
+# (`latest`, per window). The default size applies only when no client is
+# attached, so a detached phase window still has room.
+tmux_apply_size_options() {
+  "$TMUX_BIN" set-option -t "$SESSION" -w window-size latest 2>/dev/null || true
+  "$TMUX_BIN" set-option -t "$SESSION" -w aggressive-resize on 2>/dev/null || true
+  "$TMUX_BIN" set-option -t "$SESSION" -w default-size "${TMUX_WIDTH}x${TMUX_HEIGHT}" 2>/dev/null || true
 }
 
 # Bring an existing session back in line with the current settings.
 #
 # The session outlives every phase, so it is created once and then reused
-# indefinitely. That means a change to TMUX_WIDTH/TMUX_HEIGHT, or a session
-# created by hand, would otherwise keep whatever it was born with and silently
-# disagree with the driver. Re-assert the options and resize the idle window on
-# every tick: it is cheap, and it is the only thing that makes a setting change
-# take effect without the operator killing the session by hand.
+# indefinitely. A session created with an older setting, such as a fixed size,
+# would otherwise keep it. Re-assert the options on every tick: it is cheap, and
+# it makes a setting change take effect without the operator killing the session.
 tmux_session_reconcile() {
-  "$TMUX_BIN" set-option -t "$SESSION" -w window-size manual 2>/dev/null || true
+  tmux_apply_size_options
   "$TMUX_BIN" set-option -t "$SESSION" set-titles on 2>/dev/null || true
   tmux_apply_status_style
-  local idle_wid idle_geom
-  idle_wid="$("$TMUX_BIN" list-windows -t "$SESSION" -F '#{window_id} #{window_name}' 2>/dev/null \
-    | awk -v want="$TMUX_IDLE_WINDOW" '$2 == want { print $1 }')"
-  [ -n "$idle_wid" ] || return 0
-  idle_geom="$("$TMUX_BIN" display-message -p -t "$idle_wid" '#{window_width}x#{window_height}' 2>/dev/null || true)"
-  if [ "$idle_geom" != "${TMUX_WIDTH}x${TMUX_HEIGHT}" ]; then
-    log "resizing idle window from ${idle_geom:-unknown} to ${TMUX_WIDTH}x${TMUX_HEIGHT}"
-    "$TMUX_BIN" resize-window -t "$idle_wid" -x "$TMUX_WIDTH" -y "$TMUX_HEIGHT" 2>/dev/null || true
-  fi
   return 0
 }
 
@@ -160,8 +163,8 @@ tmux_phase_window_open() {
   # Resolve by ID right away: the window may be renamed by a stage hook moments
   # after this, and every later target must still find it.
   wid="$(tmux_window_id)" || return 1
-  # new-window has no -x/-y; set the size explicitly.
-  "$TMUX_BIN" resize-window -t "$wid" -x "$TMUX_WIDTH" -y "$TMUX_HEIGHT" 2>/dev/null || true
+  # No resize here: the window takes its size from the attached client, or from
+  # default-size when none is attached.
   # pipe-pane must name the phase window, not the session.
   [ -z "$logfile" ] || "$TMUX_BIN" pipe-pane -t "$wid" -o "cat >> '$logfile'" 2>/dev/null || true
   return 0
