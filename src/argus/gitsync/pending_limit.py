@@ -88,3 +88,8 @@ def step(
             )
     _save(path, record)
     return out
+
+
+def noticed(path: Path, head: str | None) -> bool:
+    """Whether the one Needs You notice for this head already went out."""
+    return head is not None and bool(head in _load(path).get("noticed", []))

@@ -1,0 +1,1 @@
+With issue work, a tick that marks a pull request ready, or that finds an open issue pull request still in the driver's hands, starts no new work. The next tick repairs or readies that pull request. ([#263](https://github.com/agentmemoir/argus/issues/263))

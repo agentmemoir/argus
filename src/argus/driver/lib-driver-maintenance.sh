@@ -37,10 +37,11 @@ PY
 # later. The once-only guard is GitHub's own ready/draft timeline, read inside
 # the mode, so a pull request a person put back in draft is never re-readied.
 #
-# It cannot stop the line and never gates a launch: a group that is held or
-# still waiting is logged and the next tick asks again.
+# It cannot stop the line: a group that is held or still waiting is logged and
+# the next tick asks again. With `issues` work, an issue pull request this sweep
+# readies ends the tick before selection (READY_MARKED, read by the driver).
 reconcile_group_ready() {
-  local state="" newly=""
+  local state="" newly="" ready_nums="" n=""
   # The self-test has no receipts, board or network.
   [ -z "${DRIVER_STUB_COORDINATION:-}" ] || return 0
   mkdir -p "$RUN_DIR"
@@ -61,7 +62,21 @@ print(" ".join(sorted({r.get("kind", "group") for r in json.load(sys.stdin).get(
         *" group "*) log "a group's shared pull request is ready; its checks passed" ;;
       esac
       case " $newly " in
-        *" issue "*) log "an issue pull request is ready; its checks passed" ;;
+        *" issue "*)
+          if [ "${WORK_SOURCE:-phases}" != issues ]; then
+            log "an issue pull request is ready; its checks passed"
+          else
+            ready_nums="$("$PYTHON" -c 'import json, sys
+for r in json.load(sys.stdin).get("results", []):
+    if r.get("kind") == "issue" and r.get("state") == "READY" and not r.get("skipped"):
+        print(str(r.get("pull_request", "")).rstrip("/").rsplit("/", 1)[-1])' \
+              <"$RUN_DIR/group-ready.json" 2>/dev/null || true)"
+            while read -r n; do
+              [ -n "$n" ] || continue
+              READY_MARKED=1
+              log "ready: PR #$n marked ready; no new work this tick"
+            done <<<"$ready_nums"
+          fi ;;
       esac
       ;;
     HELD)
@@ -74,6 +89,9 @@ print(" ".join(sorted({r.get("kind", "group") for r in json.load(sys.stdin).get(
 reconcile_pending_reviews() {
   PENDING_PUBLISHED=0
   REPAIR_STOP=0
+  READY_MARKED=0
+  WAITING_PR=""
+  WAITING_STATE=""
   if [ "${WORK_SOURCE:-phases}" = issues ]; then
     # Issue pull requests have no receipt to settle; the ready sweep reads their
     # rows, and red CI is still repaired.
