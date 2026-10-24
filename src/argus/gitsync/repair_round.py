@@ -176,13 +176,22 @@ def escalation_text(
     attempts: int,
     failing: list[dict[str, str]],
     conflict: bool = False,
+    base_sync_error: str | None = None,
 ) -> str:
-    """The Needs You line: one cause and one action."""
+    """The Needs You line: one cause and one action. A recorded base-sync
+    failure names itself as the cause — the checks were never evaluated that
+    round, so naming them would point at a readout that never ran (#276)."""
     if conflict:
         return (
             f"Needs You. {pull_request} still conflicts with its base after "
             f"{attempts} repair round(s). Action: resolve the conflict on the "
             "branch, or close the pull request."
+        )
+    if base_sync_error:
+        return (
+            f"Needs You. {pull_request} is still red after {attempts} repair "
+            f"round(s): the base check failed — {base_sync_error}. Action: fix "
+            "the configuration, or close the pull request."
         )
     names = ", ".join(c["name"] for c in failing) or "a check"
     return (

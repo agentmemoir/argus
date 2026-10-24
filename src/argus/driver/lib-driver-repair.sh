@@ -261,12 +261,19 @@ repair_observe() {
 # force; a moved branch rejects the push), and removes the worktree.
 # Bring a repair round's checkout up to its base before the repair agent starts.
 # Sets BASE_SYNC_STATE to clean, conflict, or failed. On a conflict, BASE_SYNC_NOTE
-# tells the agent to finish the merge that git left in progress.
+# tells the agent to finish the merge that git left in progress. On another
+# failure, BASE_SYNC_NOTE carries the CLI's own base-sync line and a copy is
+# left in $RUN_DIR for the escalation to name (#276).
 base_sync_repair() {  # <key> <worktree> <branch>
   local key="$1" wt="$2" branch="$3" out rc=0 line
   BASE_SYNC_STATE=failed BASE_SYNC_NOTE=""
-  out="$("$PYTHON" "$ARGUS/gitsync/base_sync_cli.py" "${ARGUS_CONFIG_ARGS[@]}" \
-    --repo "$wt" --pr-branch "$branch" 2>&1)" || rc=$?
+  rm -f "$RUN_DIR/base-sync-error-$key"
+  # The CLI loads the configuration through the driver's flag overrides, and a
+  # flag-origin repo-root resolves against this process's working directory.
+  # Run it from the driver's directory, so the worktree is only the --repo
+  # checkout to test, never the root the config is resolved against (#276).
+  out="$(cd "$BASE_SYNC_DRIVER_DIR" && "$PYTHON" "$ARGUS/gitsync/base_sync_cli.py" \
+    "${ARGUS_CONFIG_ARGS[@]}" --repo "$wt" --pr-branch "$branch" 2>&1)" || rc=$?
   while IFS= read -r line; do
     if [ -n "$line" ]; then log "repair $key: $line"; fi
   done <<<"$out"
@@ -275,12 +282,19 @@ base_sync_repair() {  # <key> <worktree> <branch>
     3)
       BASE_SYNC_STATE=conflict
       BASE_SYNC_NOTE="A merge of the base into this branch stopped on text conflicts. Run git status, resolve the conflicted files, and commit the merge before the other work. " ;;
+    *)
+      BASE_SYNC_NOTE=$(printf '%s\n' "$out" | grep '^base-sync: ' | head -n1)
+      printf '%s' "$BASE_SYNC_NOTE" >"$RUN_DIR/base-sync-error-$key" ;;
   esac
 }
 
 run_repair_session() {
   local key="$1" task="$2" branch="$3" wt rc=0
   wt="$(repair_worktree "$key")"
+  # The base-sync CLI must load the configuration from the directory the
+  # driver loaded it from, so a flag-origin repo-root resolves to the real
+  # root, not to the repair worktree (#276).
+  BASE_SYNC_DRIVER_DIR="$PWD"
   trap 'rm -f "$PIDFILE"; exit 130' HUP INT TERM
   printf '%s\n' "$$" >"$PIDFILE"
   tmux_set_title "repair $key running"

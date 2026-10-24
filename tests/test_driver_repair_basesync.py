@@ -21,6 +21,7 @@ glide_stub() { log "GLIDE $*"; }
 base_stub() {
   local a
   log "BASE_SYNC"
+  log "PWD $(pwd)"
   for a in "$@"; do log "ARG $a"; done
   printf '%s\\n' "$BASE_OUT"
   return "$BASE_RC"
@@ -77,3 +78,30 @@ def test_branch_is_one_argument_even_when_hostile(tmp_path: Path) -> None:
     name = "x;touch MARKER"
     events = _round(tmp_path, 0, "base-sync: no conflict with master", name)
     assert f"ARG {name}" in events
+
+
+def test_base_sync_runs_from_the_driver_s_directory(tmp_path: Path) -> None:
+    # The CLI's flag-origin repo-root resolves against its working directory;
+    # from inside the repair worktree a valid config failed its containment
+    # check and every round ran no agent (#276). The child must run from the
+    # directory the driver loaded its configuration from.
+    events = _round(tmp_path, 0, "base-sync: no conflict with master", "feature/x")
+    pwds = [line for line in events if line.startswith("PWD ")]
+    assert pwds, "the stub never logged its working directory"
+    for line in pwds:
+        assert "repair-worktree" not in line, line
+
+
+def test_a_failed_base_check_leaves_its_error_for_the_escalation(tmp_path: Path) -> None:
+    events = _round(
+        tmp_path,
+        2,
+        "base-sync: configuration error: invalid value for key "
+        "'issues.task-dir': must stay inside repo-root",
+        "feature/x",
+    )
+    note = tmp_path / "base-sync-error-k1"
+    assert note.exists(), "the base-sync error was not recorded"
+    assert "must stay inside repo-root" in note.read_text()
+    assert any("repair k1: base-sync: configuration error" in e for e in events)
+

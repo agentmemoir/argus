@@ -100,6 +100,19 @@ def test_log_backticks_cannot_close_the_task_fence() -> None:
     assert "`````\nerror: ```\n````\nok\n`````\n" in text
 
 
+def test_escalation_names_a_recorded_base_sync_error() -> None:
+    # A round whose base check failed never evaluated the checks, so the
+    # escalation names the base-sync error, not the check readout (#276).
+    line = escalation_text(
+        "#7", 3, failing_checks(RED), base_sync_error="configuration error: "
+        "invalid value for key 'issues.task-dir': must stay inside repo-root"
+    )
+    assert line.startswith("Needs You. #7 is still red after 3 repair round(s):")
+    assert "the base check failed" in line
+    assert "must stay inside repo-root" in line
+    assert "Action: fix the configuration" in line
+
+
 def test_escalation_has_one_cause_and_one_action() -> None:
     line = escalation_text("#7", 3, failing_checks(RED))
     assert line == (

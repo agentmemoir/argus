@@ -238,8 +238,18 @@ def run(args: argparse.Namespace, now: float) -> tuple[int, dict[str, object]]:
     elif action == "escalate":
         record["escalated"] = True
         repair_round.save_record(record_path, record)
+        # A recorded base-sync failure is the cause: the checks readout never
+        # ran that round, so naming them would point at nothing (#276).
+        note_path = args.run_dir / f"base-sync-error-{key}"
+        base_sync_error = (
+            note_path.read_text(encoding="utf-8").strip() if note_path.exists() else None
+        ) or None
         out["message"] = repair_round.escalation_text(
-            args.pull_request, args.attempts, failing, conflict=conflict
+            args.pull_request,
+            args.attempts,
+            failing,
+            conflict=conflict,
+            base_sync_error=base_sync_error,
         )
     pending_path = args.run_dir / f"pending-{key}.json"
     out.update(pending_limit.step(pending_path, args.pull_request, head, rows, now))
