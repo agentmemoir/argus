@@ -44,7 +44,15 @@ selftest_case_launch() {
   drive --self-test || true
   grep -q "running; skip" "$LOG" \
     && echo "ok: busy run skipped" || { echo "FAIL: busy run not skipped"; fail=1; }
-  sleep 1
+  # The start notice is written by the phase's own process a few seconds after the
+  # launch, and later under load. Wait for it, with a bound, before counting, so a
+  # slow start is not read as a missing one. The wait also ends when the window
+  # closes, because a process that has exited will not write the notice later.
+  start_waits=0
+  until [ "$(grep -c 'Phase .* started\.' "$LOG" || true)" -ge 1 ] \
+      || [ "$start_waits" -ge 120 ] || ! tmux_window_exists; do
+    sleep 0.5; start_waits=$((start_waits + 1))
+  done
   start_count="$(grep -c 'Phase .* started\.' "$LOG" || true)"
   # A launch that never starts usually left a reason in the driver log: the claim
   # check that refused it. Show that reason with the failure, so one failing run
@@ -52,7 +60,12 @@ selftest_case_launch() {
   [ "$start_count" = 1 ] \
     && echo "ok: one start notification logged" \
     || { echo "FAIL: expected one start notification, got $start_count"; fail=1; \
-         grep -h 'claim check refused' "$LOG" 2>/dev/null | sed 's/^/  driver log: /' || true; }
+         grep -h 'claim check refused' "$LOG" 2>/dev/null | sed 's/^/  driver log: /' || true; \
+         grep -hE 'launched|started|notify|claim|running|skip' "$LOG" 2>/dev/null | tail -n 12 | sed 's/^/  driver log: /' || true; \
+         for session_log in "$RUN_DIR"/session-*.log; do \
+           [ -f "$session_log" ] || continue; \
+           tail -n 15 "$session_log" | sed "s|^|  session log $(basename "$session_log"): |"; \
+         done; }
   grep -q '\[clio\]' "$LOG" \
     && { echo "FAIL: old notification prefix remains"; fail=1; } \
     || echo "ok: notification prefix removed"
