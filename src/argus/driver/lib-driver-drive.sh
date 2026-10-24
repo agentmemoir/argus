@@ -300,7 +300,7 @@ _drive_cut_branch() {
       if [ "${work_kind:-phase}" = issue ]; then
         branch_reason="$(selection_value error <"$RUN_DIR/phase-branch.json")"
         log "issue $number: could not put the issue on its own branch; no launch, nothing ran on the base branch (see $RUN_DIR/phase-branch.json)"
-        launchfault_halt "$number" "$rel" "$(phase_run_dir "$number" "$rel")" \
+        launchfault_halt "$number" "$rel" "$(run_dir_of "$number" "$rel")" \
           "${branch_state:-}" "$branch_rc" "" "" "$(launchfault_branch_reason "$branch_reason")"
         _DRIVE_RC=1
         return 0

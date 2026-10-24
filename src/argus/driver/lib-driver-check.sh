@@ -160,7 +160,7 @@ check() {
     issue_path="$(printf '%s' "$issue_result" | selection_value path)"
     if [ -n "$issue_number" ]; then
       echo "next issue: $issue_number ($issue_path)"
-      echo "issue run directory: $(phase_run_dir "$issue_number" "$issue_path")"
+      echo "issue run directory: $(run_dir_of "$issue_number" "$issue_path")"
     fi
     echo "issue readiness: accepted (exit $issue_rc)"
     return "$warned"

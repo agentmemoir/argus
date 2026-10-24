@@ -137,3 +137,34 @@ def test_issue_lookup_matches_number_and_slug_only(configured: Path) -> None:
     assert conventions.resolve_issue_file(configured, 255) == folder / TASK
     assert conventions.resolve_issue_file(configured, 25) is None
     assert conventions.resolve_issue_file(configured, 256) is None
+
+
+def tick_run_dirs(root: Path) -> str:
+    body = (
+        '. "$TEST_DRIVER/lib-driver-job.sh"\n'
+        "work_kind=issue; PHASE_FILE_INPUT=issue_file\n"
+        'phase_state 255 "" 2>"$RUN_DIR/state.err"\n'
+        'failure_residue_write 255 "" failed 1 0 2>"$RUN_DIR/residue.err"\n'
+        "printf 'done\\n'\n"
+    )
+    return shell(root, body)
+
+
+def test_issue_run_dir_with_task_file_does_not_raise(issue_driver: Path) -> None:
+    folder = issue_driver / "runs" / "issue-tasks"
+    folder.mkdir(parents=True)
+    (folder / TASK).write_text("frozen task\n", encoding="utf-8")
+    assert "done" in tick_run_dirs(issue_driver)
+    for name in ("state.err", "residue.err"):
+        assert "Traceback" not in (issue_driver / name).read_text(encoding="utf-8")
+    assert (issue_driver / "runs" / "issue-000255" / "failed.json").is_file()
+
+
+def test_issue_run_dir_without_task_file_logs_one_line(issue_driver: Path) -> None:
+    assert "done" in tick_run_dirs(issue_driver)
+    for name in ("state.err", "residue.err"):
+        assert "Traceback" not in (issue_driver / name).read_text(encoding="utf-8")
+    events = (issue_driver / "events").read_text(encoding="utf-8").splitlines()
+    named = [line for line in events if "issue 255 has no task file" in line and "issue_file" in line]
+    assert len(named) == 2
+    assert not (issue_driver / "runs" / "issue-000255").exists()

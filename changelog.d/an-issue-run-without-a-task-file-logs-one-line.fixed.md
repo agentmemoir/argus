@@ -1,0 +1,1 @@
+An issue without a frozen task file no longer raises `missing required input 'issue_file'` on the tick. The run directory of an issue is now looked up in the issue task folder, and with no task file the tick logs one line naming `issue_file` and launches nothing for that issue. ([#281](https://github.com/agentmemoir/argus/issues/281))

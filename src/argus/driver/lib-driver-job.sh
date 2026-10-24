@@ -46,7 +46,7 @@ job_retry() {   # <command> [args...]
 # dynamic scope.
 glide_run_once() {
   local prior_state="" fresh_args=() run_dir map_file driver_map
-  run_dir="$(phase_run_dir "$number" "$rel")"
+  run_dir="$(run_dir_of "$number" "$rel")"
   prior_state="$(terminal_state_of_file "$run_dir/run.json")"
   # run.json is the marker glide writes first, and the --fresh decision below
   # reads it. A failed.json with no run.json beside it is residue from a glide
@@ -93,7 +93,7 @@ glide_run_once() {
 # run directory, which is left alone for the evidence a person reads.
 failure_residue_write() {   # <number> <rel> <state> <rc> <retries>
   local dir
-  dir="$(phase_run_dir "$1" "$2")"
+  dir="$(run_dir_of "$1" "$2")"
   # A job can fail before glide creates its run directory, so make it here; a
   # residue that cannot be written is logged and never halts the line.
   mkdir -p "$dir" || {
