@@ -1,0 +1,188 @@
+# The full tier: every driver self-test case and every guard fault, with the
+# self-test repeated seven times in parallel to catch flaky cases. Seven runs see a
+# failure that happens in half of the runs with 99% confidence. It runs on a
+# schedule, on main after a merge, and by hand. It never blocks a pull request: a
+# failure opens or comments on one open issue.
+#
+# GitHub may delay a scheduled run when the load is high, and the load is highest at
+# the start of every hour, so the cron uses a minute that is not on the hour, at
+# night UTC. Scheduled workflows run only on the default branch. See
+# https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows
+# A job may run up to 6 hours. See
+# https://docs.github.com/en/actions/reference/limits
+name: full-suites
+
+on:
+  schedule:
+    - cron: "17 2 * * *"
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: full-suites
+  cancel-in-progress: false
+
+jobs:
+  self-test:
+    name: self-test, run ${{ matrix.run }} of 7
+    strategy:
+      fail-fast: false
+      max-parallel: 7
+      matrix:
+        run: [1, 2, 3, 4, 5, 6, 7]
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - name: Mount temporary storage
+        run: |
+          sudo mkdir -p /mnt/noexec
+          sudo mount -t tmpfs -o noexec,nosuid,nodev,mode=1777 tmpfs /mnt/noexec
+          sudo mount -t tmpfs -o noexec,nosuid,nodev,mode=1777 tmpfs /dev/shm
+          echo "TMPDIR=/mnt/noexec" >> "$GITHUB_ENV"
+
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+
+      - name: Install the project
+        run: uv sync --frozen
+
+      - name: Install tmux
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq tmux
+
+      - name: Run make self-test
+        run: |
+          set -o pipefail
+          started=$(date +%s)
+          make self-test 2>&1 | tee "$RUNNER_TEMP/self-test.log"
+          echo "self-test elapsed seconds: $(( $(date +%s) - started ))"
+
+      - name: Upload the run log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: self-test-run-${{ matrix.run }}
+          path: ${{ runner.temp }}/self-test.log
+          if-no-files-found: ignore
+
+  guard-faults:
+    name: guard-faults
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - name: Mount temporary storage
+        run: |
+          sudo mkdir -p /mnt/noexec
+          sudo mount -t tmpfs -o noexec,nosuid,nodev,mode=1777 tmpfs /mnt/noexec
+          sudo mount -t tmpfs -o noexec,nosuid,nodev,mode=1777 tmpfs /dev/shm
+          echo "TMPDIR=/mnt/noexec" >> "$GITHUB_ENV"
+
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+
+      - name: Install the project
+        run: uv sync --frozen
+
+      - name: Install tmux
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq tmux
+
+      - name: Run make guard-faults
+        run: |
+          set -o pipefail
+          started=$(date +%s)
+          make guard-faults 2>&1 | tee "$RUNNER_TEMP/guard-faults.log"
+          echo "guard-faults elapsed seconds: $(( $(date +%s) - started ))"
+
+      - name: Upload the run log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: guard-faults-run
+          path: ${{ runner.temp }}/guard-faults.log
+          if-no-files-found: ignore
+
+  # One open issue holds the failure. A run that fails adds a comment to it, and a
+  # green run closes it. Runs queue, so one report acts at a time.
+  report:
+    name: report the result
+    needs: [self-test, guard-faults]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      issues: write
+    steps:
+      - name: Download the run logs
+        uses: actions/download-artifact@v4
+        with:
+          path: logs
+
+      - name: Record the result on the open issue
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SELF_TEST: ${{ needs.self-test.result }}
+          GUARD: ${{ needs.guard-faults.result }}
+          SHA: ${{ github.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          title="Full driver suites failed on main"
+          issue=$(gh issue list -R "$REPO" --state open --limit 200 --json number,title \
+            | jq -r --arg t "$title" '[.[] | select(.title | startswith($t))] | sort_by(.number) | .[0].number // empty')
+
+          if [ "$SELF_TEST" = "success" ] && [ "$GUARD" = "success" ]; then
+            if [ -n "$issue" ]; then
+              gh issue comment "$issue" -R "$REPO" \
+                --body "The full driver suites are green at $SHA. Run: $RUN_URL"
+              gh issue close "$issue" -R "$REPO"
+            fi
+            exit 0
+          fi
+
+          logs=$(find logs -type f -name '*.log' | sort)
+          body="$RUNNER_TEMP/full-suites-body.md"
+          {
+            printf 'Run: %s\n\nCommit: %s\n\n' "$RUN_URL" "$SHA"
+            printf 'Results: self-test %s, guard-faults %s\n\n' "$SELF_TEST" "$GUARD"
+            printf 'Failing lines, by run log:\n'
+            for log in $logs; do
+              hits=$(grep -i -E 'FAIL|uncovered|undetected|not caught' "$log" | head -n 40 || true)
+              if [ -n "$hits" ]; then
+                printf '%s\n' "$hits" | sed "s|^|$(basename "$(dirname "$log")"): |"
+              fi
+            done
+            printf '\nPer-case and per-fault time, by run log:\n'
+            for log in $logs; do
+              times=$(grep -E '^(case|fault) time:' "$log" | head -n 60 || true)
+              if [ -n "$times" ]; then
+                printf '%s\n' "$times" | sed "s|^|$(basename "$(dirname "$log")"): |"
+              fi
+            done
+            printf '\nThe failing cases and faults above must be fixed.\n'
+          } > "$body"
+
+          if [ -z "$issue" ]; then
+            gh issue create -R "$REPO" --title "$title" \
+              --label bug --label area:tooling --label difficulty:medium \
+              --body-file "$body"
+            exit 0
+          fi
+          last=$(gh issue view "$issue" -R "$REPO" --json comments --jq '.comments | last | .body // ""')
+          if [[ "$last" == *"$SHA"* ]]; then
+            echo "The latest comment on the open issue already names $SHA."
+          else
+            gh issue comment "$issue" -R "$REPO" --body-file "$body"
+          fi
