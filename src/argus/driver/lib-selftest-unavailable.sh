@@ -30,6 +30,7 @@ selftest_case_unavailable() {
   # and the folder the answer is written to, so a change to either half is one
   # failing case and not two.
   unavailable_entry="COORDINATION_UNAVAILABLE ($stub_reason); refusing to launch, nothing reserved (see $RUN_DIR/coordination-selection.json)"
+  selftest_replay_log
   launches="$(grep -c 'launched phase' "$LOG" || true)"
   unavailable_rc=0
   DRIVER_STUB_COORDINATION=unavailable drive --self-test >/dev/null 2>&1 || unavailable_rc=$?

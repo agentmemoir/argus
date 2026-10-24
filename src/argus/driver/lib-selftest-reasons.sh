@@ -8,6 +8,7 @@ selftest_case_reasons() {
   # A state this case statement has no case for, carrying a reason. The catch-all
   # is where a reason matters most, because it exists for a state nobody
   # anticipated, and it must still refuse.
+  selftest_replay_log
   unknown_launches="$(grep -c 'launched phase' "$LOG" || true)"
   unknown_rc=0
   DRIVER_STUB_COORDINATION=unknown drive --self-test >/dev/null 2>&1 || unknown_rc=$?

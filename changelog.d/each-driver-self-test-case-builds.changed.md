@@ -1,0 +1,1 @@
+Four driver self-test cases now create the driver log they read before their first tick, and the merge orphan case keeps its own starting stub sleep, so each of them passes when run alone. Their checks are unchanged. ([#270](https://github.com/agentmemoir/argus/issues/270))

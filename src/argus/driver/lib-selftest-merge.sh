@@ -9,6 +9,7 @@ selftest_case_merge_orphan() {
   # selector no longer stops on an open pull request and this is the only place
   # left that would turn a merged pull request into a finished phase. Driven
   # through the coordination stub so the case runs with no board and no network.
+  local old_stub_sleep="$DRIVER_STUB_SLEEP"
   log "self-test: merge check with a merged and an unmerged pull request"
   # The case counts how many times the tick logs a waiting phase, and a tick
   # logs a line that has not changed since the last one only once.

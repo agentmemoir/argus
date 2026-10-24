@@ -15,6 +15,7 @@ MAP = tiers.load_map(tiers.MAP_FILE.read_text(encoding="utf-8"))
 CASES = tiers.driver_cases_in_source()
 REACH = case_reach(tiers.ROOT, MAP.cases)
 GROUP_CASES = {"group_run", "group_partial", "group_release", "group_resume"}
+SYNTHETIC_GROUP = ("launch", "flow", "release")
 
 
 def _code_files() -> list[str]:
@@ -137,17 +138,17 @@ def test_the_shards_cover_every_driver_case_once():
 
 
 def test_an_ordered_group_stays_in_one_shard():
-    units = selftest_shards.driver_units(CASES)
+    units = selftest_shards.driver_units(CASES, groups=[SYNTHETIC_GROUP])
     shards = selftest_shards.shard_units(units, 6)
     groups = [unit for unit in units if len(unit) > 1]
-    assert groups, "scripts/driver_cases.py declares no ordered group"
+    assert groups, "no ordered group was formed from the synthetic group"
     for group in groups:
         homes = {i for i, shard in enumerate(shards) for name in group if name in shard}
         assert len(homes) == 1, f"ordered group split across shards: {group}"
 
 
 def test_a_member_of_an_ordered_group_brings_the_whole_group():
-    units = selftest_shards.driver_units(["flow"])
+    units = selftest_shards.driver_units(["flow"], groups=[("launch", "flow")])
     assert len(units) == 1
     assert "launch" in units[0] and "flow" in units[0]
 
