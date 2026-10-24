@@ -120,9 +120,12 @@ def test_a_conflict_starts_a_round_even_when_checks_are_green() -> None:
     assert _merge(GREEN, "CONFLICTING", []) == ("repair", None)
 
 
-def test_an_unknown_merge_state_waits_and_starts_no_round() -> None:
-    assert _merge(RED, "UNKNOWN", []) == ("wait", None)
-    assert _merge(GREEN, "UNKNOWN", []) == ("wait", None)
+def test_an_unknown_merge_state_starts_no_conflict_round() -> None:
+    assert _merge(GREEN, "UNKNOWN", []) == ("none", None)
+
+
+def test_an_unknown_merge_state_does_not_block_red_ci() -> None:
+    assert _merge(RED, "UNKNOWN", []) == ("repair", None)
 
 
 def test_a_mergeable_pull_request_keeps_the_check_logic() -> None:

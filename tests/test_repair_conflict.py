@@ -53,14 +53,26 @@ def test_a_conflict_starts_a_round_with_green_checks(
     assert "# Repair https://github.com/o/r/pull/7: it conflicts with base" in task
 
 
-def test_an_unknown_merge_state_waits_and_records_nothing(
+def test_an_unknown_merge_state_starts_no_round_when_checks_are_green(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+) -> None:
+    rc, out = _run(monkeypatch, capsys, tmp_path, GREEN, "UNKNOWN", 1000.0)
+    assert (rc, out) == (0, {"action": "none"})
+    assert not list(tmp_path.glob("repair-*"))
+
+
+def test_an_unknown_merge_state_still_repairs_red_ci(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
     tmp_path: Path,
 ) -> None:
     rc, out = _run(monkeypatch, capsys, tmp_path, RED, "UNKNOWN", 1000.0)
-    assert (rc, out["action"]) == (0, "wait")
-    assert not list(tmp_path.glob("repair-*"))
+    assert (rc, out["action"]) == (0, "repair")
+    task = Path(out["task"]).read_text(encoding="utf-8")
+    assert "- lint: https://ci/1" in task
+    assert "conflicts with base" not in task
 
 
 def test_an_unread_merge_state_fails_closed_and_records_nothing(

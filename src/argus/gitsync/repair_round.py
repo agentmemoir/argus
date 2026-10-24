@@ -47,15 +47,14 @@ def decide(
 ) -> tuple[Action, float | None]:
     """The step for this tick, and when the next round is due if it waits.
 
-    A ``CONFLICTING`` pull request starts a round whatever its checks say, since
-    CI may never run on it. ``UNKNOWN`` means GitHub is still computing the merge
-    state: no round starts and the next tick reads again. Otherwise only a
-    ``FAILING`` state starts a round. A check ``UNKNOWN`` (no rows, a skipped or
-    cancelled row) is not a failure to fix, so it asks for nothing here; the ready
-    sweep keeps such a pull request in draft.
+    Only a ``CONFLICTING`` pull request starts a round for its merge state, and
+    it does so whatever its checks say, since CI may never run on it. ``UNKNOWN``
+    (GitHub is still computing the merge state) starts no conflict round, and the
+    next tick reads again; it never blocks a red check from starting a round. A
+    ``FAILING`` state starts a round as before. A check ``UNKNOWN`` (no rows, a
+    skipped or cancelled row) is not a failure to fix, so it asks for nothing
+    here; the ready sweep keeps such a pull request in draft.
     """
-    if mergeable == "UNKNOWN":
-        return "wait", None
     if mergeable != "CONFLICTING" and checks_state(rows, bucket_counts(rows)) != (
         "FAILING"
     ):
