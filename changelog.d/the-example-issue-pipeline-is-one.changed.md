@@ -1,0 +1,1 @@
+The example issue pipeline is one step with a `post_step` hook that runs the issue checkpoint, then open-pr. The step does the fix, its review, and its publication. `glide run --dry-run` validates it. ([#193](https://github.com/agentmemoir/argus/issues/193), [#194](https://github.com/agentmemoir/argus/issues/194))

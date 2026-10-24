@@ -1,0 +1,1 @@
+Docs: the repair section now states that a pull request head that was escalated gets no further repair round or notice, even when its checks turn red again, that a new head starts a fresh budget, and that an unreadable attempt record sends one notice and starts no round. ([#210](https://github.com/agentmemoir/argus/issues/210))

@@ -1,0 +1,1 @@
+A tick that cannot save or prove its selected claim returns that reservation to the queue. It keeps another machine's replacement claim and records a refused cleanup. ([#183](https://github.com/agentmemoir/argus/issues/183))

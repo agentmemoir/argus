@@ -1,0 +1,1 @@
+Every one of those fences returns `FENCED` on a mismatch and `COORDINATION_UNAVAILABLE` when the reservation cannot be read or the board cannot answer, through the one helper `argus.gitsync.fence.phase_fence`, and every refusal writes nothing. ([#164](https://github.com/agentmemoir/argus/issues/164))

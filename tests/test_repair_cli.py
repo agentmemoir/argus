@@ -32,6 +32,11 @@ def _run(
         return rows, 1, ""
 
     monkeypatch.setattr(repair_cli, "gh_pull_request_checks", checks)
+
+    def merge(*_a: object) -> str:
+        return "MERGEABLE"
+
+    monkeypatch.setattr(repair_cli, "gh_pull_request_mergeable", merge)
     argv = ["--pull-request", PR, "--run-dir", str(tmp_path)]
     argv += ["--attempts", "2", "--wait", "600", "--head", head]
     rc = repair_cli.main(argv, now=now)
@@ -280,6 +285,11 @@ def _pending_run(
         return "gh" if key == "commands.gh" else real_setting(key)
 
     monkeypatch.setattr(repair_cli, "gh_pull_request_checks", checks)
+
+    def merge(*_a: object) -> str:
+        return "MERGEABLE"
+
+    monkeypatch.setattr(repair_cli, "gh_pull_request_mergeable", merge)
     monkeypatch.setattr(gitsync_git, "setting", setting)
     monkeypatch.setattr(repair_cli.subprocess, "run", _gh_head(head))
     argv = [*REPAIR_ARGV[:3], str(tmp_path), *REPAIR_ARGV[4:]]

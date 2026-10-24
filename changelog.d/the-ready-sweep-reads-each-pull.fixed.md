@@ -1,0 +1,1 @@
+The ready sweep reads each pull request once per pass. A group has one pull request shared by every member, so the sweep used to read its timeline and checks once per member. The first answer is now kept by pull request URL for the rest of that pass, and a pull request readied in the pass is not readied again. ([#181](https://github.com/agentmemoir/argus/issues/181))

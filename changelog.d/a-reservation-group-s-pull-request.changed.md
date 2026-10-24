@@ -1,0 +1,1 @@
+A reservation group's pull request is made ready for review only when every member has published and its checks pass; a pull request with failing, running, or unreported checks stays in draft with the reason in the publication output, and the driver readies it on the first tick that finds the checks green.

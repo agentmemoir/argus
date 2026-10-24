@@ -1,0 +1,1 @@
+Phase write fences and publication use the local machine identity when reading a saved reservation. A copied reservation from another machine cannot grant ownership or let clean land its live run state. ([#183](https://github.com/agentmemoir/argus/issues/183))

@@ -1,0 +1,1 @@
+An issue tick with no readable repair pipeline no longer lists the open pull requests of its issue run folders first. It names the missing file once and starts no repair round. `argus --check` reports a missing repair pipeline as MISSING. ([#210](https://github.com/agentmemoir/argus/issues/210))

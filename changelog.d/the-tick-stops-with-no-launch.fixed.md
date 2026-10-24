@@ -1,0 +1,1 @@
+The tick stops with no launch when `gitsync --mode branch` refuses on the phase fence (FENCED or COORDINATION_UNAVAILABLE), instead of launching on the branch the checkout already has. Every other branch failure is still a repair. ([#164](https://github.com/agentmemoir/argus/issues/164))

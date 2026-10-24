@@ -1,0 +1,1 @@
+The readiness report reads the crontab, read only, and says whether a line runs the configuration. When none does, it prints the exact line to install and the check that proves it worked. Argus never edits a crontab. ([#216](https://github.com/agentmemoir/argus/issues/216))

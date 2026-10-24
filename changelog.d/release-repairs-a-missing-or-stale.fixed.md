@@ -1,0 +1,1 @@
+Release repairs a missing or stale phase reservation from its proved claim before saving partial work. It keeps the claim when that file cannot be saved. Issue claims leave phase reservation files unchanged. ([#183](https://github.com/agentmemoir/argus/issues/183))

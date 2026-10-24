@@ -1,0 +1,1 @@
+A pull request signal snapshot and its events name the comment-trust boolean `allowed` instead of `trusted`, and the `Visibility` field, the fetch parameter, and the reply check follow the new name. The old name is also a static-analysis pattern for sensitive data, so it raised a false code-scanning alert on the signal print.

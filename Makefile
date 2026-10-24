@@ -16,7 +16,7 @@ LINE_LIMIT := 350
 # migration ends. It is empty now: the last file was split.
 LINE_EXEMPT :=
 
-.PHONY: install sync lint fmt fmt-check typecheck typecheck-strict lines prose quick check dry-run clear-halt example-check \
+.PHONY: install sync lint fmt fmt-check typecheck typecheck-strict lines prose changelog-check quick check dry-run clear-halt example-check \
         self-test identifiers leakscan noexecscan guard-faults wheel install-check
 install:
 	install -d "$(DESTDIR)$(BINDIR)"
@@ -75,8 +75,14 @@ prose: ## Fail on hard-wrapped prose (one paragraph per line)
 	@printf 'checking prose for hard-wrapped paragraphs\n'
 	@$(RUN) python scripts/check_prose.py
 
+# One changelog fragment per change under changelog.d/, named <slug>.<category>.md.
+# This target fails on a bad name, an empty fragment, or a hard-wrapped paragraph.
+# `scripts/changelog.py build <version>` folds the fragments into CHANGELOG.md.
+changelog-check: ## Fail on a bad changelog fragment
+	@$(RUN) python scripts/changelog.py check
+
 # The static checks, no tests: the fast local gate before a push.
-quick: lint fmt-check typecheck typecheck-strict lines prose
+quick: lint fmt-check typecheck typecheck-strict lines prose changelog-check
 
 # self-test and guard-faults take many minutes, so they run in CI, which sets
 # CI. They refuse to start anywhere else unless ARGUS_ALLOW_LOCAL=1 is set.

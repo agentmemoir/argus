@@ -1,0 +1,1 @@
+A board whose remote holds no claims branch reads as an empty board. The first claim write creates the branch, through the existing write path. A remote that cannot be asked still fails closed. ([#216](https://github.com/agentmemoir/argus/issues/216))

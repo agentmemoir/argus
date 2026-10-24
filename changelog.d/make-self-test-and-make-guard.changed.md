@@ -1,0 +1,1 @@
+`make self-test` and `make guard-faults` refuse to start unless the `CI` variable is set; `ARGUS_ALLOW_LOCAL=1` overrides. `make quick` runs the lint, format, type, line-limit, and prose checks without tests.

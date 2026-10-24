@@ -1,0 +1,1 @@
+The README is now a landing page that links into `docs/` instead of restating it, and the `docs/` set names every configuration key, the package-root program files, and every run mode, including `--merge-check-only` and `abandon`.

@@ -1,0 +1,1 @@
+Issue pull requests are marked ready for review once every check on them passes. The ready sweep reuses the group ready transition, with its once-only guard, and skips a pull request while its issue run or a repair round runs. ([#198](https://github.com/agentmemoir/argus/issues/198))

@@ -1,0 +1,1 @@
+A new stop path in the driver or gitsync fails the build. The tripwire scans every shell and Python stop form and allows only the stops with an owner reason, keyed by file, rule, owner function, and the occurrence of that form, so a new function and a second stop of the same form in an already-allowed function both fail. ([#157](https://github.com/agentmemoir/argus/pull/157))
