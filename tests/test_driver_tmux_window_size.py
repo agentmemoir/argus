@@ -2,9 +2,9 @@
 
 The test runs the driver's own session and phase-window functions on a real tmux
 server with a private socket. It checks three things: the size options are set
-to follow the client, no tmux call passes a fixed size, and the phase window and
-its pane change size when an attached client changes size. A detached phase
-window takes the default size.
+to follow the client, the only size call is the one-time detached default for the
+idle window, and the phase window and its pane change size when an attached client
+changes size. A detached idle and phase window take the default size.
 """
 
 from __future__ import annotations
@@ -134,15 +134,18 @@ def test_windows_follow_the_attached_client_and_have_no_fixed_size(
         assert option("aggressive-resize") == "on"
         assert option("default-size") == DEFAULT_SIZE
 
-        # No tmux call may pass a fixed size.
+        # The only size call allowed is the one-time detached default for the
+        # idle window at session creation. No other call may pass a size.
         logged = calls.read_text()
         assert logged, "the driver made no tmux calls"
+        idle_default = f"resize-window -t {SESSION}:idle -x 200 -y 50"
         for line in logged.splitlines():
             args = line.split()
-            assert "-x" not in args and "-y" not in args, line
-            assert "resize-window" not in args, line
+            if "-x" in args or "-y" in args or "resize-window" in args:
+                assert line == idle_default, line
 
-        # Detached: the phase window takes the default size.
+        # Detached: the idle and phase windows take the default size.
+        assert window_size("idle") == DEFAULT_SIZE
         assert window_size("phase") == DEFAULT_SIZE
 
         # A control client attaches and sets its size. Windows and pane follow.

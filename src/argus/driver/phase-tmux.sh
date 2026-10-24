@@ -104,6 +104,11 @@ tmux_session_ensure() {
   9>&- "$TMUX_BIN" new-session -d -s "$SESSION" -c "$REPO" \
     -n "$TMUX_IDLE_WINDOW" "$ARGUS_DRIVER/$TMUX_IDLE_SCRIPT" "${ARGUS_CONFIG_ARGS[@]}" \
     || { log "failed to create tmux session '$SESSION'"; return 1; }
+  # tmux gives a new detached session no default size of its own, and a global
+  # default-size needs a running server. So the idle window takes the default
+  # size once, here. resize-window also sets window-size to manual, so the size
+  # options are applied after it.
+  "$TMUX_BIN" resize-window -t "$SESSION:$TMUX_IDLE_WINDOW" -x "$TMUX_WIDTH" -y "$TMUX_HEIGHT" 2>/dev/null || true
   tmux_apply_size_options
   "$TMUX_BIN" set-option -t "$SESSION" set-titles on 2>/dev/null || true
   return 0
