@@ -4,6 +4,8 @@ Notable changes to this project are documented here. The format follows [Keep a 
 
 ## [Unreleased]
 
+- A driver pull request that conflicts with its base now starts a CI repair round, even when no check is red, because CI may not run on it. The merge state is read on each tick with the checks. A merge state that GitHub is still computing starts no conflict round, and red checks still start one. A failed merge-state read ends the tick before new work. The repair task and the Needs You notice name the cause. ([#250](https://github.com/agentmemoir/argus/issues/250))
+
 - `argus --check` refuses a git older than 2.38, which `merge-tree --write-tree` needs, and names the version it found and the version needed. ([#248](https://github.com/agentmemoir/argus/issues/248))
 
 - Base sync: a CI repair round checks its pull request branch against the base branch before its agent starts, and the example issue post-step hook does the same before it opens the pull request. A clean merge is one merge commit and one normal push. A text conflict stays in progress for the agent, and a failed read is a failure, never no conflict. The command is `gitsync/base_sync_cli.py`. ([#248](https://github.com/agentmemoir/argus/issues/248))
