@@ -17,7 +17,7 @@ LINE_LIMIT := 350
 LINE_EXEMPT :=
 
 .PHONY: install sync lint fmt fmt-check typecheck typecheck-strict lines prose changelog-check quick check dry-run clear-halt example-check \
-        self-test identifiers leakscan noexecscan guard-faults wheel install-check
+        self-test identifiers leakscan noexecscan guard-faults test-all wheel install-check
 install:
 	install -d "$(DESTDIR)$(BINDIR)"
 	ln -sf "$(CURDIR)/bin/argus" "$(DESTDIR)$(BINDIR)/argus"
@@ -161,6 +161,12 @@ noexecscan:
 guard-faults:
 	$(ci_only)
 	$(RUN) python tests/guard_faults.py
+
+# Every suite at once on this machine, each with its own log, printing the wall time
+# of each suite and the total. Local only: CI runs the same suites as separate steps.
+# The list of suites is in scripts/test_all.py.
+test-all:
+	$(RUN) python scripts/test_all.py
 
 # The package: a wheel whose console script is `argus`, for `pip install .` and
 # `uv tool install .`. `install` above stays the development link, so an edit is
