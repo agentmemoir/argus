@@ -14,10 +14,12 @@ from argus.board.reservations import (
 from argus.gitsync.branch import branch_phase_checkouts
 from argus.gitsync.git import (
     ConfigError,
+    blocked,
     current_branch,
     degraded,
     git,
     integration_branch,
+    resolve_upstream,
     summarize,
 )
 from argus.gitsync.group_publication import _push_one
@@ -78,10 +80,44 @@ def _owned_issue_branch(root: Path) -> tuple[str, ReservationStore, Any] | None:
     return branch, store, reservation
 
 
-def mode_issue_checkpoint(root: str | Path) -> dict[str, Any]:
+def _push_issue_branch(root: Path, branch: str) -> dict[str, Any]:
+    """Push the issue branch, and give it its upstream when the cut could not."""
+    if resolve_upstream(root)[3] is None:
+        return _push_one(root)
+    base = integration_branch(root)
+    rc, remote, _err = git(root, "config", "--get", f"branch.{base}.remote")
+    if rc != 0 or not remote:
+        return blocked({"repo": str(root)}, f"no remote to push {branch!r} to")
+    rc, out, err = git(root, "push", "-q", "-u", remote, branch)
+    if rc != 0:
+        return blocked({"repo": str(root)}, f"push failed: {err or out}")
+    return {"repo": str(root), "ok": True, "action": "pushed"}
+
+
+def mode_issue_checkpoint(
+    root: str | Path, number: int | str | None = None
+) -> dict[str, Any]:
+    """Commit and push the run's edits on its own issue branch.
+
+    A stop path calls this before it exits, so the next branch cut finds a
+    clean checkout. A checkout on another issue's branch, or a claim this
+    machine does not hold, is left alone. A failed commit or push is a named
+    state, never a warning.
+    """
     root = Path(root).resolve()
     private, _tasks = private_layout(root)
-    owned = _owned_issue_branch(root)
+    branch = current_branch(root)
+    if number is not None and not branch.startswith(f"issue/{issue_number(number)}-"):
+        return {"repo": str(root), "ok": True, "action": "not-the-run-branch"}
+    try:
+        owned = _owned_issue_branch(root)
+    except ReservationFenced as exc:
+        return {
+            "repo": str(root),
+            "ok": True,
+            "action": "claim-not-held",
+            "why": str(exc),
+        }
     if owned is None:
         return degraded({"repo": str(root)}, "checkpoint needs an issue branch")
     branch, store, reservation = owned
@@ -93,23 +129,28 @@ def mode_issue_checkpoint(root: str | Path) -> dict[str, Any]:
         if git(root, "check-ignore", "-q", "--", inner)[0] != 0:
             args.append(f":(exclude,literal){inner}")
     rc, out, err = git(root, *args)
-    if rc != 0:
-        return degraded(
-            {"repo": str(root)}, f"could not stage issue work: {err or out}"
-        )
-    rc, staged, _err = git(root, "diff", "--cached", "--name-only")
-    if rc != 0:
-        return degraded({"repo": str(root)}, "cannot read the issue index")
-    if staged:
-        rc, out, err = git(
-            root, "commit", "-q", "-m", f"wip: work in progress on {branch}"
-        )
-        if rc != 0:
-            return degraded(
-                {"repo": str(root)}, f"could not commit issue work: {err or out}"
+    if rc == 0:
+        rc, staged, err = git(root, "diff", "--cached", "--name-only")
+        if rc == 0 and staged:
+            rc, out, err = git(
+                root, "commit", "-q", "-m", f"wip: work in progress on {branch}"
             )
+    if rc != 0:
+        return {
+            "repo": str(root),
+            "ok": False,
+            "state": "COMMIT_FAILED",
+            "error": f"could not commit the issue work on {branch}: {err or out}",
+        }
     store.assert_owner(reservation)
-    return _push_one(root)
+    pushed = _push_issue_branch(root, branch)
+    if not pushed["ok"]:
+        return dict(
+            pushed,
+            state="PUSH_FAILED",
+            error=f"could not push {branch}: {'; '.join(pushed['blockers'])}",
+        )
+    return pushed
 
 
 def mode_issue_open_pr(
@@ -188,7 +229,7 @@ def _issue_mode(args: Namespace) -> dict[str, Any] | None:
     if args.mode == "tidy":
         return mode_issue_tidy(args.root)
     if args.mode == "checkpoint":
-        return mode_issue_checkpoint(args.root)
+        return mode_issue_checkpoint(args.root, args.phase)
     if args.mode == "open-pr":
         # The issue branch comes from the claim, so these flags would be ignored.
         ignored = [

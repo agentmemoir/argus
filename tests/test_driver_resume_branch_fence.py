@@ -70,6 +70,22 @@ def test_an_issue_resume_branch_failure_halts_as_a_launch_fault(
     assert halt.startswith("launch fault: issue 100020 attempt 1")
 
 
+def test_an_issue_resume_halt_keeps_the_branch_exit_code_and_cause(
+    tmp_path: Path,
+) -> None:
+    reason = "checkout is on issue/334-x with 1 uncommitted path(s)"
+    out = (
+        '{"ok": false, "mode": "branch", "repos": [{"repo": "clio", "ok": false, '
+        f'"blockers": ["{reason}"]}}], "summary": "branch sync BLOCKED: {reason}"}}'
+    )
+    setup = '. "$TEST_DRIVER/lib-driver-halt-record.sh"; RESUME_RUN_DIR="$RUN_DIR"\n'
+    body = f"work_kind=issue; BRANCH_OUT='{out}'; BRANCH_RC=3\n"
+    shell(tmp_path, setup + body + RESUME_BRANCH)
+    halt = (tmp_path / "halted").read_text()
+    assert "rc=3 state=BLOCKED" in halt, halt
+    assert reason in (tmp_path / "halted.json").read_text()
+
+
 def test_the_resume_fences_and_claims_before_it_cuts_a_branch() -> None:
     """The branch step proves the fence, so the fence must be down first.
 

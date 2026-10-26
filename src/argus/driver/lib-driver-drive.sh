@@ -308,7 +308,8 @@ _drive_cut_branch() {
       # the base branch, so a launch would put issue work there (belief 4).
       # Launch nothing; it is a launch fault, so keep the claim and halt.
       if [ "${work_kind:-phase}" = issue ]; then
-        branch_reason="$(selection_value error <"$RUN_DIR/phase-branch.json")"
+        IFS=$'\t' read -r branch_state branch_reason \
+          < <(launchfault_branch_fields "$RUN_DIR/phase-branch.json") || true
         log "issue $number: could not put the issue on its own branch; no launch, nothing ran on the base branch (see $RUN_DIR/phase-branch.json)"
         launchfault_halt "$number" "$rel" "$(run_dir_of "$number" "$rel")" \
           "${branch_state:-}" "$branch_rc" "" "" "$(launchfault_branch_reason "$branch_reason")"

@@ -143,6 +143,11 @@ record_claim_fence() {
 # the exact token again, so a replacement owner's reservation cannot be freed.
 release_refused_claim() {
   local number="$1" reservation_id="$2" generation="$3" why="${4:-refused}"
+  # The run's edits go onto its branch before the claim is given back.
+  if ! issue_stop_save "$number"; then
+    CLAIM_RELEASED=0
+    return 0
+  fi
   if "$PYTHON" "$ARGUS/board/reservations.py" release-group \
       "${ARGUS_CONFIG_ARGS[@]}" "${BOARD_KIND_ARGS[@]+"${BOARD_KIND_ARGS[@]}"}" \
       --repo-root "$REPO" --machine-id "$PHASE_MACHINE_ID" \

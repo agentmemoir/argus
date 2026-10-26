@@ -305,4 +305,10 @@ STOP_ALLOWLIST = r"""
     driver/lib-driver-checkout.sh	return_nonzero	fn:driver_checkout_take|driver_checkout_flock || return 1#1
     driver/lib-driver-drive.sh	drive_rc_nonzero	fn:_drive_cut_branch|_DRIVE_RC=1#4
     driver/phase-driver.sh	exit_nonzero	fn:<top>|driver_checkout_take || { driver_checkout_refusal >&2; exit 1; }#1
+    driver/lib-driver-control.sh	return_nonzero	fn:release|return 1#6
+    driver/lib-driver-launchfault.sh	halt_marker	fn:issue_stop_save|printf 'stop-save: issue %s state=%s at %s\n' "$1" "$STOP_SAVE_STATE" "$(ts)" >"$HALT"#1
+    driver/lib-driver-launchfault.sh	return_nonzero	fn:issue_stop_save|return 1#1
+    gitsync/issue_modes.py	blocked_call	fn:_push_issue_branch|return blocked({"repo": str(root)}, f"no remote to push {branch!r} to")#1
+    gitsync/issue_modes.py	blocked_call	fn:_push_issue_branch|return blocked({"repo": str(root)}, f"push failed: {err or out}")#1
+    gitsync/issue_modes.py	ok_false	fn:mode_issue_checkpoint|"ok": False,#1
 """

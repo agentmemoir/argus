@@ -266,6 +266,7 @@ def test_failed_issue_run_returns_its_claim(kind: str, tmp_path: Path) -> None:
     driver = Path(__file__).resolve().parents[1] / "src/argus/driver"
     script = f"""
 . "{driver}/lib-driver-fence.sh"
+. "{driver}/lib-driver-launchfault.sh"
 . "{driver}/lib-driver-run.sh"
 log() {{ printf '%s\\n' "$*" >>"{tmp_path}/log"; }}
 fake_python() {{ printf '%s ' "$@" >"{tmp_path}/call"; }}

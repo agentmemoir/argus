@@ -26,6 +26,18 @@ print(json.dumps({"ok": False, "state": "CONFIG_ERROR",
 raise SystemExit(2)
 """
 
+DIRTY_TOOL = """import json, sys
+mode = sys.argv[sys.argv.index("--mode") + 1]
+with open(sys.argv[0] + ".calls", "a", encoding="utf-8") as calls:
+    calls.write(mode + "\\n")
+reason = "checkout is on 'issue/334-x' with 1 uncommitted path(s)"
+print(json.dumps({"ok": False, "mode": "branch", "kind": "issue",
+                  "repos": [{"repo": "clio", "ok": False, "action": "blocked",
+                             "blockers": [reason]}],
+                  "summary": "branch sync BLOCKED: clio: BLOCKED (" + reason + ")"}))
+raise SystemExit(1)
+"""
+
 CRASHING_TOOL = """import sys
 mode = sys.argv[sys.argv.index("--mode") + 1]
 with open(sys.argv[0] + ".calls", "a", encoding="utf-8") as calls:
@@ -107,6 +119,14 @@ def test_an_issue_branch_cut_failure_halts_and_keeps_the_claim(tmp_path: Path) -
     assert "continuing on" not in events, events
     halt = (tmp_path / "run/halted").read_text(encoding="utf-8")
     assert halt.startswith("launch fault: issue 23 attempt 1"), halt
+
+
+def test_a_dirty_checkout_refusal_names_its_state_and_cause(tmp_path: Path) -> None:
+    cut_branch(tmp_path, "issue", released=True, tool_source=DIRTY_TOOL)
+    halt = (tmp_path / "run/halted").read_text(encoding="utf-8")
+    assert "rc=1 state=BLOCKED" in halt, halt
+    record = (tmp_path / "run/halted.json").read_text(encoding="utf-8")
+    assert "1 uncommitted path(s)" in record, record
 
 
 def test_the_third_branch_cut_failure_sends_one_notice(tmp_path: Path) -> None:
