@@ -1,1 +1,0 @@
-The executable-directory probe is written by a short-lived shell. A parallel probe no longer fails with a text-file-busy error, which made a usable directory look unusable and marked a guard fault as not run.

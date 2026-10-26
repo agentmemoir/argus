@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
 # SPDX-License-Identifier: Apache-2.0
-#
+# (scratch bisect touch)
 # Self-test case: the stranding fixture against the real board of a throwaway repo.
 #
 selftest_case_stranding() {
@@ -20,12 +20,6 @@ selftest_case_stranding() {
 strand_diagnose() {
   echo "--- strand driver.log ---"
   sed 's/^/    /' "$LOG" 2>/dev/null || echo "    (no log)"
-  for record in run-state-leftovers.json phase-branch.json; do
-    [ -f "$RUN_DIR/$record" ] || continue
-    echo "--- strand $record ---"
-    sed 's/^/    /' "$RUN_DIR/$record" | head -c 3000
-    echo
-  done
   if [ -f "$RUN_DIR/coordination-sync.json" ]; then
     echo "--- strand coordination-sync.json ---"
     "$PYTHON" -c 'import json,sys

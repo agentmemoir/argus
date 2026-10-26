@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
 # SPDX-License-Identifier: Apache-2.0
-#
+# (scratch bisect touch)
 # Self-test cases: the guards a resume runs before it launches.
 #
 # The gate names a terminal or damaged run and lets the two-tick repair run, and
@@ -23,7 +23,6 @@ selftest_resume_gate_cases() {
     echo "ok: a damaged run.json is named and passed to the repair"
   else
     echo "FAIL: a damaged run.json stopped the resume instead of repairing it"; fail=1
-    echo "--- resume driver.log ---"; tail -n 30 "$LOG" | sed 's/^/    /'
   fi
   # The repair launched a phase, so let that window close before the next case.
   wait_phase_window_gone
