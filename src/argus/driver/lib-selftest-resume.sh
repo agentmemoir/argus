@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 #
 # Self-test cases: the halt record, the resume, and the abandon close-out.
 #

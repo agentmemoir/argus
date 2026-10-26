@@ -1,5 +1,5 @@
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Fail-closed git sync for the public and private checkouts.
 
 The command line: arguments, the mode dispatch, and the JSON result.

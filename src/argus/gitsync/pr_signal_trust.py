@@ -1,5 +1,5 @@
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Which pull request comments may show their text, from the issue trust settings.
 
 The ``issues.*`` keys already decide which issue comments an agent may read:

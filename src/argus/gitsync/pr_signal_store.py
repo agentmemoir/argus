@@ -1,5 +1,5 @@
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """The phase run folder's files for pull request signals: the last snapshot and two logs."""
 
 import fcntl

@@ -1,5 +1,5 @@
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Public ticks settle saved receipts while the launch hold stays in place."""
 
 import json

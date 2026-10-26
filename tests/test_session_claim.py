@@ -1,5 +1,5 @@
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """`--session` holds a live claim before it starts the work, or it refuses."""
 
 import os

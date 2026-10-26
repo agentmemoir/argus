@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """The work source contract, and the registry that resolves a configured name.
 
 A work source is wherever the driver gets its work. The driver asks the active

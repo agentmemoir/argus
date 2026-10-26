@@ -1,5 +1,5 @@
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """The recovery sweep for a self-test run that could not clean up after itself.
 
 SIGKILL runs no trap, so a run killed that hard leaves its fixture behind, with

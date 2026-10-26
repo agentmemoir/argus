@@ -1,5 +1,5 @@
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """The phase fence every write path proves before its first write.
 
 ``--mode published`` has read the reservation before it wrote anything since the

@@ -1,5 +1,5 @@
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """One sync attempt: fast-forward, or a plain merge, and the refusal that stops it."""
 
 from pathlib import Path

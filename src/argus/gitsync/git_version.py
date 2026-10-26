@@ -1,5 +1,5 @@
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """The git version check that `argus --check` runs.
 
 base-sync tests a merge with `git merge-tree --write-tree`, which git 2.38 added.

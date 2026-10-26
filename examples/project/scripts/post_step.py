@@ -1,5 +1,5 @@
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Example post_step hook for an issue pipeline.
 
 glide runs this from the repository root after each step, with GLIDE_RUN_DIR

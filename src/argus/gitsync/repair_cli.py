@@ -1,5 +1,5 @@
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Command entry for one tick's CI repair step on one pull request.
 
 The driver runs it the way it runs ``board/remedy.py``: ``"$PYTHON" "$ARGUS/

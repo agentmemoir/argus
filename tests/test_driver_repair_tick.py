@@ -1,5 +1,5 @@
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Argus reads glide's result.json and treats repair_pending as a no-launch tick.
 
 Glide returns EXIT_OK on a repair tick and writes no run.json; the state, step,

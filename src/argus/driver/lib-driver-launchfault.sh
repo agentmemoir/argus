@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 #
 # The launch-fault halt of an issue run (belief 3, belief 8, hard line 4).
 #

@@ -1,5 +1,5 @@
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """The leak-scan patterns prove themselves against fixed samples.
 
 Source: ``tests/test_no_host_leak.py``. That file owns the scan; this file owns

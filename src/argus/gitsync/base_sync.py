@@ -1,5 +1,5 @@
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Bring a pull request branch up to date with its base at one fixed point.
 
 Git decides. A clean merge is committed by git and pushed once, normally, and

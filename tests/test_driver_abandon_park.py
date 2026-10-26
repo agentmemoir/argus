@@ -1,5 +1,5 @@
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """`abandon` takes a park reservation on the board before it writes the residue.
 
 A phase with no live claim is parked without a release, so the board must

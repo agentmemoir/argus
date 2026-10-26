@@ -1,5 +1,5 @@
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """The self-test's teardown, on the path that keeps a fixture on purpose.
 
 `selftest_teardown` removes the fixture tree and the tmux sessions a run made.

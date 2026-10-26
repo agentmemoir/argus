@@ -1,5 +1,5 @@
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """The ready sweep reads only the open draft pull requests GitHub lists.
 
 GitHub is replaced at its call sites, so the test runs the real sweep and the

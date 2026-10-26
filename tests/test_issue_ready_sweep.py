@@ -1,5 +1,5 @@
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """The ready sweep for issue pull requests marks one ready only when all checks pass.
 
 GitHub is replaced at the group transition's own call sites, so the test runs

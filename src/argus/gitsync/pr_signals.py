@@ -1,5 +1,5 @@
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Watch a phase's pull request between driver ticks and record what changed.
 
 The driver calls this on every tick that finds a phase waiting for review. It

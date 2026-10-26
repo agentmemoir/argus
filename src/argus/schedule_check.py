@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Whether a tick schedule runs this configuration. Read only: Argus never edits a crontab.
 
 The readiness check runs this as `schedule_check.py <config> <run-state folder>

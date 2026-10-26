@@ -1,5 +1,5 @@
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """A run-state commit that fails is reported as degraded, not as a clean sync (issue #174).
 
 A degraded step keeps ``ok`` true, so the line keeps running and the next tick

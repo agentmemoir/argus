@@ -1,5 +1,5 @@
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """`abandon` and `--resume` prove the fence on a real board, not a stub.
 
 Each case runs the installed driver against the fixture's local git board, so

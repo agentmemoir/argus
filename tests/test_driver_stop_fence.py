@@ -1,5 +1,5 @@
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """`stop` always halts the line; only the stopped-claim hold is fenced.
 
 The halt marker is this machine's own run state, so no claim, a bad claim, or a

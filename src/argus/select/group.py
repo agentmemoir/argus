@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Request a reservation group for one agent and claim it on the shared board.
 
 An agent identifies itself by its machine id and names one phase. The phase

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """The stage temporary folder: a folder that runs the files a stage starts.
 
 Some hosts mount the default temporary folder `noexec`. A stage runs a Bun-based

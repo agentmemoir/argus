@@ -1,5 +1,5 @@
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Tripwire: a new non-owned stop in the driver or gitsync fails this test.
 
 The allowlist is keyed by file, rule, and the normalized stop line, never by a

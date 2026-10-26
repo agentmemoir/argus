@@ -1,5 +1,5 @@
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """The pending limit for one pull request's checks: one Needs You notice per head.
 
 A check that stays pending for more than ``PENDING_LIMIT_S`` on one head raises

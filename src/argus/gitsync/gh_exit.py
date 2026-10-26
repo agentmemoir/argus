@@ -1,5 +1,5 @@
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """The words for a gh exit code, and the step that was running."""
 
 # The two gh exit codes its own documentation names, and the only two that need

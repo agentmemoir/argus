@@ -1,5 +1,5 @@
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """A whole-tree clean that lands nothing is not a success.
 
 The sweep computed ``ok`` from the phases it landed, so a sweep that skipped

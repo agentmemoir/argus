@@ -8,12 +8,13 @@ version = "0.1.0"
 description = "An unattended phase driver: select work, reserve it on a shared board, launch it, watch it, and publish it."
 readme = "README.md"
 requires-python = ">=3.11"
-license = "Apache-2.0"
+license = "AGPL-3.0-or-later"
 authors = [{ name = "Agent Memoir", email = "dev@agentmemoir.com" }]
 keywords = ["pipeline", "coding-agent", "automation", "orchestration"]
 classifiers = [
   "Development Status :: 3 - Alpha",
   "Intended Audience :: Developers",
+  "License :: OSI Approved :: GNU Affero General Public License v3 or later (AGPLv3+)",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 #
 # Argus: the unattended driver. Its source folder holds the driver and the
 # shell helpers it sources. The pipeline, the stages and the workers are

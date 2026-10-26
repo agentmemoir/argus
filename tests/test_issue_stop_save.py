@@ -1,5 +1,5 @@
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """An issue run that stops early leaves no edits for the next branch cut (#288).
 
 The launch-fault halt runs for real and calls the real issue checkpoint, which

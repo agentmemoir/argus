@@ -1,5 +1,5 @@
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """The base branch a draft pull request targets, resolved honestly.
 
 ``integration_branch`` answers with a name even when the checkout cannot prove

@@ -1,5 +1,5 @@
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Decide one tick's CI repair step for one open driver pull request.
 
 The tick reads a pull request's checks once with ``gh_pull_request_checks``

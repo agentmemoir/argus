@@ -1,5 +1,5 @@
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Read one pull request's checks once, and report what they say.
 
 ``gh pr checks`` exits 0 when nothing failed and nothing is pending, and that

@@ -1,5 +1,5 @@
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """What open-pr refuses before it asks gh to create anything.
 
 Three facts, and each one is a refusal with a way out: the title and body the

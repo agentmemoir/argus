@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 #
 # The tripwire half of the phase driver self-test support: it snapshots the
 # machine's real checkouts and run state so a run that reached them says so.

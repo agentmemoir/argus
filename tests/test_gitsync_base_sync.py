@@ -1,5 +1,5 @@
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """base-sync: no conflict changes nothing, a clean merge is one merge commit and
 one push, a text conflict leaves the merge for an agent, and a failed read or a
 hostile branch name is a failure, never "no conflict"."""

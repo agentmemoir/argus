@@ -1,5 +1,5 @@
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """The base-sync command: one checkout and one recorded branch, one exit code.
 
 Exit codes: 0 no conflict, or merged and pushed; 1 a read, the merge, or the push

@@ -1,5 +1,5 @@
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Every caller of the check read names the repository its pull request is in.
 
 The helper is replaced with a recorder, so each test checks only what the caller

@@ -1,5 +1,5 @@
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """A closed issue's leftover run is released in one line, and never resumed.
 
 The selection tests fake GitHub's view of the issue, because the search list

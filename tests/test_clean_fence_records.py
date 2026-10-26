@@ -1,5 +1,5 @@
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """The clean fence lands run state unless another machine holds a live claim.
 
 An escalated phase is ``rejected`` and an abandoned one is released, so the old

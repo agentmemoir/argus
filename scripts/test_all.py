@@ -1,5 +1,5 @@
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Run every Argus suite at once on this machine, and print what each one took.
 
 `make test-all` starts the suites together. Each is its own process with its own

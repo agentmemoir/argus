@@ -1,5 +1,5 @@
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """The gh re-export module: every published name resolves on it.
 
 The module was split into ``gh_read``, ``gh_write``, ``gh_checks``, and

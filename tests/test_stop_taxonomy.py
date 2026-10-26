@@ -1,5 +1,5 @@
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """The stop taxonomy for the packages the driver and gitsync tripwire does not scan.
 
 The driver and gitsync shell and Python stops have their own tripwire

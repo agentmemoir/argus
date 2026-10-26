@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Run the quick tier: the driver self-test cases and guard faults a change affects.
 
 The quick tier is the only gate on a pull request and the local gate for these

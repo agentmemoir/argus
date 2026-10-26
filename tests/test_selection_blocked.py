@@ -1,5 +1,5 @@
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """A halted run is never done, and a parked phase is reported, not offered.
 
 The approval box used to close out a blocked phase on its own, so a cleared halt

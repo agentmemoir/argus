@@ -1,5 +1,5 @@
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Driver log shows phases skipped by the whole-tree clean sweep (issue #172).
 
 ``gitsync --mode clean`` over every phase lands some and skips others and still

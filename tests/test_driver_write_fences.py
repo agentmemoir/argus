@@ -1,5 +1,5 @@
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Every write path proves the fence before its first write, or writes nothing.
 
 One case per path named by issue 164: ``tidy`` with a phase,

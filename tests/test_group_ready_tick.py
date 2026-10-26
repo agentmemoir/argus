@@ -1,5 +1,5 @@
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """The per-tick sweep that readies a group's shared pull request.
 
 The boundary is a real ``gh`` executable on ``PATH`` that answers from a JSON

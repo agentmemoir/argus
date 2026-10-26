@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 #
 # Estimate factor: after a phase finishes, move its developer model's factor
 # toward the wall time the phase took (see ../estimate.py). It is off unless the

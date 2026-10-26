@@ -1,5 +1,5 @@
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Board doubles the phases self-test drives the selector with.
 
 The real store talks to a Git board. These answer from memory instead, so the

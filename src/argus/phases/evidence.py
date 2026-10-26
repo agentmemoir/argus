@@ -1,5 +1,5 @@
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Completion evidence for one phase item, and the folder it is read from.
 
 A phase is done when the pipeline's own records say so, so this module reads

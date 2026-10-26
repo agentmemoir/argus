@@ -1,5 +1,5 @@
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """A read-modify-push transaction for files that live outside the board.
 
 The board's own transaction edits one known state file. A file that belongs to

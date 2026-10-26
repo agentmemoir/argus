@@ -1,5 +1,5 @@
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """An issue whose branch cannot be cut never runs on the base branch.
 
 This runs the real branch-cut path with a publishing tool that refuses, so

@@ -1,5 +1,5 @@
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """The argv the check read is built from, against a real gh on ``PATH``.
 
 The boundary here is a program, not a monkeypatched function: the shim records

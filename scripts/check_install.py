@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Prove the built wheel installs and runs in a clean environment.
 
 `make install-check` builds the wheel and runs this. Only the built wheel and

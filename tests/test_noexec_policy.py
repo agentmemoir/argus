@@ -1,5 +1,5 @@
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Executable test stubs must come from a probed directory.
 
 A host may mount its temporary storage ``noexec``. A test that makes its own

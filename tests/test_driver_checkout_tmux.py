@@ -1,5 +1,5 @@
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """A tmux server must not keep the checkout lock after its phase ends.
 
 The phase takes the checkout lock inside its own window process. The first test runs

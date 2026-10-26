@@ -1,5 +1,5 @@
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """A resume stops when the branch cut's fence refuses, and launches nothing.
 
 ``gitsync --mode branch`` proves the board fence before the cut. The resume

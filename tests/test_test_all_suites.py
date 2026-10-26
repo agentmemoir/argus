@@ -1,5 +1,5 @@
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Every suite that `make test-all` runs names a real script or module.
 
 The runner starts each suite as a separate process, so a typo in a suite's path

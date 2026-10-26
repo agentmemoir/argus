@@ -1,5 +1,5 @@
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """The open-pr reads: what a gh answer must say before it is reported.
 
 Each test here is one answer a reader could not have trusted: a row with no

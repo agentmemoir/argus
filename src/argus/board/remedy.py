@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Close out a phase whose remedy approver ran out of rounds.
 
 Exhausting the approver's round budget is a fact about the budget, not a verdict

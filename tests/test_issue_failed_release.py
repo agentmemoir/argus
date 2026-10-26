@@ -1,5 +1,5 @@
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """A failed or escalated issue run gives its claim back, and says so honestly.
 
 These run the real session path, so deleting either release call fails a test.

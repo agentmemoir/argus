@@ -1,5 +1,5 @@
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Run-state predicates: what a run left behind, and whether it can continue.
 
 `evidence` answers whether a phase is finished. These answer the other half of

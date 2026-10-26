@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Make the pipeline's git hooks ready in the work checkout before a Glide run.
 
 The pipeline's pre_run hook refuses a run while the checkout's hooks are missing or

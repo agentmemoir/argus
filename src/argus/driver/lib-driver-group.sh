@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 #
 # The group side of a tick: the array the selection carries, the one branch the
 # group's work lives on, and the heartbeat renewal the tick loop owes it.

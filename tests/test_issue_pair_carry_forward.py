@@ -1,5 +1,5 @@
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """A `--fresh` archive never takes the issue reservation pair with it (#287).
 
 glide moves the whole run folder to `<folder>.prev-<epoch>`. A claim that wrote

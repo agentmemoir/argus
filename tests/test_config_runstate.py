@@ -1,5 +1,5 @@
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """The optional ``runstate`` config object: its resolved values and shell vars.
 
 The object is optional as a whole, so the sample leaves it commented out. When

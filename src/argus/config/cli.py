@@ -1,5 +1,5 @@
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """One configuration file for an Argus tick, and the CLI that renders it.
 
 The file is JSON with `//` and `/* */` comments. Comments are removed with a

@@ -1,5 +1,5 @@
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """One draft pull request for a branch: create it, or reuse the one that exists.
 
 A phase pipeline asks for this mode with no arguments but the branch it already knows, so every default here must work with no extra flags: reusing an open pull request takes no body file, and only a create needs ``--body-file``.

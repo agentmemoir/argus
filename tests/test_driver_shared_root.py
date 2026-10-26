@@ -1,5 +1,5 @@
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Two driver configs on one repository root: the second tick refuses (issue 199).
 
 The first config's phase holds the checkout lock. The second config's tick reaches

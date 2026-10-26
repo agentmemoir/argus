@@ -1,5 +1,5 @@
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """The driver and gitsync stop allowlist: file, rule, owner function, stop line.
 
 Regenerate by importing the test module's scanner and writing its rows; keep one

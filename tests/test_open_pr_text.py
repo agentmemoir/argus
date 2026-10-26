@@ -1,5 +1,5 @@
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """The title and body a caller wrote reach the create, or the call is refused.
 
 A file that is missing or blank has no test of its own before this one: the two

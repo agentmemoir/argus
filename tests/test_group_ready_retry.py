@@ -1,5 +1,5 @@
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Retry rules for the shared group pull-request ready transition.
 
 The once-guard is GitHub's own ready/draft timeline. There is no local ready
