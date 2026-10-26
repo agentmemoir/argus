@@ -111,7 +111,7 @@ def _issue_ready_one(
 
     The issue pull request has no group, so the group's transition runs with the
     issue number as its only member and nothing pending. That reuses its checks
-    gate (every check reads ``pass``, with at least one row) and its GitHub
+    gate (one check reads ``pass``, the rest ``pass`` or ``skipping``) and its GitHub
     ready/draft history guard, so a pull request already readied is skipped and
     no second ready call is made. A pull request that is not green yet is
     reported as ``WAITING``, not ``HELD``: it stays draft, which is the normal

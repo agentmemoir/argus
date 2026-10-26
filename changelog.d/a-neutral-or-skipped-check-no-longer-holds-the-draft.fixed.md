@@ -1,0 +1,1 @@
+A neutral or skipped check, such as a CodeQL run that ends NEUTRAL, no longer keeps a pull request in draft. The ready sweep now marks it ready when at least one check passes and no check fails, is cancelled, or is pending. GitHub counts these conclusions as passing for a required check.

@@ -322,3 +322,27 @@ def test_a_green_group_is_readied_once_with_one_timeline_read(
     )
     assert [r["state"] for r in result["results"]] == ["READY", "READY"], result
     assert any(r.get("skipped") is True for r in result["results"]), result["results"]
+
+
+# gh puts NEUTRAL and SKIPPED in the bucket "skipping". GitHub counts both as
+# passing for a required check, but at least one check must still pass.
+SKIPPED = [{"bucket": "skipping", "state": "NEUTRAL", "name": "CodeQL", "link": ""}]
+
+
+@pytest.mark.parametrize(
+    ("rows", "ready"),
+    [(GREEN + SKIPPED, True), (SKIPPED, False), (GREEN + SKIPPED + PENDING, False)],
+)
+def test_a_skipped_check_does_not_hold_an_otherwise_green_pull_request(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    rows: list[dict[str, str]],
+    ready: bool,
+) -> None:
+    pub, _run_dir, state = _group_fixture(tmp_path, monkeypatch)
+    _github(state, **_checks(rows, 0))
+
+    result = mode_ready(pub)
+
+    assert (_ready_calls(state) == [READY]) is ready, result
+    assert result["state"] == ("READY" if ready else "HELD"), result
