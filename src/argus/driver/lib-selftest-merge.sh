@@ -113,6 +113,8 @@ selftest_case_merge_orphan() {
     && echo "ok: orphan halts the line" || { echo "FAIL: orphan did not halt"; fail=1; }
   : >"$orphan_release"
   unset DRIVER_STUB_WAIT_FILE DRIVER_STUB_READY_FILE
+  # A pane takes the tmux server's environment, so a stale wait file must leave it too.
+  tmux set-environment -gu DRIVER_STUB_WAIT_FILE 2>/dev/null || true; tmux set-environment -gu DRIVER_STUB_READY_FILE 2>/dev/null || true
   unset DRIVER_STUB_COORDINATION
   RECOVER_OWN_CLAIM=0; export RECOVER_OWN_CLAIM
   DRIVER_STUB_SLEEP="$old_stub_sleep"; export DRIVER_STUB_SLEEP

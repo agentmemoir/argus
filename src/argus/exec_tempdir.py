@@ -175,11 +175,32 @@ def _run_probe(directory: str) -> _ProbeOutcome:
     # One name per thread and process. Parallel callers probe the same directory,
     # and a shared name lets one caller delete or overwrite another caller's probe.
     probe = os.path.join(directory, f"_probe-{os.getpid()}-{threading.get_ident()}.sh")
+    # A short-lived shell writes the probe and exits before this process starts it.
+    # Written here, the file would be open for writing in this process, and a thread
+    # that forks meanwhile hands its child that open file; starting the probe then
+    # fails with ETXTBSY. The shell only uses printf, a builtin, so it needs no
+    # command found on PATH; the mode is set here, after the shell has exited.
     try:
-        with open(probe, "w", encoding="utf-8") as handle:
-            handle.write("#!/bin/sh\nexit 0\n")
-        os.chmod(probe, 0o755)
-    except OSError:
+        written = (
+            subprocess.call(
+                [
+                    "/bin/sh",
+                    "-c",
+                    'printf "#!/bin/sh\\nexit 0\\n" > "$1"',
+                    "probe",
+                    probe,
+                ],
+                timeout=10,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            == 0
+        )
+        if written:
+            os.chmod(probe, 0o755)
+    except (OSError, subprocess.SubprocessError):
+        written = False
+    if not written:
         # A probe that could not be written was never run, so this says nothing
         # about execution. It is UNPROBED, never REFUSED.
         return _ProbeOutcome.UNPROBED
