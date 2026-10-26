@@ -74,7 +74,7 @@ A red check on an open issue pull request gets a CI repair round before new work
 
 ## Ready sweep
 
-Each tick, the driver reads the same open issue pull requests as the CI repair step. It marks one ready for review only when every check that GitHub reports for it reads pass, and there is at least one check. A pending, failing, or missing check leaves it in draft, and the next tick asks again. The ready transition uses GitHub's ready/draft history as its once-only guard, so a pull request that was already readied, or that a person put back in draft, is not readied again. The sweep skips a pull request while its issue run or a repair round is running. It logs one line when it readies a pull request. Argus never merges it; a person does.
+Each tick, the driver reads the same open issue pull requests as the CI repair step. The sweep also runs while another issue run is live. It marks one ready for review only when at least one check passes and every other check passes or is skipped (a NEUTRAL or SKIPPED conclusion). A pending, failing, cancelled, or missing check leaves it in draft, and the next tick asks again. The ready transition uses GitHub's ready/draft history as its once-only guard, so a pull request that was already readied, or that a person put back in draft, is not readied again. The sweep skips a pull request while its issue run or a repair round is running. It logs one line when it readies a pull request. Argus never merges it; a person does.
 
 ## Settings
 

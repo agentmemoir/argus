@@ -103,6 +103,11 @@ _drive() {
     check_stall
     # The repair reads still run while the window is busy. A round waits for it.
     repair_observe
+    # A finished issue pull request must not wait for the live run to end. The
+    # sweep writes no run state, skips the live run's pull request, and never
+    # touches the checkout. A live phase run readies its own group as it
+    # publishes, so a phase tick does not sweep here.
+    [ "${WORK_SOURCE:-phases}" != issues ] || reconcile_group_ready
     log "${work_kind:-phase} window is running; skip"
     return 0
   fi

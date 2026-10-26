@@ -147,10 +147,11 @@ def mark_group_pull_request_ready(
     pull request is recorded, or its URL cannot name a pull request to act on.
 
     The transition is gated on the pull request's checks: the ready is recorded
-    only when gh reports at least one check and every one reads ``pass``, so a
-    pull request that is not yet mergeable stays draft. An empty check report is
-    a refusal too: gh returning zero rows is not ``all checks pass``, so a
-    pull request with no reported checks stays draft until checks are reported.
+    only when at least one check reads ``pass`` and every other one reads
+    ``pass`` or ``skipping`` (NEUTRAL or SKIPPED), so a pull request that is not
+    yet mergeable stays draft. An empty check report is a refusal too: gh
+    returning zero rows is not ``all checks pass``, so a pull request with no
+    reported checks stays draft until checks are reported.
 
     Every ready transition checks GitHub's complete ready/draft history and stops
     if it is unclear or records any earlier ready. That history is the once-guard,
@@ -192,11 +193,14 @@ def mark_group_pull_request_ready(
     )
     # gh returning zero rows is not "all checks pass": an empty report names no
     # passing check, so the pull request stays draft until checks are reported.
+    # gh puts NEUTRAL and SKIPPED in "skipping", which GitHub counts as passing
+    # for a required check. At least one row must still read "pass".
+    buckets = {str(row.get("bucket") or "") for row in rows or []}
     if (
         rows is None
         or code != 0
-        or not rows
-        or any(str(row.get("bucket") or "") != "pass" for row in rows)
+        or "pass" not in buckets
+        or buckets - {"pass", "skipping"}
     ):
         return {
             "ok": False,
