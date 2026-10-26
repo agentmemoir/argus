@@ -53,12 +53,14 @@ launchfault_halt() {   # <issue> <task file> <run dir> <state> <rc> <session log
   if [ "$attempts" -ge 3 ] && [ "$notified" != 1 ]; then
     notify "Needs You. Issue $number cannot start, and no other issue is taken: $reason
 Action: fix that cause on this host.
-Check: the next retry starts the run. Argus retries issue $number every $((delay / 60)) minutes and resumes alone."
+Check: the next retry starts the run. Argus retries issue $number on the first tick at least $((delay / 60)) minutes after each attempt and resumes alone."
     notified=1
   fi
-  printf '%s %s %s %s\n' "$number" "$attempts" "$(($(launchfault_now) + delay))" \
-    "$notified" >"$file"
-  log "launch-fault: issue $number attempt $attempts rc=$rc state=${state:-unknown}; claim kept, no new issue; retry in $((delay / 60)) min"
+  local due=$(($(launchfault_now) + delay))
+  printf '%s %s %s %s\n' "$number" "$attempts" "$due" "$notified" >"$file"
+  # A retry runs only on a tick (launchfault_due), so name the earliest time.
+  due="$(date -d "@$due" +%H:%M 2>/dev/null || date -r "$due" +%H:%M)"
+  log "launch-fault: issue $number attempt $attempts rc=$rc state=${state:-unknown}; claim kept, no new issue; retry on the first tick at or after $due"
   tmux_set_title "HALTED issue $number (launch fault)"
 }
 

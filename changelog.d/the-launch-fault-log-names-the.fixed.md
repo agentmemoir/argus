@@ -1,0 +1,1 @@
+The launch-fault log names the earliest retry time and says that the retry runs on the first tick at or after it. It no longer says "retry in 20 min", because a retry runs only on a driver tick, so the real spacing follows the tick schedule. The Needs You notice says the same. ([#291](https://github.com/agentmemoir/argus/issues/291))
