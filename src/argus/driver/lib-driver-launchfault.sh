@@ -97,3 +97,24 @@ launchfault_branch_reason() {   # <gitsync error>
   printf 'Argus could not put it on its own branch, so nothing ran on the base branch. Cause: %s' \
     "${1:-see phase-branch.json in the driver run folder}"
 }
+
+# The state and the cause of a failed issue branch cut, as `<state><TAB><reason>`.
+# A refusal such as a dirty checkout carries no `state` key, so a blocked repo
+# reads as BLOCKED with the cut's own summary, and a cut that wrote no result
+# says so. The halt then names what was seen, not `unknown` (belief 4).
+launchfault_branch_fields() {   # <phase-branch.json>
+  "$PYTHON" -c 'import json, sys
+try:
+    with open(sys.argv[1], encoding="utf-8") as handle:
+        out = json.load(handle)
+except (OSError, ValueError):
+    out = None
+if not isinstance(out, dict):
+    print("NO_RESULT\tthe branch cut wrote no result")
+    raise SystemExit
+repos = [r for r in out.get("repos") or [] if isinstance(r, dict)]
+state = out.get("state") or ("BLOCKED" if any(not r.get("ok") for r in repos) else "")
+reason = " ".join(str(out.get("error") or out.get("summary") or "").split())
+print(state + "\t" + reason)
+' "$1"
+}
