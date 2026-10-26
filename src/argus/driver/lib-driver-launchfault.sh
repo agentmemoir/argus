@@ -44,6 +44,9 @@ launchfault_halt() {   # <issue> <task file> <run dir> <state> <rc> <session log
   halt_state_from_session "$6" "$7"
   [ -z "$HALT_LOG_STATE" ] || state="$HALT_LOG_STATE"
   reason="${8:-${HALT_LOG_REASON:-glide exited with rc=$rc before any stage ran}}"
+  if ! issue_stop_save "$number"; then
+    state="$STOP_SAVE_STATE"; reason="$STOP_SAVE_REASON"
+  fi
   printf '%s issue %s attempt %s rc=%s state=%s at %s\n' "$LAUNCHFAULT_PREFIX" \
     "$number" "$attempts" "$rc" "${state:-unknown}" "$(ts)" >"$HALT"
   halt_record_write "$number" "$rel" "$run_dir" "$state" "$rc" launch-fault "$reason"
@@ -96,4 +99,48 @@ launchfault_due() {
 launchfault_branch_reason() {   # <gitsync error>
   printf 'Argus could not put it on its own branch, so nothing ran on the base branch. Cause: %s' \
     "${1:-see phase-branch.json in the driver run folder}"
+}
+
+# The state and the cause of a failed issue branch cut, as `<state><TAB><reason>`.
+# A refusal such as a dirty checkout carries no `state` key, so a blocked repo
+# reads as BLOCKED with the cut's own summary, and a cut that wrote no result
+# says so. The halt then names what was seen, not `unknown` (belief 4).
+launchfault_branch_fields() {   # <phase-branch.json>
+  "$PYTHON" -c 'import json, sys
+try:
+    with open(sys.argv[1], encoding="utf-8") as handle:
+        out = json.load(handle)
+except (OSError, ValueError):
+    out = None
+if not isinstance(out, dict):
+    print("NO_RESULT\tthe branch cut wrote no result")
+    raise SystemExit
+repos = [r for r in out.get("repos") or [] if isinstance(r, dict)]
+state = out.get("state") or ("BLOCKED" if any(not r.get("ok") for r in repos) else "")
+reason = " ".join(str(out.get("error") or out.get("summary") or "").split())
+print(state + "\t" + reason)
+' "$1"
+}
+
+# Save an issue run's edits before a stop path exits, so the next branch cut
+# finds a clean checkout and recovery needs no hand edit (#288). The checkpoint
+# commits and pushes them on the run's own issue branch only; another branch, or
+# a claim this machine does not hold, is left alone. A failure halts the line
+# with STOP_SAVE_STATE and STOP_SAVE_REASON and returns 1.
+issue_stop_save() {   # <issue>
+  local out="$RUN_DIR/stop-save-$1.json" fields
+  STOP_SAVE_STATE="" STOP_SAVE_REASON=""
+  [ "${work_kind:-phase}" = issue ] || return 0
+  case "$(${CMD_GIT:-git} -C "$REPO" rev-parse --abbrev-ref HEAD 2>/dev/null)" in
+    "issue/$1-"*) ;;
+    *) return 0 ;;
+  esac
+  "$PYTHON" "$ARGUS/gitsync/main.py" "${ARGUS_CONFIG_ARGS[@]}" --root "$REPO" \
+    --kind issue --mode checkpoint --phase "$1" >"$out" 2>/dev/null && return 0
+  fields="$(launchfault_branch_fields "$out")"
+  STOP_SAVE_STATE="${fields%%$'\t'*}"
+  STOP_SAVE_REASON="the run's edits are not saved on its branch: ${fields#*$'\t'}"
+  printf 'stop-save: issue %s state=%s at %s\n' "$1" "$STOP_SAVE_STATE" "$(ts)" >"$HALT"
+  log "stop-save: issue $1 state=$STOP_SAVE_STATE; $STOP_SAVE_REASON (see $out)"
+  return 1
 }

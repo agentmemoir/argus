@@ -95,13 +95,15 @@ _drive_resume_branch() {   # <number> <rel>
     return 0
   fi
   phases_name="$(basename "$rel" .md)"
-  if ! "$PYTHON" "$ARGUS/gitsync/main.py" "${ARGUS_CONFIG_ARGS[@]}" --root "$REPO" \
+  local branch_rc=0
+  "$PYTHON" "$ARGUS/gitsync/main.py" "${ARGUS_CONFIG_ARGS[@]}" --root "$REPO" \
       --mode branch --phase "$number" --phases "$phases_name" \
       "${GITSYNC_KIND_ARGS[@]+"${GITSYNC_KIND_ARGS[@]}"}" \
       --phases-directory "$(phases_dir)" \
       "${GROUP_ARGS[@]+"${GROUP_ARGS[@]}"}" \
-      >"$RUN_DIR/phase-branch.json" 2>/dev/null; then
-    local branch_state
+      >"$RUN_DIR/phase-branch.json" 2>/dev/null || branch_rc=$?
+  if [ "$branch_rc" -ne 0 ]; then
+    local branch_state branch_reason
     branch_state="$(selection_value state <"$RUN_DIR/phase-branch.json")"
     case "$branch_state" in
       FENCED|COORDINATION_UNAVAILABLE)
@@ -114,8 +116,10 @@ _drive_resume_branch() {   # <number> <rel>
     # a launch fault: halt again and keep retrying (lib-driver-launchfault.sh).
     if [ "${work_kind:-phase}" = issue ]; then
       log "resume: could not put issue $number on its own branch; no launch, nothing ran on the base branch (see $RUN_DIR/phase-branch.json)"
-      launchfault_halt "$number" "$rel" "$RESUME_RUN_DIR" "$branch_state" 1 "" "" \
-        "$(launchfault_branch_reason "$(selection_value error <"$RUN_DIR/phase-branch.json")")"
+      IFS=$'\t' read -r branch_state branch_reason \
+        < <(launchfault_branch_fields "$RUN_DIR/phase-branch.json") || true
+      launchfault_halt "$number" "$rel" "$RESUME_RUN_DIR" "$branch_state" "$branch_rc" "" "" \
+        "$(launchfault_branch_reason "$branch_reason")"
       RESUME_LAUNCH_FAULT=1
       return 1
     fi

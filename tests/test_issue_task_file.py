@@ -137,3 +137,74 @@ def test_issue_lookup_matches_number_and_slug_only(configured: Path) -> None:
     assert conventions.resolve_issue_file(configured, 255) == folder / TASK
     assert conventions.resolve_issue_file(configured, 25) is None
     assert conventions.resolve_issue_file(configured, 256) is None
+
+
+def tick_run_dirs(root: Path) -> str:
+    body = (
+        '. "$TEST_DRIVER/lib-driver-job.sh"\n'
+        "work_kind=issue; PHASE_FILE_INPUT=issue_file\n"
+        'failure_residue_write 255 "" failed 1 0 2>"$RUN_DIR/residue.err"\n'
+        "printf 'done\\n'\n"
+    )
+    return shell(root, body)
+
+
+def test_issue_run_dir_with_task_file_does_not_raise(issue_driver: Path) -> None:
+    folder = issue_driver / "runs" / "issue-tasks"
+    folder.mkdir(parents=True)
+    (folder / TASK).write_text("frozen task\n", encoding="utf-8")
+    assert "done" in tick_run_dirs(issue_driver)
+    for name in ("residue.err",):
+        assert "Traceback" not in (issue_driver / name).read_text(encoding="utf-8")
+    assert (issue_driver / "runs" / "issue-000255" / "failed.json").is_file()
+
+
+def test_issue_run_dir_without_task_file_logs_one_line(issue_driver: Path) -> None:
+    assert "done" in tick_run_dirs(issue_driver)
+    for name in ("residue.err",):
+        assert "Traceback" not in (issue_driver / name).read_text(encoding="utf-8")
+    events = (issue_driver / "events").read_text(encoding="utf-8").splitlines()
+    named = [
+        line
+        for line in events
+        if "issue 255 has no task file" in line and "issue_file" in line
+    ]
+    assert len(named) == 1
+    assert not (issue_driver / "runs" / "issue-000255").exists()
+
+
+def task_for_tick(root: Path, stub: str) -> str:
+    body = (
+        "work_kind=issue; PHASE_FILE_INPUT=issue_file\n"
+        'release_refused_claim() { printf \'%s %s %s %s\\n\' "$@" >>"$RUN_DIR/released"; }\n'
+        f"{stub}\n"
+        'rel="$(issue_task_for_tick 255 r1 2)"\n'
+        "printf 'rel=[%s]\\n' \"$rel\"\n"
+    )
+    return shell(root, body)
+
+
+def test_missing_task_file_is_rendered_again_and_the_tick_continues(
+    issue_driver: Path,
+) -> None:
+    stub = "issue_rerender() { printf 'runs/issue-tasks/issue-000255-fix-api.md\\n'; }"
+    out = task_for_tick(issue_driver, stub)
+    assert "rel=[runs/issue-tasks/issue-000255-fix-api.md]" in out
+    events = (issue_driver / "events").read_text(encoding="utf-8").splitlines()
+    assert "issue 255: task file missing; re-rendered" in events
+    assert not (issue_driver / "released").exists()
+
+
+def test_missing_task_file_and_failed_render_releases_the_claim(
+    issue_driver: Path,
+) -> None:
+    out = task_for_tick(issue_driver, "issue_rerender() { :; }")
+    assert "rel=[]" in out
+    events = (issue_driver / "events").read_text(encoding="utf-8").splitlines()
+    assert any(
+        line.startswith("issue 255: task file missing; re-render failed")
+        for line in events
+    )
+    assert "issue 255: task file missing; re-rendered" not in events
+    released = (issue_driver / "released").read_text(encoding="utf-8").splitlines()
+    assert released == ["255 r1 2 task-file-missing"]

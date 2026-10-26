@@ -38,6 +38,7 @@
 @unplaced src/argus/issues/leftover.py
 @unplaced src/argus/issues/order.py
 @unplaced src/argus/issues/report.py
+@unplaced src/argus/issues/rerender.py
 @unplaced src/argus/issues/selftest.py
 @unplaced src/argus/issues/source.py
 

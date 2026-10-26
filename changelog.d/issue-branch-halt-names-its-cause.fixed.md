@@ -1,0 +1,1 @@
+When an issue branch cut is refused without a named state, such as a checkout left with uncommitted work, the launch-fault halt now records `state=BLOCKED` and the cut's own summary as the reason, not `state=unknown`. A cut that wrote no result records `state=NO_RESULT`. A resumed issue keeps the real exit code of its branch cut, so each attempt shows what it saw.
