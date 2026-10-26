@@ -65,6 +65,10 @@ selftest_case_launch() {
          for session_log in "$RUN_DIR"/session-*.log; do \
            [ -f "$session_log" ] || continue; \
            tail -n 15 "$session_log" | sed "s|^|  session log $(basename "$session_log"): |"; \
+         done; \
+         for owner_check in "$RUN_DIR"/assert-owner-*.json; do \
+           [ -f "$owner_check" ] || continue; \
+           tail -n 15 "$owner_check" | sed "s|^|  board answer $(basename "$owner_check"): |"; \
          done; }
   grep -q '\[clio\]' "$LOG" \
     && { echo "FAIL: old notification prefix remains"; fail=1; } \
