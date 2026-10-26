@@ -123,9 +123,9 @@ STOP_ALLOWLIST = r"""
     driver/lib-driver-run.sh	return_nonzero	fn:claim_read_fields|[ -s "$1" ] || return 1#1
     driver/lib-driver-run.sh	return_nonzero	fn:claim_read_fields|IFS= read -r line <"$1" || return 1#1
     driver/lib-driver-run.sh	halt_marker	fn:on_stop|"${work_kind:-phase}" "$CUR_PHASE" "$rc" "$(ts)" >"$HALT"#1
-    driver/lib-driver-run.sh	return_nonzero	fn:run_session|session_claim_start_running "$number" || return 1#1
-    driver/lib-driver-run.sh	halt_marker	fn:run_session|"${work_kind:-phase}" "$number" "$rc" "${state:-unknown}" "$(ts)" >"$HALT"#1
-    driver/lib-driver-run.sh	return_nonzero	fn:tmux_busy|return 1#1
+    driver/lib-driver-run-session.sh	return_nonzero	fn:run_session|session_claim_start_running "$number" || return 1#1
+    driver/lib-driver-run-session.sh	halt_marker	fn:run_session|"${work_kind:-phase}" "$number" "$rc" "${state:-unknown}" "$(ts)" >"$HALT"#1
+    driver/lib-driver-run-session.sh	return_nonzero	fn:tmux_busy|return 1#1
     driver/lib-driver-select-flow.sh	return_nonzero	fn:_drive_choose_selection|return 1#1
     driver/lib-driver-select-flow.sh	drive_rc_nonzero	fn:_drive_choose_selection|{ _DRIVE_RC=1; return 0; }#1
     driver/lib-driver-select-flow.sh	drive_rc_zero_refusal	fn:_drive_choose_selection|{ _DRIVE_RC=0; return 0; }#1
