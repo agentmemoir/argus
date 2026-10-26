@@ -318,3 +318,30 @@ def test_a_ready_sweep_with_no_new_transition_logs_nothing(tmp_path: Path) -> No
     )
     events = (tmp_path / "events").read_text(encoding="utf-8").splitlines()
     assert events.count(READY_LINE) == 1
+
+
+BUSY_SWEEP = """
+tmux_busy() { return 0; }
+check_stall() { :; }
+repair_observe() { :; }
+python_transport() {
+  case "$*" in
+    *"--mode ready"*) log SWEEP; printf '{"state":"WAITING"}' ;;
+    *) "$TEST_PYTHON" "$@" ;;
+  esac
+}
+"""
+
+
+def test_a_busy_issue_tick_still_runs_the_ready_sweep(tmp_path: Path) -> None:
+    # A finished issue pull request must not wait for the live run to end.
+    shell(tmp_path, BUSY_SWEEP + "WORK_SOURCE=issues; work_kind=issue\n_drive\n")
+    events = (tmp_path / "events").read_text(encoding="utf-8").splitlines()
+    assert events == ["SWEEP", "issue window is running; skip"]
+
+
+def test_a_busy_phase_tick_does_not_sweep(tmp_path: Path) -> None:
+    # A live phase run may ready its own group pull request as it publishes.
+    shell(tmp_path, BUSY_SWEEP + "_drive\n")
+    events = (tmp_path / "events").read_text(encoding="utf-8").splitlines()
+    assert events == ["phase window is running; skip"]
