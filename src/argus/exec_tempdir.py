@@ -172,7 +172,7 @@ def _run_probe(directory: str) -> _ProbeOutcome:
     directory refuses execution; the second is a failure to find out, and reading
     it as a refusal turns a skip into a false answer.
     """
-    # One name per thread and process. Parallel callers probe the same directory,
+    # Scratch bisect: the old probe body. One name per thread and process. Parallel callers probe the same directory,
     # and a shared name lets one caller delete or overwrite another caller's probe.
     probe = os.path.join(directory, f"_probe-{os.getpid()}-{threading.get_ident()}.sh")
     try:
