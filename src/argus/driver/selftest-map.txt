@@ -58,11 +58,13 @@ lost_repo src/argus/driver/lib-driver-checkout.sh
 flow src/argus/driver/lib-selftest-flow.sh
 flow src/argus/driver/lib-driver-select-flow.sh
 flow src/argus/driver/lib-driver-run.sh
+flow src/argus/driver/lib-driver-run-session.sh
 flow src/argus/driver/lib-driver-drive.sh
 flow src/argus/driver/lib-driver-session-claim.sh
 flow src/argus/notify/notifications.py
 release src/argus/driver/lib-selftest-flow.sh
 release src/argus/driver/lib-driver-run.sh
+release src/argus/driver/lib-driver-run-session.sh
 release src/argus/driver/lib-driver-control.sh
 unavailable src/argus/driver/lib-selftest-unavailable.sh
 unavailable src/argus/driver/lib-driver-check.sh
@@ -81,6 +83,7 @@ merge_orphan src/argus/select/next_phase.py
 stranding src/argus/driver/lib-selftest-stranding.sh
 stranding src/argus/driver/lib-driver-drive.sh
 stranding src/argus/driver/lib-driver-run.sh
+stranding src/argus/driver/lib-driver-run-session.sh
 stranding src/argus/notify/notifications.py
 group_run src/argus/driver/lib-selftest-group.sh
 group_run src/argus/driver/lib-driver-group.sh
@@ -102,6 +105,7 @@ group_release src/argus/driver/lib-selftest-group.sh
 group_release src/argus/driver/lib-driver-group.sh
 group_release src/argus/driver/lib-driver-control.sh
 group_release src/argus/driver/lib-driver-run.sh
+group_release src/argus/driver/lib-driver-run-session.sh
 group_release src/argus/board/reservations.py
 group_resume src/argus/driver/lib-selftest-resume.sh
 group_resume src/argus/driver/lib-driver-resume.sh

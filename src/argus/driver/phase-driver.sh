@@ -154,7 +154,7 @@ NOTIFIER="$ARGUS/notify/notifications.py"
 for helper in \
   phase-tmux.sh lib-stat.sh \
   lib-driver-config.sh lib-driver-log.sh lib-driver-notify.sh \
-  lib-driver-run.sh lib-driver-job.sh lib-driver-select.sh lib-driver-check.sh \
+  lib-driver-run.sh lib-driver-run-session.sh lib-driver-job.sh lib-driver-select.sh lib-driver-check.sh \
   lib-driver-drive.sh lib-driver-control.sh lib-driver-dryrun.sh lib-driver-select-flow.sh \
   lib-driver-select-stub.sh lib-driver-select-real.sh lib-driver-maintenance.sh lib-driver-repair.sh lib-driver-launch.sh \
   lib-driver-halt-record.sh lib-driver-fence.sh \
