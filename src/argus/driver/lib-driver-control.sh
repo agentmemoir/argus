@@ -140,10 +140,18 @@ release() {
   # just read, immediately before it stages and pushes. The handoff is the one
   # write that must never land under a claim this machine no longer holds.
   [ -z "$number" ] || checkpoint_args+=(--phase "$number")
-  "$PYTHON" "$ARGUS/gitsync/main.py" "${ARGUS_CONFIG_ARGS[@]}" --root "$REPO" \
-    "${GITSYNC_KIND_ARGS[@]+"${GITSYNC_KIND_ARGS[@]}"}" \
-    "${checkpoint_args[@]}" >"$RUN_DIR/release-checkpoint.json" 2>/dev/null \
-    || log "release: could not push the work in progress; the next owner starts from what is already on the branch (see $RUN_DIR/release-checkpoint.json)"
+  if [ "${work_kind:-phase}" = issue ]; then
+    # An issue's edits that cannot be saved halt the line; the claim is kept.
+    if ! issue_stop_save "$number"; then
+      exec 9>&- || true
+      return 1
+    fi
+  else
+    "$PYTHON" "$ARGUS/gitsync/main.py" "${ARGUS_CONFIG_ARGS[@]}" --root "$REPO" \
+      "${GITSYNC_KIND_ARGS[@]+"${GITSYNC_KIND_ARGS[@]}"}" \
+      "${checkpoint_args[@]}" >"$RUN_DIR/release-checkpoint.json" 2>/dev/null \
+      || log "release: could not push the work in progress; the next owner starts from what is already on the branch (see $RUN_DIR/release-checkpoint.json)"
+  fi
   [ -z "$number" ] || gitsync_clean "$number"
   # The operator asked to release, so the local manual-stop hold goes whatever
   # the board write does; clearing it only on success left an expired release

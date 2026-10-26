@@ -1,0 +1,1 @@
+An issue run that stops early now commits and pushes its edits on its own issue branch before it exits, so the next issue's branch cut finds a clean checkout. A commit or push that fails halts the line with COMMIT_FAILED or PUSH_FAILED and the cause.
