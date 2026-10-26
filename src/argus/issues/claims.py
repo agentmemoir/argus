@@ -42,6 +42,38 @@ def save(repo: Path, number: int, reservation: dict[str, Any], path: Path) -> No
         raise CoordinationError("could not persist issue reservation token") from exc
 
 
+def carry_forward(repo: Path, number: int) -> bool:
+    """Copy the pair into a run folder that a ``--fresh`` archive emptied (#287).
+
+    glide's ``--fresh`` restart moves the whole run folder to
+    ``<folder>.prev-<epoch>``, so a pair written just before the move leaves
+    with it. The newest archive that holds both files has the pair this folder
+    last had. It is copied, never moved, and only into a folder with no
+    ``reservation.json``, so every owner check reads the same token as before
+    the archive. The snapshot is written first, so a stop in between leaves no
+    token without its snapshot.
+    """
+    target = reservation_file(repo, number, kind="issue")
+    folder = target.parent
+    if target.exists() or not folder.is_dir():
+        return False
+    found: list[tuple[int, Path]] = []
+    for old in folder.parent.glob(folder.name + ".prev-*"):
+        epoch = old.name.rsplit(".prev-", 1)[1]
+        names = ("task-snapshot.json", target.name)
+        if epoch.isdigit() and all((old / name).is_file() for name in names):
+            found.append((int(epoch), old))
+    if not found:
+        return False
+    newest = max(found)[1]
+    try:
+        for name in ("task-snapshot.json", target.name):
+            write(folder / name, (newest / name).read_text(encoding="utf-8"))
+    except OSError:
+        return False
+    return True
+
+
 def snapshot(repo: Path, number: int, record: dict[str, Any]) -> Path | None:
     try:
         target = reservation_file(repo, number, kind="issue").with_name(

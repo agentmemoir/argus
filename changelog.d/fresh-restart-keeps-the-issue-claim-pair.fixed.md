@@ -1,0 +1,1 @@
+When a `--fresh` restart archives an issue run folder and takes its `reservation.json` and `task-snapshot.json` with it, Argus now copies the pair from the newest archive back into the fresh folder the next time it reads the claim. The ready sweep and the run's own post-steps then find the folder again, so a green draft pull request is marked ready with no hand edit.

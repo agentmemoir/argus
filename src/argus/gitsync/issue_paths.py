@@ -10,7 +10,7 @@ from argus import conventions
 from argus.board.core import CoordinationError, _issue_key
 from argus.board.files import load_reservation_file, reservation_file
 from argus.gitsync.git import ConfigError, git, is_git_repo
-from argus.issues.claims import snapshot
+from argus.issues.claims import carry_forward, snapshot
 from argus.issues.task import task_directory
 from argus.issues.transport import IssuesUnavailable
 
@@ -74,6 +74,7 @@ def load_issue_reservation(
     expected = reservation_file(root, number, kind="issue").resolve()
     if path is not None and Path(path).resolve() != expected:
         raise ConfigError("issue reservation file must be inside the current run")
+    carry_forward(Path(root), number)
     data = load_reservation_file(expected)
     if data is None or "phase" in data or issue_number(data.get("issue")) != number:
         raise ConfigError("reservation does not belong to the current issue")
