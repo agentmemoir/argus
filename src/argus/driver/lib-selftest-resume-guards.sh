@@ -11,7 +11,9 @@
 selftest_resume_gate_cases() {
   # A damaged run result is named and passed to the repair, never used as a
   # reason to hold the line. The message still separates it from the interrupted
-  # class, which has no run.json at all.
+  # class, which has no run.json at all. The tick before this one launched a
+  # phase, and a tick that finds that window still open launches nothing.
+  wait_phase_window_gone
   selftest_resume_record "$phase" "$rel" "$run_dir" "" 1
   printf 'not json at all\n' >"$run_dir/run.json"
   printf '{"current": "fixture"}\n' >"$run_dir/resume.json"

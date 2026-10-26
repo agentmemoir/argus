@@ -335,6 +335,7 @@ selftest_case_release() {
     && echo "ok: release returns success and does not exit through the error path" \
     || { echo "FAIL: release returned $release_rc"; fail=1; }
   unset DRIVER_STUB_WAIT_FILE DRIVER_STUB_READY_FILE DRIVER_STUB_COORDINATION
+  tmux set-environment -gu DRIVER_STUB_WAIT_FILE 2>/dev/null || true; tmux set-environment -gu DRIVER_STUB_READY_FILE 2>/dev/null || true
   RECOVER_OWN_CLAIM=0; export RECOVER_OWN_CLAIM
   DRIVER_STUB_SLEEP="$old_stub_sleep"; export DRIVER_STUB_SLEEP
   rm -f "$release_wait" "$release_ready" "$RELEASE" "$CLAIM" "$HALT"
