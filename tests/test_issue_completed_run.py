@@ -49,6 +49,25 @@ def test_an_argus_pull_request_in_any_state_gives_pull_request(
     assert pull_request_verdict(100001, TASK) == "pull_request"
 
 
+def test_a_pull_request_on_a_suffixed_branch_gives_pull_request(repo: Path) -> None:
+    # Given a closed pull request on the suffixed branch of the same issue, when the
+    # verdict is read, then it is pull_request: the suffixed form is the same issue.
+    row: dict[str, Any] = {
+        "number": 71,
+        "html_url": URL,
+        "state": "closed",
+        "merged_at": None,
+        "draft": False,
+        "head": {
+            "ref": "issue/100001-fix-the-input-2",
+            "repo": {"full_name": "example/project"},
+            "sha": "b" * 40,
+        },
+    }
+    fixture_update(repo, history=[row])
+    assert pull_request_verdict(100001, TASK) == "pull_request"
+
+
 def test_an_unreadable_branch_list_raises(repo: Path) -> None:
     # Given the pull request list cannot be read, when the verdict is read, then it
     # raises, so the driver starts no run and says nothing.

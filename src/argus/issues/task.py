@@ -61,11 +61,16 @@ def task_directory(repo: Path) -> Path:
     return path
 
 
-def task_path(directory: Path, issue: dict[str, Any]) -> Path:
+def task_path(
+    directory: Path, issue: dict[str, Any], suffix: int | None = None
+) -> Path:
     number = issue_number(issue["number"])
     words = re.sub(r"[^a-z0-9]+", "-", issue["title"].lower()).strip("-").split("-")
     slug = "-".join(words[:3])[:60].rstrip("-")
-    return directory / (f"issue-{number:06d}" + (f"-{slug}" if slug else "") + ".md")
+    tail = "" if suffix is None else f"-{suffix}"
+    return directory / (
+        f"issue-{number:06d}" + (f"-{slug}" if slug else "") + tail + ".md"
+    )
 
 
 def safe_token(value: Any) -> str:

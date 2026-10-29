@@ -4,13 +4,15 @@
 
 from argus.gitsync.issue_paths import issue_branch
 from argus.issues.client import IssueClient
+from argus.issues.pulls import history
 
 
 def pull_request_verdict(number: int, task_name: str) -> str:
-    """``pull_request`` when an Argus pull request exists on the issue branch.
+    """``pull_request`` when an Argus pull request exists for the issue.
 
-    The branch is read in every state, so an open, closed, or merged pull request
-    counts. ``none`` means no pull request exists. A failed read raises.
+    The issue branch and any suffixed branch count, in every state: open, closed,
+    or merged. ``none`` means no pull request exists. A failed read raises.
     """
-    pulls = IssueClient().pull_requests_on(issue_branch(number, task_name))
-    return "pull_request" if pulls else "none"
+    client = IssueClient()
+    pulls = client.pull_requests_on(issue_branch(number, task_name))
+    return "pull_request" if pulls or history(client).get(number) else "none"

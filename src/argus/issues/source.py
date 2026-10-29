@@ -14,12 +14,13 @@ from argus.board.reservations import (
     ReservationStore,
 )
 from argus.issues import claims
+from argus.issues.branches import fresh_task_path
 from argus.issues.client import IssueClient
 from argus.issues.evidence import Evidence, escalated, pending, signals
 from argus.issues.filter import eligible, label_claimed
 from argus.issues.leftover import release_closed
 from argus.issues.order import PREFERENCES, ordering
-from argus.issues.owned import tick_pull_requests
+from argus.issues.owned import retire_closed, tick_pull_requests
 from argus.issues.report import _Reports, skip_counts
 from argus.issues.task import render, task_directory, task_path, write
 from argus.issues.transport import IssuesUnavailable
@@ -69,7 +70,7 @@ class IssuesSource(_Reports, WorkSource):
         self.store: Any = None
         self.truncated = False
         self.notices: list[dict[str, str]] = []
-        self.evidence = Evidence(self.client.argus_pull_requests)
+        self.evidence = Evidence(self.client)
 
     def _load(
         self, *, reserve: bool = False, store: Any = None, listing: bool = True
@@ -186,7 +187,7 @@ class IssuesSource(_Reports, WorkSource):
                 self.claim_label,
                 self.rows or [],
                 self.records,
-                self.evidence.open_pull_requests(),
+                self.evidence,
             )
         attempts = 0
         last: tuple[dict[str, Any], dict[str, Any]] | None = None
@@ -206,9 +207,9 @@ class IssuesSource(_Reports, WorkSource):
                             release_closed(self.store, number, record)
                             self.records.pop(f"{number:06d}", None)
                         continue
-                    if number in self.evidence.open_pull_requests():
-                        # An open Argus pull request owns its issue, so its claim is
-                        # not resumed on this machine either. The read fails closed.
+                    if self.evidence.owns(number):
+                        # An open or merged Argus pull request owns its issue, so its
+                        # claim is not resumed on this machine either.
                         self.skipped["open_pull_request"] += 1
                         continue
                     if run_failed(self.repo, number, task_path(self.directory, row)):
@@ -238,10 +239,12 @@ class IssuesSource(_Reports, WorkSource):
             if label_claimed(row, record, self.claim_label):
                 self.skipped["claim_label"] += 1
                 continue
+            if reserve:
+                retire_closed(self.store, machine, number, self.records, self.evidence)
             detail = self._detail(row)
             if detail["evidence"]:
                 continue
-            path = task_path(self.directory, detail)
+            path = fresh_task_path(self.directory, detail, self.evidence)
             if not reserve:
                 return self._base("AVAILABLE", detail)
             write(
@@ -256,11 +259,8 @@ class IssuesSource(_Reports, WorkSource):
             except (ReservationConflict, ReservationCooldown) as exc:
                 self.skipped["claimed"] += 1
                 last = detail, exc.record
-                last_state = (
-                    "COOLDOWN"
-                    if isinstance(exc, ReservationCooldown)
-                    else "WAIT_FOR_CLAIM"
-                )
+                cooling = isinstance(exc, ReservationCooldown)
+                last_state = "COOLDOWN" if cooling else "WAIT_FOR_CLAIM"
                 if attempts >= conventions.setting("issues.claim-attempts", 3):
                     break
                 continue
@@ -270,7 +270,10 @@ class IssuesSource(_Reports, WorkSource):
             except IssuesUnavailable as exc:
                 # The board reservation is the claim; a lost label write keeps it.
                 print(f"issue claim: label not added: {exc}", file=sys.stderr)
-            return self._base("RESERVED", detail, reservation, attempts=attempts)
+            rel = path.relative_to(self.repo).as_posix()
+            return self._base(
+                "RESERVED", detail, reservation, attempts=attempts, path=rel
+            )
         if last:
             return self._base(
                 last_state,

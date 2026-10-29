@@ -95,6 +95,7 @@ def test_each_filter_counts_once_and_the_survivor_wins(configured: Configured) -
         "escalated": 0,
         "claim_label": 0,
         "open_pull_request": 0,
+        "merged_pull_request": 0,
         "missing_labels.type": 1,
         "type_ambiguous": 0,
         "missing_labels.area": 0,

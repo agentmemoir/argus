@@ -1,6 +1,6 @@
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
 # SPDX-License-Identifier: Apache-2.0
-"""The issue pull requests Argus owns: board records, and labels after a merge."""
+"""The issue pull requests Argus owns: board records, and what a merge releases."""
 
 from collections.abc import Iterator
 from pathlib import Path
@@ -31,13 +31,19 @@ def held(*, machine: str = "worker-one", status: str = "running") -> dict[str, A
     }
 
 
-def merged_row(state: str = "MERGED") -> dict[str, Any]:
+def history_row(state: str, branch: str = BRANCH) -> dict[str, Any]:
+    """A pull request as the all-state listing returns it."""
     return {
         "number": 70,
-        "url": PULL_URL,
-        "state": state,
-        "headRefName": BRANCH,
-        "isCrossRepository": False,
+        "html_url": PULL_URL,
+        "state": "open" if state == "open" else "closed",
+        "merged_at": "2026-10-29T12:00:00Z" if state == "merged" else None,
+        "draft": False,
+        "head": {
+            "ref": branch,
+            "repo": {"full_name": "example/project"},
+            "sha": "a" * 40,
+        },
     }
 
 
@@ -88,7 +94,7 @@ def test_a_merged_pull_request_removes_the_label_of_a_published_issue(
     # Given a published issue with the claim label and a merged Argus pull request,
     # when the tick runs, then the label is removed and the published record stays.
     board.records["100001"] = held(status="completed")
-    fixture_update(repo, branch_pulls=[merged_row()])
+    fixture_update(repo, history=[history_row("merged")])
     IssuesSource(repo).select()
     assert len(removals(repo)) == 1
     assert board.released == []
@@ -98,10 +104,10 @@ def test_a_merged_pull_request_removes_the_label_of_a_published_issue(
 def test_a_second_tick_after_the_merge_removes_nothing(
     repo: Path, board: Board
 ) -> None:
-    # Given the first tick removed the label, when a second tick runs, then no
-    # further label removal is sent.
+    # Given the first tick removed the label on GitHub, when a second tick runs, then
+    # no further label removal is sent.
     board.records["100001"] = held(status="completed")
-    fixture_update(repo, branch_pulls=[merged_row()])
+    fixture_update(repo, history=[history_row("merged")])
     IssuesSource(repo).select()
     fixture_update(repo, rows=[issue(labels=ELIGIBLE)])
     IssuesSource(repo).select()
@@ -111,11 +117,10 @@ def test_a_second_tick_after_the_merge_removes_nothing(
 def test_a_failed_label_removal_is_retried_on_the_next_tick(
     repo: Path, board: Board
 ) -> None:
-    # Given a published issue, a merged pull request, and a label write that fails,
-    # when the tick runs, then the tick returns and the record is unchanged; when the
-    # next tick's write works, then the label is removed.
+    # Given a label write that fails, when the tick runs, then the tick returns and
+    # the record is unchanged; when the next tick's write works, then the label goes.
     board.records["100001"] = held(status="completed")
-    fixture_update(repo, branch_pulls=[merged_row()], mode="edit-failure")
+    fixture_update(repo, history=[history_row("merged")], mode="edit-failure")
     IssuesSource(repo).select()
     assert board.records["100001"]["status"] == "completed"
     fixture_update(repo, mode="working")
@@ -134,16 +139,30 @@ def test_an_unreadable_merge_check_changes_nothing(repo: Path, board: Board) -> 
     assert board.released == []
 
 
-def test_an_active_claim_keeps_its_label_after_a_merge(
+def test_a_merged_pull_request_is_never_selected_and_its_claim_is_released_once(
     repo: Path, board: Board
 ) -> None:
-    # Given an active claim held here and a merged Argus pull request, when the tick
-    # runs, then the claim and its label are left to the run.
+    # Given an active claim held here and a merged Argus pull request with the issue
+    # still open, when two ticks run, then the issue is never selected and its claim
+    # is released once.
     board.records["100001"] = held()
-    fixture_update(repo, branch_pulls=[merged_row()])
+    fixture_update(repo, history=[history_row("merged")])
     IssuesSource(repo).select()
-    assert removals(repo) == []
-    assert board.released == []
+    fixture_update(repo, rows=[issue(labels=ELIGIBLE)])
+    second = IssuesSource(repo).select()
+    assert second["state"] == "NO_PHASE"
+    assert second["skipped"]["merged_pull_request"] == 1
+    assert board.released == ["100001"]
+    assert len(removals(repo)) == 1
+
+
+@pytest.mark.usefixtures("board")
+def test_an_unreadable_history_selects_nothing(repo: Path) -> None:
+    # Given the pull request history cannot be read, when a tick checks an issue,
+    # then selection raises and no issue is chosen.
+    fixture_update(repo, rows=[issue(labels=ELIGIBLE)], history_failure=True)
+    with pytest.raises(IssuesUnavailable):
+        IssuesSource(repo).select(reserve=False)
 
 
 def test_an_open_pull_request_is_recorded_once_on_its_issue(

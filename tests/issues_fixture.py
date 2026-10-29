@@ -122,6 +122,10 @@ elif args[:2] == ["label", "create"]:
     fixture.setdefault("labels", []).append(args[2])
     (root / "github.json").write_text(json.dumps(fixture))
     sys.exit(0)
+elif args[0] == "api" and "state=all" in args[-1]:
+    if fixture.get("history_failure"):
+        sys.exit(1)
+    result = [fixture.get("history", [])]
 elif args[0] == "api" and "/pulls?" in args[-1]:
     result = fixture.get("pull_pages", [fixture.get("pulls", [])])
 elif args[0] == "api":
@@ -161,6 +165,7 @@ class Board:
         self.claims: list[int] = []
         self.released: list[str] = []
         self.pull_writes: list[dict[str, Any]] = []
+        self.retired: list[str] = []
 
     def read(self) -> tuple[dict[str, Any], str]:
         return {"phases": self.records}, "fixture-revision"
@@ -201,6 +206,10 @@ class Board:
     ) -> None:
         self.pull_writes.append(pull_request)
         self.records[f"{int(reservation['issue']):06d}"]["pull_request"] = pull_request
+
+    def retire_retained(self, reservation: dict[str, Any]) -> None:
+        self.retired.append(str(reservation["issue"]))
+        self.records.pop(f"{int(reservation['issue']):06d}", None)
 
     def assert_owner(self, reservation: dict[str, Any]) -> dict[str, Any]:
         return self.records[f"{int(reservation['issue']):06d}"]

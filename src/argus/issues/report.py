@@ -26,6 +26,7 @@ SKIP_REASONS = (
     "escalated",
     "claim_label",
     "open_pull_request",
+    "merged_pull_request",
 )
 
 

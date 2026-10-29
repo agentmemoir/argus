@@ -56,6 +56,7 @@ def tick_notices(
     rows: list[dict[str, Any]],
     records: dict[str, Any],
     open_pulls: dict[int, dict[str, Any]],
+    past: dict[int, list[dict[str, Any]]],
 ) -> list[dict[str, str]]:
     """The Needs You notices for one tick, as ``key`` and ``text`` pairs.
 
@@ -70,9 +71,13 @@ def tick_notices(
         ):
             continue
         branch = issue_branch(number, task_path(directory, row).name)
-        for pull in client.pull_requests_on(branch):
-            if pull["state"] == "CLOSED":
-                notices.append(_closed_notice(number, _one_line(pull["url"])))
+        urls = {
+            str(p["url"])
+            for p in client.pull_requests_on(branch)
+            if p["state"] == "CLOSED"
+        }
+        urls |= {str(p["url"]) for p in past.get(number, []) if p["state"] == "closed"}
+        notices.extend(_closed_notice(number, _one_line(url)) for url in sorted(urls))
     owner, _, name = client.repo.partition("/")
     for number, pull in sorted(open_pulls.items()):
         if pull["draft"] is not False:
