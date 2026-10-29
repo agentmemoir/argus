@@ -179,7 +179,7 @@ def mode_issue_open_pr(
     )
 
 
-PHASE_ONLY_MODES = frozenset({"signals", "signal-reply", "peek-ci"})
+PHASE_ONLY_MODES = frozenset({"signals", "signal-reply"})
 
 
 def issue_mode(args: Namespace) -> dict[str, Any] | None:
@@ -198,8 +198,9 @@ def issue_mode(args: Namespace) -> dict[str, Any] | None:
 
 
 def _issue_mode(args: Namespace) -> dict[str, Any] | None:
-    # These modes read phase pull requests and phase run folders. Without a
-    # phase run for an issue they have nothing to read, so they refuse by name.
+    # These modes read a phase's pull request signals and phase run folders.
+    # Without a phase run for an issue they have nothing to read, so they refuse
+    # by name. peek-ci is not listed: it reads the checks of the checked-out branch.
     if args.mode in PHASE_ONLY_MODES:
         raise ConfigError(
             f"--mode {args.mode} is phase-only; run it without --kind issue"
