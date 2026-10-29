@@ -22,7 +22,7 @@ import os
 import shutil
 import subprocess
 import sys
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 if __name__ == "__main__":
@@ -81,7 +81,7 @@ def back_up(hooks: Path | None, run_dir: Path) -> Path | None:
     """Copy the hooks folder into the run state before anything replaces it."""
     if hooks is None or not hooks.is_dir():
         return None
-    stamp = datetime.now().strftime("%Y%m%dT%H%M%S")
+    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S")
     destination = run_dir / "hooks-backup" / stamp
     shutil.copytree(hooks, destination)
     return destination

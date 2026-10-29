@@ -26,6 +26,7 @@ dev = [
     "mypy>=1.11",
     "pyright>=1.1.390",
     "pytest>=9.0.3,<10",
+    "pytest-cov>=7.1.0",
     "pytest-xdist>=3.8.0",
     "ruff>=0.17.3",
 ]
@@ -67,10 +68,13 @@ ignore = ["E501"]
 testpaths = ["tests"]
 addopts = "-ra --strict-markers"
 
+[tool.coverage.run]
+source = ["argus"]
+
 # Type checking: mypy at its default level gates the package (`make
 # typecheck`); pyright in strict mode, the checker behind the editor's Pylance,
-# gates the package and the suite (`make typecheck-strict`). A shipped
-# `py.typed` is the open step of the recorded type-checking target.
+# gates the package and the suite (`make typecheck-strict`). The package ships
+# a `py.typed` marker, so type checkers read its annotations.
 [tool.mypy]
 python_version = "3.11"
 files = ["src/argus"]
