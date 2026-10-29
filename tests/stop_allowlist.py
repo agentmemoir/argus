@@ -112,6 +112,8 @@ STOP_ALLOWLIST = r"""
     driver/lib-driver-resume.sh	return_nonzero	fn:issue_leftover_release|*) return 2 ;;#1
     driver/lib-driver-resume.sh	return_nonzero	fn:issue_leftover_release|return 1#1
     driver/lib-driver-resume.sh	return_nonzero	fn:issue_leftover_release|1) return 1 ;;#1
+    driver/lib-driver-resume.sh	return_nonzero	fn:issue_resume_gate|return 1#1
+    driver/lib-driver-resume.sh	return_nonzero	fn:_drive_resume|issue_resume_gate "$number" || return 1#1
     driver/lib-driver-resume.sh	exit_nonzero	fn:resume_cmd|exit 2 ;;#1
     driver/lib-driver-resume.sh	exit_nonzero	fn:resume_cmd|driver_lock_take || { printf 'argus: another driver instance holds the lock; try again\n' >&2; exit 1; }#1
     driver/lib-driver-resume.sh	exit_nonzero	fn:resume_cmd|exit 1#1
