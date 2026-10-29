@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, cast
 
 from argus import conventions
+from argus.issues.parse import issue_number, mapping, objects
 from argus.issues.transport import IssuesUnavailable, run
 
 REPO_RE = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+\Z")
@@ -19,31 +20,6 @@ SEARCH_FIELDS = "number,title,labels,author,authorAssociation,createdAt,updatedA
 VIEW_FIELDS = (
     "number,title,body,labels,author,createdAt,updatedAt,comments,blockedBy,state"
 )
-
-
-def issue_number(value: Any) -> int:
-    if (
-        isinstance(value, bool)
-        or not isinstance(value, int)
-        or not 1 <= value <= 9999999999
-    ):
-        raise IssuesUnavailable("invalid_response", "issue number")
-    return value
-
-
-def objects(value: Any, operation: str) -> list[dict[str, Any]]:
-    if not isinstance(value, list):
-        raise IssuesUnavailable("invalid_response", operation)
-    items = cast("list[object]", value)
-    if any(not isinstance(item, dict) for item in items):
-        raise IssuesUnavailable("invalid_response", operation)
-    return cast("list[dict[str, Any]]", items)
-
-
-def mapping(value: Any, operation: str) -> dict[str, Any]:
-    if not isinstance(value, dict):
-        raise IssuesUnavailable("invalid_response", operation)
-    return cast("dict[str, Any]", value)
 
 
 class IssueClient:

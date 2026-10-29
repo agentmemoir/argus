@@ -11,8 +11,9 @@ from pathlib import Path
 from typing import Any
 
 from argus import conventions
-from argus.issues.client import TOKEN_RE, IssueClient, issue_number
+from argus.issues.client import TOKEN_RE, IssueClient
 from argus.issues.filter import label_names
+from argus.issues.parse import issue_number
 from argus.issues.transport import IssuesUnavailable
 from argus.issues.trust import ASSOCIATIONS, Trust
 
