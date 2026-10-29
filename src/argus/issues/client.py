@@ -111,20 +111,29 @@ class IssueClient:
         return issues
 
     def argus_pull_requests(self) -> set[int]:
-        """Issue numbers with an open pull request on an Argus issue branch."""
-        limit = conventions.setting("issues.list-limit", 200)
-        argv = ["pr", "list", "--repo", self.repo, "--state", "open"]
-        argv += ["--limit", str(limit), "--json", "headRefName,isCrossRepository"]
-        rows = objects(self.call(argv), "pr list")
-        if len(rows) >= limit:
-            # A full page may hide an Argus pull request, so no issue is free.
-            raise IssuesUnavailable("truncated", "pr list")
-        return {
-            int(match.group(1))
-            for row in rows
-            if row.get("isCrossRepository") is False
-            and (match := BRANCH_RE.fullmatch(str(row.get("headRefName"))))
-        }
+        """Issue numbers with an open pull request on an Argus issue branch.
+
+        Every page is read, so a busy repository never hides an Argus pull request.
+        """
+        path = f"repos/{self.repo}/pulls?state=open&per_page=100"
+        pages = self.call(["api", "--paginate", "--slurp", path])
+        if not isinstance(pages, list):
+            raise IssuesUnavailable("invalid_response", "pr list")
+        owned: set[int] = set()
+        for page in cast("list[Any]", pages):
+            for row in objects(page, "pr list"):
+                head = row.get("head")
+                if not isinstance(head, dict):
+                    continue
+                head = cast("dict[str, Any]", head)
+                repo: object = head.get("repo")
+                if not isinstance(repo, dict):
+                    continue
+                name = cast("dict[str, Any]", repo).get("full_name")
+                match = BRANCH_RE.fullmatch(str(head.get("ref")))
+                if match and str(name).casefold() == self.repo.casefold():
+                    owned.add(int(match.group(1)))
+        return owned
 
     def view(
         self, number: int, metadata: dict[str, Any] | None = None

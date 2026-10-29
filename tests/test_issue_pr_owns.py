@@ -16,7 +16,9 @@ from issues_fixture import Board, fake_gh, fixture_update, issue, settings
 
 
 def pull(branch: str, *, draft: bool = True, fork: bool = False) -> dict[str, Any]:
-    return {"headRefName": branch, "isCrossRepository": fork, "isDraft": draft}
+    owner = "fork" if fork else "example"
+    head = {"ref": branch, "repo": {"full_name": f"{owner}/project"}}
+    return {"head": head, "draft": draft}
 
 
 @pytest.fixture
@@ -55,7 +57,8 @@ def test_an_open_argus_pull_request_holds_its_issue(repo: Path, draft: bool) -> 
         pull("issue/100001-fix-input", fork=True),
         pull("issue/100001-fix-input\n; rm -rf /"),
         pull("x/issue/100001-fix-input"),
-        {"headRefName": ["issue/100001-x"], "isCrossRepository": False},
+        {"head": {"ref": ["issue/100001-x"], "repo": {"full_name": "example/project"}}},
+        {"head": {"ref": "issue/100001-x", "repo": None}},
     ],
 )
 def test_a_branch_that_is_not_argus_own_does_not_hold(
@@ -84,11 +87,14 @@ def test_an_unread_pull_request_list_selects_nothing(
         source.select(reserve=False)
 
 
-def test_a_full_pull_request_page_selects_nothing(repo: Path) -> None:
-    conventions.override({"issues.list-limit": 1})
-    fixture_update(repo, pulls=[pull("feature/x")])
-    with pytest.raises(IssuesUnavailable, match="truncated"):
-        IssuesSource(repo).client.argus_pull_requests()
+def test_a_pull_request_on_a_later_page_still_holds(repo: Path) -> None:
+    # Given more open pull requests than one page, when the Argus one is on the
+    # second page, then its issue is still held.
+    first = [pull(f"feature/{n}") for n in range(100)]
+    second = [pull("issue/100001-fix-input")]
+    fixture_update(repo, pull_pages=[first, second])
+    result = IssuesSource(repo).select(reserve=False)
+    assert result["skipped"]["open_pull_request"] == 1
 
 
 def test_a_ready_pull_request_is_never_listed_for_repair(
@@ -98,7 +104,8 @@ def test_a_ready_pull_request_is_never_listed_for_repair(
     ready = {"number": 70, "url": "https://g/o/r/pull/70", "state": "OPEN"}
 
     def listed(_root: Path, branch: str) -> tuple[list[dict[str, Any]], str]:
-        return [{**ready, **pull(branch, draft=False)}], ""
+        row = {"headRefName": branch, "isCrossRepository": False, "isDraft": False}
+        return [{**ready, **row}], ""
 
     def scope(_root: object, _number: int) -> tuple[Path, list[str]]:
         return tmp_path, ["runs/issue-7", "tasks/issue-7-fix-ci.md"]
