@@ -93,5 +93,91 @@ class _IssueOps(_StoreBase):
             issues=True,
         )
 
+    def set_issue_pull_request(
+        self, reservation: Any, pull_request: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Record the branch and pull request URL that an Argus issue run owns.
+
+        The reservation must own the record, as a receipt write does. The write
+        does not renew the claim, so the record is not a lease.
+        """
+        if not self.issues:
+            raise CoordinationError("issue pull requests require the issue board")
+        if not isinstance(reservation, dict):
+            raise CoordinationError("reservation must be an object")
+        reservation = cast("dict[str, Any]", reservation)
+        key, _number = self._key(reservation.get("issue"))
+        machine = _validate_machine_id(reservation.get("machine_id"))
+        token = _validate_reservation_id(reservation.get("reservation_id"))
+        generation = _validate_generation(reservation.get("generation"))
+        branch = pull_request.get("branch")
+        url = pull_request.get("url")
+        if (
+            not isinstance(branch, str)
+            or not isinstance(url, str)
+            or not branch
+            or not url.startswith("https://")
+            or len(url) > 500
+            or any(char.isspace() for char in branch + url)
+        ):
+            raise CoordinationError(
+                "issue pull request needs a branch and an https URL"
+            )
+        value = {"branch": branch, "url": url}
+
+        def mutate(state: dict[str, Any]) -> _Mutation:
+            record = state["phases"].get(key)
+            if record is None or not _owner_matches(record, machine, token, generation):
+                raise ReservationFenced(
+                    f"issue {key} is no longer owned by this reservation"
+                )
+            record["pull_request"] = value
+            return _Mutation(True, self._reservation(record, key))
+
+        return _transaction(
+            self.private,
+            self.remote,
+            self.branch,
+            mutate,
+            f"issue coordination: record pull request for {key}",
+            issues=True,
+        )
+
+    def retire_retained(self, reservation: Any) -> None:
+        """Remove this reservation's own published issue record, so the issue can be claimed.
+
+        Only a record retained as published (terminal) is removed. The caller checks that
+        the pull request closed without merge.
+        """
+        if not self.issues:
+            raise CoordinationError("issue records require the issue board")
+        if not isinstance(reservation, dict):
+            raise CoordinationError("reservation must be an object")
+        reservation = cast("dict[str, Any]", reservation)
+        key, _number = self._key(reservation.get("issue"))
+        machine = _validate_machine_id(reservation.get("machine_id"))
+        token = _validate_reservation_id(reservation.get("reservation_id"))
+        generation = _validate_generation(reservation.get("generation"))
+
+        def mutate(state: dict[str, Any]) -> _Mutation:
+            record = state["phases"].get(key)
+            if record is None or not _owner_matches(record, machine, token, generation):
+                raise ReservationFenced(
+                    f"issue {key} is no longer owned by this reservation"
+                )
+            if record.get("status") not in TERMINAL_STATUSES:
+                raise ReservationFenced(f"issue {key} is not retained as published")
+            del state["phases"][key]
+            return _Mutation(True, None)
+
+        _transaction(
+            self.private,
+            self.remote,
+            self.branch,
+            mutate,
+            f"issue coordination: retire published record for {key}",
+            issues=True,
+        )
+
 
 __all__ = ["_IssueOps"]

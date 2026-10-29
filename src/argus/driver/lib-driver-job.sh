@@ -88,6 +88,53 @@ glide_run_once() {
     "${fresh_args[@]+"${fresh_args[@]}"}" "${glide_inputs[@]}"
 }
 
+# D11: an issue run that completed is not restarted with --fresh, since a finished
+# run is never run again. The caller holds the issue here and starts no run. Argus
+# says so once when no Argus pull request exists on the issue branch, in any state,
+# with the key and text the selector's notice uses, so one line is sent. Removing
+# the claim label is the retry: the next claim sets this run folder aside.
+# A pull request owns the issue and raises nothing. A failed read raises nothing
+# either, because it cannot tell whether a pull request exists.
+issue_completed_hold() {   # <number> <rel>
+  local number="$1" task="${2:-}" task_name="" verdict="unknown" text marker
+  [ -n "$task" ] || task="$(issue_task_file_of "$number")"
+  [ -z "$task" ] || task_name="$(basename "$task")"
+  if [ -n "$task_name" ]; then
+    verdict="$(${ISSUE_PR_VERDICT_CMD:-issue_pr_verdict} "$number" "$task_name" 2>/dev/null)" \
+      || verdict=unknown
+  fi
+  case "$verdict" in
+    none) ;;
+    pull_request)
+      log "issue $number: its Argus pull request owns it; no run starts"
+      return 0 ;;
+    *)
+      log "issue $number: the pull request check is unavailable; no run starts"
+      return 0 ;;
+  esac
+  text="Needs You. Issue #$number finished its run with no pull request. Argus starts no new run for it. Action: remove the claim label to retry."
+  marker="$RUN_DIR/log-last-notice-completed-$number"
+  if [ "$(cat "$marker" 2>/dev/null)" != "$text" ]; then
+    notify "$text"
+    printf '%s' "$text" >"$marker"
+  fi
+  return 0
+}
+
+# The verdict for an issue's Argus pull request: `pull_request` or `none`. A read
+# that fails exits non-zero, so the caller reads it as unknown and starts nothing.
+issue_pr_verdict() {   # <number> <task file name>
+  "$PYTHON" - "$ARGUS" "$1" "$2" "${ARGUS_CONFIG_ARGS[@]}" <<'PY'
+import sys
+sys.path.insert(0, sys.argv[1])
+import _bootstrap
+from argus import conventions
+conventions.configure_from_cli(sys.argv[4:])
+from argus.issues.completed_run import pull_request_verdict
+print(pull_request_verdict(int(sys.argv[2]), sys.argv[3]))
+PY
+}
+
 # Record a job that failed after its retries, so the selector skips it and the
 # line continues to the next job. The residue is written atomically beside the
 # run directory, which is left alone for the evidence a person reads.

@@ -1,0 +1,1 @@
+Argus records the issue branch and the pull request URL on the issue's board record when it opens the draft pull request, and the tick writes the same record again if that first write failed. Only the machine that owns a record writes it. ([#306](https://github.com/agentmemoir/argus/issues/306))

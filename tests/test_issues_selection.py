@@ -228,7 +228,8 @@ def test_pending_validated_writeback_retries_before_search(
     calls = argv(repo)
     assert calls[0]["argv"][0] == "api"
     assert calls[1]["argv"][:2] == ["issue", "comment"]
-    assert calls[-1]["argv"][:2] == ["search", "issues"]
+    # The open pull request read for Needs You notices now follows the search.
+    assert ["search", "issues"] in [call["argv"][:2] for call in calls[2:]]
     assert board.records == {} and result["state"] == "NO_PHASE"
 
 

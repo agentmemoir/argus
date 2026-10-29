@@ -107,12 +107,27 @@ elif args[:2] == ["issue", "view"]:
     result = next(row for row in fixture["rows"] if row["number"] == int(args[2]))
 elif args[:2] == ["pr", "view"]:
     result = {"state": fixture.get("pr_states", {}).get(args[2], "CLOSED")}
+elif args[:2] == ["pr", "list"]:
+    if fixture.get("pr_list") == "failure":
+        sys.exit(1)
+    head = args[args.index("--head") + 1]
+    result = [row for row in fixture.get("branch_pulls", []) if row.get("headRefName") == head]
+elif args[:2] == ["pr", "checks"]:
+    if fixture.get("checks_error"):
+        sys.exit(1)
+    result = fixture.get("checks", {}).get(args[2], [])
 elif args[:2] == ["label", "list"]:
     result = [{"name": name} for name in fixture.get("labels", [])]
 elif args[:2] == ["label", "create"]:
     fixture.setdefault("labels", []).append(args[2])
     (root / "github.json").write_text(json.dumps(fixture))
     sys.exit(0)
+elif args[0] == "api" and "state=all" in args[-1]:
+    if fixture.get("history_failure"):
+        sys.exit(1)
+    result = [fixture.get("history", [])]
+elif args[0] == "api" and "/pulls?" in args[-1]:
+    result = fixture.get("pull_pages", [fixture.get("pulls", [])])
 elif args[0] == "api":
     result = fixture.get("pages", [[]])
 elif args[:2] == ["issue", "comment"]:
@@ -149,6 +164,8 @@ class Board:
         self.losses = losses or set()
         self.claims: list[int] = []
         self.released: list[str] = []
+        self.pull_writes: list[dict[str, Any]] = []
+        self.retired: list[str] = []
 
     def read(self) -> tuple[dict[str, Any], str]:
         return {"phases": self.records}, "fixture-revision"
@@ -183,6 +200,16 @@ class Board:
             record.pop("completion_receipt", None)
         else:
             record["completion_receipt"] = receipt
+
+    def set_issue_pull_request(
+        self, reservation: dict[str, Any], pull_request: dict[str, Any]
+    ) -> None:
+        self.pull_writes.append(pull_request)
+        self.records[f"{int(reservation['issue']):06d}"]["pull_request"] = pull_request
+
+    def retire_retained(self, reservation: dict[str, Any]) -> None:
+        self.retired.append(str(reservation["issue"]))
+        self.records.pop(f"{int(reservation['issue']):06d}", None)
 
     def assert_owner(self, reservation: dict[str, Any]) -> dict[str, Any]:
         return self.records[f"{int(reservation['issue']):06d}"]

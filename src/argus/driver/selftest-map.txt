@@ -35,8 +35,12 @@
 @unplaced src/argus/config/cli.py
 @unplaced src/argus/config/render.py
 @unplaced src/argus/estimate.py
+@unplaced src/argus/issues/branches.py
+@unplaced src/argus/issues/completed_run.py
+@unplaced src/argus/issues/held.py
 @unplaced src/argus/issues/leftover.py
 @unplaced src/argus/issues/order.py
+@unplaced src/argus/issues/owned.py
 @unplaced src/argus/issues/report.py
 @unplaced src/argus/issues/rerender.py
 @unplaced src/argus/issues/selftest.py
@@ -126,6 +130,9 @@ job_fresh_keeps_edit src/argus/driver/lib-selftest-job.sh
 job_fresh_keeps_edit src/argus/driver/lib-driver-job.sh
 job_stale_failed src/argus/driver/lib-selftest-job.sh
 job_stale_failed src/argus/driver/lib-driver-job.sh
+job_completed_issue src/argus/driver/lib-selftest-job.sh
+job_completed_issue src/argus/driver/lib-driver-job.sh
+job_completed_issue src/argus/driver/lib-driver-run-session.sh
 repair_round src/argus/driver/lib-selftest-repair.sh
 repair_round src/argus/driver/lib-driver-repair.sh
 repair_round src/argus/gitsync/repair_cli.py

@@ -423,6 +423,7 @@ PROBE
   # `--fresh` keep contract and reads the edited map back from the new run.
   selftest_run_case job_fresh_keeps_edit
   selftest_run_case job_stale_failed
+  selftest_run_case job_completed_issue
   selftest_run_case repair_round
 
 

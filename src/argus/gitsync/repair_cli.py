@@ -147,7 +147,8 @@ def issue_pull_requests(
         # gh_pull_requests_for_branch is the one filter: it keeps only this
         # repository's rows on the branch, so a fork's checks and logs never arrive.
         for pr in found:
-            if pr["state"] != "OPEN":
+            if pr["state"] != "OPEN" or pr["isDraft"] is False:
+                # A ready pull request is final: no repair round, read, or push.
                 continue
             if pr["isDraft"] is None:
                 # gh gave no draft flag, so the tick cannot tell whether to wait.

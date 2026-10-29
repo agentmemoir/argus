@@ -11,8 +11,9 @@ from pathlib import Path
 from typing import Any
 
 from argus import conventions
-from argus.issues.client import TOKEN_RE, IssueClient, issue_number
+from argus.issues.client import TOKEN_RE, IssueClient
 from argus.issues.filter import label_names
+from argus.issues.parse import issue_number
 from argus.issues.transport import IssuesUnavailable
 from argus.issues.trust import ASSOCIATIONS, Trust
 
@@ -60,11 +61,16 @@ def task_directory(repo: Path) -> Path:
     return path
 
 
-def task_path(directory: Path, issue: dict[str, Any]) -> Path:
+def task_path(
+    directory: Path, issue: dict[str, Any], suffix: int | None = None
+) -> Path:
     number = issue_number(issue["number"])
     words = re.sub(r"[^a-z0-9]+", "-", issue["title"].lower()).strip("-").split("-")
     slug = "-".join(words[:3])[:60].rstrip("-")
-    return directory / (f"issue-{number:06d}" + (f"-{slug}" if slug else "") + ".md")
+    tail = "" if suffix is None else f"-{suffix}"
+    return directory / (
+        f"issue-{number:06d}" + (f"-{slug}" if slug else "") + tail + ".md"
+    )
 
 
 def safe_token(value: Any) -> str:

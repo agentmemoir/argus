@@ -1,0 +1,1 @@
+An issue claimed by this machine is not resumed while its Argus pull request is open. Before, only the selection of new issues checked for an open Argus pull request. ([#306](https://github.com/agentmemoir/argus/issues/306))

@@ -1,0 +1,1 @@
+An issue whose Argus pull request merged is never selected again, even while it stays open. Argus releases this machine's own claim on it and removes the claim label, once each, and a later tick does nothing more. Before, the claim label stayed on the issue until a person removed it. ([#306](https://github.com/agentmemoir/argus/issues/306))

@@ -32,14 +32,11 @@ from argus import conventions
 from argus.gitsync.fence import phase_fence
 from argus.gitsync.gh import gh_create_draft_pull_request, gh_pull_requests_for_branch
 from argus.gitsync.gh_exit import gh_exit_detail
-from argus.gitsync.git import (
-    ConfigError,
-    current_branch,
-    git,
-)
+from argus.gitsync.git import ConfigError, current_branch, git
 from argus.gitsync.open_pr_base import resolve_base
 from argus.gitsync.open_pr_ready import fork_refusal, text_from_file, unpushed_refusal
 from argus.gitsync.paths import phase_branch
+from argus.issues.pr_record import record_pull_request
 
 
 def resolve_branch(root: Path, phase: int | str | None, branch: str | None) -> str:
@@ -310,6 +307,8 @@ def mode_open_pr(
                 "so no pull request is confirmed; check the branch by hand"
             ],
         )
+    # Record the pull request on the issue's claim now. The tick writes it too, if this fails.
+    record_pull_request(root, branch_name, url)
     # gh printed the new pull request's URL. That URL is all it reports, so the
     # number, draft flag, and state are read back from the pull request itself.
     again, why = gh_pull_requests_for_branch(root, branch_name)

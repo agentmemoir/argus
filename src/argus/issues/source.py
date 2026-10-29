@@ -3,7 +3,6 @@
 """Issue selection: trust, labels, ordering, evidence, then a fenced claim."""
 
 import sys
-from collections import Counter
 from pathlib import Path
 from typing import Any
 
@@ -15,12 +14,14 @@ from argus.board.reservations import (
     ReservationStore,
 )
 from argus.issues import claims
+from argus.issues.branches import fresh_task_path
 from argus.issues.client import IssueClient
 from argus.issues.evidence import Evidence, escalated, pending, signals
 from argus.issues.filter import eligible, label_claimed
 from argus.issues.leftover import release_closed
 from argus.issues.order import PREFERENCES, ordering
-from argus.issues.report import _Reports
+from argus.issues.owned import fresh_start, tick_pull_requests
+from argus.issues.report import _Reports, skip_counts
 from argus.issues.task import render, task_directory, task_path, write
 from argus.issues.transport import IssuesUnavailable
 from argus.issues.trust import Trust
@@ -62,31 +63,14 @@ class IssuesSource(_Reports, WorkSource):
         self.directory = task_directory(self.repo)
         self.client = IssueClient()
         self.trust = Trust(self.repo, self.client)
-        self.skipped: Counter[str] = Counter(
-            dict.fromkeys(
-                (
-                    "not_open",
-                    "is_pull_request",
-                    "untrusted_author",
-                    "unknown_difficulty",
-                    "blocked",
-                    "claimed",
-                    "failed",
-                    "escalated",
-                    "claim_label",
-                ),
-                0,
-            )
-        )
-        for name in self.groups:
-            self.skipped[f"missing_labels.{name}"] = 0
-            self.skipped[f"{name}_ambiguous"] = 0
+        self.skipped = skip_counts(self.groups)
         self.rows: list[dict[str, Any]] | None = None
         self.details: dict[int, dict[str, Any]] = {}
         self.records: dict[str, Any] = {}
         self.store: Any = None
         self.truncated = False
-        self.evidence = Evidence()
+        self.notices: list[dict[str, str]] = []
+        self.evidence = Evidence(self.client)
 
     def _load(
         self, *, reserve: bool = False, store: Any = None, listing: bool = True
@@ -193,6 +177,18 @@ class IssuesSource(_Reports, WorkSource):
             state, _ = self.store.read()
             self.records = state["phases"]
         self._load()
+        if reserve:
+            self.notices = tick_pull_requests(
+                self.client,
+                self.store,
+                machine,
+                self.repo,
+                self.directory,
+                self.claim_label,
+                self.rows or [],
+                self.records,
+                self.evidence,
+            )
         attempts = 0
         last: tuple[dict[str, Any], dict[str, Any]] | None = None
         last_state = "WAIT_FOR_CLAIM"
@@ -210,6 +206,10 @@ class IssuesSource(_Reports, WorkSource):
                         if reserve:
                             release_closed(self.store, number, record)
                             self.records.pop(f"{number:06d}", None)
+                        continue
+                    if self.evidence.owns(number):
+                        # An open or merged Argus pull request owns its claim too.
+                        self.skipped["open_pull_request"] += 1
                         continue
                     if run_failed(self.repo, number, task_path(self.directory, row)):
                         # The job failed and left its claim; skip it so the line
@@ -241,9 +241,13 @@ class IssuesSource(_Reports, WorkSource):
             detail = self._detail(row)
             if detail["evidence"]:
                 continue
-            path = task_path(self.directory, detail)
+            path = fresh_task_path(self.directory, detail, self.evidence)
             if not reserve:
                 return self._base("AVAILABLE", detail)
+            if not fresh_start(
+                self.store, machine, self.repo, number, self.records, self.evidence
+            ):
+                continue
             write(
                 path,
                 render(detail, self.client, self.trust, self.groups, self.preference),
@@ -256,11 +260,8 @@ class IssuesSource(_Reports, WorkSource):
             except (ReservationConflict, ReservationCooldown) as exc:
                 self.skipped["claimed"] += 1
                 last = detail, exc.record
-                last_state = (
-                    "COOLDOWN"
-                    if isinstance(exc, ReservationCooldown)
-                    else "WAIT_FOR_CLAIM"
-                )
+                cooling = isinstance(exc, ReservationCooldown)
+                last_state = "COOLDOWN" if cooling else "WAIT_FOR_CLAIM"
                 if attempts >= conventions.setting("issues.claim-attempts", 3):
                     break
                 continue
@@ -270,7 +271,10 @@ class IssuesSource(_Reports, WorkSource):
             except IssuesUnavailable as exc:
                 # The board reservation is the claim; a lost label write keeps it.
                 print(f"issue claim: label not added: {exc}", file=sys.stderr)
-            return self._base("RESERVED", detail, reservation, attempts=attempts)
+            rel = path.relative_to(self.repo).as_posix()
+            return self._base(
+                "RESERVED", detail, reservation, attempts=attempts, path=rel
+            )
         if last:
             return self._base(
                 last_state,

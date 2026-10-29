@@ -136,3 +136,42 @@ selftest_case_job_stale_failed() {
   fi
   rm -rf "$run_dir" "$run_dir".prev-*
 }
+
+# The verdict the self-test gives for an issue's pull request. `fail` makes the
+# stub fail, which the driver reads as an unreadable check.
+job_verdict_answer=none
+job_stub_verdict() {
+  [ "$job_verdict_answer" != fail ] || return 1
+  printf '%s' "$job_verdict_answer"
+}
+
+selftest_case_job_completed_issue() {
+  # A completed issue run with no Argus pull request raises Needs You once. A
+  # pull request, or an unreadable check, raises nothing. The launch itself stops
+  # before glide in run_session, so no --fresh restart can happen; this case
+  # exercises the hold that the launch calls.
+  local number=100031 rel="issues/100031-fix-input.md" notes
+  notes="$tmp/job-completed-notes"
+  rm -f "$notes" "$RUN_DIR/log-last-notice-completed-$number"
+  mkdir -p "$RUN_DIR"
+  ISSUE_PR_VERDICT_CMD=job_stub_verdict
+  job_verdict_answer=none
+  (notify() { printf '%s\n' "$1" >>"$notes"; }; issue_completed_hold "$number" "$rel")
+  (notify() { printf '%s\n' "$1" >>"$notes"; }; issue_completed_hold "$number" "$rel")
+  if [ "$(grep -c "Issue #$number finished its run" "$notes" 2>/dev/null)" = 1 ]; then
+    echo "ok: a completed issue with no pull request raises Needs You once"
+  else
+    echo "FAIL: a completed issue with no pull request did not raise Needs You once"; fail=1
+  fi
+  job_verdict_answer=pull_request
+  (notify() { printf '%s\n' "$1" >>"$notes"; }; issue_completed_hold "$number" "$rel")
+  job_verdict_answer=fail
+  (notify() { printf '%s\n' "$1" >>"$notes"; }; issue_completed_hold "$number" "$rel")
+  if [ "$(grep -c . "$notes" 2>/dev/null)" = 1 ]; then
+    echo "ok: a pull request or an unreadable check raises no notice"
+  else
+    echo "FAIL: a pull request or an unreadable check raised a notice"; fail=1
+  fi
+  ISSUE_PR_VERDICT_CMD=issue_pr_verdict
+  rm -f "$notes" "$RUN_DIR/log-last-notice-completed-$number"
+}

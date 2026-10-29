@@ -1,0 +1,1 @@
+Argus raises Needs You for an issue that an Argus pull request holds. A claimed issue whose Argus pull request closed without merge stays held and names that pull request. A ready Argus pull request with a failing check names the pull request and the check, and Argus runs no repair or issue run for it. ([#306](https://github.com/agentmemoir/argus/issues/306))

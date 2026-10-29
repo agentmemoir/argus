@@ -15,6 +15,29 @@ from argus.issues.filter import label_names
 from argus.issues.task import safe_token, stamp, task_path
 from argus.issues.trust import Trust
 
+SKIP_REASONS = (
+    "not_open",
+    "is_pull_request",
+    "untrusted_author",
+    "unknown_difficulty",
+    "blocked",
+    "claimed",
+    "failed",
+    "escalated",
+    "claim_label",
+    "open_pull_request",
+    "merged_pull_request",
+)
+
+
+def skip_counts(groups: dict[str, Any]) -> Counter[str]:
+    """Every skip reason at zero, so the summary always names each one."""
+    skipped: Counter[str] = Counter(dict.fromkeys(SKIP_REASONS, 0))
+    for name in groups:
+        skipped[f"missing_labels.{name}"] = 0
+        skipped[f"{name}_ambiguous"] = 0
+    return skipped
+
 
 class _Reports:
     repo: Path
@@ -28,6 +51,7 @@ class _Reports:
     records: dict[str, Any]
     details: dict[int, dict[str, Any]]
     trust: Trust
+    notices: list[dict[str, str]]
 
     def _verbose(self, row: dict[str, Any], status: dict[str, bool]) -> None:
         allowed = {label for group in self.groups.values() for label in group["labels"]}
@@ -89,6 +113,9 @@ class _Reports:
                 "inside_checkout": self.directory.is_relative_to(self.repo),
             },
         }
+        if self.notices:
+            # Needs You lines for the driver to send once; see report_issue_notices.
+            result["notices"] = list(self.notices)
         if row is not None:
             result.update(
                 issue=str(row["number"]),

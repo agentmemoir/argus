@@ -1,0 +1,99 @@
+# Copyright 2026 Agent Memoir (https://agentmemoir.com/)
+# SPDX-License-Identifier: Apache-2.0
+"""The verdict that holds an issue whose run completed with no pull request."""
+
+from collections.abc import Iterator
+from pathlib import Path
+from typing import Any
+
+import pytest
+
+from argus import conventions
+from argus.issues.completed_run import owned, pull_request_verdict
+from argus.issues.transport import IssuesUnavailable
+from issues_fixture import fake_gh, fixture_update, issue, settings
+
+TASK = "issue-100001-fix-the-input.md"
+URL = "https://github.com/example/project/pull/70"
+
+
+@pytest.fixture
+def repo(tmp_path: Path, request: pytest.FixtureRequest) -> Iterator[Path]:
+    binary = fake_gh(tmp_path, [issue()], add_cleanup=request.addfinalizer)
+    previous = conventions.override(settings(tmp_path, binary))
+    yield tmp_path
+    conventions.configure(previous)
+
+
+@pytest.mark.usefixtures("repo")
+def test_no_argus_pull_request_gives_none() -> None:
+    # Given no pull request on the issue branch, when the verdict is read, then it
+    # is none, so the driver may raise Needs You.
+    assert pull_request_verdict(100001, TASK) == "none"
+
+
+@pytest.mark.parametrize("state", ["OPEN", "CLOSED", "MERGED"])
+def test_an_argus_pull_request_in_any_state_gives_pull_request(
+    repo: Path, state: str
+) -> None:
+    # Given an Argus pull request in any state, when the verdict is read, then it
+    # is pull_request, so the issue stays owned by that pull request.
+    row: dict[str, Any] = {
+        "number": 70,
+        "url": URL,
+        "state": state,
+        "headRefName": "issue/100001-fix-the-input",
+        "isCrossRepository": False,
+    }
+    fixture_update(repo, branch_pulls=[row])
+    assert pull_request_verdict(100001, TASK) == "pull_request"
+
+
+def test_a_pull_request_on_a_suffixed_branch_gives_pull_request(repo: Path) -> None:
+    # Given a closed pull request on the suffixed branch of the same issue, when the
+    # verdict is read, then it is pull_request: the suffixed form is the same issue.
+    row: dict[str, Any] = {
+        "number": 71,
+        "html_url": URL,
+        "state": "closed",
+        "merged_at": None,
+        "draft": False,
+        "head": {
+            "ref": "issue/100001-fix-the-input-2",
+            "repo": {"full_name": "example/project"},
+            "sha": "b" * 40,
+        },
+    }
+    fixture_update(repo, history=[row])
+    assert pull_request_verdict(100001, TASK) == "pull_request"
+
+
+def test_an_unreadable_branch_list_raises(repo: Path) -> None:
+    # Given the pull request list cannot be read, when the verdict is read, then it
+    # raises, so the driver starts no run and says nothing.
+    fixture_update(repo, pr_list="failure")
+    with pytest.raises(IssuesUnavailable):
+        pull_request_verdict(100001, TASK)
+
+
+@pytest.mark.parametrize(("state", "owns"), [("open", True), ("closed", False)])
+def test_the_resume_gate_owns_only_an_open_or_merged_pull_request(
+    repo: Path, state: str, owns: bool
+) -> None:
+    # Given an Argus pull request, when the resume gate asks, then an open one owns
+    # the issue and a closed one does not, as in selection.
+    pull: dict[str, Any] = {
+        "number": 72,
+        "html_url": URL,
+        "draft": True,
+        "head": {
+            "ref": "issue/100001-fix-the-input",
+            "repo": {"full_name": "example/project"},
+            "sha": "c" * 40,
+        },
+    }
+    if state == "open":
+        fixture_update(repo, pulls=[pull])
+    else:
+        fixture_update(repo, history=[{**pull, "state": "closed", "merged_at": None}])
+    assert owned(100001) is owns

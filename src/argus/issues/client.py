@@ -10,39 +10,16 @@ from pathlib import Path
 from typing import Any, cast
 
 from argus import conventions
+from argus.issues.parse import issue_number, mapping, objects
 from argus.issues.transport import IssuesUnavailable, run
 
 REPO_RE = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+\Z")
+BRANCH_RE = re.compile(r"issue/([0-9]+)-[a-z0-9]+(?:-[a-z0-9]+)*")
 TOKEN_RE = re.compile(r"[A-Za-z0-9_.:@/\[\]-]+\Z")
 SEARCH_FIELDS = "number,title,labels,author,authorAssociation,createdAt,updatedAt,isPullRequest,assignees,url,state,commentsCount"
 VIEW_FIELDS = (
     "number,title,body,labels,author,createdAt,updatedAt,comments,blockedBy,state"
 )
-
-
-def issue_number(value: Any) -> int:
-    if (
-        isinstance(value, bool)
-        or not isinstance(value, int)
-        or not 1 <= value <= 9999999999
-    ):
-        raise IssuesUnavailable("invalid_response", "issue number")
-    return value
-
-
-def objects(value: Any, operation: str) -> list[dict[str, Any]]:
-    if not isinstance(value, list):
-        raise IssuesUnavailable("invalid_response", operation)
-    items = cast("list[object]", value)
-    if any(not isinstance(item, dict) for item in items):
-        raise IssuesUnavailable("invalid_response", operation)
-    return cast("list[dict[str, Any]]", items)
-
-
-def mapping(value: Any, operation: str) -> dict[str, Any]:
-    if not isinstance(value, dict):
-        raise IssuesUnavailable("invalid_response", operation)
-    return cast("dict[str, Any]", value)
 
 
 class IssueClient:
@@ -108,6 +85,70 @@ class IssueClient:
             ):
                 raise IssuesUnavailable("invalid_response", "comments count")
         return issues
+
+    def argus_pull_requests(self) -> dict[int, dict[str, Any]]:
+        """Open pull requests on an Argus issue branch, keyed by issue number.
+
+        Every page is read, so a busy repository never hides an Argus pull request.
+        """
+        path = f"repos/{self.repo}/pulls?state=open&per_page=100"
+        pages = self.call(["api", "--paginate", "--slurp", path])
+        if not isinstance(pages, list):
+            raise IssuesUnavailable("invalid_response", "pr list")
+        owned: dict[int, dict[str, Any]] = {}
+        for page in cast("list[Any]", pages):
+            for row in objects(page, "pr list"):
+                head = row.get("head")
+                if not isinstance(head, dict):
+                    continue
+                head = cast("dict[str, Any]", head)
+                repo: object = head.get("repo")
+                if not isinstance(repo, dict):
+                    continue
+                name = cast("dict[str, Any]", repo).get("full_name")
+                match = BRANCH_RE.fullmatch(str(head.get("ref")))
+                if match and str(name).casefold() == self.repo.casefold():
+                    owned[int(match.group(1))] = {
+                        "number": row.get("number"),
+                        "branch": head.get("ref"),
+                        "url": row.get("html_url"),
+                        "draft": row.get("draft"),
+                        "sha": head.get("sha"),
+                    }
+        return owned
+
+    def pull_requests_on(self, branch: str) -> list[dict[str, Any]]:
+        """Every pull request, in any state, from this repository's branch."""
+        rows = objects(
+            self.call(
+                [
+                    "pr",
+                    "list",
+                    "--repo",
+                    self.repo,
+                    "--head",
+                    branch,
+                    "--state",
+                    "all",
+                    "--limit",
+                    "100",
+                    "--json",
+                    "number,url,state,headRefName,isCrossRepository",
+                ]
+            ),
+            "pr list",
+        )
+        for row in rows:
+            if not isinstance(row.get("url"), str) or not isinstance(
+                row.get("state"), str
+            ):
+                raise IssuesUnavailable("invalid_response", "pr list")
+        return [
+            row
+            for row in rows
+            if row.get("isCrossRepository") is False
+            and row.get("headRefName") == branch
+        ]
 
     def view(
         self, number: int, metadata: dict[str, Any] | None = None
@@ -269,5 +310,21 @@ class IssueClient:
             print(f"issue claim: created label {label!r}", file=sys.stderr)
         self.call(
             ["issue", "edit", str(number), "--repo", self.repo, "--add-label", label],
+            parse=False,
+        )
+
+    def remove_label(self, number: int, label: str) -> None:
+        """Remove one label from an issue. A failure raises; the caller decides."""
+        number = issue_number(number)
+        self.call(
+            [
+                "issue",
+                "edit",
+                str(number),
+                "--repo",
+                self.repo,
+                "--remove-label",
+                label,
+            ],
             parse=False,
         )

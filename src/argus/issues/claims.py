@@ -4,6 +4,8 @@
 
 import hashlib
 import json
+import sys
+import time
 from pathlib import Path
 from typing import Any, cast
 
@@ -40,6 +42,28 @@ def save(repo: Path, number: int, reservation: dict[str, Any], path: Path) -> No
         write(target.with_name("task-snapshot.json"), json.dumps(manifest))
     except (OSError, ValueError) as exc:
         raise CoordinationError("could not persist issue reservation token") from exc
+
+
+def set_aside(repo: Path, number: int) -> bool:
+    """Move an earlier run's folder to ``<folder>.prev-<epoch>`` before a new claim.
+
+    glide's ``--fresh`` restart uses the same name. The new claim then starts a
+    clean run, so a finished run never stops it, and the old folder stays as
+    evidence. False means the move failed, and the claim waits for the next tick.
+    """
+    folder = reservation_file(repo, number, kind="issue").parent
+    if not (folder / "run.json").exists():
+        return True
+    target = folder.with_name(f"{folder.name}.prev-{int(time.time())}")
+    try:
+        if target.exists():
+            raise FileExistsError(target.name)
+        folder.rename(target)
+    except OSError as exc:
+        print(f"issue {number}: earlier run not set aside: {exc}", file=sys.stderr)
+        return False
+    print(f"issue {number}: earlier run set aside as {target.name}", file=sys.stderr)
+    return True
 
 
 def carry_forward(repo: Path, number: int) -> bool:

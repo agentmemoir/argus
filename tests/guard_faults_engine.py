@@ -21,6 +21,9 @@ DRIVER = Path("src/argus/driver/phase-driver.sh")
 #: measured fault runs far below it.
 SELFTEST_TIMEOUT = 600
 
+#: How many of the self-test's last FAIL lines a failed control fault prints.
+FAIL_TAIL = 40
+
 
 class FaultError(RuntimeError):
     """A fault could not be applied, so it proved nothing."""
@@ -211,6 +214,17 @@ def run_selftest(
         shutil.rmtree(scratch, ignore_errors=True)
 
 
+def fail_detail(lines: list[str]) -> list[str]:
+    """The FAIL lines, each with the indented lines printed right under it."""
+    picked: list[str] = []
+    inside = False
+    for ln in lines:
+        inside = ln.startswith("FAIL:") or (inside and ln.startswith("  "))
+        if inside:
+            picked.append(ln)
+    return picked
+
+
 def judge(lines: list[str], rc: int, fault: dict[str, Any]) -> tuple[bool, str]:
     """Decide whether the self-test caught this fault. Returns (caught, detail).
 
@@ -252,10 +266,17 @@ def judge(lines: list[str], rc: int, fault: dict[str, Any]) -> tuple[bool, str]:
     if fault.get("expect_absent") and not any(
         ln.strip() == fault["expect_absent"] for ln in lines
     ):
-        return False, (
-            f"expected the driver to keep working "
-            f"({fault['expect_absent']!r}) and it did not; the verdict "
-            f"was {verdict!r}"
+        # The FAIL lines, and the indented detail a case prints under one, name
+        # what broke, so a CI log shows the cause without a local reproduction.
+        # The tail is bounded to keep the log readable.
+        fails = fail_detail(lines)[-FAIL_TAIL:]
+        return False, "\n      ".join(
+            [
+                f"expected the driver to keep working "
+                f"({fault['expect_absent']!r}) and it did not; the verdict "
+                f"was {verdict!r}",
+                *fails,
+            ]
         )
     return True, f"the driver still works under this fault ({verdict})"
 
