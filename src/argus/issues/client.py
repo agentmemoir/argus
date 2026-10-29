@@ -110,8 +110,8 @@ class IssueClient:
                 raise IssuesUnavailable("invalid_response", "comments count")
         return issues
 
-    def argus_pull_requests(self) -> set[int]:
-        """Issue numbers with an open pull request on an Argus issue branch.
+    def argus_pull_requests(self) -> dict[int, dict[str, Any]]:
+        """Open pull requests on an Argus issue branch, keyed by issue number.
 
         Every page is read, so a busy repository never hides an Argus pull request.
         """
@@ -119,7 +119,7 @@ class IssueClient:
         pages = self.call(["api", "--paginate", "--slurp", path])
         if not isinstance(pages, list):
             raise IssuesUnavailable("invalid_response", "pr list")
-        owned: set[int] = set()
+        owned: dict[int, dict[str, Any]] = {}
         for page in cast("list[Any]", pages):
             for row in objects(page, "pr list"):
                 head = row.get("head")
@@ -132,8 +132,46 @@ class IssueClient:
                 name = cast("dict[str, Any]", repo).get("full_name")
                 match = BRANCH_RE.fullmatch(str(head.get("ref")))
                 if match and str(name).casefold() == self.repo.casefold():
-                    owned.add(int(match.group(1)))
+                    owned[int(match.group(1))] = {
+                        "number": row.get("number"),
+                        "url": row.get("html_url"),
+                        "draft": row.get("draft"),
+                        "sha": head.get("sha"),
+                    }
         return owned
+
+    def pull_requests_on(self, branch: str) -> list[dict[str, Any]]:
+        """Every pull request, in any state, from this repository's branch."""
+        rows = objects(
+            self.call(
+                [
+                    "pr",
+                    "list",
+                    "--repo",
+                    self.repo,
+                    "--head",
+                    branch,
+                    "--state",
+                    "all",
+                    "--limit",
+                    "100",
+                    "--json",
+                    "number,url,state,headRefName,isCrossRepository",
+                ]
+            ),
+            "pr list",
+        )
+        for row in rows:
+            if not isinstance(row.get("url"), str) or not isinstance(
+                row.get("state"), str
+            ):
+                raise IssuesUnavailable("invalid_response", "pr list")
+        return [
+            row
+            for row in rows
+            if row.get("isCrossRepository") is False
+            and row.get("headRefName") == branch
+        ]
 
     def view(
         self, number: int, metadata: dict[str, Any] | None = None

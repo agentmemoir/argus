@@ -13,6 +13,7 @@ _drive_real_selection() {
     { _DRIVE_RC=1; return 0; }
   fi
   bind_selection_kind "$selection"
+  report_issue_notices "$selection"
   sync_branch_args
   local sync_rc=0
   "$PYTHON" "$ARGUS/gitsync/main.py" "${ARGUS_CONFIG_ARGS[@]}" --root "$REPO" --mode start \

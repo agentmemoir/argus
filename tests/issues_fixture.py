@@ -107,6 +107,15 @@ elif args[:2] == ["issue", "view"]:
     result = next(row for row in fixture["rows"] if row["number"] == int(args[2]))
 elif args[:2] == ["pr", "view"]:
     result = {"state": fixture.get("pr_states", {}).get(args[2], "CLOSED")}
+elif args[:2] == ["pr", "list"]:
+    if fixture.get("pr_list") == "failure":
+        sys.exit(1)
+    head = args[args.index("--head") + 1]
+    result = [row for row in fixture.get("branch_pulls", []) if row.get("headRefName") == head]
+elif args[:2] == ["pr", "checks"]:
+    if fixture.get("checks_error"):
+        sys.exit(1)
+    result = fixture.get("checks", {}).get(args[2], [])
 elif args[:2] == ["label", "list"]:
     result = [{"name": name} for name in fixture.get("labels", [])]
 elif args[:2] == ["label", "create"]:

@@ -3,7 +3,6 @@
 """Issue selection: trust, labels, ordering, evidence, then a fenced claim."""
 
 import sys
-from collections import Counter
 from pathlib import Path
 from typing import Any
 
@@ -18,9 +17,10 @@ from argus.issues import claims
 from argus.issues.client import IssueClient
 from argus.issues.evidence import Evidence, escalated, pending, signals
 from argus.issues.filter import eligible, label_claimed
+from argus.issues.held import tick_notices
 from argus.issues.leftover import release_closed
 from argus.issues.order import PREFERENCES, ordering
-from argus.issues.report import _Reports
+from argus.issues.report import _Reports, skip_counts
 from argus.issues.task import render, task_directory, task_path, write
 from argus.issues.transport import IssuesUnavailable
 from argus.issues.trust import Trust
@@ -62,31 +62,13 @@ class IssuesSource(_Reports, WorkSource):
         self.directory = task_directory(self.repo)
         self.client = IssueClient()
         self.trust = Trust(self.repo, self.client)
-        self.skipped: Counter[str] = Counter(
-            dict.fromkeys(
-                (
-                    "not_open",
-                    "is_pull_request",
-                    "untrusted_author",
-                    "unknown_difficulty",
-                    "blocked",
-                    "claimed",
-                    "failed",
-                    "escalated",
-                    "claim_label",
-                    "open_pull_request",
-                ),
-                0,
-            )
-        )
-        for name in self.groups:
-            self.skipped[f"missing_labels.{name}"] = 0
-            self.skipped[f"{name}_ambiguous"] = 0
+        self.skipped = skip_counts(self.groups)
         self.rows: list[dict[str, Any]] | None = None
         self.details: dict[int, dict[str, Any]] = {}
         self.records: dict[str, Any] = {}
         self.store: Any = None
         self.truncated = False
+        self.notices: list[dict[str, str]] = []
         self.evidence = Evidence(self.client.argus_pull_requests)
 
     def _load(
@@ -194,6 +176,16 @@ class IssuesSource(_Reports, WorkSource):
             state, _ = self.store.read()
             self.records = state["phases"]
         self._load()
+        if reserve:
+            self.notices = tick_notices(
+                self.client,
+                self.repo,
+                self.directory,
+                self.claim_label,
+                self.rows or [],
+                self.records,
+                self.evidence.open_pull_requests(),
+            )
         attempts = 0
         last: tuple[dict[str, Any], dict[str, Any]] | None = None
         last_state = "WAIT_FOR_CLAIM"
@@ -211,6 +203,11 @@ class IssuesSource(_Reports, WorkSource):
                         if reserve:
                             release_closed(self.store, number, record)
                             self.records.pop(f"{number:06d}", None)
+                        continue
+                    if number in self.evidence.open_pull_requests():
+                        # An open Argus pull request owns its issue, so its claim is
+                        # not resumed on this machine either. The read fails closed.
+                        self.skipped["open_pull_request"] += 1
                         continue
                     if run_failed(self.repo, number, task_path(self.directory, row)):
                         # The job failed and left its claim; skip it so the line

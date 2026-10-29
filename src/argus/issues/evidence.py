@@ -21,15 +21,19 @@ def pending(record: dict[str, Any] | None) -> bool:
 
 
 class Evidence:
-    def __init__(self, owned: Callable[[], set[int]]) -> None:
+    def __init__(self, owned: Callable[[], dict[int, dict[str, Any]]]) -> None:
         self.owned = owned
-        self.held: set[int] | None = None
+        self.held: dict[int, dict[str, Any]] | None = None
+
+    def open_pull_requests(self) -> dict[int, dict[str, Any]]:
+        """The open Argus pull requests, read once per tick; a failed read raises."""
+        if self.held is None:
+            self.held = self.owned()
+        return self.held
 
     def inspect(self, issue: dict[str, Any]) -> str | None:
         # An open Argus pull request owns its issue; a failed read raises.
-        if self.held is None:
-            self.held = self.owned()
-        if issue["number"] in self.held:
+        if issue["number"] in self.open_pull_requests():
             return "open_pull_request"
         blockers = issue["blockedBy"]
         # gh fetches 50 nodes. Unread dependencies are conservatively blocked;
