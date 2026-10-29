@@ -87,17 +87,26 @@ def test_a_label_added_after_the_search_stops_the_claim(
     assert result["skipped"]["claim_label"] == 1
 
 
-@pytest.mark.parametrize(
-    ("status", "state"), [("claimed", "WAIT_FOR_CLAIM"), ("expired", "AVAILABLE")]
-)
-def test_the_board_decides_a_held_or_expired_claim(
-    configured: Configured, status: str, state: str
-) -> None:
+def test_the_board_decides_a_held_claim(configured: Configured) -> None:
     repo, board = configured
-    board.records["100001"] = {"machine_id": "other-worker", "status": status}
+    board.records["100001"] = {"machine_id": "other-worker", "status": "claimed"}
     fixture_update(repo, rows=[labelled(100001, "accepted")])
     result = IssuesSource(repo).select(reserve=False, store=board)
-    assert result["state"] == state and result["skipped"]["claim_label"] == 0
+    assert result["state"] == "WAIT_FOR_CLAIM" and result["skipped"]["claim_label"] == 0
+
+
+def test_an_expired_claim_stays_held_by_its_label(configured: Configured) -> None:
+    # Given a labelled issue whose board claim expired (its pull request closed
+    # or its run ended), when selection runs, then the label still holds it.
+    repo, board = configured
+    board.records["100001"] = {"machine_id": "other-worker", "status": "expired"}
+    fixture_update(repo, rows=[labelled(100001, "accepted")])
+    result = IssuesSource(repo).select(reserve=False, store=board)
+    assert result["state"] == "NO_PHASE" and result["skipped"]["claim_label"] == 1
+    # When a person removes the label, then the issue is eligible again.
+    fixture_update(repo, rows=[labelled(100001)])
+    result = IssuesSource(repo).select(reserve=False, store=board)
+    assert result["state"] == "AVAILABLE" and result["issue"] == "100001"
 
 
 def calls(repo: Path, *head: str) -> list[list[str]]:

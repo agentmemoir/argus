@@ -5,7 +5,7 @@
 from collections import Counter
 from typing import Any
 
-from argus.board.core import ACTIVE_STATUSES, EXPIRED_STATUS
+from argus.board.core import ACTIVE_STATUSES
 from argus.issues.trust import Trust
 
 
@@ -18,9 +18,12 @@ def label_names(issue: dict[str, Any]) -> set[str]:
 def label_claimed(
     issue: dict[str, Any], record: dict[str, Any] | None, label: str
 ) -> bool:
-    """A claim label stops a pick; a held or expired board claim decides alone."""
-    status = (record or {}).get("status")
-    if status in ACTIVE_STATUSES or status == EXPIRED_STATUS:
+    """A claim label stops a pick; only a held board claim decides alone.
+
+    An expired claim does not free a labelled issue: the label holds it until a
+    person removes it, so a finished or stopped run is never started again.
+    """
+    if (record or {}).get("status") in ACTIVE_STATUSES:
         return False
     # GitHub matches label names without case, so the repo's spelling counts too.
     wanted = label.casefold()

@@ -1,0 +1,1 @@
+An issue keeps its claim label as a hold after its board claim expires. Argus selects it again only after a person removes the label, and then starts a fresh run. Before, an expired claim made Argus ignore the label, so a finished or stopped issue run was started again. ([#306](https://github.com/agentmemoir/argus/issues/306))
