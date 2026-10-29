@@ -289,6 +289,15 @@ def test_cli_module_runs_and_reports_a_missing_command(tmp_path: Path) -> None:
     assert "a command is required" in result.stderr
 
 
+def _module_prog() -> str:
+    # argparse derives the default prog from how the interpreter found the
+    # __main__ code. Before Python 3.14 that is the file name; from 3.14 on it is
+    # "<python> -m <module>". See https://docs.python.org/3.14/whatsnew/3.14.html#argparse
+    if sys.version_info >= (3, 14):
+        return f"{Path(sys.executable).name} -m argus.board.cli"
+    return "cli.py"
+
+
 def test_cli_module_serves_the_show_subcommand(tmp_path: Path) -> None:
     result = subprocess.run(
         [sys.executable, "-m", "argus.board.cli", "show", "--help"],
@@ -302,5 +311,5 @@ def test_cli_module_serves_the_show_subcommand(tmp_path: Path) -> None:
         check=False,
     )
     assert result.returncode == 0
-    assert "usage: cli.py show" in result.stdout
+    assert result.stdout.startswith(f"usage: {_module_prog()} show ")
     assert "-h, --help" in result.stdout
