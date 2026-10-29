@@ -160,6 +160,7 @@ class Board:
         self.losses = losses or set()
         self.claims: list[int] = []
         self.released: list[str] = []
+        self.pull_writes: list[dict[str, Any]] = []
 
     def read(self) -> tuple[dict[str, Any], str]:
         return {"phases": self.records}, "fixture-revision"
@@ -194,6 +195,12 @@ class Board:
             record.pop("completion_receipt", None)
         else:
             record["completion_receipt"] = receipt
+
+    def set_issue_pull_request(
+        self, reservation: dict[str, Any], pull_request: dict[str, Any]
+    ) -> None:
+        self.pull_writes.append(pull_request)
+        self.records[f"{int(reservation['issue']):06d}"]["pull_request"] = pull_request
 
     def assert_owner(self, reservation: dict[str, Any]) -> dict[str, Any]:
         return self.records[f"{int(reservation['issue']):06d}"]

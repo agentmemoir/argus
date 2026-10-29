@@ -1,0 +1,1 @@
+A completed issue run is no longer restarted with a fresh start. Argus starts no run for the issue, and it raises one Needs You line when no Argus pull request exists for it. Before, a completed issue run was restarted. ([#306](https://github.com/agentmemoir/argus/issues/306))

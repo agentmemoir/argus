@@ -1,0 +1,1 @@
+Argus records the issue branch and the pull request URL on the board record of each issue whose open Argus pull request it finds, once for each pull request. Only the machine that owns a record writes it. ([#306](https://github.com/agentmemoir/argus/issues/306))

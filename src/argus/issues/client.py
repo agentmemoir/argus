@@ -134,6 +134,7 @@ class IssueClient:
                 if match and str(name).casefold() == self.repo.casefold():
                     owned[int(match.group(1))] = {
                         "number": row.get("number"),
+                        "branch": head.get("ref"),
                         "url": row.get("html_url"),
                         "draft": row.get("draft"),
                         "sha": head.get("sha"),
@@ -333,5 +334,21 @@ class IssueClient:
             print(f"issue claim: created label {label!r}", file=sys.stderr)
         self.call(
             ["issue", "edit", str(number), "--repo", self.repo, "--add-label", label],
+            parse=False,
+        )
+
+    def remove_label(self, number: int, label: str) -> None:
+        """Remove one label from an issue. A failure raises; the caller decides."""
+        number = issue_number(number)
+        self.call(
+            [
+                "issue",
+                "edit",
+                str(number),
+                "--repo",
+                self.repo,
+                "--remove-label",
+                label,
+            ],
             parse=False,
         )

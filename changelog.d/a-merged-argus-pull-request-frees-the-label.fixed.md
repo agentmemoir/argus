@@ -1,0 +1,1 @@
+An issue whose Argus pull request merged loses its claim label once its board record is retained as published, so a person no longer has to remove the label. Before, the label stayed on the issue. A claim that is still active keeps its label until its run ends. ([#306](https://github.com/agentmemoir/argus/issues/306))

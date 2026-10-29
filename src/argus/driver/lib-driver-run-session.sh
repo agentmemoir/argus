@@ -115,6 +115,15 @@ except OSError:
       # and is left alone, and a missing run.json means there is nothing to archive.
       local prior_state
       prior_state="$(terminal_state_of_file "$(phase_run_dir "$number" "$rel")/run.json")"
+      # D11: a completed issue run is never restarted. Its claim stays with the run,
+      # its label holds the issue, and this launch starts no glide run.
+      if [ "${work_kind:-phase}" = issue ] && [ "$prior_state" = completed ] \
+          && [ "${CLIO_RESUME:-}" != 1 ]; then
+        issue_completed_hold "$number" "$rel"
+        tmux_set_title "issue $number completed; no run"
+        rm -f "$CURRENT" "$PIDFILE"
+        exit 0
+      fi
       # A run that continues an earlier one measures only part of the phase, so
       # the estimate factor skips it (estimate_run=1 marks it resumed).
       estimate_run=0

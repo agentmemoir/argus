@@ -17,9 +17,9 @@ from argus.issues import claims
 from argus.issues.client import IssueClient
 from argus.issues.evidence import Evidence, escalated, pending, signals
 from argus.issues.filter import eligible, label_claimed
-from argus.issues.held import tick_notices
 from argus.issues.leftover import release_closed
 from argus.issues.order import PREFERENCES, ordering
+from argus.issues.owned import tick_pull_requests
 from argus.issues.report import _Reports, skip_counts
 from argus.issues.task import render, task_directory, task_path, write
 from argus.issues.transport import IssuesUnavailable
@@ -177,8 +177,10 @@ class IssuesSource(_Reports, WorkSource):
             self.records = state["phases"]
         self._load()
         if reserve:
-            self.notices = tick_notices(
+            self.notices = tick_pull_requests(
                 self.client,
+                self.store,
+                machine,
                 self.repo,
                 self.directory,
                 self.claim_label,
