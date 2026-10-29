@@ -208,3 +208,25 @@ def test_missing_task_file_and_failed_render_releases_the_claim(
     assert "issue 255: task file missing; re-rendered" not in events
     released = (issue_driver / "released").read_text(encoding="utf-8").splitlines()
     assert released == ["255 r1 2 task-file-missing"]
+
+
+def test_issue_lookup_takes_the_claimed_suffix_then_the_newest(
+    configured: Path,
+) -> None:
+    # A new branch adds a suffixed task file. "-2.md" sorts before ".md" as text,
+    # so the lookup orders the suffixes by number, and the claim's snapshot wins.
+    folder = configured / "runs" / "issue-tasks"
+    folder.mkdir(parents=True)
+    names = ["issue-000255-fix.md", "issue-000255-fix-2.md", "issue-000255-fix-3.md"]
+    for name in names:
+        (folder / name).write_text("frozen task\n", encoding="utf-8")
+    assert conventions.resolve_issue_file(configured, 255) == folder / names[2]
+    run = configured / "runs" / "issue-000255"
+    run.mkdir(parents=True)
+    held = {"path": f"runs/issue-tasks/{names[1]}"}
+    (run / "task-snapshot.json").write_text(json.dumps(held), encoding="utf-8")
+    previous = conventions.override({"driver.runs": configured / "runs"})
+    try:
+        assert conventions.resolve_issue_file(configured, 255) == folder / names[1]
+    finally:
+        conventions.configure(previous)

@@ -186,6 +186,7 @@ mkdir -p "$RUN_DIR/issue-000023"
 halt_record_write 23 tasks/issue-000023-fix.md "$RUN_DIR/issue-000023" \\
   config_error 2 launch-fault "hook pre_run failed (exit 1)"
 phase_state() { :; }
+owns_free() { printf free; }; ISSUE_PR_OWNS_CMD=owns_free
 resume_fence() { RESUME_RESERVATION_ID=r1; RESUME_RESERVATION_GENERATION=4; }
 record_claim_fence() { log "fence $*"; }
 _drive_launch() { log "launch resume=$RESUME_MODE"; _DRIVE_RC=0; }

@@ -9,7 +9,7 @@ from typing import Any
 import pytest
 
 from argus import conventions
-from argus.issues.completed_run import pull_request_verdict
+from argus.issues.completed_run import owned, pull_request_verdict
 from argus.issues.transport import IssuesUnavailable
 from issues_fixture import fake_gh, fixture_update, issue, settings
 
@@ -74,3 +74,26 @@ def test_an_unreadable_branch_list_raises(repo: Path) -> None:
     fixture_update(repo, pr_list="failure")
     with pytest.raises(IssuesUnavailable):
         pull_request_verdict(100001, TASK)
+
+
+@pytest.mark.parametrize(("state", "owns"), [("open", True), ("closed", False)])
+def test_the_resume_gate_owns_only_an_open_or_merged_pull_request(
+    repo: Path, state: str, owns: bool
+) -> None:
+    # Given an Argus pull request, when the resume gate asks, then an open one owns
+    # the issue and a closed one does not, as in selection.
+    pull: dict[str, Any] = {
+        "number": 72,
+        "html_url": URL,
+        "draft": True,
+        "head": {
+            "ref": "issue/100001-fix-the-input",
+            "repo": {"full_name": "example/project"},
+            "sha": "c" * 40,
+        },
+    }
+    if state == "open":
+        fixture_update(repo, pulls=[pull])
+    else:
+        fixture_update(repo, history=[{**pull, "state": "closed", "merged_at": None}])
+    assert owned(100001) is owns

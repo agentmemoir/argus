@@ -81,6 +81,42 @@ issue_leftover_release() {
   esac
 }
 
+# Whether an open (draft or ready) or merged Argus pull request owns the issue:
+# prints `owned` or `free`. A read that fails exits non-zero.
+issue_pr_owns() {   # <number>
+  "$PYTHON" - "$ARGUS" "$1" "${ARGUS_CONFIG_ARGS[@]}" <<'PY'
+import sys
+sys.path.insert(0, sys.argv[1])
+import _bootstrap
+from argus import conventions
+conventions.configure_from_cli(sys.argv[3:])
+from argus.issues.completed_run import owned
+print("owned" if owned(int(sys.argv[2])) else "free")
+PY
+}
+
+# The selection gate, asked before a halted issue run is resumed. A pull request
+# that owns the issue means no resume, so nothing is pushed to its branch. From the
+# tick, the halt record is consumed, and the next tick selects, which holds the
+# issue by its pull request. A check that cannot answer resumes nothing and keeps
+# the record, so the next tick asks again.
+issue_resume_gate() {   # <number>
+  [ "${work_kind:-phase}" = issue ] || return 0
+  local owns
+  owns="$(${ISSUE_PR_OWNS_CMD:-issue_pr_owns} "$1" 2>/dev/null)" || owns=unknown
+  case "$owns" in
+    free) return 0 ;;
+    owned)
+      RESUME_REFUSAL="issue $1: an open or merged Argus pull request owns it; no resume"
+      if [ "${RESUME_FROM_TICK:-0}" = 1 ] && [ "$HALT_REC_PHASE" = "$1" ]; then
+        rm -f "$HALT_RECORD"
+      fi ;;
+    *) RESUME_REFUSAL="issue $1: the pull request check is unavailable; no resume this tick" ;;
+  esac
+  log "$RESUME_REFUSAL"
+  return 1
+}
+
 # Put the checkout on the phase branch before the resumed launch.
 #
 # The tick's own cut also runs a resync. Only the branch half runs here. A
@@ -225,6 +261,7 @@ _drive_resume() {   # [<number>]
     fi
   fi
   RESUME_PHASE_FILE="$rel"
+  issue_resume_gate "$number" || return 1
 
   # The record is one slot and may belong to another phase: `--resume N` names a
   # phase the record need not. Its run directory, its state snapshot and its

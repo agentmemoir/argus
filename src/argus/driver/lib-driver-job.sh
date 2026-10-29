@@ -90,7 +90,9 @@ glide_run_once() {
 
 # D11: an issue run that completed is not restarted with --fresh, since a finished
 # run is never run again. The caller holds the issue here and starts no run. Argus
-# says so once when no Argus pull request exists on the issue branch, in any state.
+# says so once when no Argus pull request exists on the issue branch, in any state,
+# with the key and text the selector's notice uses, so one line is sent. Removing
+# the claim label is the retry: the next claim sets this run folder aside.
 # A pull request owns the issue and raises nothing. A failed read raises nothing
 # either, because it cannot tell whether a pull request exists.
 issue_completed_hold() {   # <number> <rel>
@@ -110,7 +112,7 @@ issue_completed_hold() {   # <number> <rel>
       log "issue $number: the pull request check is unavailable; no run starts"
       return 0 ;;
   esac
-  text="Needs You. Issue #$number finished its run with no pull request. Argus starts no new run for it."
+  text="Needs You. Issue #$number finished its run with no pull request. Argus starts no new run for it. Action: remove the claim label to retry."
   marker="$RUN_DIR/log-last-notice-completed-$number"
   if [ "$(cat "$marker" 2>/dev/null)" != "$text" ]; then
     notify "$text"

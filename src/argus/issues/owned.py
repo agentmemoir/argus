@@ -122,36 +122,41 @@ def release_merged(
         )
 
 
-def retire_closed(
+def fresh_start(
     store: Any,
     machine: str,
+    repo: Path,
     number: int,
     records: dict[str, Any],
     evidence: Evidence,
-) -> None:
-    """Free a published record whose Argus pull request closed without merge.
+) -> bool:
+    """Prepare a new claim once a person removed the claim label.
 
-    A person removes the claim label first. The issue then takes a fresh claim on
-    a new branch. Only this machine's own published record is removed, and never
-    while an open or merged pull request owns the issue.
+    This machine's own finished record is retired through the fenced board op when
+    its Argus pull request closed without merge, or when the run completed with no
+    pull request. Never while an open or merged pull request owns the issue. The
+    earlier run folder is then set aside, so the new claim starts a clean run.
+    False means the claim waits for the next tick.
     """
     key = f"{number:06d}"
     record = records.get(key)
-    if (
-        record is None
-        or record.get("machine_id") != machine
-        or record.get("status") not in TERMINAL_STATUSES
-        or evidence.owns(number)
-        or number not in evidence.closed_issues()
-    ):
-        return
-    try:
-        store.retire_retained(claims.token(number, record))
-    except CoordinationError as exc:
-        print(f"issue {number}: published record not retired: {exc}", file=sys.stderr)
-        return
-    records.pop(key, None)
-    print(
-        f"issue {number}: closed pull request; the issue can be claimed again",
-        file=sys.stderr,
-    )
+    status = None if record is None else record.get("status")
+    if record is not None and status in TERMINAL_STATUSES:
+        no_pull = status == "completed" and number not in evidence.pull_history()
+        if (
+            record.get("machine_id") != machine
+            or evidence.owns(number)
+            or not (no_pull or number in evidence.closed_issues())
+        ):
+            # The board keeps the record and refuses the claim, as before.
+            return True
+        try:
+            store.retire_retained(claims.token(number, record))
+        except CoordinationError as exc:
+            print(
+                f"issue {number}: finished record not retired: {exc}", file=sys.stderr
+            )
+            return False
+        records.pop(key, None)
+        print(f"issue {number}: finished record retired; claim again", file=sys.stderr)
+    return claims.set_aside(repo, number)

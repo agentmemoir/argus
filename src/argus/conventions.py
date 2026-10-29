@@ -3,6 +3,7 @@
 """Shared settings, paths, and phase names for Argus tools."""
 
 import contextlib
+import json
 import re
 from collections.abc import Mapping
 from pathlib import Path
@@ -210,7 +211,9 @@ def resolve_phase_file(repo: str | Path, number: int) -> Path | None:
 def resolve_issue_file(repo: str | Path, number: int) -> Path | None:
     """Find the frozen task file the issue source wrote for ``number``.
 
-    Issue tasks live in ``issues.task-dir``, never in the phases folder.
+    Issue tasks live in ``issues.task-dir``, never in the phases folder. A new
+    branch adds a suffixed file (``-2``, ``-3``), so the file the claim's snapshot
+    names wins, and otherwise the newest suffix in natural order does.
     """
     folder = setting("issues.task-dir", None)
     if folder is None:
@@ -219,10 +222,18 @@ def resolve_issue_file(repo: str | Path, number: int) -> Path | None:
     if not base.is_absolute():
         base = Path(repo) / base
     prefix = f"issue-{int(number):06d}"
-    for path in sorted(base.glob(f"{prefix}*.md")):
-        if path.stem == prefix or path.stem.startswith(prefix + "-"):
-            return path
-    return None
+    found = [
+        path
+        for path in base.glob(f"{prefix}*.md")
+        if path.stem == prefix or path.stem.startswith(prefix + "-")
+    ]
+    with contextlib.suppress(OSError, ValueError, KeyError, TypeError):
+        snapshot = runs_dir(repo) / prefix / "task-snapshot.json"
+        held = (Path(repo) / json.loads(snapshot.read_text())["path"]).resolve()
+        for path in found:
+            if path.resolve() == held:
+                return path
+    return max(found, key=lambda path: (len(path.stem), path.stem), default=None)
 
 
 def _pipeline(repo: str | Path) -> dict[str, Any] | None:

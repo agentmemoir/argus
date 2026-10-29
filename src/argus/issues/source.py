@@ -20,7 +20,7 @@ from argus.issues.evidence import Evidence, escalated, pending, signals
 from argus.issues.filter import eligible, label_claimed
 from argus.issues.leftover import release_closed
 from argus.issues.order import PREFERENCES, ordering
-from argus.issues.owned import retire_closed, tick_pull_requests
+from argus.issues.owned import fresh_start, tick_pull_requests
 from argus.issues.report import _Reports, skip_counts
 from argus.issues.task import render, task_directory, task_path, write
 from argus.issues.transport import IssuesUnavailable
@@ -208,8 +208,7 @@ class IssuesSource(_Reports, WorkSource):
                             self.records.pop(f"{number:06d}", None)
                         continue
                     if self.evidence.owns(number):
-                        # An open or merged Argus pull request owns its issue, so its
-                        # claim is not resumed on this machine either.
+                        # An open or merged Argus pull request owns its claim too.
                         self.skipped["open_pull_request"] += 1
                         continue
                     if run_failed(self.repo, number, task_path(self.directory, row)):
@@ -239,14 +238,16 @@ class IssuesSource(_Reports, WorkSource):
             if label_claimed(row, record, self.claim_label):
                 self.skipped["claim_label"] += 1
                 continue
-            if reserve:
-                retire_closed(self.store, machine, number, self.records, self.evidence)
             detail = self._detail(row)
             if detail["evidence"]:
                 continue
             path = fresh_task_path(self.directory, detail, self.evidence)
             if not reserve:
                 return self._base("AVAILABLE", detail)
+            if not fresh_start(
+                self.store, machine, self.repo, number, self.records, self.evidence
+            ):
+                continue
             write(
                 path,
                 render(detail, self.client, self.trust, self.groups, self.preference),
