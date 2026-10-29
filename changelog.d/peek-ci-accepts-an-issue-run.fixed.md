@@ -1,0 +1,1 @@
+The peek-ci mode accepts an issue run. It reads the checks of the pull request for the checked-out branch, so an issue run's post-step no longer records a CONFIG_ERROR (exit 2) from peek-ci on every issue run. ([#298](https://github.com/agentmemoir/argus/issues/298))

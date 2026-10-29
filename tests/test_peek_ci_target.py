@@ -215,3 +215,29 @@ def test_the_repo_flag_names_the_checkout_to_peek_at(
     assert main.main() == 0
     out = json.loads(capsys.readouterr().out)
     assert out["repos"][0]["repo"] == str(other.resolve())
+
+
+def test_given_an_issue_run_when_peek_ci_runs_it_does_not_exit_config_error(
+    workspace: Workspace,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # Given an issue run: the checkout is on the issue branch, and that
+    # branch's pull request has passing checks.
+    branch = "issue/298-peek-ci-post-step"
+    monkeypatch.setattr(conventions, "configure_from_args", keep_settings)
+    workspace.answer(list=open_pull_request(), checks=[check_row("build", "pass")])
+    assert git(workspace.root, "checkout", "-q", "-b", branch)[0] == 0
+
+    # When the issue post-step runs peek-ci with --kind issue and no branch flag.
+    monkeypatch.setattr(
+        sys, "argv", ["gitsync", "--kind", "issue", "--mode", "peek-ci"]
+    )
+    code = main.main()
+
+    # Then the mode reads the issue branch's checks and the run is not refused.
+    out = json.loads(capsys.readouterr().out)
+    assert out["state"] != "CONFIG_ERROR", out
+    assert code == 0, out
+    assert out["branch"] == branch
+    assert out["repos"][0]["state"] == "PASSING"
