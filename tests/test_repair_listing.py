@@ -14,7 +14,7 @@ from argus.gitsync import gh_read, repair_cli
 SAME: dict[str, Any] = {
     "headRefName": "issue/7-fix-ci",
     "isCrossRepository": False,
-    "isDraft": False,
+    "isDraft": True,
 }
 
 
@@ -54,7 +54,7 @@ def test_issue_pull_requests_reads_only_recorded_branches(
             "issue": 7,
             "branch": "issue/7-fix-ci",
             "pull_request": "https://g/o/r/pull/70",
-            "draft": False,
+            "draft": True,
         }
     ]
     err = capsys.readouterr().err

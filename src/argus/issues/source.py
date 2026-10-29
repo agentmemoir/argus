@@ -74,6 +74,7 @@ class IssuesSource(_Reports, WorkSource):
                     "failed",
                     "escalated",
                     "claim_label",
+                    "open_pull_request",
                 ),
                 0,
             )
@@ -86,7 +87,7 @@ class IssuesSource(_Reports, WorkSource):
         self.records: dict[str, Any] = {}
         self.store: Any = None
         self.truncated = False
-        self.evidence = Evidence()
+        self.evidence = Evidence(self.client.argus_pull_requests)
 
     def _load(
         self, *, reserve: bool = False, store: Any = None, listing: bool = True

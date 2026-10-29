@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Completion from issue dependencies and explicit board records."""
 
+from collections.abc import Callable
 from typing import Any
 
 
@@ -20,7 +21,16 @@ def pending(record: dict[str, Any] | None) -> bool:
 
 
 class Evidence:
+    def __init__(self, owned: Callable[[], set[int]]) -> None:
+        self.owned = owned
+        self.held: set[int] | None = None
+
     def inspect(self, issue: dict[str, Any]) -> str | None:
+        # An open Argus pull request owns its issue; a failed read raises.
+        if self.held is None:
+            self.held = self.owned()
+        if issue["number"] in self.held:
+            return "open_pull_request"
         blockers = issue["blockedBy"]
         # gh fetches 50 nodes. Unread dependencies are conservatively blocked;
         # closed nodes do not block just because they remain linked.

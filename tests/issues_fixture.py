@@ -105,6 +105,8 @@ if args[:2] == ["search", "issues"]:
     result = fixture["rows"]
 elif args[:2] == ["issue", "view"]:
     result = next(row for row in fixture["rows"] if row["number"] == int(args[2]))
+elif args[:2] == ["pr", "list"]:
+    result = fixture.get("pulls", [])
 elif args[:2] == ["pr", "view"]:
     result = {"state": fixture.get("pr_states", {}).get(args[2], "CLOSED")}
 elif args[:2] == ["label", "list"]:

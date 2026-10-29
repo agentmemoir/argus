@@ -13,6 +13,7 @@ from argus import conventions
 from argus.issues.transport import IssuesUnavailable, run
 
 REPO_RE = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+\Z")
+BRANCH_RE = re.compile(r"issue/([0-9]+)-[a-z0-9]+(?:-[a-z0-9]+)*")
 TOKEN_RE = re.compile(r"[A-Za-z0-9_.:@/\[\]-]+\Z")
 SEARCH_FIELDS = "number,title,labels,author,authorAssociation,createdAt,updatedAt,isPullRequest,assignees,url,state,commentsCount"
 VIEW_FIELDS = (
@@ -108,6 +109,22 @@ class IssueClient:
             ):
                 raise IssuesUnavailable("invalid_response", "comments count")
         return issues
+
+    def argus_pull_requests(self) -> set[int]:
+        """Issue numbers with an open pull request on an Argus issue branch."""
+        limit = conventions.setting("issues.list-limit", 200)
+        argv = ["pr", "list", "--repo", self.repo, "--state", "open"]
+        argv += ["--limit", str(limit), "--json", "headRefName,isCrossRepository"]
+        rows = objects(self.call(argv), "pr list")
+        if len(rows) >= limit:
+            # A full page may hide an Argus pull request, so no issue is free.
+            raise IssuesUnavailable("truncated", "pr list")
+        return {
+            int(match.group(1))
+            for row in rows
+            if row.get("isCrossRepository") is False
+            and (match := BRANCH_RE.fullmatch(str(row.get("headRefName"))))
+        }
 
     def view(
         self, number: int, metadata: dict[str, Any] | None = None

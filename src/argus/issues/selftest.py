@@ -54,7 +54,8 @@ def _checks(repo: Path) -> None:
         "import json, sys\n"
         "from pathlib import Path\n"
         "row = json.loads((Path(__file__).parent / 'github.json').read_text())\n"
-        "print(json.dumps([row] if sys.argv[1] == 'search' else row))\n",
+        "kind = sys.argv[1]\n"
+        "print(json.dumps([row] if kind == 'search' else [] if kind == 'pr' else row))\n",
         encoding="utf-8",
     )
     gh.chmod(0o755)
