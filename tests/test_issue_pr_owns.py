@@ -26,7 +26,11 @@ def repo(
     binary = fake_gh(tmp_path, [issue()], add_cleanup=request.addfinalizer)
     previous = conventions.override(settings(tmp_path, binary))
     board = Board()
-    monkeypatch.setattr("argus.issues.source.ReservationStore", lambda *_a, **_k: board)
+
+    def store(*_a: object, **_k: object) -> Board:
+        return board
+
+    monkeypatch.setattr("argus.issues.source.ReservationStore", store)
     yield tmp_path
     conventions.configure(previous)
 
@@ -67,11 +71,17 @@ def test_a_branch_that_is_not_argus_own_does_not_hold(
 def test_an_unread_pull_request_list_selects_nothing(
     repo: Path, mode: dict[str, Any]
 ) -> None:
+    # Given the issue search succeeds, when the pull request list cannot be read,
+    # then selection raises and no issue is chosen.
     source = IssuesSource(repo)
-    source._load()
-    fixture_update(repo, **mode)
+
+    def unread() -> set[int]:
+        fixture_update(repo, **mode)
+        return source.client.argus_pull_requests()
+
+    source.evidence.owned = unread
     with pytest.raises(IssuesUnavailable):
-        source.evidence.inspect(issue())
+        source.select(reserve=False)
 
 
 def test_a_full_pull_request_page_selects_nothing(repo: Path) -> None:
@@ -93,9 +103,10 @@ def test_a_ready_pull_request_is_never_listed_for_repair(
     def scope(_root: object, _number: int) -> tuple[Path, list[str]]:
         return tmp_path, ["runs/issue-7", "tasks/issue-7-fix-ci.md"]
 
-    monkeypatch.setattr(
-        repair_cli.conventions, "runs_dir", lambda _r: tmp_path / "runs"
-    )
+    def runs_dir(_root: object) -> Path:
+        return tmp_path / "runs"
+
+    monkeypatch.setattr(repair_cli.conventions, "runs_dir", runs_dir)
     monkeypatch.setattr(repair_cli, "issue_scope", scope)
     monkeypatch.setattr(repair_cli, "gh_pull_requests_for_branch", listed)
     assert repair_cli.issue_pull_requests(tmp_path) == []
