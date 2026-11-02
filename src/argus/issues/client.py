@@ -313,6 +313,14 @@ class IssueClient:
             parse=False,
         )
 
+    def close(self, number: int, reason: str, comment: str | None = None) -> None:
+        """Close one issue, with a comment when given. A failure raises."""
+        argv = ["issue", "close", str(issue_number(number)), "--repo", self.repo]
+        argv += ["--reason", reason]
+        if comment is not None:
+            argv += ["--comment", comment]
+        self.call(argv, parse=False)
+
     def remove_label(self, number: int, label: str) -> None:
         """Remove one label from an issue. A failure raises; the caller decides."""
         number = issue_number(number)

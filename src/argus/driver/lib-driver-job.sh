@@ -89,15 +89,15 @@ glide_run_once() {
 }
 
 # D11: an issue run that completed is not restarted with --fresh, since a finished
-# run is never run again. The caller holds the issue here and starts no run. Argus
-# says so once when no Argus pull request exists on the issue branch, in any state,
-# with the key and text the selector's notice uses, so one line is sent. Removing
-# the claim label is the retry: the next claim sets this run folder aside. Closing
-# the issue ends it: the next tick's release_closed_completed frees the claim.
-# A pull request owns the issue and raises nothing. A failed read raises nothing
-# either, because it cannot tell whether a pull request exists.
+# run is never run again. The caller holds the issue here and starts no run. With no
+# Argus pull request on the issue branch, in any state, a checked no-change reason
+# makes Argus close the issue, and the next tick's release_closed_completed frees the
+# claim. With no such reason, Argus says so once, with the key and text the selector's
+# notice uses, so one line is sent. Removing the claim label is the retry: the next
+# claim sets this run folder aside. A pull request owns the issue and raises nothing.
+# A failed read raises nothing either, because it cannot tell whether one exists.
 issue_completed_hold() {   # <number> <rel>
-  local number="$1" task="${2:-}" task_name="" verdict="unknown" text marker reason run_dir
+  local number="$1" task="${2:-}" task_name="" verdict="unknown" text marker reason run_dir outcome
   [ -n "$task" ] || task="$(issue_task_file_of "$number")"
   [ -z "$task" ] || task_name="$(basename "$task")"
   if [ -n "$task_name" ]; then
@@ -117,7 +117,16 @@ issue_completed_hold() {   # <number> <rel>
   run_dir="$(run_dir_of "$number" "$task")"
   [ -z "$run_dir" ] || reason="$(issue_no_change_reason "$number" "$task_name" "$run_dir" 2>/dev/null)" || reason=""
   if [ -n "$reason" ]; then
-    text="Needs You. Issue #$number ends with no pull request and no code change. Argus checked zero commits, a clean tree, and no pull request. The reason is the agent's claim, and Argus did not check it: $reason. Argus starts no new run for it. Action: close the issue. The next tick then releases the claim. Check: the claim label is gone. If the reason is wrong, remove the claim label to retry."
+    outcome="$(issue_no_change_close "$number" "$run_dir" "$reason" 2>/dev/null)" || outcome=""
+    case "$outcome" in
+      closed)
+        log "issue $number: no change, and the issue is closed. The next tick releases the claim. No action needed."
+        return 0 ;;
+      "Needs You."*) text="$outcome" ;;
+      *)
+        log "issue $number: the no-change close waits; the next tick tries again"
+        return 0 ;;
+    esac
   else
     text="Needs You. Issue #$number finished its run with no pull request. Argus starts no new run for it. Action: remove the claim label to retry."
   fi
@@ -140,6 +149,23 @@ import _bootstrap
 from argus.issues.completed_run import checked_no_change_reason
 print(checked_no_change_reason(
     Path(sys.argv[2]), Path(sys.argv[5]), int(sys.argv[3]), sys.argv[4]
+))
+PY
+}
+
+# Close a checked no-change issue. Prints closed, waits, or one Needs You line. The
+# tick runs in the checkout, where a relative commands.reply-check path resolves.
+issue_no_change_close() {   # <number> <run folder> <reason>
+  "$PYTHON" - "$ARGUS" "$REPO" "$1" "$2" "$3" "$PHASE_MACHINE_ID" "${ARGUS_CONFIG_ARGS[@]}" <<'PY'
+import sys
+from pathlib import Path
+sys.path.insert(0, sys.argv[1])
+import _bootstrap
+from argus import conventions
+conventions.configure_from_cli(sys.argv[7:])
+from argus.issues.no_change import close_no_change
+print(close_no_change(
+    Path(sys.argv[2]), Path(sys.argv[4]), int(sys.argv[3]), sys.argv[5], sys.argv[6]
 ))
 PY
 }

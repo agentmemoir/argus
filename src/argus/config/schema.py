@@ -54,6 +54,8 @@ SCHEMA = (
     Field("commands.python", "str", "required"),
     Field("commands.hermes", "str", "required"),
     Field("commands.gh", "str", "required"),
+    # A command that reads a draft public text on stdin and exits non-zero to refuse it.
+    Field("commands.reply-check", "str", "optional"),
     # The argument list that installs this project's git hooks. No default: Argus
     # cannot guess it, and it runs only when the pre_run hook refuses the checkout.
     Field("commands.hooks-install", "str-list", "optional"),
@@ -143,6 +145,7 @@ SHELL_VARS = {
     "commands.python": "CMD_PYTHON",
     "commands.hermes": "CMD_HERMES",
     "commands.gh": "CMD_GH",
+    "commands.reply-check": "CMD_REPLY_CHECK",
     "commands.hooks-install": "CMD_HOOKS_INSTALL",
     "tmux.session": "SESSION_NAME",
     "tmux.width": "TMUX_WIDTH",

@@ -104,7 +104,7 @@ if mode == "edit-failure" and args[:2] == ["issue", "edit"]:
 if args[:2] == ["search", "issues"]:
     result = fixture["rows"]
 elif args[:2] == ["issue", "view"]:
-    result = next(row for row in fixture["rows"] if row["number"] == int(args[2]))
+    result = fixture.get("views", {}).get(args[2]) or next(row for row in fixture["rows"] if row["number"] == int(args[2]))
 elif args[:2] == ["pr", "view"]:
     result = {"state": fixture.get("pr_states", {}).get(args[2], "CLOSED")}
 elif args[:2] == ["pr", "list"]:
@@ -130,6 +130,17 @@ elif args[0] == "api" and "/pulls?" in args[-1]:
     result = fixture.get("pull_pages", [fixture.get("pulls", [])])
 elif args[0] == "api":
     result = fixture.get("pages", [[]])
+elif args[:2] == ["issue", "close"]:
+    if "--comment" in args:
+        fixture.setdefault("pages", [[]])[0].append({"id": 1, "body": args[args.index("--comment") + 1], "user": {"login": "argus"}, "author_association": "OWNER", "created_at": "2026-01-01T12:00:00Z"})
+        (root / "github.json").write_text(json.dumps(fixture))
+    if mode == "close-failure":
+        print("close refused", file=sys.stderr)
+        sys.exit(1)
+    fixture.setdefault("views", {})[args[2]] = {**fixture["views"][args[2]], "state": "CLOSED"}
+    fixture["rows"] = [row for row in fixture["rows"] if row["number"] != int(args[2])]
+    (root / "github.json").write_text(json.dumps(fixture))
+    sys.exit(0)
 elif args[:2] == ["issue", "comment"]:
     body = Path(args[args.index("--body-file") + 1]).read_text()
     fixture.setdefault("pages", [[]])[0].append({"id": 1, "body": body, "user": {"login": "maintainer"}, "author_association": "OWNER", "created_at": "2026-01-01T12:00:00Z"})

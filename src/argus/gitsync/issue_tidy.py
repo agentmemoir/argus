@@ -34,8 +34,8 @@ def tidy_issue_checkout(root: str | Path) -> dict[str, Any]:
     _branch, remote, remote_branch, why = resolve_upstream(root)
     if why or remote is None or remote_branch != here:
         return degraded(info, why or "issue branch upstream does not match its branch")
-    # Publication pushes the issue branch and ends there; Argus opens no pull
-    # request and closes no issue, so there is no GitHub evidence to read here.
+    # Publication pushes the issue branch and ends there; no pull request or issue
+    # state decides this tidy, so there is no GitHub evidence to read here.
     return dict(info, ok=True, action="issue-not-yet-published")
 
 

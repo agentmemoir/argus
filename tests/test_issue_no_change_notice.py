@@ -56,7 +56,10 @@ def _run_folder(tmp_path: Path, text: str | None) -> Path:
 
 
 def _hold(checkout: Path, run: Path, verdict: str, tmp_path: Path) -> list[str]:
-    """Run the real issue_completed_hold once; return the notices it sent."""
+    """Run the real issue_completed_hold once; return the notices it sent.
+
+    The close itself is stubbed here. It is tested in test_issue_no_change_close.py.
+    """
     notes = tmp_path / "notes.txt"
     driver_run = tmp_path / "driver-run"
     driver_run.mkdir(exist_ok=True)
@@ -68,6 +71,7 @@ def _hold(checkout: Path, run: Path, verdict: str, tmp_path: Path) -> list[str]:
             'stub_verdict() { [ "$VERDICT" != fail ] || return 1; printf "%s" "$VERDICT"; }',
             "ISSUE_PR_VERDICT_CMD=stub_verdict",
             f'source "{LIB}"',
+            'issue_no_change_close() { printf "%s" "$3" >"$RUN_DIR/closed-reason"; printf closed; }',
             f"issue_completed_hold 315 {TASK}",
         ]
     )
@@ -133,21 +137,12 @@ def test_a_dirty_tree_refuses_the_reason(checkout: Path, tmp_path: Path) -> None
     assert checked_no_change_reason(checkout, run, 315, TASK) == ""
 
 
-def test_the_notice_holds_the_reason_when_the_evidence_holds(
+def test_a_checked_reason_closes_and_raises_no_notice(
     checkout: Path, tmp_path: Path
 ) -> None:
     run = _run_folder(tmp_path, f"{REASON}\n")
-    notices = _hold(checkout, run, "none", tmp_path)
-    assert len(notices) == 1
-    assert notices[0].startswith(
-        "Needs You. Issue #315 ends with no pull request and no code change."
-    )
-    assert f"did not check it: {REASON}." in notices[0]
-    assert notices[0].endswith(
-        "Action: close the issue. The next tick then releases the claim. "
-        "Check: the claim label is gone. "
-        "If the reason is wrong, remove the claim label to retry."
-    )
+    assert _hold(checkout, run, "none", tmp_path) == []
+    assert (tmp_path / "driver-run/closed-reason").read_text("utf-8") == REASON
 
 
 def test_the_notice_is_unchanged_without_the_file(
@@ -223,9 +218,8 @@ def test_shell_metacharacters_in_the_reason_stay_inert_text(
     canary = tmp_path / "canary"
     hostile = "$(touch canary) `touch canary`; touch canary && $HOME"
     run = _run_folder(tmp_path, f"{hostile}\n")
-    notices = _hold(checkout, run, "none", tmp_path)
-    assert len(notices) == 1
-    assert hostile in notices[0]
+    assert _hold(checkout, run, "none", tmp_path) == []
+    assert (tmp_path / "driver-run/closed-reason").read_text("utf-8") == hostile
     assert not canary.exists()
 
 
