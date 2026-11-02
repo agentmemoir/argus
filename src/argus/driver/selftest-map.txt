@@ -39,6 +39,7 @@
 @unplaced src/argus/issues/completed_run.py
 @unplaced src/argus/issues/held.py
 @unplaced src/argus/issues/leftover.py
+@unplaced src/argus/issues/no_change.py
 @unplaced src/argus/issues/order.py
 @unplaced src/argus/issues/owned.py
 @unplaced src/argus/issues/report.py

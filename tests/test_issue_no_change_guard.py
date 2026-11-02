@@ -65,7 +65,7 @@ def test_hostile_text_stays_inert_through_the_shell(case: Case) -> None:
     "reason",
     [
         "Seen on worker-one.",
-        "Read /home/someone/project/file.txt first.",
+        "Read /var/lib/project/file.txt first.",
         "Read ~/project/file.txt first.",
     ],
 )

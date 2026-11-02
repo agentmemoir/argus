@@ -154,9 +154,8 @@ PY
 }
 
 # Close a checked no-change issue. Prints closed, waits, or one Needs You line. The
-# run starts in the checkout, where a relative commands.reply-check path resolves.
+# tick runs in the checkout, where a relative commands.reply-check path resolves.
 issue_no_change_close() {   # <number> <run folder> <reason>
-  cd "$REPO" || return 1
   "$PYTHON" - "$ARGUS" "$REPO" "$1" "$2" "$3" "$PHASE_MACHINE_ID" "${ARGUS_CONFIG_ARGS[@]}" <<'PY'
 import sys
 from pathlib import Path
