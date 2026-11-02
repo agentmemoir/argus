@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """What the public closing comment may hold: the reason passes the guard, or it goes."""
 
+import json
 import sys
 from pathlib import Path
 
@@ -105,3 +106,18 @@ def test_the_comment_marks_the_claim_and_ends_in_its_marker() -> None:
     body = closing_comment("a `b` c", "<!-- m -->", show_reason=True)
     assert "`a 'b' c`" in body
     assert body.endswith("<!-- m -->")
+
+
+def test_a_config_file_reply_check_puts_the_reason_on_the_real_path(case: Case) -> None:
+    # Given the host's check in the config file, when a real tick closes the issue,
+    # then the driver's own process loads the check, and the comment gives the reason.
+    check = case.config.parent / "reply_check.py"
+    check.write_text("import sys\nsys.exit(0)\n", "utf-8")
+    document = json.loads(case.config.read_text("utf-8"))
+    document["commands"]["reply-check"] = f"{sys.executable} {check}"
+    case.config.write_text(json.dumps(document), "utf-8")
+    case.tick()
+    row = case.closes()[0]
+    comment = row[row.index("--comment") + 1]
+    assert f"Argus did not check it: `{REASON}`" in comment
+    assert case.notes() == []

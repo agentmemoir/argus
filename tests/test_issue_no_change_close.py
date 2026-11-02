@@ -49,7 +49,7 @@ def test_a_checked_run_closes_and_the_second_tick_launches_the_next_issue(
     assert "- The issue branch has zero commits past its base." in comment
     assert "- The working tree is clean." in comment
     assert "- No Argus pull request exists for this issue." in comment
-    # A config file gives the driver no commands.reply-check, so no reason is posted.
+    # This config sets no commands.reply-check, so no reason is posted.
     assert "The agent's reason is not shown" in comment
     assert "main.rs" not in comment
     assert "To undo this, reopen the issue. Argus then starts a new run." in comment
