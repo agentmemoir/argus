@@ -92,7 +92,8 @@ glide_run_once() {
 # run is never run again. The caller holds the issue here and starts no run. Argus
 # says so once when no Argus pull request exists on the issue branch, in any state,
 # with the key and text the selector's notice uses, so one line is sent. Removing
-# the claim label is the retry: the next claim sets this run folder aside.
+# the claim label is the retry: the next claim sets this run folder aside. Closing
+# the issue ends it: the next tick's release_closed_completed frees the claim.
 # A pull request owns the issue and raises nothing. A failed read raises nothing
 # either, because it cannot tell whether a pull request exists.
 issue_completed_hold() {   # <number> <rel>
@@ -116,7 +117,7 @@ issue_completed_hold() {   # <number> <rel>
   run_dir="$(run_dir_of "$number" "$task")"
   [ -z "$run_dir" ] || reason="$(issue_no_change_reason "$number" "$task_name" "$run_dir" 2>/dev/null)" || reason=""
   if [ -n "$reason" ]; then
-    text="Needs You. Issue #$number ends with no pull request and no code change. Argus checked zero commits, a clean tree, and no pull request. The reason is the agent's claim, and Argus did not check it: $reason. Argus starts no new run for it. Action: close the issue if you agree; to retry, remove the claim label."
+    text="Needs You. Issue #$number ends with no pull request and no code change. Argus checked zero commits, a clean tree, and no pull request. The reason is the agent's claim, and Argus did not check it: $reason. Argus starts no new run for it. Action: close the issue. The next tick then releases the claim. Check: the claim label is gone. If the reason is wrong, remove the claim label to retry."
   else
     text="Needs You. Issue #$number finished its run with no pull request. Argus starts no new run for it. Action: remove the claim label to retry."
   fi

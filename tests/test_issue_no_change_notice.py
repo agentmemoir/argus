@@ -144,7 +144,9 @@ def test_the_notice_holds_the_reason_when_the_evidence_holds(
     )
     assert f"did not check it: {REASON}." in notices[0]
     assert notices[0].endswith(
-        "Action: close the issue if you agree; to retry, remove the claim label."
+        "Action: close the issue. The next tick then releases the claim. "
+        "Check: the claim label is gone. "
+        "If the reason is wrong, remove the claim label to retry."
     )
 
 
