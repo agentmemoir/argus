@@ -175,3 +175,22 @@ def test_no_change_ending_exits_non_zero_when_the_tree_is_dirty(
     (work / "scratch.txt").write_text("left over\n", encoding="utf-8")
     _no_change_run(monkeypatch, tmp_path, work)
     assert _load_hook().main() == 1
+
+
+def test_no_change_ending_exits_non_zero_when_the_base_is_unknown(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    work = _issue_branch(tmp_path)
+    _git(work, "remote", "set-head", "origin", "--delete")
+    _no_change_run(monkeypatch, tmp_path, work)
+    assert _load_hook().main() == 1
+
+
+def test_no_change_ending_exits_non_zero_when_a_git_call_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The base name resolves but names no branch, so the commit count fails.
+    work = _issue_branch(tmp_path)
+    _git(work, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/gone")
+    _no_change_run(monkeypatch, tmp_path, work)
+    assert _load_hook().main() == 1

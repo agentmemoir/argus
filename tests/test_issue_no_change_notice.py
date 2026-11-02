@@ -185,3 +185,51 @@ def test_an_unknown_verdict_raises_nothing_even_with_the_file(
 def test_a_pull_request_verdict_raises_nothing(checkout: Path, tmp_path: Path) -> None:
     run = _run_folder(tmp_path, f"{REASON}\n")
     assert _hold(checkout, run, "pull_request", tmp_path) == []
+
+
+def test_a_token_shaped_reason_gives_the_old_notice(
+    checkout: Path, tmp_path: Path
+) -> None:
+    run = _run_folder(tmp_path, f"The key is ghp_{'a' * 36} here.\n")
+    assert checked_no_change_reason(checkout, run, 315, TASK) == ""
+    assert _hold(checkout, run, "none", tmp_path) == [OLD_TEXT]
+
+
+@pytest.mark.parametrize("cut", ["\n", "\x07", "\u200b"])
+def test_a_control_character_does_not_hide_a_token(
+    checkout: Path, tmp_path: Path, cut: str
+) -> None:
+    run = _run_folder(tmp_path, f"ghp_{'a' * 18}{cut}{'a' * 18}\n")
+    assert checked_no_change_reason(checkout, run, 315, TASK) == ""
+
+
+def test_a_token_past_the_cap_gives_no_reason(checkout: Path, tmp_path: Path) -> None:
+    run = _run_folder(tmp_path, "x " * 150 + f"ghp_{'a' * 36}\n")
+    assert checked_no_change_reason(checkout, run, 315, TASK) == ""
+
+
+def test_a_reason_that_cannot_be_read_as_text_gives_the_old_notice(
+    checkout: Path, tmp_path: Path
+) -> None:
+    run = _run_folder(tmp_path, None)
+    (run / "no-change.txt").write_bytes(b"bad \xff bytes\n")
+    assert _hold(checkout, run, "none", tmp_path) == [OLD_TEXT]
+
+
+def test_shell_metacharacters_in_the_reason_stay_inert_text(
+    checkout: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    canary = tmp_path / "canary"
+    hostile = "$(touch canary) `touch canary`; touch canary && $HOME"
+    run = _run_folder(tmp_path, f"{hostile}\n")
+    notices = _hold(checkout, run, "none", tmp_path)
+    assert len(notices) == 1
+    assert hostile in notices[0]
+    assert not canary.exists()
+
+
+def test_a_failed_git_read_gives_no_reason(checkout: Path, tmp_path: Path) -> None:
+    run = _run_folder(tmp_path, f"{REASON}\n")
+    _git(checkout, "remote", "set-head", "origin", "--delete")
+    assert checked_no_change_reason(checkout, run, 315, TASK) == ""

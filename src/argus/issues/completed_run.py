@@ -7,6 +7,7 @@ import unicodedata
 from pathlib import Path
 
 from argus.gitsync.issue_paths import issue_branch
+from argus.gitsync.pr_signal_reply import SECRET_PATTERN
 from argus.issues.client import IssueClient
 from argus.issues.evidence import Evidence
 from argus.issues.pulls import history
@@ -55,8 +56,10 @@ def checked_no_change_reason(
 ) -> str:
     """The agent's one-line reason, only when Argus confirms zero commits and a clean tree.
 
-    Returns "" when the file is missing or unreadable, when the reason is empty, or
-    when a check fails or cannot run. The reason stays the agent's claim.
+    Returns "" when the file is missing or unreadable, when the reason is empty or
+    holds a secret-looking span, or when a check fails or cannot run. The scan reads
+    the whole text with control characters gone, so neither the cap nor one of those
+    characters can split a span. The reason stays the agent's claim.
     """
     branch = issue_branch(number, task_name)
     try:
@@ -71,6 +74,9 @@ def checked_no_change_reason(
     if ahead is None or ahead.strip() != "0":
         return ""
     if dirty is None or dirty.strip():
+        return ""
+    joined = "".join(ch for ch in text if unicodedata.category(ch)[0] != "C")
+    if SECRET_PATTERN.search(joined):
         return ""
     cleaned = "".join(" " if unicodedata.category(ch)[0] == "C" else ch for ch in text)
     line = " ".join(cleaned.split())

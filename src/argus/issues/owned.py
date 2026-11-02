@@ -14,7 +14,7 @@ from argus.issues.evidence import Evidence
 from argus.issues.filter import label_claimed, label_names
 from argus.issues.held import tick_notices
 from argus.issues.transport import IssuesUnavailable
-from argus.phases.runstate import _state_in
+from argus.phases.runstate import state_in
 
 
 def tick_pull_requests(
@@ -155,7 +155,7 @@ def release_closed_completed(
                 status == "completed"
                 or (
                     (claims.held(record) or status == EXPIRED_STATUS)
-                    and _state_in(run) == "completed"
+                    and state_in(run) == "completed"
                 )
             )
         ):

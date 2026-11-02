@@ -202,6 +202,14 @@ print(record.get("reservation_id", ""), record.get("generation", ""))
           fi
         else
           log "WAIT_FOR_CLAIM for ${work_kind:-phase} $wait_phase (owner=$wait_owner status=$wait_status); no launch"
+          # This machine's completed issue run gets no launch here, so the launch's
+          # hold never runs. The same hold raises its one notice, and starts nothing.
+          if [ "$work_kind" = issue ] && [ "$wait_owner" = "$PHASE_MACHINE_ID" ]; then
+            wait_rel="$(printf '%s' "$selection" | selection_value path)"
+            if [ "$(terminal_state_of_file "$(run_dir_of "$wait_phase" "$wait_rel")/run.json")" = completed ]; then
+              issue_completed_hold "$wait_phase" "$wait_rel"
+            fi
+          fi
           { _DRIVE_RC=0; return 0; }
         fi
         ;;
