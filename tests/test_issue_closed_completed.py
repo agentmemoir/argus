@@ -81,14 +81,6 @@ def tick(tmp_path: Path, request: pytest.FixtureRequest) -> Iterator[Tick]:
     github = tmp_path / "github"
     github.mkdir()
     binary = fake_gh(github, [], add_cleanup=request.addfinalizer)
-    # The fixture's view answers from the listing; a closed issue is off the listing.
-    binary.write_text(
-        binary.read_text().replace(
-            'result = next(row for row in fixture["rows"] if row["number"] == int(args[2]))',
-            'result = fixture.get("views", {}).get(args[2]) or next(row for row in fixture["rows"] if row["number"] == int(args[2]))',
-        ),
-        encoding="utf-8",
-    )
     _configure_self_test(root, vault)
     conventions.override(
         {

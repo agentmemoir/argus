@@ -13,6 +13,7 @@ from argus.issues.client import IssueClient
 from argus.issues.evidence import Evidence
 from argus.issues.filter import label_claimed, label_names
 from argus.issues.held import tick_notices
+from argus.issues.no_change import CLOSED_FILE, close_lapsed
 from argus.issues.transport import IssuesUnavailable
 from argus.phases.runstate import state_in
 
@@ -28,9 +29,16 @@ def tick_pull_requests(
     records: dict[str, Any],
     evidence: Evidence,
 ) -> list[dict[str, str]]:
-    """The tick's pull request work, in order: notices, board records, releases."""
+    """The tick's pull request work: no-change closes, then notices, records, releases.
+
+    The closes and their release go first, so a released run raises no held notice.
+    """
     open_pulls = evidence.open_pull_requests()
-    notices = tick_notices(
+    closing, replaced = close_lapsed(root, machine, records)
+    release_closed_completed(
+        client, store, machine, root, claim_label, records, evidence
+    )
+    held = tick_notices(
         client,
         root,
         directory,
@@ -44,10 +52,7 @@ def tick_pull_requests(
     release_merged(
         client, store, machine, claim_label, rows, records, evidence.merged_issues()
     )
-    release_closed_completed(
-        client, store, machine, root, claim_label, records, evidence
-    )
-    return notices
+    return closing + [notice for notice in held if notice["key"] not in replaced]
 
 
 def record_pull_requests(
@@ -136,12 +141,14 @@ def release_closed_completed(
     records: dict[str, Any],
     evidence: Evidence,
 ) -> None:
-    """A person closed an issue whose run completed with no pull request.
+    """An issue whose run completed with no pull request was closed.
 
-    The search lists open issues only, so nothing else sees this claim again. GitHub
-    is read only for this machine's completed runs. A failed read or write releases
-    nothing, and the next tick tries again. The label goes first, because the record
-    is what brings this path back. The run is then set aside, so the reads end.
+    A person or Argus closed it. The search lists open issues only, so nothing else
+    sees this claim again. GitHub is read only for this machine's completed runs. A
+    failed read or write releases nothing, and the next tick tries again. The label
+    goes first, because the record is what brings this path back. The run is then set
+    aside, so the reads end. An issue reopened after Argus closed it is released too,
+    so the next tick claims it for a new run, and Argus never closes it again.
     """
     past = evidence.pull_history()
     for key, record in sorted(records.items()):
@@ -162,7 +169,9 @@ def release_closed_completed(
             continue
         try:
             issue = client.view(number)
-            if issue["state"].lower() != "closed":
+            state = issue["state"].lower()
+            reopened = state == "open" and (run / CLOSED_FILE).exists()
+            if state != "closed" and not reopened:
                 continue
             if label_claimed(issue, None, claim_label):
                 client.remove_label(number, claim_label)
@@ -178,8 +187,9 @@ def release_closed_completed(
             continue
         records.pop(key, None)
         claims.set_aside(root, number)
+        said = "was reopened" if reopened else "is closed"
         print(
-            f"issue {number} is closed; completed run released. No action needed.",
+            f"issue {number} {said}; completed run released. No action needed.",
             file=sys.stderr,
         )
 

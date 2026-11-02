@@ -79,7 +79,7 @@ def _recorded_reason(recorded: Snapshot | None, cid: str, ref: dict[str, Any]) -
     return ""
 
 
-def _host_reply_refusal(text: str) -> str:
+def host_reply_refusal(text: str) -> str:
     """Why the host reply check refused the draft reply, or "" when it did not."""
     command = conventions.setting("commands.reply-check", None)
     if not command:
@@ -194,7 +194,7 @@ def reply_to_comment(
             "the comment's author is not trusted, so the agent may not answer it"
         )
     if text is not None:
-        host_refusal = _host_reply_refusal(text)
+        host_refusal = host_reply_refusal(text)
         if host_refusal:
             return _refused(host_refusal)
     base = f"repos/{ref['owner']}/{ref['repo']}/pulls"
