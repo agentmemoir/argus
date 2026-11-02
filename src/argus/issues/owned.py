@@ -6,13 +6,15 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from argus.board.core import TERMINAL_STATUSES, CoordinationError
+from argus.board.core import EXPIRED_STATUS, TERMINAL_STATUSES, CoordinationError
+from argus.board.files import reservation_file
 from argus.issues import claims
 from argus.issues.client import IssueClient
 from argus.issues.evidence import Evidence
-from argus.issues.filter import label_names
+from argus.issues.filter import label_claimed, label_names
 from argus.issues.held import tick_notices
 from argus.issues.transport import IssuesUnavailable
+from argus.phases.runstate import state_in
 
 
 def tick_pull_requests(
@@ -41,6 +43,9 @@ def tick_pull_requests(
     record_pull_requests(store, machine, records, open_pulls)
     release_merged(
         client, store, machine, claim_label, rows, records, evidence.merged_issues()
+    )
+    release_closed_completed(
+        client, store, machine, root, claim_label, records, evidence
     )
     return notices
 
@@ -119,6 +124,63 @@ def release_merged(
             continue
         print(
             f"issue {number}: merged pull request; claim label removed", file=sys.stderr
+        )
+
+
+def release_closed_completed(
+    client: IssueClient,
+    store: Any,
+    machine: str,
+    root: Path,
+    claim_label: str,
+    records: dict[str, Any],
+    evidence: Evidence,
+) -> None:
+    """A person closed an issue whose run completed with no pull request.
+
+    The search lists open issues only, so nothing else sees this claim again. GitHub
+    is read only for this machine's completed runs. A failed read or write releases
+    nothing, and the next tick tries again. The label goes first, because the record
+    is what brings this path back. The run is then set aside, so the reads end.
+    """
+    past = evidence.pull_history()
+    for key, record in sorted(records.items()):
+        number = int(key)
+        status = record.get("status")
+        run = reservation_file(root, number, kind="issue").parent
+        if (
+            record.get("machine_id") != machine
+            or number in past
+            or not (
+                status == "completed"
+                or (
+                    (claims.held(record) or status == EXPIRED_STATUS)
+                    and state_in(run) == "completed"
+                )
+            )
+        ):
+            continue
+        try:
+            issue = client.view(number)
+            if issue["state"].lower() != "closed":
+                continue
+            if label_claimed(issue, None, claim_label):
+                client.remove_label(number, claim_label)
+            if status != EXPIRED_STATUS:
+                release = (
+                    store.release_group
+                    if claims.held(record)
+                    else store.retire_retained
+                )
+                release(claims.token(number, record))
+        except (IssuesUnavailable, CoordinationError) as exc:
+            print(f"issue {number}: closed-issue release waits: {exc}", file=sys.stderr)
+            continue
+        records.pop(key, None)
+        claims.set_aside(root, number)
+        print(
+            f"issue {number} is closed; completed run released. No action needed.",
+            file=sys.stderr,
         )
 
 

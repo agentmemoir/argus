@@ -8,12 +8,16 @@ issue branch with base-sync, then runs the open-pr mode with the run's pull
 request body. It exits 1 when a mode refuses or degrades, or when base-sync
 leaves a text conflict or fails, so glide, which gates post_step, does not
 record the step as complete.
+
+When the run folder holds no-change.txt, the step passes only when the branch has
+no commit past the base and the tree is clean. It then opens no pull request.
 """
 
 import json
 import os
 import subprocess
 import sys
+from pathlib import Path
 
 GITSYNC = [sys.executable, "-m", "argus.gitsync.main", "--kind", "issue"]
 BASE_SYNC = [sys.executable, "-m", "argus.gitsync.base_sync_cli"]
@@ -58,8 +62,46 @@ def run_base_sync() -> bool:
     return proc.returncode == 0
 
 
+NO_CHANGE_FILE = "no-change.txt"
+
+
+def git_out(*args: str) -> tuple[int, str]:
+    """Run one git command; return its exit code and its trimmed stdout."""
+    proc = subprocess.run(["git", *args], capture_output=True, text=True, check=False)
+    return proc.returncode, proc.stdout.strip()
+
+
+def no_change_verified() -> bool:
+    """True only when the branch has no commit past the base and the tree is clean.
+
+    The agent's claim is not trusted. This reads the commit count and the tree.
+    """
+    rc, base = git_out("symbolic-ref", "--short", "refs/remotes/origin/HEAD")
+    if rc != 0 or not base:
+        print("no-change: the base branch is unknown, so the ending is refused")
+        return False
+    rc, ahead = git_out("rev-list", "--count", f"{base}..HEAD")
+    if rc != 0 or ahead != "0":
+        print(
+            f"no-change: the branch has commits past {base}, so the ending is refused"
+        )
+        return False
+    rc, dirty = git_out("status", "--porcelain")
+    if rc != 0 or dirty:
+        print("no-change: the tree is not clean, so the ending is refused")
+        return False
+    print(
+        "no-change: no commit past the base and a clean tree; no pull request is opened"
+    )
+    return True
+
+
 def main() -> int:
     run_dir = os.environ["GLIDE_RUN_DIR"]
+    # A no-change ending is checked first: checkpoint would commit leftovers, and
+    # base-sync would merge the base into the branch.
+    if Path(run_dir, NO_CHANGE_FILE).exists():
+        return 0 if no_change_verified() else 1
     # The base is merged before the pull request is opened (belief 10).
     ok = (
         run_mode(["--mode", "checkpoint"])

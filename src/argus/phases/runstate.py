@@ -46,7 +46,7 @@ def _read_json(path: Path) -> dict[str, Any] | None:
     return cast("dict[str, Any]", value)
 
 
-def _state_in(directory: Path) -> str | None:
+def state_in(directory: Path) -> str | None:
     state = _read_json(directory / RESULT_FILENAME)
     if state is None:
         return None
@@ -64,7 +64,7 @@ def run_state(
     directory = _run_dir(repo, number, phase_file)
     if directory is None:
         return None
-    return _state_in(directory)
+    return state_in(directory)
 
 
 def run_unfinished(
@@ -79,7 +79,7 @@ def run_unfinished(
     directory = _run_dir(repo, number, phase_file)
     if directory is None:
         return False
-    state = _state_in(directory)
+    state = state_in(directory)
     if state == BLOCKED:
         return True
     return state is None and (directory / RESUME_FILENAME).is_file()
