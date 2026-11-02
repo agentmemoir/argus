@@ -96,7 +96,7 @@ glide_run_once() {
 # A pull request owns the issue and raises nothing. A failed read raises nothing
 # either, because it cannot tell whether a pull request exists.
 issue_completed_hold() {   # <number> <rel>
-  local number="$1" task="${2:-}" task_name="" verdict="unknown" text marker
+  local number="$1" task="${2:-}" task_name="" verdict="unknown" text marker reason run_dir
   [ -n "$task" ] || task="$(issue_task_file_of "$number")"
   [ -z "$task" ] || task_name="$(basename "$task")"
   if [ -n "$task_name" ]; then
@@ -112,7 +112,14 @@ issue_completed_hold() {   # <number> <rel>
       log "issue $number: the pull request check is unavailable; no run starts"
       return 0 ;;
   esac
-  text="Needs You. Issue #$number finished its run with no pull request. Argus starts no new run for it. Action: remove the claim label to retry."
+  reason=""
+  run_dir="$(run_dir_of "$number" "$task")"
+  [ -z "$run_dir" ] || reason="$(issue_no_change_reason "$number" "$task_name" "$run_dir" 2>/dev/null)" || reason=""
+  if [ -n "$reason" ]; then
+    text="Needs You. Issue #$number ends with no pull request and no code change. Argus checked zero commits, a clean tree, and no pull request. The reason is the agent's claim, and Argus did not check it: $reason. Argus starts no new run for it. Action: close the issue if you agree; to retry, remove the claim label."
+  else
+    text="Needs You. Issue #$number finished its run with no pull request. Argus starts no new run for it. Action: remove the claim label to retry."
+  fi
   marker="$RUN_DIR/log-last-notice-completed-$number"
   if [ "$(cat "$marker" 2>/dev/null)" != "$text" ]; then
     notify "$text"
@@ -121,7 +128,22 @@ issue_completed_hold() {   # <number> <rel>
   return 0
 }
 
-# The verdict for an issue's Argus pull request: `pull_request` or `none`. A read
+# The agent's reason for a no-change ending, or nothing. The check runs in code here,
+# so the outcome file alone never changes the notice.
+issue_no_change_reason() {   # <number> <task file name> <run folder>
+  "$PYTHON" - "$ARGUS" "$REPO" "$1" "$2" "$3" <<'PY'
+import sys
+from pathlib import Path
+sys.path.insert(0, sys.argv[1])
+import _bootstrap
+from argus.issues.completed_run import checked_no_change_reason
+print(checked_no_change_reason(
+    Path(sys.argv[2]), Path(sys.argv[5]), int(sys.argv[3]), sys.argv[4]
+))
+PY
+}
+
+# The verdict for an issue's Argus pull request:`pull_request` or `none`. A read
 # that fails exits non-zero, so the caller reads it as unknown and starts nothing.
 issue_pr_verdict() {   # <number> <task file name>
   "$PYTHON" - "$ARGUS" "$1" "$2" "${ARGUS_CONFIG_ARGS[@]}" <<'PY'

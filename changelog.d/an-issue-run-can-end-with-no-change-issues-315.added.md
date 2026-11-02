@@ -1,1 +1,1 @@
-An issue run can end with no pull request when its agent finds that no code change is needed: the step passes only when the branch has no commit past the base and the working tree is clean.
+An issue run can end with no pull request when its agent finds that no code change is needed: Argus checks that the branch has no commit and that the tree is clean, then shows the agent's one-line reason in a Needs You notice.
