@@ -107,3 +107,71 @@ def test_base_sync_stop_exits_non_zero_before_open_pr(
     calls = _fake_gitsync(monkeypatch, [ok, ok], base_sync=outcome)
     assert _load_hook().main() == 1
     assert not [call for call in calls if "open-pr" in call], calls
+
+
+def _git(cwd: Path, *args: str) -> None:
+    """Run one git command in a test repository with a fixed identity."""
+    subprocess.run(
+        ["git", "-c", "user.name=test", "-c", "user.email=test@example.invalid", *args],
+        cwd=cwd,
+        check=True,
+        capture_output=True,
+    )
+
+
+def _issue_branch(tmp_path: Path) -> Path:
+    """A clone on an issue branch with no commit past main."""
+    origin, seed, work = tmp_path / "origin.git", tmp_path / "seed", tmp_path / "work"
+    _git(tmp_path, "init", "--bare", "-b", "main", str(origin))
+    _git(tmp_path, "init", "-b", "main", str(seed))
+    (seed / "README.md").write_text("base\n", encoding="utf-8")
+    _git(seed, "add", "README.md")
+    _git(seed, "commit", "-m", "base")
+    _git(seed, "push", str(origin), "main")
+    _git(tmp_path, "clone", str(origin), str(work))
+    _git(work, "checkout", "-b", "issue/315-fixture")
+    return work
+
+
+def _no_change_run(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, work: Path) -> None:
+    """Point the hook at a run folder that holds the outcome file, from the checkout."""
+    run = tmp_path / "run"
+    run.mkdir()
+    (run / "no-change.txt").write_text("The flag already exists.\n", encoding="utf-8")
+    monkeypatch.setenv("GLIDE_RUN_DIR", str(run))
+    monkeypatch.chdir(work)
+
+
+def _must_not_run(*_args: Any, **_kwargs: Any) -> bool:
+    raise AssertionError("a no-change ending must not run a gitsync mode")
+
+
+def test_no_change_ending_exits_zero_with_no_commit_and_a_clean_tree(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    work = _issue_branch(tmp_path)
+    _no_change_run(monkeypatch, tmp_path, work)
+    hook = _load_hook()
+    monkeypatch.setattr(hook, "run_mode", _must_not_run)
+    monkeypatch.setattr(hook, "run_base_sync", _must_not_run)
+    assert hook.main() == 0
+
+
+def test_no_change_ending_exits_non_zero_when_the_branch_has_a_commit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    work = _issue_branch(tmp_path)
+    (work / "fix.txt").write_text("change\n", encoding="utf-8")
+    _git(work, "add", "fix.txt")
+    _git(work, "commit", "-m", "change")
+    _no_change_run(monkeypatch, tmp_path, work)
+    assert _load_hook().main() == 1
+
+
+def test_no_change_ending_exits_non_zero_when_the_tree_is_dirty(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    work = _issue_branch(tmp_path)
+    (work / "scratch.txt").write_text("left over\n", encoding="utf-8")
+    _no_change_run(monkeypatch, tmp_path, work)
+    assert _load_hook().main() == 1
