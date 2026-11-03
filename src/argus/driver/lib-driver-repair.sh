@@ -133,6 +133,12 @@ repair_refuse() {  # <key> <head> <reason>
   printf '%s\n%s\n%s\n' "$2" "$(date +%s)" "$reason" >"$RUN_DIR/repair-$1.refused"
 }
 
+# A checksum of a run marker, or "none" when there is none. glide writes its marker
+# before any stage runs, so a marker that changed during a launch shows that a run began.
+repair_marker_sum() {  # <run marker>
+  if [ -f "$1" ]; then cksum <"$1"; else echo none; fi
+}
+
 repair_launch() {
   local key="$1" task="$2" branch="$3" head="$4" launch quoted setting
   repair_worktree_add "$key" "$branch" \
@@ -321,6 +327,7 @@ base_sync_repair() {  # <key> <worktree> <branch>
 
 run_repair_session() {
   local key="$1" task="$2" branch="$3" wt saves rc=0 prior_state fresh_args=() head base_line
+  local marker marker_before marker_after
   wt="$(repair_worktree "$key")"
   # The head the launch was made on: the branch as the launch fetched it.
   head="$("$CMD_GIT" -C "$REPO" rev-parse -q --verify "refs/remotes/origin/$branch" 2>/dev/null || true)"
@@ -345,11 +352,17 @@ run_repair_session() {
         fresh_args=(--fresh)
         log "repair $key run is terminal ($prior_state); restarting it with --fresh"
       fi
+      marker="$RUN_DIR/repair-$key/run.json"
+      marker_before="$(repair_marker_sum "$marker")"
       # The pipeline's hooks read the configuration file this driver loaded.
       ARGUS_CONFIG_FILE="$ARGUS_CONFIG_FILE" "$CMD_GLIDE" run --pipeline "$REPAIR_PIPELINE" \
         "${fresh_args[@]+"${fresh_args[@]}"}" \
         --input "repair_id=$key" --input "repair_task=$BASE_SYNC_NOTE$task" || rc=$?
-      if [ "$rc" -ne 0 ]; then
+      marker_after="$(repair_marker_sum "$marker")"
+      if [ "$rc" -ne 0 ] && { [ "$marker_after" = none ] || [ "$marker_after" = "$marker_before" ]; }; then
+        # glide failed before it wrote a run marker, so no run began and no agent ran.
+        repair_refuse "$key" "$head" "glide exited with rc=$rc before it wrote a run marker"
+      elif [ "$rc" -ne 0 ]; then
         log "repair $key: the run ended with rc=$rc and pushed nothing"
       elif repair_pushed "$wt" "$("$CMD_GIT" -C "$wt" rev-parse HEAD 2>/dev/null)"; then
         log "repair $key: the run made no commit; nothing pushed to $branch"
