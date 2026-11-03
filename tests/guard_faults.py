@@ -74,8 +74,7 @@ from functools import partial
 from pathlib import Path
 from typing import Any
 
-from argus.exec_tempdir import make_exec_dir
-from argus.exec_tempdir_states import candidate_states
+from argus.exec_tempdir import candidate_states, make_exec_dir
 from faults import FAULTS
 from guard_faults_engine import DRIVER, RestoreError, check_fault
 
