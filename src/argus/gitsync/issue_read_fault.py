@@ -33,7 +33,7 @@ WAIT_S = 10 * 60
 
 def record_path(root: str | Path, number: int) -> Path:
     """The count file for one issue, in the driver's own state folder."""
-    state = conventions.runs_dir(root) / conventions.setting("driver.state")
+    state: Path = conventions.runs_dir(root) / conventions.setting("driver.state")
     return state / f"read-fault-issue-{number}.json"
 
 

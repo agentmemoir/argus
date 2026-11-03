@@ -27,7 +27,7 @@ from argus.gitsync.issue_paths import (
     load_issue_reservation,
 )
 from argus.gitsync.issue_runstate import commit_issue_state
-from argus.gitsync.runstate import ENGINE_WRITTEN_RUN_ARTIFACTS
+from argus.gitsync.runstate_artifacts import ENGINE_WRITTEN_RUN_ARTIFACTS
 from argus.gitsync.sync import mode_resync, sync_all
 from argus.issues.claims import snapshot
 

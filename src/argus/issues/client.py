@@ -96,7 +96,8 @@ class IssueClient:
         if not isinstance(pages, list):
             raise IssuesUnavailable("invalid_response", "pr list")
         owned: dict[int, dict[str, Any]] = {}
-        for page in cast("list[Any]", pages):
+        page_list = cast("list[object]", pages)
+        for page in page_list:
             for row in objects(page, "pr list"):
                 head = row.get("head")
                 if not isinstance(head, dict):

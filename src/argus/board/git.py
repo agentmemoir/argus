@@ -15,7 +15,8 @@ from argus.board.core import GIT_TIMEOUT_S, CoordinationUnavailable
 
 def git_binary() -> str:
     """The git command named in the loaded config."""
-    return conventions.setting("commands.git")
+    binary: str = conventions.setting("commands.git")
+    return binary
 
 
 def isolate_self_test_git() -> None:

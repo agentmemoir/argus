@@ -36,7 +36,7 @@ fmt:
 fmt-check:
 	$(RUN) ruff format --check .
 
-# Type checking at mypy's default level (see pyproject.toml). CI runs it.
+# Type checking in mypy strict mode (see pyproject.toml). CI runs it.
 typecheck:
 	$(RUN) mypy src/argus
 

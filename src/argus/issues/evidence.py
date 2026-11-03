@@ -26,9 +26,10 @@ def left_out(root: str | Path, number: int, record: dict[str, Any] | None) -> bo
 
 
 def pending(record: dict[str, Any] | None) -> bool:
-    return (record or {}).get("completion_receipt", {}).get(
-        "state_reason"
-    ) == "writeback_pending"
+    return bool(
+        (record or {}).get("completion_receipt", {}).get("state_reason")
+        == "writeback_pending"
+    )
 
 
 class Evidence:

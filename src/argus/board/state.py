@@ -75,10 +75,10 @@ def _validate_state(state: Any, *, issues: bool = False) -> dict[str, Any]:
     phases = state.get("phases")
     if not isinstance(phases, dict):
         raise CoordinationUnavailable("coordination state.phases is not an object")
-    phases = cast("dict[Any, Any]", phases)
+    phases_map = cast("dict[object, object]", phases)
     pattern = ISSUE_KEY_RE if issues else PHASE_KEY_RE
     kind = "issue" if issues else "phase"
-    for key, record in phases.items():
+    for key, record in phases_map.items():
         if not isinstance(key, str) or not pattern.fullmatch(key):
             raise CoordinationUnavailable(f"invalid {kind} key in state: {key!r}")
         if issues:
@@ -138,7 +138,7 @@ def _validate_state(state: Any, *, issues: bool = False) -> dict[str, Any]:
         _validate_reservation_id(publication["reservation_id"])
         _phase_key(publication["phase"])
         _validate_generation(publication["generation"])
-    return state
+    return cast("dict[str, Any]", state)
 
 
 def _read_state_file(

@@ -107,7 +107,7 @@ def _stale_publication_lock_check(
     )
 
     def take(**clock: Any) -> dict[str, Any]:
-        return store.takeover(
+        result: dict[str, Any] = store.takeover(
             target["phase"],
             "server-02",
             confirm=True,
@@ -115,6 +115,7 @@ def _stale_publication_lock_check(
             expected_generation=target["generation"],
             **clock,
         )
+        return result
 
     try:
         take()
