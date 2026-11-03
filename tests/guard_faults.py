@@ -74,7 +74,12 @@ from functools import partial
 from pathlib import Path
 from typing import Any
 
-from argus.exec_tempdir import make_exec_dir
+from argus.exec_tempdir import (
+    can_execute,
+    candidate_bases,
+    make_exec_dir,
+    refuses_execution,
+)
 from faults import FAULTS
 from guard_faults_engine import DRIVER, RestoreError, check_fault
 
@@ -111,6 +116,25 @@ def print_slowest(timings: list[tuple[float, str]]) -> None:
         print(f"fault time:   {seconds:7.1f} s  {name}")
 
 
+def candidate_states() -> list[str]:
+    """Name each scratch candidate and what this host did with a file in it.
+
+    Used only when make_exec_dir found no directory, so the NOT RUN outcome can say
+    why. A candidate that refuses execution is refused; one that cannot be probed,
+    including one that does not exist, is unprobed.
+    """
+    states: list[str] = []
+    for base in candidate_bases():
+        if can_execute(base):
+            state = "runs"
+        elif refuses_execution(base):
+            state = "refused"
+        else:
+            state = "unprobed"
+        states.append(f"{base}: {state}")
+    return states
+
+
 def run_in_copy(repo: Path, fault: dict[str, Any]) -> Outcome:
     """Run one fault in its own copy of the repository, then discard the copy.
 
@@ -121,10 +145,11 @@ def run_in_copy(repo: Path, fault: dict[str, Any]) -> Outcome:
     name = str(fault["name"])
     scratch = make_exec_dir()
     if not scratch:
+        states = "; ".join(candidate_states())
         return Outcome(
             name,
             None,
-            "no executable temporary directory on this host",
+            f"no executable temporary directory on this host: {states}",
             0.0,
             "NOT RUN",
         )

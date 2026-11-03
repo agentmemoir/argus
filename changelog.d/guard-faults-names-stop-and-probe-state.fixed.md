@@ -1,0 +1,1 @@
+The guard-faults self-test now prints its exit status on the stop line when a run stops before its verdict. When no executable temporary directory is found, the guard-faults harness names each candidate and the state its probe reported. ([#312](https://github.com/agentmemoir/argus/issues/312))
