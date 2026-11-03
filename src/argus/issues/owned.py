@@ -47,6 +47,7 @@ def tick_pull_requests(
         records,
         open_pulls,
         evidence.pull_history(),
+        machine,
     )
     record_pull_requests(store, machine, records, open_pulls)
     release_merged(
