@@ -8,7 +8,7 @@ import os
 import shutil
 import subprocess
 import tempfile
-from collections.abc import Iterator
+from collections.abc import Generator
 from pathlib import Path
 from typing import Any
 
@@ -36,7 +36,7 @@ def _leftover_checkouts() -> list[Path]:
 
 
 @contextlib.contextmanager
-def _own_temp_root(root: Path) -> Iterator[None]:
+def _own_temp_root(root: Path) -> Generator[None]:
     """Point the default temporary folder at ``root`` until the block ends."""
     root.mkdir()
     saved = tempfile.tempdir

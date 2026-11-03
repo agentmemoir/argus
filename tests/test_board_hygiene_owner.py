@@ -12,6 +12,7 @@ import pytest
 from argus import conventions
 from argus.board import selftest_hygiene
 from argus.board.core import SELF_TEST_BRANCH, WORKTREE_PREFIX
+from argus.board.selftest_fixture import _git_test_repo as real_git_test_repo
 
 NO_LEFTOVER = "a failed board commit leaves no checkout"
 
@@ -37,13 +38,12 @@ def _act_once_during_check(
     monkeypatch: pytest.MonkeyPatch, action: Callable[[], None]
 ) -> None:
     """Run ``action`` once, after the check takes its first temp-root snapshot."""
-    real_repo = selftest_hygiene._git_test_repo
     pending = [action]
 
     def repo_after_action(*args: Any, **kwargs: Any) -> Any:
         if pending:
             pending.pop()()
-        return real_repo(*args, **kwargs)
+        return real_git_test_repo(*args, **kwargs)
 
     monkeypatch.setattr(selftest_hygiene, "_git_test_repo", repo_after_action)
 
