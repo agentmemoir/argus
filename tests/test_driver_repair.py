@@ -245,6 +245,44 @@ repair_worktree_remove "$wt"
     assert out.split() == ["kept"]
 
 
+def test_a_round_that_ran_no_agent_saves_no_backup(tmp_path: Path) -> None:
+    # The base merge left an uncommitted file. No agent ran, so no backup and no
+    # "work is saved" notice may be made for it.
+    _checkout(tmp_path, "/state\n")
+    out = shell(
+        tmp_path,
+        WORKTREE
+        + """
+notify() { echo "NOTIFY $*"; }
+repair_worktree_add 7 feature/fixture
+wt="$RUN_DIR/repair-worktree-7"
+echo merged >"$wt/merged.txt"
+git -C "$wt" add merged.txt
+repair_worktree_remove "$wt" none
+[ -z "$(git -C "$REPO" for-each-ref refs/argus/repair-backup)" ] && echo none
+""",
+    )
+    assert out.split() == ["none"]
+
+
+def test_a_round_that_ran_an_agent_keeps_its_edits(tmp_path: Path) -> None:
+    _checkout(tmp_path, "/state\n")
+    out = shell(
+        tmp_path,
+        WORKTREE
+        + """
+notify() { echo "NOTIFY $*"; }
+repair_worktree_add 7 feature/fixture
+wt="$RUN_DIR/repair-worktree-7"
+echo edit >"$wt/edit.txt"
+repair_worktree_remove "$wt"
+[ -n "$(git -C "$REPO" for-each-ref refs/argus/repair-backup)" ] && echo kept
+""",
+    )
+    assert out.split()[-1] == "kept"
+    assert out.split()[0] == "NOTIFY"
+
+
 def test_check_names_a_missing_repair_pipeline_and_does_not_fail(
     tmp_path: Path,
 ) -> None:
