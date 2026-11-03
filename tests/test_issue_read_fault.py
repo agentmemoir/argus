@@ -7,10 +7,10 @@ from typing import Any
 
 import pytest
 
-from argus.gitsync import issue_read_fault, repair_cli
+from argus.gitsync import repair_cli
 from argus.issues import evidence
 
-WAIT = issue_read_fault.WAIT_S
+WAIT = 10 * 60  # the spacing that PHILOSOPHY.md section 3 names: 10 minutes
 FAIL = (None, "gh ran the list and failed (gh exited 1)")
 OK: tuple[list[dict[str, Any]], str] = ([], "")
 
@@ -81,6 +81,8 @@ def test_a_success_clears_the_count_and_the_exclusion(listing: dict[str, Any]) -
     unread, _ = _tick(listing, 3 * WAIT)
     assert unread == []
     assert not evidence.left_out(listing["root"], 7, None)
+    from argus.gitsync import issue_read_fault
+
     assert not issue_read_fault.record_path(listing["root"], 7).exists()
     listing["gh"] = FAIL
     unread, notices = _tick(listing, 4 * WAIT)
