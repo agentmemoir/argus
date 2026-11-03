@@ -308,7 +308,7 @@ base_sync_repair() {  # <key> <worktree> <branch>
 }
 
 run_repair_session() {
-  local key="$1" task="$2" branch="$3" wt saves rc=0
+  local key="$1" task="$2" branch="$3" wt saves start head rc=0
   wt="$(repair_worktree "$key")"
   trap 'rm -f "$PIDFILE"; exit 130' HUP INT TERM
   printf '%s\n' "$$" >"$PIDFILE"
@@ -318,6 +318,7 @@ run_repair_session() {
   else
     # The start of the round, before the agent launches (belief 10): the branch is
     # brought up to its base first, so the agent never starts on a stale branch.
+    start="$("$CMD_GIT" -C "$wt" rev-parse HEAD 2>/dev/null)"
     base_sync_repair "$key" "$wt" "$branch"
     if [ "$BASE_SYNC_STATE" = failed ]; then
       log "repair $key: the base check failed, so this round ran no agent"
@@ -325,10 +326,16 @@ run_repair_session() {
       # The pipeline's hooks read the configuration file this driver loaded.
       ARGUS_CONFIG_FILE="$ARGUS_CONFIG_FILE" "$CMD_GLIDE" run --pipeline "$REPAIR_PIPELINE" \
         --input "repair_id=$key" --input "repair_task=$BASE_SYNC_NOTE$task" || rc=$?
+      head="$("$CMD_GIT" -C "$wt" rev-parse HEAD 2>/dev/null)"
       if [ "$rc" -ne 0 ]; then
         log "repair $key: the run ended with rc=$rc and pushed nothing"
-      elif repair_pushed "$wt" "$("$CMD_GIT" -C "$wt" rev-parse HEAD 2>/dev/null)"; then
-        log "repair $key: the run made no commit; nothing pushed to $branch"
+      elif repair_pushed "$wt" "$head"; then
+        # The remote has HEAD. A HEAD that moved during the round was committed and pushed by it.
+        if [ "$head" = "$start" ]; then
+          log "repair $key: the run made no commit; nothing pushed to $branch"
+        else
+          log "repair $key: the round pushed its commit ${head:0:7} to $branch; the next tick reads the new checks"
+        fi
       elif "$CMD_GIT" -C "$wt" push --quiet origin "HEAD:refs/heads/$branch" >/dev/null 2>&1; then
         log "repair $key: pushed to $branch; the next tick reads the new checks"
       else
