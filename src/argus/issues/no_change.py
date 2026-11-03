@@ -8,7 +8,7 @@ import socket
 import sys
 import time
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 from argus import conventions
 from argus.board.core import EXPIRED_STATUS, CoordinationError
@@ -106,6 +106,15 @@ def _clear(attempts: Path) -> None:
         print(f"close count not cleared: {exc}", file=sys.stderr)
 
 
+def _read_count(path: Path) -> dict[str, Any] | None:
+    """The attempt record, or None when it cannot be read or holds no attempt list."""
+    try:
+        record = load_record(path)
+    except (OSError, ValueError):
+        return None
+    return record if isinstance(record.get("attempts"), list) else None
+
+
 def spent(root: Path, number: int) -> list[dict[str, str]]:
     """The Needs You line that stops selection for a claim with no attempts left.
 
@@ -114,14 +123,12 @@ def spent(root: Path, number: int) -> list[dict[str, str]]:
     marker in the run folder keeps it to one send. Empty while the close may still try.
     """
     run = reservation_file(root, number, kind="issue").parent
-    try:
-        record = load_record(run / ATTEMPTS_FILE)
-    except (OSError, ValueError):
+    record = _read_count(run / ATTEMPTS_FILE)
+    if record is None:
         text = _give_up(number, "the attempt record is unreadable")
+    elif len(record["attempts"]) < ATTEMPT_LIMIT:
+        return []
     else:
-        raw: object = record.get("attempts", [])
-        if not isinstance(raw, list) or len(cast("list[object]", raw)) < ATTEMPT_LIMIT:
-            return []
         text = _give_up(number, str(record.get("cause", "unknown")))
     return [{"key": f"completed-{number}", "text": text}]
 
@@ -141,9 +148,8 @@ def close_no_change(
     if (run_dir / CLOSED_FILE).exists():
         return CLOSED
     attempts = run_dir / ATTEMPTS_FILE
-    try:
-        record = load_record(attempts)
-    except (OSError, ValueError):
+    record = _read_count(attempts)
+    if record is None:
         # A lost count must not look like zero attempts.
         return _give_up(number, "the attempt record is unreadable")
     if len(record["attempts"]) >= ATTEMPT_LIMIT:

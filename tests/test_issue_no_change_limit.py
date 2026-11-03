@@ -97,3 +97,14 @@ def test_an_invalid_count_file_does_not_stop_the_tick(case: Case) -> None:
     assert "the attempt record is unreadable" in case.notes()[0]
     assert case.tick() == ""
     assert len(case.notes()) == 1
+
+
+def test_a_count_without_an_attempt_list_counts_as_spent(case: Case) -> None:
+    # Given a count whose attempts field is not a list, when a tick runs, then the claim
+    # counts as spent, the later free issue is reserved, and one notice names the record.
+    count = case.run_folder() / ATTEMPTS_FILE
+    count.write_text('{"attempts": 5}\n', encoding="utf-8")
+    assert case.tick() == str(NEXT)
+    assert case.closes() == []
+    assert len(case.notes()) == 1
+    assert "the attempt record is unreadable" in case.notes()[0]
