@@ -2,8 +2,10 @@
 # SPDX-License-Identifier: Apache-2.0
 """Completion from issue dependencies, Argus pull requests, and board records."""
 
+from pathlib import Path
 from typing import Any
 
+from argus.gitsync import issue_read_fault
 from argus.issues.client import IssueClient
 from argus.issues.pulls import history
 
@@ -13,6 +15,13 @@ def escalated(record: dict[str, Any] | None) -> bool:
     return (
         receipt.get("state_reason") == "remedy_escalated"
         and receipt.get("cleared") is not True
+    )
+
+
+def left_out(root: str | Path, number: int, record: dict[str, Any] | None) -> bool:
+    """Whether selection skips the issue: escalated, or its attempts are spent."""
+    return escalated(record) or issue_read_fault.excluded(
+        issue_read_fault.record_path(root, number)
     )
 
 
