@@ -1,0 +1,1 @@
+The issue leftover sweep no longer stops when one run folder has a stale task snapshot. It skips that folder, names it and the reason in its result and in the driver log, leaves its files as they are, and lands the leftover run state of the other issues. ([#313](https://github.com/agentmemoir/argus/issues/313))

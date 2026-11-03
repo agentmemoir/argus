@@ -10,6 +10,7 @@ from typing import Any
 from argus import conventions
 from argus.board.files import reservation_file
 from argus.gitsync.git import (
+    ConfigError,
     degraded,
     dirty_paths,
     git,
@@ -96,6 +97,7 @@ def mode_issue_clean(
     root = Path(root).resolve()
     private, _tasks = private_layout(root)
     numbers = [issue_number(number)] if number is not None else []
+    skipped: list[dict[str, Any]] = []
     if number is None:
         dirty = dirty_paths(private)
         for run in sorted(conventions.runs_dir(root).glob("issue-*")):
@@ -107,14 +109,35 @@ def mode_issue_clean(
             # claimed run; skip it so one leftover never stops the whole sweep.
             if not reservation_file(root, candidate, kind="issue").is_file():
                 continue
-            _private, scopes = issue_scope(root, candidate)
+            # A folder whose snapshot no longer matches is named and skipped, and
+            # its files stay as they are, so one stale folder never stops the sweep.
+            try:
+                _private, scopes = issue_scope(root, candidate)
+            except ConfigError as exc:
+                skipped.append(
+                    {
+                        "issue": candidate,
+                        "folder": run.name,
+                        "state": "CONFIG_ERROR",
+                        "error": str(exc),
+                    }
+                )
+                continue
             if any(inside_scope(path, scopes) for path in dirty):
                 numbers.append(candidate)
     results = [commit_issue_state(root, candidate) for candidate in numbers]
-    return {
+    out: dict[str, Any] = {
         "ok": all(r["ok"] for r in results),
         "mode": "clean",
         "kind": "issue",
         "repos": results,
         "summary": summarize(results, "clean"),
     }
+    if skipped:
+        out["skipped"] = skipped
+        out["state"] = "PARTIAL"
+        out["summary"] = (
+            f"{out['summary']}; {len(skipped)} issue folder(s) skipped: "
+            + ", ".join(f"{one['folder']}: {one['error']}" for one in skipped)
+        )
+    return out

@@ -60,7 +60,9 @@ SKIPPED = [
 ]
 
 
-def _run(tmp_path: Path, output: str, rc: int = 0) -> tuple[str, list[str]]:
+def _run(
+    tmp_path: Path, output: str, rc: int = 0, work_kind: str = ""
+) -> tuple[str, list[str]]:
     env = {
         "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
         "DRIVER": str(DRIVER),
@@ -69,6 +71,8 @@ def _run(tmp_path: Path, output: str, rc: int = 0) -> tuple[str, list[str]]:
         "GITSYNC_OUT": output,
         "GITSYNC_RC": str(rc),
     }
+    if work_kind:
+        env["work_kind"] = work_kind
     done = subprocess.run(
         ["bash", "-c", PRELUDE + BODY],
         cwd=tmp_path,
@@ -193,3 +197,41 @@ def test_control_characters_are_removed_and_the_reason_is_capped(
     # against over 5000 for the uncapped reason.
     assert "[+4521 bytes truncated]" in skip_lines[0]
     assert len(skip_lines[0]) <= 620
+
+
+def test_issue_sweep_names_the_skipped_folder_and_its_reason(tmp_path: Path) -> None:
+    folder = "issue-001234567"
+    reason = "current issue has no valid frozen task snapshot"
+    payload = {
+        "ok": True,
+        "mode": "clean",
+        "state": "PARTIAL",
+        "skipped": [
+            {
+                "issue": 1234567,
+                "folder": folder,
+                "state": "CONFIG_ERROR",
+                "error": reason,
+            }
+        ],
+    }
+    stdout, lines = _run(tmp_path, json.dumps(payload), work_kind="issue")
+    assert "land_rc=0" in stdout
+    assert any(
+        line.endswith(
+            f"leftover run state skipped issue {folder} (CONFIG_ERROR): {reason}"
+        )
+        for line in lines
+    )
+
+
+def test_failed_sweep_log_line_holds_the_sweep_reason(tmp_path: Path) -> None:
+    reason = "private issue state must stay on the integration branch"
+    payload = {"ok": False, "mode": "clean", "state": "CONFIG_ERROR", "error": reason}
+    stdout, lines = _run(tmp_path, json.dumps(payload), rc=2)
+    assert "land_rc=0" in stdout
+    assert any(
+        "could not land leftover run state before launch (rc=2; reason: "
+        f"{reason}; see " in line
+        for line in lines
+    )

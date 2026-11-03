@@ -214,13 +214,38 @@ gitsync_clean() {
 # closes that gap before the launch without carrying another phase's partial
 # records into this phase's commit. A failure is logged and never halts: the
 # publish that would have refused reports it instead.
+# The reason a failed leftover sweep gives: its top-level error, or else the first
+# repository's blocker. Prints nothing when the result file gives neither.
+sweep_failure_reason() {
+  "$PYTHON" -c 'import json,sys
+try:
+    with open(sys.argv[1], encoding="utf-8") as handle:
+        data = json.load(handle)
+except (OSError, ValueError):
+    data = None
+reason = ""
+if isinstance(data, dict):
+    if isinstance(data.get("error"), str):
+        reason = data["error"]
+    for one in data.get("repos") or []:
+        if not reason and isinstance(one, dict) and one.get("ok") is False:
+            blockers = one.get("blockers") or []
+            reason = str(blockers[-1]) if blockers else ""
+text = "".join(ch if ch.isprintable() else " " for ch in reason)
+print(" ".join(text.split()))' "$1" 2>/dev/null || true
+}
+
 gitsync_land_leftovers() {
-  local rc=0 warning=""
+  local rc=0 warning="" reason=""
   "$PYTHON" "$ARGUS/gitsync/main.py" "${ARGUS_CONFIG_ARGS[@]}" --root "$REPO" --mode clean \
     "${GITSYNC_KIND_ARGS[@]+"${GITSYNC_KIND_ARGS[@]}"}" \
     >"$RUN_DIR/run-state-leftovers.json" 2>/dev/null || rc=$?
   if [ "$rc" -ne 0 ]; then
-    log "could not land leftover run state before launch (rc=$rc; see $RUN_DIR/run-state-leftovers.json)"
+    reason="$(cap_length "$(sweep_failure_reason "$RUN_DIR/run-state-leftovers.json")" 500)"
+    if [ -n "$reason" ]; then
+      reason="; reason: $reason"
+    fi
+    log "could not land leftover run state before launch (rc=$rc$reason; see $RUN_DIR/run-state-leftovers.json)"
   else
     warning="$(run_state_warning "$RUN_DIR/run-state-leftovers.json")"
     if [ -n "$warning" ]; then
@@ -255,7 +280,7 @@ if not unreadable:
                 unreadable = True
                 continue
             print("skip", index,
-                  clean(one.get("phase", "")) or "unknown",
+                  clean(one.get("phase") or one.get("folder") or "") or "unknown",
                   clean(one.get("state", "")) or "unknown",
                   clean(one.get("error", "")), sep="\t")
 if unreadable:
@@ -263,7 +288,7 @@ if unreadable:
     "$RUN_DIR/run-state-leftovers.json" 2>/dev/null |
     while IFS=$'\t' read -r kind index phase state reason; do
       case "$kind" in
-        skip) log_changed "leftovers-skipped-$index" "leftover run state skipped phase $phase ($state): $(cap_length "$(flatten_one_line "$reason")" 500)" ;;
+        skip) log_changed "leftovers-skipped-$index" "leftover run state skipped ${work_kind:-phase} $phase ($state): $(cap_length "$(flatten_one_line "$reason")" 500)" ;;
         unreadable) log_changed "leftovers-unreadable" "could not read the clean sweep result at $RUN_DIR/run-state-leftovers.json; skipped phases are unknown" ;;
       esac
     done || true
