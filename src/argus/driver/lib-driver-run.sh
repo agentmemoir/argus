@@ -254,7 +254,13 @@ gitsync_land_leftovers() {
   fi
   # A whole-tree sweep lands some phases and skips others and still exits 0,
   # so the exit code cannot carry a skip. Say each one; never change the rc.
-  "$PYTHON" -c 'import json,sys
+  local seen=" " kind index phase state reason
+  while IFS=$'\t' read -r kind index phase state reason; do
+    case "$kind" in
+      skip) seen="$seen$index "; log_changed "leftovers-skipped-$index" "leftover run state skipped ${work_kind:-phase} $phase ($state): $(cap_length "$(flatten_one_line "$reason")" 500)" ;;
+      unreadable) log_changed "leftovers-unreadable" "could not read the clean sweep result at $RUN_DIR/run-state-leftovers.json; skipped phases are unknown" ;;
+    esac
+  done < <("$PYTHON" -c 'import json,sys
 
 
 def clean(value):
@@ -285,13 +291,15 @@ if not unreadable:
                   clean(one.get("error", "")), sep="\t")
 if unreadable:
     print("unreadable")' \
-    "$RUN_DIR/run-state-leftovers.json" 2>/dev/null |
-    while IFS=$'\t' read -r kind index phase state reason; do
-      case "$kind" in
-        skip) log_changed "leftovers-skipped-$index" "leftover run state skipped ${work_kind:-phase} $phase ($state): $(cap_length "$(flatten_one_line "$reason")" 500)" ;;
-        unreadable) log_changed "leftovers-unreadable" "could not read the clean sweep result at $RUN_DIR/run-state-leftovers.json; skipped phases are unknown" ;;
-      esac
-    done || true
+    "$RUN_DIR/run-state-leftovers.json" 2>/dev/null) || true
+  # A skip this sweep no longer lists is forgotten, so an identical skip that
+  # returns after a clean tick is logged again.
+  local remembered keep
+  for remembered in "$RUN_DIR"/log-last-leftovers-skipped-*; do
+    [ -e "$remembered" ] || continue
+    keep="${remembered##*-}"
+    case "$seen" in *" $keep "*) ;; *) rm -f "$remembered" ;; esac
+  done
   return 0
 }
 

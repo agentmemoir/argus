@@ -235,3 +235,23 @@ def test_failed_sweep_log_line_holds_the_sweep_reason(tmp_path: Path) -> None:
         f"{reason}; see " in line
         for line in lines
     )
+
+
+def test_a_skip_that_clears_is_logged_again_when_it_returns(tmp_path: Path) -> None:
+    skip = {"ok": True, "mode": "clean", "state": "PARTIAL", "skipped": SKIPPED[:1]}
+    clean = {
+        "ok": True,
+        "mode": "clean",
+        "repos": [],
+        "pathspec": "runs",
+        "summary": "clean sync ok: no leftover run state",
+    }
+    entry = SKIPPED[0]
+    message = (
+        f"leftover run state skipped phase {entry['phase']} "
+        f"({entry['state']}): {entry['error']}"
+    )
+    _run(tmp_path, json.dumps(skip))
+    _run(tmp_path, json.dumps(clean))
+    _stdout, lines = _run(tmp_path, json.dumps(skip))
+    assert sum(line.endswith(message) for line in lines) == 2
