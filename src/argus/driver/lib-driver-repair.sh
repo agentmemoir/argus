@@ -133,10 +133,30 @@ repair_refuse() {  # <key> <head> <reason>
   printf '%s\n%s\n%s\n' "$2" "$(date +%s)" "$reason" >"$RUN_DIR/repair-$1.refused"
 }
 
-# A checksum of a run marker, or "none" when there is none. glide writes its marker
-# before any stage runs, so a marker that changed during a launch shows that a run began.
-repair_marker_sum() {  # <run marker>
-  if [ -f "$1" ]; then cksum <"$1"; else echo none; fi
+# The run folder's snapshot before a glide launch. A refused launch is proven only when
+# the folder shows that glide's startup failed before any stage (repair_refusal.py).
+repair_snapshot() {  # <run folder> <snapshot file>
+  "$PYTHON" - "$ARGUS" "$1" "$2" <<'PY'
+import sys
+from pathlib import Path
+sys.path.insert(0, sys.argv[1])
+import _bootstrap
+from argus.gitsync import repair_refusal
+repair_refusal.save_snapshot(Path(sys.argv[2]), Path(sys.argv[3]))
+PY
+}
+
+# Exit 0 only when the run folder proves no stage started. Any other result, including
+# an error, leaves the launch counted as a round.
+repair_proven_refusal() {  # <run folder> <snapshot file>
+  "$PYTHON" - "$ARGUS" "$1" "$2" <<'PY'
+import sys
+from pathlib import Path
+sys.path.insert(0, sys.argv[1])
+import _bootstrap
+from argus.gitsync import repair_refusal
+sys.exit(0 if repair_refusal.refused_by_proof(Path(sys.argv[2]), Path(sys.argv[3])) else 1)
+PY
 }
 
 repair_launch() {
@@ -327,7 +347,7 @@ base_sync_repair() {  # <key> <worktree> <branch>
 
 run_repair_session() {
   local key="$1" task="$2" branch="$3" wt saves start rc=0 prior_state fresh_args=() head base_line
-  local marker marker_before marker_after after
+  local folder before_file after
   wt="$(repair_worktree "$key")"
   # The head the launch was made on: the branch as the launch fetched it.
   head="$("$CMD_GIT" -C "$REPO" rev-parse -q --verify "refs/remotes/origin/$branch" 2>/dev/null || true)"
@@ -353,19 +373,19 @@ run_repair_session() {
         fresh_args=(--fresh)
         log "repair $key run is terminal ($prior_state); restarting it with --fresh"
       fi
-      marker="$RUN_DIR/repair-$key/run.json"
-      marker_before="$(repair_marker_sum "$marker")"
+      folder="$RUN_DIR/repair-$key"
+      before_file="$RUN_DIR/repair-$key.before.json"
+      repair_snapshot "$folder" "$before_file" >/dev/null 2>&1 || true
       # The pipeline's hooks read the configuration file this driver loaded.
       ARGUS_CONFIG_FILE="$ARGUS_CONFIG_FILE" "$CMD_GLIDE" run --pipeline "$REPAIR_PIPELINE" \
         "${fresh_args[@]+"${fresh_args[@]}"}" \
         --input "repair_id=$key" --input "repair_task=$BASE_SYNC_NOTE$task" || rc=$?
-      marker_after="$(repair_marker_sum "$marker")"
       after="$("$CMD_GIT" -C "$wt" rev-parse HEAD 2>/dev/null)"
-      if [ "$rc" -ne 0 ] && { [ "$marker_after" = none ] || [ "$marker_after" = "$marker_before" ]; }; then
-        # glide failed before it wrote a run marker, so no run began and no agent ran.
-        repair_refuse "$key" "$head" "glide exited with rc=$rc before it wrote a run marker"
+      if [ "$rc" -ne 0 ] && repair_proven_refusal "$folder" "$before_file"; then
+        # glide's startup failed and the run folder shows no stage started: no agent ran.
+        repair_refuse "$key" "$head" "glide refused its startup with rc=$rc before any stage"
       elif [ "$rc" -ne 0 ]; then
-        log "repair $key: the run ended with rc=$rc and pushed nothing"
+        log "repair $key: the run ended with rc=$rc; the round is counted and this round pushes nothing"
       elif repair_pushed "$wt" "$after"; then
         # The remote has HEAD. A HEAD that moved during the round was committed and pushed by it.
         if [ "$after" = "$start" ]; then

@@ -195,7 +195,7 @@ def escalation_text(
 ) -> str:
     """The Needs You line: the rounds that ran, the launches refused, one cause
     and one action. ``reason`` is the last refusal's reason, when one was recorded."""
-    tally = f"{rounds} repair round(s) ran and {refused} launch(es) refused"
+    tally = f"{rounds} repair round(s) counted and {refused} launch(es) refused"
     if conflict:
         cause = f"{pull_request} still conflicts with its base after {tally}."
         check = "resolve the conflict on the branch, or close the pull request."

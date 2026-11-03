@@ -103,7 +103,7 @@ def test_log_backticks_cannot_close_the_task_fence() -> None:
 def test_escalation_has_one_cause_and_one_action() -> None:
     line = escalation_text("#7", 3, 0, failing_checks(RED))
     assert line == (
-        "Needs You. #7 is still red after 3 repair round(s) ran and 0 launch(es) "
+        "Needs You. #7 is still red after 3 repair round(s) counted and 0 launch(es) "
         "refused: lint failed. "
         "Action: fix the failing check on the branch, or close the pull request."
     )
@@ -114,7 +114,7 @@ def test_escalation_names_the_counts_and_the_last_refusal() -> None:
         "#7", 0, 2, failing_checks(RED), reason="the base check failed: x"
     )
     assert line == (
-        "Needs You. #7 is still red after 0 repair round(s) ran and 2 launch(es) "
+        "Needs You. #7 is still red after 0 repair round(s) counted and 2 launch(es) "
         "refused: lint failed. The last refusal: the base check failed: x. "
         "Action: fix the cause named above, push the branch, or close the pull request."
     )
@@ -189,7 +189,7 @@ def test_a_conflict_task_names_its_cause() -> None:
 
 def test_a_conflict_escalation_names_its_cause() -> None:
     assert escalation_text("#7", 3, 0, [], conflict=True) == (
-        "Needs You. #7 still conflicts with its base after 3 repair round(s) ran and "
+        "Needs You. #7 still conflicts with its base after 3 repair round(s) counted and "
         "0 launch(es) refused. "
         "Action: resolve the conflict on the branch, or close the pull request."
     )

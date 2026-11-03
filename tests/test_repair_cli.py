@@ -121,7 +121,7 @@ def test_a_refused_launch_spends_no_round_and_is_named_when_refusals_run_out(
     )
     assert out["action"] == "escalate"
     assert out["message"] == (
-        f"Needs You. {PR} is still red after 0 repair round(s) ran and 3 launch(es) "
+        f"Needs You. {PR} is still red after 0 repair round(s) counted and 3 launch(es) "
         "refused: lint failed. "
         f"The last refusal: the base check failed: {cause}. "
         "Action: fix the cause named above, push the branch, or close the pull request."
