@@ -1,0 +1,1 @@
+- The coordination self-test's checkout check now counts and removes only the checkouts it made, so a checkout held by another run in the same temporary folder is no longer deleted.

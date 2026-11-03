@@ -2,11 +2,13 @@
 # SPDX-License-Identifier: Apache-2.0
 """Self-test checks for coordination checkout hygiene."""
 
+import contextlib
 import datetime as _datetime
 import os
 import shutil
 import subprocess
 import tempfile
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
@@ -31,6 +33,18 @@ def _worktree_entries(private: Path) -> str:
 
 def _leftover_checkouts() -> list[Path]:
     return sorted(Path(tempfile.gettempdir()).glob(f"{WORKTREE_PREFIX}*"))
+
+
+@contextlib.contextmanager
+def _own_temp_root(root: Path) -> Iterator[None]:
+    """Point the default temporary folder at ``root`` until the block ends."""
+    root.mkdir()
+    saved = tempfile.tempdir
+    tempfile.tempdir = str(root)
+    try:
+        yield
+    finally:
+        tempfile.tempdir = saved
 
 
 def drop_checkouts_under(path: str | Path) -> int:
@@ -71,6 +85,14 @@ def _checkout_hygiene_checks(checks: list[dict[str, Any]], base: Path) -> None:
     # directory a `noexec` mount would refuse to run it from.
     sandbox = base / "checkout-hygiene"
     sandbox.mkdir()
+    # The check counts and removes the checkouts it finds in the default temporary
+    # folder, so that folder must hold only this run's checkouts. A live driver on
+    # the same host keeps its own checkouts there, so this check gets its own folder.
+    with _own_temp_root(sandbox / "tmp"):
+        _run_hygiene_checks(checks, sandbox)
+
+
+def _run_hygiene_checks(checks: list[dict[str, Any]], sandbox: Path) -> None:
     try:
         before = set(_leftover_checkouts())
 
