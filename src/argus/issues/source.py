@@ -20,6 +20,7 @@ from argus.issues.completed_run import finished_unchecked
 from argus.issues.evidence import Evidence, escalated, left_out, signals
 from argus.issues.filter import eligible, label_claimed
 from argus.issues.leftover import release_closed
+from argus.issues.no_change import spent
 from argus.issues.order import PREFERENCES, ordering
 from argus.issues.owned import fresh_start, tick_pull_requests
 from argus.issues.report import _Reports, skip_counts
@@ -204,9 +205,11 @@ class IssuesSource(_Reports, WorkSource):
                         # resume through its own windows.
                         self.skipped["failed"] += 1
                         continue
-                    if finished_unchecked(self.repo, number):
-                        # The run finished with no checked close. Selection moves on,
-                        # and the tick raises the one Needs You line for this claim.
+                    stop = spent(self.repo, number)
+                    if finished_unchecked(self.repo, number) or stop:
+                        # The run finished with no checked close, or its close has no
+                        # attempts left. Selection moves on, and no claim is released.
+                        self.notices += stop
                         self.skipped["claimed"] += 1
                         continue
                     frozen = claims.snapshot(self.repo, number, record)
