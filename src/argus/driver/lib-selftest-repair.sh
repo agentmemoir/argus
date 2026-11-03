@@ -61,23 +61,23 @@ PY
   PENDING_PUBLISHED=0
   repair_tick "$pending"
   if [ "$(selftest_repair_count)" = 1 ] && [ "$PENDING_PUBLISHED" = 0 ] && [ ! -e "$wt" ] \
-      && grep -q 'failed to launch' "$notes"; then
-    echo "ok: repair: a failed launch uses one attempt, is named, and leaves no worktree"
+      && [ -f "$RUN_DIR/repair-77.refused" ] && [ ! -s "$notes" ]; then
+    echo "ok: repair: a refused launch leaves a refusal for the next tick, sends no notice, and leaves no worktree"
   else
-    echo "FAIL: repair: a failed launch was not counted once, left a worktree, or sent no notice (count $(selftest_repair_count))"; bad=1
+    echo "FAIL: repair: a refused launch left a worktree, sent a notice, or left no refusal (count $(selftest_repair_count))"; bad=1
   fi
   : >"$notes"
 
   tmux_phase_window_open() { return 0; }
   PENDING_PUBLISHED=0
   repair_tick "$pending"
-  if [ "$(selftest_repair_count)" = 2 ] && [ "$PENDING_PUBLISHED" = 1 ] \
+  if [ "$(selftest_repair_count)" = 1 ] && [ "$PENDING_PUBLISHED" = 1 ] && [ ! -f "$RUN_DIR/repair-77.refused" ] \
       && [ "$(git -C "$wt" rev-parse HEAD 2>/dev/null)" = "$(git -C "$REPO" rev-parse "origin/$branch")" ] \
       && ! git -C "$wt" symbolic-ref -q HEAD >/dev/null \
       && [ "$(git -C "$REPO" symbolic-ref -q HEAD || echo detached)" = "$main_branch" ]; then
-    echo "ok: repair: a red pull request starts one counted round in a detached worktree"
+    echo "ok: repair: the refused launch is taken back, and a red pull request starts one counted round in a detached worktree"
   else
-    echo "FAIL: repair: the round was not counted after the failed launch, or its worktree is wrong (count $(selftest_repair_count), started $PENDING_PUBLISHED)"; cat "$notes"; bad=1
+    echo "FAIL: repair: the refused launch was not taken back, or the round was not counted once (count $(selftest_repair_count), started $PENDING_PUBLISHED)"; cat "$notes"; bad=1
   fi
 
   repair_tick "$pending"
@@ -91,6 +91,7 @@ PY
   selftest_repair_issue_pr || bad=1
   selftest_repair_backup || bad=1
   selftest_repair_fresh_round || bad=1
+  selftest_repair_refused_budget || bad=1
 
   git -C "$REPO" push -q origin --delete "$branch" || true
   rm -f "$stub" "$cfg" "$notes" "$REPAIR_PIPELINE" "$RUN_DIR"/repair-77.*
@@ -199,5 +200,40 @@ SH
   git -C "$REPO" push -q origin --delete "$branch" || true
   rm -rf "$RUN_DIR/repair-80" "$RUN_DIR"/repair-80.prev-* "$agent"
   rm -f "$glide" "$RUN_DIR/repair-pid"
+  return "$bad"
+}
+
+# Launches the session refuses, because the base check fails before any agent runs.
+# Neither refused launch spends a round. The third tick sends one Needs You that gives
+# both counts and the reason, and the next tick sends nothing more for this head.
+selftest_repair_refused_budget() {
+  local bad=0 pr=https://github.com/acme/widget/pull/81 branch=issue/81-refused pending tick
+  refused_notes="$RUN_DIR/repair-refused-notes"; : >"$refused_notes"
+  notify() { printf '%s\n' "$1" >>"$refused_notes"; }
+  tmux_phase_window_open() { return 0; }
+  rm -f "$RUN_DIR"/repair-81.*
+  git -C "$REPO" push -q origin "HEAD:refs/heads/$branch" || return 1
+  pending="{\"awaiting_review\":[{\"phase\":\"100011\",\"branch\":\"$branch\",\"pull_request\":\"$pr\"}]}"
+  for tick in 1 2 3; do
+    PENDING_PUBLISHED=0
+    repair_tick "$pending"
+    if [ "$PENDING_PUBLISHED" = 1 ]; then
+      # The launched round's session runs here, with its base check failing.
+      ( base_sync_repair() { BASE_SYNC_STATE=failed BASE_SYNC_NOTE=""; echo "base-sync: configuration error: bad task dir" >"$RUN_DIR/repair-81.base"; }
+        CMD_GLIDE="$RUN_DIR/repair-81-never"; PIDFILE="$RUN_DIR/repair-pid"
+        run_repair_session 81 "$RUN_DIR/repair-81.md" "$branch" ) >/dev/null 2>&1
+    fi
+  done
+  repair_tick "$pending"
+  if [ "$(wc -l <"$refused_notes" | tr -d ' ')" = 1 ] \
+      && grep -q "0 repair round(s) ran and 2 launch(es) refused" "$refused_notes" \
+      && grep -q "the base check failed: base-sync: configuration error: bad task dir" "$refused_notes" \
+      && [ "$("$PYTHON" -c 'import json,sys; print(len(json.load(open(sys.argv[1])).get("attempts", [])))' "$RUN_DIR/repair-81.json")" = 0 ]; then
+    echo "ok: repair: two refused launches spend no round and end in one Needs You with both counts and the reason"
+  else
+    echo "FAIL: repair: refused launches did not end in one Needs You with the real counts and reason"; cat "$refused_notes"; bad=1
+  fi
+  git -C "$REPO" push -q origin --delete "$branch" || true
+  rm -f "$refused_notes" "$RUN_DIR"/repair-81.* "$RUN_DIR/repair-pid"
   return "$bad"
 }

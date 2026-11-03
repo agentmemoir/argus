@@ -70,7 +70,10 @@ def test_failed_base_check_runs_no_agent(tmp_path: Path) -> None:
     )
     assert _agent_lines(events) == []
     assert "repair k1: base-sync: failed: git fetch origin failed" in events
-    assert "repair k1: the base check failed, so this round ran no agent" in events
+    assert (
+        "repair k1: the launch was refused and no agent ran: "
+        "the base check failed: base-sync: failed: git fetch origin failed"
+    ) in events
 
 
 def _base_note(tmp_path: Path, base_rc: int, base_out: str, before: str) -> str:
