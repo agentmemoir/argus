@@ -1,0 +1,1 @@
+The driver logs the unreadable leftover-sweep line again after a readable sweep result. Before, one unreadable episode suppressed every later one. ([#332](https://github.com/agentmemoir/argus/issues/332))

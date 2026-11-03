@@ -254,11 +254,11 @@ gitsync_land_leftovers() {
   fi
   # A whole-tree sweep lands some phases and skips others and still exits 0,
   # so the exit code cannot carry a skip. Say each one; never change the rc.
-  local seen=" " kind index phase state reason
+  local seen=" " kind index phase state reason unreadable=0
   while IFS=$'\t' read -r kind index phase state reason; do
     case "$kind" in
       skip) seen="$seen$index "; log_changed "leftovers-skipped-$index" "leftover run state skipped ${work_kind:-phase} $phase ($state): $(cap_length "$(flatten_one_line "$reason")" 500)" ;;
-      unreadable) log_changed "leftovers-unreadable" "could not read the clean sweep result at $RUN_DIR/run-state-leftovers.json; skipped phases are unknown" ;;
+      unreadable) unreadable=1; log_changed "leftovers-unreadable" "could not read the clean sweep result at $RUN_DIR/run-state-leftovers.json; skipped phases are unknown" ;;
     esac
   done < <("$PYTHON" -c 'import json,sys
 
@@ -300,6 +300,9 @@ if unreadable:
     keep="${remembered##*-}"
     case "$seen" in *" $keep "*) ;; *) rm -f "$remembered" ;; esac
   done
+  # A readable sweep result forgets the unreadable line, so the next unreadable
+  # result is logged again.
+  [ "$unreadable" = 1 ] || rm -f "$RUN_DIR/log-last-leftovers-unreadable"
   return 0
 }
 
