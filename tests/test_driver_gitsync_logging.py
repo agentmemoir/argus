@@ -255,3 +255,23 @@ def test_a_skip_that_clears_is_logged_again_when_it_returns(tmp_path: Path) -> N
     _run(tmp_path, json.dumps(clean))
     _stdout, lines = _run(tmp_path, json.dumps(skip))
     assert sum(line.endswith(message) for line in lines) == 2
+
+
+def test_an_unreadable_line_is_logged_again_after_a_readable_sweep(
+    tmp_path: Path,
+) -> None:
+    clean: dict[str, object] = {
+        "ok": True,
+        "mode": "clean",
+        "repos": [],
+        "pathspec": "runs",
+        "summary": "clean sync ok: no leftover run state",
+    }
+    expected = (
+        f"could not read the clean sweep result at "
+        f"{tmp_path / 'runs' / 'run-state-leftovers.json'}; skipped phases are unknown"
+    )
+    _run(tmp_path, "{not json")
+    _run(tmp_path, json.dumps(clean))
+    _stdout, lines = _run(tmp_path, "{not json")
+    assert sum(line.endswith(expected) for line in lines) == 2
