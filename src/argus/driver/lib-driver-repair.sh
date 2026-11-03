@@ -48,11 +48,14 @@ repair_pushed() {
 # (hard line 2): uncommitted edits become one commit on top of HEAD, and a ref
 # under refs/argus/repair-backup/ keeps it. Argus never pushes or deletes that
 # ref. When the backup fails, the worktree stays and the next tick tries again.
+# The second argument is "none" when the round ran no agent: its uncommitted state is
+# then the base merge, not repair work, so no edits are saved. Only a commit the
+# remote lacks still gets a backup ref.
 repair_worktree_remove() {
-  local wt="$1" key ref tip tree
+  local wt="$1" saves="${2:-agent}" key ref tip tree
   key="${wt##*/repair-worktree-}"
   tip="$("$CMD_GIT" -C "$wt" rev-parse -q --verify HEAD 2>/dev/null || true)"
-  if [ -n "$tip" ] && [ -n "$("$CMD_GIT" -C "$wt" status --porcelain 2>/dev/null | head -1)" ]; then
+  if [ "$saves" = agent ] && [ -n "$tip" ] && [ -n "$("$CMD_GIT" -C "$wt" status --porcelain 2>/dev/null | head -1)" ]; then
     # Plumbing only: no hook runs, and a missing Git identity cannot refuse it.
     tip="$("$CMD_GIT" -C "$wt" add -A >/dev/null 2>&1 \
       && tree="$("$CMD_GIT" -C "$wt" write-tree)" \
@@ -284,7 +287,7 @@ base_sync_repair() {  # <key> <worktree> <branch>
 }
 
 run_repair_session() {
-  local key="$1" task="$2" branch="$3" wt rc=0
+  local key="$1" task="$2" branch="$3" wt saves rc=0
   wt="$(repair_worktree "$key")"
   trap 'rm -f "$PIDFILE"; exit 130' HUP INT TERM
   printf '%s\n' "$$" >"$PIDFILE"
@@ -312,7 +315,10 @@ run_repair_session() {
       fi
     fi
     cd "$REPO" || true
-    repair_worktree_remove "$wt" || true
+    # A round whose base check failed ran no agent, so there is no repair work to save.
+    saves=agent
+    [ "$BASE_SYNC_STATE" != failed ] || saves=none
+    repair_worktree_remove "$wt" "$saves" || true
   fi
   tmux_set_title "repair $key done (rc=$rc)"
   rm -f "$PIDFILE"
