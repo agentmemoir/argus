@@ -210,10 +210,29 @@ def test_merge_refused_without_conflict_keeps_git_stderr(
     assert out["state"] == bs.FAILED
     assert _git(repos["work"], "rev-parse", "HEAD") == before
     assert not (repos["work"] / ".git" / "MERGE_HEAD").exists()
-    prefix = "git merge of origin/master failed and left no conflict: "
+    prefix = "git refused to merge origin/master before applying anything: "
     assert out["reason"].startswith(prefix)
     detail = out["reason"].removeprefix(prefix)
     assert "would be overwritten by merge" in detail
     assert "\n" not in out["reason"]
     assert len(detail) <= 240
     assert detail.endswith("...")
+
+
+def test_merge_applied_but_not_committed_is_named_as_such(
+    repos: dict[str, Path],
+) -> None:
+    # A signing program that does not exist makes git stop after it applies the
+    # merge. The merge stays in progress (MERGE_HEAD exists) and no conflict is left.
+    _git(repos["work"], "config", "commit.gpgSign", "true")
+    _git(repos["work"], "config", "gpg.program", str(repos["work"] / "no-gpg"))
+    _move_base(repos, "other.txt", "base side\n")
+    out = bs.base_sync(repos["work"], BRANCH)
+    assert out["state"] == bs.FAILED
+    assert (repos["work"] / ".git" / "MERGE_HEAD").exists()
+    prefix = (
+        "git applied the merge of origin/master but could not create the merge commit: "
+    )
+    assert out["reason"].startswith(prefix)
+    assert "\n" not in out["reason"]
+    assert "gpg failed to sign the data" in out["reason"]

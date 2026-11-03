@@ -133,7 +133,15 @@ def base_sync(repo: str | Path, branch: str) -> dict[str, Any]:
         _, unmerged, _ = git(path, "diff", "--name-only", "--diff-filter=U")
         if unmerged:
             return dict(result, state=TEXT_CONFLICT, conflicted=unmerged.splitlines())
-        reason = f"git merge of origin/{base} failed and left no conflict"
+        # MERGE_HEAD means git applied the merge and then stopped before the commit.
+        applied, _, _ = git(path, "rev-parse", "-q", "--verify", "MERGE_HEAD")
+        if applied == 0:
+            reason = (
+                f"git applied the merge of origin/{base} but could not create "
+                "the merge commit"
+            )
+        else:
+            reason = f"git refused to merge origin/{base} before applying anything"
         detail = _one_line(err or out)
         return _failed(result, f"{reason}: {detail}" if detail else reason)
     _, head, _ = git(path, "rev-parse", "HEAD")
