@@ -19,6 +19,7 @@ pull request record repair-<n>.json.
 
 from __future__ import annotations
 
+import math
 from pathlib import Path
 from typing import cast
 
@@ -40,20 +41,28 @@ def _number(value: object) -> bool:
 
 
 def _read(path: Path) -> tuple[list[float], bool]:
-    """The recorded attempt times, and whether the file is valid. Missing is valid."""
+    """The recorded attempt times, and whether the file is valid. Missing is valid.
+
+    A value that is not a finite number, or that a float cannot hold, makes the file
+    invalid too. NaN or Infinity would never come due, and a huge integer would raise
+    out of the tick.
+    """
     if not path.exists():
         return [], True
     try:
         record = repair_round.load_record(path)
-    except (OSError, ValueError):
+        raw: object = record.get("attempts", [])
+        if not isinstance(raw, list):
+            return [], False
+        items = cast("list[object]", raw)
+        if not all(_number(t) for t in items):
+            return [], False
+        times = [float(cast("float", t)) for t in items]
+    except (OSError, ValueError, OverflowError):
         return [], False
-    raw: object = record.get("attempts", [])
-    if not isinstance(raw, list):
+    if not all(math.isfinite(t) for t in times):
         return [], False
-    times = cast("list[object]", raw)
-    if not all(_number(t) for t in times):
-        return [], False
-    return [float(t) for t in cast("list[float]", times)], True
+    return times, True
 
 
 def damaged(path: Path) -> bool:

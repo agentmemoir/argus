@@ -122,6 +122,30 @@ def test_wrong_value_types_in_the_count_file_count_as_no_record(
     assert "not valid" not in capsys.readouterr().err
 
 
+@pytest.mark.parametrize(
+    "text",
+    [
+        '{"attempts": [NaN]}',
+        '{"attempts": [Infinity]}',
+        '{"attempts": [' + "1" + "0" * 400 + "]}",
+    ],
+    ids=["nan", "infinity", "integer-too-large-for-a-float"],
+)
+def test_a_count_that_is_not_a_finite_time_counts_as_no_record(
+    listing: dict[str, Any], capsys: pytest.CaptureFixture[str], text: str
+) -> None:
+    # NaN and Infinity never come due, and a huge integer raised out of the tick.
+    # Each one counts as no record, so the tick reads the pull request again.
+    path = issue_read_fault.record_path(listing["root"], 7)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+    unread, notices = _tick(listing, 0.0)
+    assert listing["calls"] == 1
+    assert unread == [7]
+    assert notices == []
+    assert "not valid" in capsys.readouterr().err
+
+
 def test_the_leftover_sweep_does_not_stage_the_count(
     listing: dict[str, Any], tmp_path: Path
 ) -> None:
