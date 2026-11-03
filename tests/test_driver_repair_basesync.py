@@ -105,3 +105,58 @@ def test_branch_is_one_argument_even_when_hostile(tmp_path: Path) -> None:
     name = "x;touch MARKER"
     events = _round(tmp_path, 0, "base-sync: no conflict with master", name)
     assert f"ARG {name}" in events
+
+
+GIT_ENV = """
+export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.test
+export GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@example.test
+git init -q --bare "$TEST_ROOT/origin.git"
+git init -q "$TEST_ROOT/seed"
+git -C "$TEST_ROOT/seed" checkout -q -b feature/x
+git -C "$TEST_ROOT/seed" commit -q --allow-empty -m base
+git -C "$TEST_ROOT/seed" push -q "$TEST_ROOT/origin.git" feature/x
+git clone -q --branch feature/x "$TEST_ROOT/origin.git" "$RUN_DIR/repair-worktree-k1"
+"""
+
+
+def _git_round(tmp_path: Path, agent: str) -> list[str]:
+    # A real clone of a real remote. The agent stub is the only part that differs.
+    body = (
+        STUBS
+        + GIT_ENV
+        + f"""
+BASE_RC=0
+BASE_OUT="base-sync: no conflict with master"
+glide_stub() {{
+  log "GLIDE $*"
+  {agent}
+}}
+( run_repair_session k1 "fix the checks" feature/x ) || true
+cat "$RUN_DIR/events"
+"""
+    )
+    return shell(tmp_path, body).splitlines()
+
+
+def test_round_that_commits_and_pushes_says_so(tmp_path: Path) -> None:
+    agent = (
+        'printf x >>f; git add f; git commit -q -m fix; log "COMMIT $(git rev-parse HEAD)";'
+        " git push -q origin HEAD:refs/heads/feature/x"
+    )
+    events = _git_round(tmp_path, agent)
+    commit = next(line for line in events if line.startswith("COMMIT "))[
+        len("COMMIT ") :
+    ]
+    assert (
+        f"repair k1: the round pushed its commit {commit[:7]} to feature/x;"
+        " the next tick reads the new checks"
+    ) in events
+    assert (
+        "repair k1: the run made no commit; nothing pushed to feature/x" not in events
+    )
+
+
+def test_round_with_no_commit_says_so(tmp_path: Path) -> None:
+    events = _git_round(tmp_path, ":")
+    assert "repair k1: the run made no commit; nothing pushed to feature/x" in events
+    assert not any("pushed its commit" in line for line in events)

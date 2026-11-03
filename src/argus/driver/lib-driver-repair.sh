@@ -326,8 +326,8 @@ base_sync_repair() {  # <key> <worktree> <branch>
 }
 
 run_repair_session() {
-  local key="$1" task="$2" branch="$3" wt saves rc=0 prior_state fresh_args=() head base_line
-  local marker marker_before marker_after
+  local key="$1" task="$2" branch="$3" wt saves start rc=0 prior_state fresh_args=() head base_line
+  local marker marker_before marker_after after
   wt="$(repair_worktree "$key")"
   # The head the launch was made on: the branch as the launch fetched it.
   head="$("$CMD_GIT" -C "$REPO" rev-parse -q --verify "refs/remotes/origin/$branch" 2>/dev/null || true)"
@@ -339,6 +339,7 @@ run_repair_session() {
   else
     # The start of the round, before the agent launches (belief 10): the branch is
     # brought up to its base first, so the agent never starts on a stale branch.
+    start="$("$CMD_GIT" -C "$wt" rev-parse HEAD 2>/dev/null)"
     base_sync_repair "$key" "$wt" "$branch"
     if [ "$BASE_SYNC_STATE" = failed ]; then
       base_line="$(head -n 1 "$RUN_DIR/repair-$key.base" 2>/dev/null || true)"
@@ -359,13 +360,19 @@ run_repair_session() {
         "${fresh_args[@]+"${fresh_args[@]}"}" \
         --input "repair_id=$key" --input "repair_task=$BASE_SYNC_NOTE$task" || rc=$?
       marker_after="$(repair_marker_sum "$marker")"
+      after="$("$CMD_GIT" -C "$wt" rev-parse HEAD 2>/dev/null)"
       if [ "$rc" -ne 0 ] && { [ "$marker_after" = none ] || [ "$marker_after" = "$marker_before" ]; }; then
         # glide failed before it wrote a run marker, so no run began and no agent ran.
         repair_refuse "$key" "$head" "glide exited with rc=$rc before it wrote a run marker"
       elif [ "$rc" -ne 0 ]; then
         log "repair $key: the run ended with rc=$rc and pushed nothing"
-      elif repair_pushed "$wt" "$("$CMD_GIT" -C "$wt" rev-parse HEAD 2>/dev/null)"; then
-        log "repair $key: the run made no commit; nothing pushed to $branch"
+      elif repair_pushed "$wt" "$after"; then
+        # The remote has HEAD. A HEAD that moved during the round was committed and pushed by it.
+        if [ "$after" = "$start" ]; then
+          log "repair $key: the run made no commit; nothing pushed to $branch"
+        else
+          log "repair $key: the round pushed its commit ${after:0:7} to $branch; the next tick reads the new checks"
+        fi
       elif "$CMD_GIT" -C "$wt" push --quiet origin "HEAD:refs/heads/$branch" >/dev/null 2>&1; then
         log "repair $key: pushed to $branch; the next tick reads the new checks"
       else

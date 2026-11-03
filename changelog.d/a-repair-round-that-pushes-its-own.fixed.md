@@ -1,0 +1,1 @@
+A CI repair round that commits and pushes its own commit now logs that it pushed, with the short SHA. Before, the log said the run made no commit, because the remote already had the round's HEAD. The "made no commit" line now appears only when HEAD did not move during the round. ([#342](https://github.com/agentmemoir/argus/issues/342))

@@ -14,6 +14,7 @@ from argus import conventions
 from argus.board.core import EXPIRED_STATUS, CoordinationError
 from argus.board.files import reservation_file
 from argus.board.reservations import ACTIVE_STATUSES, ReservationStore
+from argus.gitsync import issue_read_fault
 from argus.gitsync.pr_signal_reply import host_reply_refusal
 from argus.gitsync.repair_round import load_record, save_record
 from argus.issues import claims
@@ -30,7 +31,7 @@ from argus.phases.runstate import state_in
 # the next tick releases its run. A failed close leaves no file, so it is retried.
 CLOSED_FILE = "no-change-closed"
 ATTEMPTS_FILE = "no-change-close-attempts.json"
-ATTEMPT_LIMIT = 3
+ATTEMPT_LIMIT = issue_read_fault.ATTEMPTS
 # GitHub's closing reason for work that will not happen because the premise is stale.
 CLOSE_REASON = "not planned"
 CLOSED = "closed"
@@ -107,11 +108,14 @@ def _clear(attempts: Path) -> None:
 
 
 def _read_count(path: Path) -> dict[str, Any] | None:
-    """The attempt record, or None when it cannot be read or holds no attempt list."""
-    try:
-        record = load_record(path)
-    except (OSError, ValueError):
+    """The attempt record, or None when it cannot be read or its attempt times are bad.
+
+    The times are checked by the same rule as the failed-read count, so a record the
+    schedule cannot read is spent here too.
+    """
+    if issue_read_fault.damaged(path):
         return None
+    record = load_record(path)
     return record if isinstance(record.get("attempts"), list) else None
 
 
@@ -140,7 +144,9 @@ def close_no_change(
 
     The caller passes the checked reason, or nothing when the checks refused. The
     issue must still be open and recorded by this machine. Each attempt that does not
-    close the issue counts one. The third answers the one Needs You line, and
+    close the issue counts one. An attempt runs only when it is due: now, then ten
+    minutes after the first, then twenty minutes after it. A tick with no due attempt
+    closes nothing and counts nothing. The third answers the one Needs You line, and
     selection then leaves the claim out. A close that works clears the count.
     ``gh issue close`` posts its comment before it closes, so a close that failed can
     leave the comment, and the retry finds it by its marker and posts no second one.
@@ -154,6 +160,8 @@ def close_no_change(
         return _give_up(number, "the attempt record is unreadable")
     if len(record["attempts"]) >= ATTEMPT_LIMIT:
         return _give_up(number, str(record.get("cause", "unknown")))
+    if not issue_read_fault.due(attempts, time.time()):
+        return WAITS
     if not reason:
         return _failed(number, attempts, record, "the no-change checks did not pass")
     try:
