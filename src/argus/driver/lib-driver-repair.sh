@@ -308,7 +308,7 @@ base_sync_repair() {  # <key> <worktree> <branch>
 }
 
 run_repair_session() {
-  local key="$1" task="$2" branch="$3" wt saves rc=0
+  local key="$1" task="$2" branch="$3" wt saves rc=0 prior_state fresh_args=()
   wt="$(repair_worktree "$key")"
   trap 'rm -f "$PIDFILE"; exit 130' HUP INT TERM
   printf '%s\n' "$$" >"$PIDFILE"
@@ -322,8 +322,17 @@ run_repair_session() {
     if [ "$BASE_SYNC_STATE" = failed ]; then
       log "repair $key: the base check failed, so this round ran no agent"
     else
+      # Every round of one pull request shares this run folder. glide refuses a finished
+      # run unless --fresh starts it over, so a later round restarts it as glide_run_once
+      # does for a phase. glide archives the folder first, so the earlier round's evidence stays.
+      prior_state="$(terminal_state_of_file "$RUN_DIR/repair-$key/run.json")"
+      if [ -n "$prior_state" ]; then
+        fresh_args=(--fresh)
+        log "repair $key run is terminal ($prior_state); restarting it with --fresh"
+      fi
       # The pipeline's hooks read the configuration file this driver loaded.
       ARGUS_CONFIG_FILE="$ARGUS_CONFIG_FILE" "$CMD_GLIDE" run --pipeline "$REPAIR_PIPELINE" \
+        "${fresh_args[@]+"${fresh_args[@]}"}" \
         --input "repair_id=$key" --input "repair_task=$BASE_SYNC_NOTE$task" || rc=$?
       if [ "$rc" -ne 0 ]; then
         log "repair $key: the run ended with rc=$rc and pushed nothing"
