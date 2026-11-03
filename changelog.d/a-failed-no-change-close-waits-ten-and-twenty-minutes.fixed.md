@@ -1,0 +1,1 @@
+A checked no-change close that fails now waits between its attempts. The second attempt runs ten minutes after the first, and the third runs twenty minutes after the first. Then one Needs You line names the cause and the attempts. A tick with no due attempt closes nothing and counts nothing. ([#338](https://github.com/agentmemoir/argus/issues/338))

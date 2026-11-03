@@ -166,8 +166,10 @@ def test_a_failed_close_retries_then_raises_one_notice_and_one_comment(
     fixture_update(case.github, mode="close-failure")
     case.tick()
     assert case.notes() == []
+    case.pass_time(600)
     case.tick()
     assert case.notes() == []
+    case.pass_time(600)
     case.tick()
     case.tick()
     closes = case.closes()
@@ -191,6 +193,7 @@ def test_a_close_that_works_on_retry_raises_nothing(case: Case) -> None:
     fixture_update(case.github, mode="close-failure")
     case.tick()
     fixture_update(case.github, mode=None)
+    case.pass_time(600)
     case.tick()
     assert [("--comment" in row) for row in case.closes()] == [True, False]
     assert case.notes() == []
@@ -261,6 +264,7 @@ def test_a_lapsed_claim_that_cannot_close_raises_one_notice(case: Case) -> None:
     assert case.store.expire_stale(now=FAR)
     fixture_update(case.github, mode="close-failure")
     for _ in range(4):
+        case.pass_time(600)
         case.tick()
     assert len(case.closes()) == 3
     assert len(case.notes()) == 1
