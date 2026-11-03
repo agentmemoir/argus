@@ -14,11 +14,14 @@
 
 # The open pull requests of `issues` work, in the pending-review shape. Only
 # branches that an issue run folder records are read (gitsync/repair_cli.py).
-# A pull request that gh cannot read exits 3, so the caller stops the tick.
+# "held" lists the issues whose read failed and that still have attempts left: the
+# tick holds new work while it is not empty. "notices" holds one Needs You text for
+# each issue whose third attempt just failed (gitsync/repair_cli.py).
 issue_review_snapshot() {
   "$PYTHON" - "$ARGUS" "$REPO" "${ARGUS_CONFIG_ARGS[@]}" <<'PY'
 import json
 import sys
+import time
 
 sys.path.insert(0, sys.argv[1])
 import _bootstrap
@@ -26,11 +29,9 @@ from argus import conventions
 from argus.gitsync.repair_cli import issue_pull_requests
 
 conventions.configure_from_cli(sys.argv[3:])
-unread = []
-rows = issue_pull_requests(sys.argv[2], unread)
-if unread:
-    sys.exit(3)
-print(json.dumps({"awaiting_review": rows}))
+held, notices = [], []
+rows = issue_pull_requests(sys.argv[2], held, notices, now=time.time())
+print(json.dumps({"awaiting_review": rows, "held": held, "notices": notices}))
 PY
 }
 
@@ -48,11 +49,14 @@ repair_pushed() {
 # (hard line 2): uncommitted edits become one commit on top of HEAD, and a ref
 # under refs/argus/repair-backup/ keeps it. Argus never pushes or deletes that
 # ref. When the backup fails, the worktree stays and the next tick tries again.
+# The second argument is "none" when the round ran no agent: its uncommitted state is
+# then the base merge, not repair work, so no edits are saved. Only a commit the
+# remote lacks still gets a backup ref.
 repair_worktree_remove() {
-  local wt="$1" key ref tip tree
+  local wt="$1" saves="${2:-agent}" key ref tip tree
   key="${wt##*/repair-worktree-}"
   tip="$("$CMD_GIT" -C "$wt" rev-parse -q --verify HEAD 2>/dev/null || true)"
-  if [ -n "$tip" ] && [ -n "$("$CMD_GIT" -C "$wt" status --porcelain 2>/dev/null | head -1)" ]; then
+  if [ "$saves" = agent ] && [ -n "$tip" ] && [ -n "$("$CMD_GIT" -C "$wt" status --porcelain 2>/dev/null | head -1)" ]; then
     # Plumbing only: no hook runs, and a missing Git identity cannot refuse it.
     tip="$("$CMD_GIT" -C "$wt" add -A >/dev/null 2>&1 \
       && tree="$("$CMD_GIT" -C "$wt" write-tree)" \
@@ -221,19 +225,32 @@ for row in json.load(sys.stdin).get("awaiting_review", []):
   done <<<"$rows"
 }
 
-# The issue pull requests' repair step. A failed listing stops the tick.
+# The issue pull requests' repair step. A failed read holds new work only while its
+# issue has attempts left; the other issues' repair checks still run. A listing that
+# cannot run at all stops the tick.
 repair_issue_reads() {
-  local issue_rows
+  local issue_rows held text
   # A missing pipeline ends the step before the snapshot, which would spend one
   # gh read per issue run folder on a round that cannot start.
   if [ ! -r "$REPAIR_PIPELINE" ]; then
     log_changed repair-pipeline "repair: cannot read $REPAIR_PIPELINE; no repair round starts"
     return 0
   fi
-  if issue_rows="$(issue_review_snapshot)"; then
-    repair_tick "$issue_rows"
-  else
+  if ! issue_rows="$(issue_review_snapshot)"; then
     repair_stop "issue pull requests could not be listed"
+    return 0
+  fi
+  while IFS= read -r text; do
+    [ -n "$text" ] || continue
+    notify "$text"
+  done < <(printf '%s' "$issue_rows" | "$PYTHON" -c 'import json, sys
+for text in json.load(sys.stdin).get("notices", []):
+    print(" ".join(str(text).split()))')
+  repair_tick "$issue_rows"
+  held="$(selection_value held <<<"$issue_rows")"
+  if [ -n "$held" ] && [ "$held" != "[]" ]; then
+    REPAIR_STOP=1
+    log_changed repair-held "repair: issue pull requests unread for $held; no new work this tick, the next attempt retries"
   fi
 }
 
@@ -284,7 +301,7 @@ base_sync_repair() {  # <key> <worktree> <branch>
 }
 
 run_repair_session() {
-  local key="$1" task="$2" branch="$3" wt rc=0
+  local key="$1" task="$2" branch="$3" wt saves rc=0
   wt="$(repair_worktree "$key")"
   trap 'rm -f "$PIDFILE"; exit 130' HUP INT TERM
   printf '%s\n' "$$" >"$PIDFILE"
@@ -312,7 +329,10 @@ run_repair_session() {
       fi
     fi
     cd "$REPO" || true
-    repair_worktree_remove "$wt" || true
+    # A round whose base check failed ran no agent, so there is no repair work to save.
+    saves=agent
+    [ "$BASE_SYNC_STATE" != failed ] || saves=none
+    repair_worktree_remove "$wt" "$saves" || true
   fi
   tmux_set_title "repair $key done (rc=$rc)"
   rm -f "$PIDFILE"

@@ -37,7 +37,7 @@ if not __package__:
     )
 from argus import conventions
 from argus.board.core import CoordinationError
-from argus.gitsync import pending_limit, repair_round
+from argus.gitsync import issue_read_fault, pending_limit, repair_round
 from argus.gitsync.gh_checks import gh_pull_request_checks
 from argus.gitsync.gh_read import gh_pull_requests_for_branch
 from argus.gitsync.git import GH_TIMEOUT_S, ConfigError, gh_binary
@@ -118,15 +118,26 @@ def save_failed_log(
 
 
 def issue_pull_requests(
-    root: str | Path, unread: list[int] | None = None
+    root: str | Path,
+    unread: list[int] | None = None,
+    notices: list[str] | None = None,
+    *,
+    now: float | None = None,
 ) -> list[dict[str, object]]:
     """One row per open pull request from this repository on a recorded branch.
 
     The branch comes from the issue run folder: the claim's reservation and
     the frozen task it names, the same proof the issue checkpoint uses. A
     folder without that proof is skipped. A gh read that fails is named on
-    stderr by issue number only and skipped. Its number is also appended to
-    ``unread`` when that list is given, so the caller can stop the tick.
+    stderr by issue number and reason, and skipped.
+
+    ``now`` is given by the repair listing only. It turns on the attempt count
+    (issue_read_fault): no read is made before an attempt is due, a failure is
+    counted, and an issue still inside its attempts is appended to ``unread``, so
+    the caller holds new work. The third failure appends one Needs You text to
+    ``notices``. An issue whose attempts are spent is not in ``unread``. Without
+    ``now``, a failed read is only reported, and its number is appended to
+    ``unread`` when that list is given.
     """
     rows: list[dict[str, object]] = []
     for run_dir in sorted(conventions.runs_dir(root).glob("issue-*")):
@@ -138,33 +149,71 @@ def issue_pull_requests(
             branch = issue_branch(number, issue_scope(root, number)[1][1])
         except (ConfigError, CoordinationError):
             continue
-        found, _why = gh_pull_requests_for_branch(Path(root), branch)
+        count = None if now is None else issue_read_fault.record_path(root, number)
+        if count is not None and issue_read_fault.damaged(count):
+            # Content that is not a list of attempt times counts as no record. It is
+            # reset here, so this line is printed once, not on every tick.
+            print(
+                f"repair: issue {number}: the read count file is not valid; "
+                "it counts as no record",
+                file=sys.stderr,
+            )
+            issue_read_fault.reset(count)
+        if (
+            count is not None
+            and now is not None
+            and not issue_read_fault.due(count, now)
+        ):
+            # The attempt is not due: no gh call, and the issue stays unknown.
+            _hold(unread, number, count)
+            continue
+        found, why = gh_pull_requests_for_branch(Path(root), branch)
+        fault = None
         if found is None:
-            print(f"repair: issue {number}: pull requests unread", file=sys.stderr)
+            # gh_read gives fixed words for the failure, never gh's own message.
+            fault = " ".join(why.split())[:200]
+        else:
+            # gh_pull_requests_for_branch is the one filter: it keeps only this
+            # repository's rows on the branch, so a fork's checks and logs never arrive.
+            for pr in found:
+                if pr["state"] != "OPEN" or pr["isDraft"] is False:
+                    # A ready pull request is final: no repair round, read, or push.
+                    continue
+                if pr["isDraft"] is None:
+                    # gh gave no draft flag, so the tick cannot tell whether to wait.
+                    fault = "gh gave no draft flag"
+                    break
+                rows.append(
+                    {
+                        "issue": number,
+                        "branch": branch,
+                        "pull_request": pr["url"],
+                        "draft": pr["isDraft"],
+                    }
+                )
+        if fault is None:
+            if count is not None and issue_read_fault.cleared(count):
+                print(
+                    f"repair: issue {number}: pull requests readable again",
+                    file=sys.stderr,
+                )
+            continue
+        print(f"repair: issue {number}: pull requests unread: {fault}", file=sys.stderr)
+        if count is None or now is None:
             if unread is not None:
                 unread.append(number)
             continue
-        # gh_pull_requests_for_branch is the one filter: it keeps only this
-        # repository's rows on the branch, so a fork's checks and logs never arrive.
-        for pr in found:
-            if pr["state"] != "OPEN" or pr["isDraft"] is False:
-                # A ready pull request is final: no repair round, read, or push.
-                continue
-            if pr["isDraft"] is None:
-                # gh gave no draft flag, so the tick cannot tell whether to wait.
-                print(f"repair: issue {number}: draft state unread", file=sys.stderr)
-                if unread is not None:
-                    unread.append(number)
-                break
-            rows.append(
-                {
-                    "issue": number,
-                    "branch": branch,
-                    "pull_request": pr["url"],
-                    "draft": pr["isDraft"],
-                }
-            )
+        text = issue_read_fault.failed(count, number, fault, now)
+        if text is not None and notices is not None:
+            notices.append(text)
+        _hold(unread, number, count)
     return rows
+
+
+def _hold(unread: list[int] | None, number: int, count: Path) -> None:
+    """Append an issue that still holds the tick: it is inside its attempts."""
+    if unread is not None and issue_read_fault.held(count):
+        unread.append(number)
 
 
 def run(args: argparse.Namespace, now: float) -> tuple[int, dict[str, object]]:

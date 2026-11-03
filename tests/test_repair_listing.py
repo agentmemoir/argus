@@ -35,7 +35,7 @@ def test_issue_pull_requests_reads_only_recorded_branches(
 
     def listed(_root: Path, branch: str) -> tuple[list[dict[str, Any]] | None, str]:
         if branch == "issue/9-docs":
-            return None, "gh secret detail"
+            return None, "gh ran the list and failed (gh exited 1)"
         assert branch == "issue/7-fix-ci"
         return [
             {"number": 70, "url": "https://g/o/r/pull/70", "state": "OPEN", **SAME},
@@ -58,7 +58,10 @@ def test_issue_pull_requests_reads_only_recorded_branches(
         }
     ]
     err = capsys.readouterr().err
-    assert "issue 9" in err and "secret" not in err
+    assert (
+        "repair: issue 9: pull requests unread: gh ran the list and failed (gh exited 1)"
+        in err
+    )
 
 
 def test_issue_pull_requests_ignore_a_fork_pull_request_on_the_recorded_branch(
