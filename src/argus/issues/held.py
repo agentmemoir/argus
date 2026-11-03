@@ -15,8 +15,10 @@ from typing import Any
 from argus.board.core import EXPIRED_STATUS
 from argus.gitsync.gh_checks import gh_pull_request_checks
 from argus.gitsync.issue_paths import issue_branch
+from argus.issues import claims
 from argus.issues.client import IssueClient
-from argus.issues.filter import label_claimed
+from argus.issues.completed_run import finished_unchecked
+from argus.issues.filter import label_claimed, label_names
 from argus.issues.task import task_path
 from argus.issues.transport import IssuesUnavailable
 
@@ -78,6 +80,23 @@ def _red_notice(number: int, url: str, sha: str, failed: list[str]) -> dict[str,
     }
 
 
+def _own_finished(
+    row: dict[str, Any],
+    record: dict[str, Any] | None,
+    root: Path,
+    machine: str,
+    claim_label: str,
+) -> bool:
+    """A finished claim of this machine that kept its label and has no checked close."""
+    return (
+        record is not None
+        and claims.held(record)
+        and record.get("machine_id") == machine
+        and any(name.casefold() == claim_label.casefold() for name in label_names(row))
+        and finished_unchecked(root, int(row["number"]))
+    )
+
+
 def tick_notices(
     client: IssueClient,
     root: Path,
@@ -87,6 +106,7 @@ def tick_notices(
     records: dict[str, Any],
     open_pulls: dict[int, dict[str, Any]],
     past: dict[int, list[dict[str, Any]]],
+    machine: str,
 ) -> list[dict[str, str]]:
     """The Needs You notices for one tick, as ``key`` and ``text`` pairs.
 
@@ -97,12 +117,22 @@ def tick_notices(
     for row in rows:
         number = int(row["number"])
         record = records.get(f"{number:06d}")
-        if number in open_pulls or not label_claimed(row, record, claim_label):
+        mine = _own_finished(row, record, root, machine, claim_label)
+        if number in open_pulls or not (
+            mine or label_claimed(row, record, claim_label)
+        ):
             continue
         branch = issue_branch(number, task_path(directory, row).name)
         on_branch = client.pull_requests_on(branch)
         urls = {str(p["url"]) for p in on_branch if p["state"] == "CLOSED"}
         urls |= {str(p["url"]) for p in past.get(number, []) if p["state"] == "closed"}
+        if mine:
+            # The completed-run line, the same one the driver's hold would raise.
+            if not on_branch and not past.get(number):
+                notice = _no_pull_notice(number, "completed")
+                if notice:
+                    notices.append(notice)
+            continue
         if urls:
             notices.append(_closed_notice(number, sorted(map(_one_line, urls))))
         elif not on_branch and not past.get(number):
