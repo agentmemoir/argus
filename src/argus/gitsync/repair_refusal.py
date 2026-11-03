@@ -35,6 +35,9 @@ def take(
     head_line, at_line, reason = (
         path.read_text(encoding="utf-8").split("\n") + ["", "", ""]
     )[:3]
+    # The file goes first: if the record was saved and the removal failed, the next
+    # read would take the same round back again. Lost here, the round stays counted.
+    path.unlink()
     if head_line == head:
         try:
             at = float(at_line)
@@ -42,7 +45,6 @@ def take(
             at = now
         record = repair_round.refuse(record, reason or "no reason recorded", at)
         repair_round.save_record(record_path, record)
-    path.unlink()
     return record
 
 
