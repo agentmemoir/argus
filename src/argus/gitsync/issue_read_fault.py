@@ -20,7 +20,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from argus import conventions
+from argus.board.files import reservation_file
 from argus.gitsync import repair_round
 
 ATTEMPTS = 3
@@ -29,8 +29,12 @@ RECORD = "read-fault.json"
 
 
 def record_path(root: str | Path, number: int) -> Path:
-    """The count file for one issue: inside the issue's run folder."""
-    return conventions.runs_dir(root) / f"issue-{number}" / RECORD
+    """The count file for one issue: beside its reservation, in its run folder.
+
+    The reservation names the run folder, which is zero-padded (issue-000007), so
+    the count is never written to a folder that does not exist.
+    """
+    return reservation_file(root, number, kind="issue").with_name(RECORD)
 
 
 def _attempts(path: Path) -> list[float]:

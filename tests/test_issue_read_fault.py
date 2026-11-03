@@ -18,7 +18,8 @@ OK: tuple[list[dict[str, Any]], str] = ([], "")
 @pytest.fixture
 def listing(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> dict[str, Any]:
     runs = tmp_path / "runs"
-    (runs / "issue-7").mkdir(parents=True)
+    (runs / "issue-000007").mkdir(parents=True)
+    monkeypatch.setattr("argus.board.files.runs_dir", lambda _root: runs)
     state: dict[str, Any] = {"gh": FAIL, "calls": 0, "root": tmp_path}
 
     def gh(_root: Path, _branch: str) -> tuple[Any, str]:
