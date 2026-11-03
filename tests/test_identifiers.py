@@ -50,10 +50,18 @@ green scan means "no identifiers" and not "no rules".
 
 from __future__ import annotations
 
+import contextlib
+import errno
+import os
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
+from unittest import mock
 
 #: This file and the repository root its scan covers.
 SELF = Path(__file__).resolve()
@@ -176,21 +184,28 @@ def published_files() -> list[Path]:
     """Every file the package ships, this scanner excepted.
 
     This file names the shapes it forbids, so it is the one file the scan skips.
-    Nothing else is skipped, because the package ships the folder as a whole; the
-    one exception is a path git ignores, which is a local artifact and not part
-    of the package.
+    Nothing else is skipped, except a path git ignores (a local artifact) and a
+    folder in SKIP_DIRS, which is never entered. A folder that vanishes mid-walk is
+    not a finding; any other error still fails.
     """
     shipped = _shipped_paths()
     files: list[Path] = []
-    for path in sorted(HERE.rglob("*")):
-        if not path.is_file() or path == SELF:
+    pending = [HERE]
+    while pending:
+        try:
+            with os.scandir(pending.pop()) as entries:
+                listed = list(entries)
+        except FileNotFoundError:
             continue
-        if any(part in SKIP_DIRS for part in path.relative_to(HERE).parts):
-            continue
-        if shipped is not None and path not in shipped:
-            continue
-        files.append(path)
-    return files
+        for entry in listed:
+            path = Path(entry.path)
+            if entry.name in SKIP_DIRS or path == SELF:
+                continue
+            if entry.is_dir(follow_symlinks=False):
+                pending.append(path)
+            elif entry.is_file() and (shipped is None or path in shipped):
+                files.append(path)
+    return sorted(files)
 
 
 def _text(path: Path) -> str:
@@ -254,9 +269,69 @@ def test_the_patterns_fire_and_do_not_overreach():
         )
 
 
+def _published_files_over(root: Path, scandir: Callable[..., Any]) -> list[Path]:
+    """The published walk over ``root``, with ``os.scandir`` replaced by ``scandir``."""
+    module = sys.modules[__name__]
+    with (
+        mock.patch.object(module, "HERE", root),
+        mock.patch.object(module, "_shipped_paths", return_value=None),
+        mock.patch.object(os, "scandir", scandir),
+    ):
+        return published_files()
+
+
+def test_a_vanished_folder_is_skipped():
+    """A folder its parent lists, then removed before the walk enters it, is no finding."""
+    real_scandir = os.scandir
+    removed: list[Path] = []
+    stale: list[os.DirEntry[str]] = []
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        parent, gone = root / "scratch", root / "scratch" / "run"
+        gone.mkdir(parents=True)
+        (gone / "state.json").write_text("{}", encoding="utf-8")
+        (root / "keep.md").write_text("ok", encoding="utf-8")
+
+        def racing_scandir(path: str | Path | int) -> Any:
+            if not (isinstance(path, (str, Path)) and Path(path) == parent):
+                return real_scandir(path)
+            if not stale:
+                with real_scandir(path) as entries:
+                    stale.extend(entries)
+                removed.append(gone)
+                shutil.rmtree(gone)
+            return contextlib.nullcontext(stale)
+
+        files = _published_files_over(root, racing_scandir)
+    check(removed == [gone], f"the race did not happen: {removed}")
+    check(files == [root / "keep.md"], f"the walk returned {files}")
+
+
+def test_another_walk_error_still_fails():
+    """Only a vanished folder is skipped. Any other error reaches the caller."""
+    real_scandir = os.scandir
+    with tempfile.TemporaryDirectory() as tmp:
+        bad = Path(tmp) / "scratch"
+        bad.mkdir()
+
+        def failing_scandir(path: str | Path) -> Any:
+            if Path(path) == bad:
+                raise OSError(errno.EIO, "input/output error")
+            return real_scandir(path)
+
+        try:
+            _published_files_over(Path(tmp), failing_scandir)
+        except OSError as exc:
+            check(exc.errno == errno.EIO, f"wrong error raised: {exc}")
+            return
+    raise AssertionError("an I/O error during the walk was not raised")
+
+
 TESTS = (
     ("published folder has no identifier", test_published_folder_has_no_identifier),
     ("patterns fire and do not overreach", test_the_patterns_fire_and_do_not_overreach),
+    ("a vanished folder is skipped", test_a_vanished_folder_is_skipped),
+    ("another walk error still fails", test_another_walk_error_still_fails),
 )
 
 
