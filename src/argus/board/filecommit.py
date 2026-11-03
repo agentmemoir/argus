@@ -19,6 +19,7 @@ from argus.board.core import (
     CoordinationUnavailable,
     _safe_detail,
 )
+from argus.board.fetch_lock import fetch_serialized
 from argus.board.git import _git
 from argus.board.worktree import _detached_worktree, sweep_stale_worktrees
 
@@ -84,13 +85,14 @@ def file_transaction(
             new_commit = _commit_paths(checkout.path, staged, message)
             if new_commit is None:
                 return
-            rc, out, err = _git(
-                checkout.path,
-                "push",
-                remote,
-                f"HEAD:refs/heads/{branch}",
-                timeout=FETCH_TIMEOUT_S,
-            )
+            with fetch_serialized(repo):
+                rc, out, err = _git(
+                    checkout.path,
+                    "push",
+                    remote,
+                    f"HEAD:refs/heads/{branch}",
+                    timeout=FETCH_TIMEOUT_S,
+                )
             # Only the final attempt's checkout is worth keeping: it holds the
             # one local commit nobody else has, while an earlier attempt holds
             # an intermediate state the final attempt has already superseded.

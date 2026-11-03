@@ -1,0 +1,1 @@
+A claim renewal no longer makes the launch's claim check refuse a claim the board holds. A board push moved the board's tracking reference outside the fetch lock, so a fetch running at the same moment failed with "cannot lock ref". Board pushes now hold that lock.

@@ -19,6 +19,7 @@ from argus.board.core import (
     CoordinationUnavailable,
     _safe_detail,
 )
+from argus.board.fetch_lock import fetch_serialized
 from argus.board.git import _git
 from argus.board.state import state_rel
 
@@ -91,13 +92,14 @@ def ensure_board_branch(
             f"broken. Restore {branch!r} from a commit that still has the "
             f"state file."
         )
-    rc, _out, err = _git(
-        private,
-        "push",
-        remote,
-        f"{source}:refs/heads/{branch}",
-        timeout=FETCH_TIMEOUT_S,
-    )
+    with fetch_serialized(private):
+        rc, _out, err = _git(
+            private,
+            "push",
+            remote,
+            f"{source}:refs/heads/{branch}",
+            timeout=FETCH_TIMEOUT_S,
+        )
     if rc != 0:
         # Losing the seed race is success: the other machine made the branch.
         if _board_branch_exists(private, remote, branch):

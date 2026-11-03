@@ -1,6 +1,6 @@
 # Copyright 2026 Agent Memoir (https://agentmemoir.com/)
 # SPDX-License-Identifier: Apache-2.0
-"""The per-checkout lock that lets one board checkout fetch its branch one at a time."""
+"""The per-checkout lock that makes board fetches and pushes take turns."""
 
 import fcntl
 import time
@@ -11,10 +11,11 @@ from pathlib import Path
 from argus.board.core import FETCH_TIMEOUT_S, CoordinationUnavailable
 from argus.board.git import _git
 
-# Two processes that fetch one board branch at the same moment race on one reference
-# lock: git refuses the second update with "cannot lock ref", and the read that needed
-# it stops. One lock per board checkout serializes each fetch and the read of its
-# reference. A lock that stays busy past the fetch timeout fails closed.
+# A fetch and any other write to the board's remote-tracking reference race on one
+# reference lock. A fetch reads the old value first, and a board push moves the
+# reference after the remote has the new commit, so git refuses the fetch with "cannot
+# lock ref". One lock per board checkout covers each fetch, the read of its reference,
+# and each board push. A lock that stays busy past the fetch timeout fails closed.
 FETCH_LOCK_NAME = "argus-board-fetch.lock"
 FETCH_LOCK_POLL_S = 0.05
 

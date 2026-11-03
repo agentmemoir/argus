@@ -241,14 +241,15 @@ def _backfill_backup(private: str | Path, remote: str, branch: str) -> None:
     if _board_branch_exists(private, remote, backup):
         return
     remote_ref = f"refs/remotes/{remote}/{branch}"
-    rc, _out, _err = _git(
-        private,
-        "fetch",
-        "--quiet",
-        remote,
-        f"+refs/heads/{branch}:{remote_ref}",
-        timeout=FETCH_TIMEOUT_S,
-    )
+    with fetch_serialized(private):
+        rc, _out, _err = _git(
+            private,
+            "fetch",
+            "--quiet",
+            remote,
+            f"+refs/heads/{branch}:{remote_ref}",
+            timeout=FETCH_TIMEOUT_S,
+        )
     if rc != 0:
         return
     rc, commit, _err = _git(private, "rev-parse", "--verify", remote_ref)
