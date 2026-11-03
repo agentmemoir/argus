@@ -112,7 +112,7 @@ def snapshot(repo: Path, number: int, record: dict[str, Any]) -> Path | None:
             or manifest.get("generation") != record["generation"]
         ):
             return None
-        path = (repo / manifest["path"]).resolve()
+        path: Path = (repo / manifest["path"]).resolve()
         if (
             not path.is_relative_to(repo)
             or not path.is_file()

@@ -22,7 +22,8 @@ def history(client: IssueClient) -> dict[int, list[dict[str, Any]]]:
     if not isinstance(pages, list):
         raise IssuesUnavailable("invalid_response", "pr history")
     past: dict[int, list[dict[str, Any]]] = {}
-    for page in cast("list[Any]", pages):
+    page_list = cast("list[object]", pages)
+    for page in page_list:
         for row in objects(page, "pr history"):
             head = row.get("head")
             head = cast("dict[str, Any]", head) if isinstance(head, dict) else {}

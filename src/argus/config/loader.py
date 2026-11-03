@@ -9,7 +9,7 @@ from typing import Any, cast
 
 from argus.config.document import read_document
 from argus.config.document import strip_comments as strip_comments
-from argus.config.errors import ConfigError
+from argus.config.errors import ConfigError as ConfigError
 from argus.config.issue_validation import (
     validate_issues,
     validate_presence,

@@ -84,7 +84,7 @@ class _IssueOps(_StoreBase):
             record["heartbeat_at"] = _now()
             return _Mutation(True, self._reservation(record, key))
 
-        return _transaction(
+        result: dict[str, Any] = _transaction(
             self.private,
             self.remote,
             self.branch,
@@ -92,6 +92,7 @@ class _IssueOps(_StoreBase):
             f"issue coordination: record receipt for {key}",
             issues=True,
         )
+        return result
 
     def set_issue_pull_request(
         self, reservation: Any, pull_request: dict[str, Any]
@@ -134,7 +135,7 @@ class _IssueOps(_StoreBase):
             record["pull_request"] = value
             return _Mutation(True, self._reservation(record, key))
 
-        return _transaction(
+        result: dict[str, Any] = _transaction(
             self.private,
             self.remote,
             self.branch,
@@ -142,6 +143,7 @@ class _IssueOps(_StoreBase):
             f"issue coordination: record pull request for {key}",
             issues=True,
         )
+        return result
 
     def retire_retained(self, reservation: Any) -> None:
         """Remove this reservation's own published issue record, so the issue can be claimed.

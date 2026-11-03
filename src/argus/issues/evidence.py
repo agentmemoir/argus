@@ -17,9 +17,10 @@ def escalated(record: dict[str, Any] | None) -> bool:
 
 
 def pending(record: dict[str, Any] | None) -> bool:
-    return (record or {}).get("completion_receipt", {}).get(
-        "state_reason"
-    ) == "writeback_pending"
+    return bool(
+        (record or {}).get("completion_receipt", {}).get("state_reason")
+        == "writeback_pending"
+    )
 
 
 class Evidence:

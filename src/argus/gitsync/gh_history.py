@@ -82,7 +82,7 @@ def gh_pull_request_stage_history(
         return None, "gh did not return JSON for the PR history"
     if not isinstance(raw_pages, list) or not raw_pages:
         return None, "gh returned no PR history pages"
-    pages = cast(list[Any], raw_pages)
+    pages = cast("list[object]", raw_pages)
     state: str | None = None
     is_draft: bool | None = None
     events: list[dict[str, str]] = []
@@ -113,7 +113,7 @@ def gh_pull_request_stage_history(
         raw_nodes = timeline.get("nodes") if timeline else None
         if not isinstance(raw_nodes, list) or page_info is None:
             return None, "GitHub returned an incomplete PR timeline"
-        nodes = cast(list[Any], raw_nodes)
+        nodes = cast("list[object]", raw_nodes)
         has_next, cursor = page_info.get("hasNextPage"), page_info.get("endCursor")
         if not isinstance(has_next, bool) or (has_next and not isinstance(cursor, str)):
             return None, "GitHub returned an incomplete PR timeline page"

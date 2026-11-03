@@ -134,7 +134,7 @@ class IssuesSource(_Reports, WorkSource):
 
     def _closed(self, row: dict[str, Any]) -> bool:
         """Ask GitHub whether the issue is still open; the search row can be stale."""
-        return self.client.view(row["number"], row)["state"].lower() != "open"
+        return bool(self.client.view(row["number"], row)["state"].lower() != "open")
 
     def _cleanup(self, machine: str, reserve: bool) -> dict[str, Any] | None:
         for key, record in list(self.records.items()):
