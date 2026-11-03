@@ -75,6 +75,7 @@ from pathlib import Path
 from typing import Any
 
 from argus.exec_tempdir import make_exec_dir
+from argus.exec_tempdir_states import candidate_states
 from faults import FAULTS
 from guard_faults_engine import DRIVER, RestoreError, check_fault
 
@@ -121,10 +122,11 @@ def run_in_copy(repo: Path, fault: dict[str, Any]) -> Outcome:
     name = str(fault["name"])
     scratch = make_exec_dir()
     if not scratch:
+        states = "; ".join(candidate_states())
         return Outcome(
             name,
             None,
-            "no executable temporary directory on this host",
+            f"no executable temporary directory on this host: {states}",
             0.0,
             "NOT RUN",
         )
