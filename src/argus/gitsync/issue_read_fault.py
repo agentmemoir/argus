@@ -22,7 +22,7 @@ from __future__ import annotations
 import math
 import time
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 from argus import conventions
 from argus.gitsync import repair_round
@@ -95,19 +95,38 @@ def excluded(path: Path) -> bool:
     return len(_read(path)[0]) >= ATTEMPTS
 
 
-def failed(path: Path, number: int, reason: str, now: float) -> str | None:
-    """Count one failed attempt. The third one returns the one Needs You text."""
+def failed(path: Path, number: int, reason: str, now: float) -> dict[str, str] | None:
+    """Count one failed attempt. The third one returns the one Needs You notice.
+
+    The notice is saved in the count file, with the count. A crash before it is sent
+    leaves it there, and notice() returns it again on the next tick.
+    """
     started = [*_read(path)[0], now]
     path.parent.mkdir(parents=True, exist_ok=True)
-    repair_round.save_record(path, {"attempts": started, "reason": reason})
-    if len(started) != ATTEMPTS:
+    record: dict[str, Any] = {"attempts": started, "reason": reason}
+    if len(started) == ATTEMPTS:
+        text = (
+            f"Needs You. Argus could not list the pull requests of issue {number} "
+            f"after {ATTEMPTS} attempts (now, after 10 minutes, and after 20): "
+            f"{reason}. Action: fix the cause of that gh failure on this host. Argus "
+            "keeps trying on its own, and the issue returns to normal once a read "
+            "succeeds."
+        )
+        record["notice"] = {
+            "key": f"read-fault-{number}-{int(started[0])}",
+            "text": text,
+        }
+    elif len(started) > ATTEMPTS:
+        record["notice"] = repair_round.load_record(path).get("notice")
+    repair_round.save_record(path, record)
+    return record["notice"] if len(started) == ATTEMPTS else None
+
+
+def notice(path: Path) -> dict[str, str] | None:
+    """The saved Needs You notice, while it is owed. The shell sends it once per key."""
+    if not _read(path)[1] or not path.exists():
         return None
-    return (
-        f"Needs You. Argus could not list the pull requests of issue {number} "
-        f"after {ATTEMPTS} attempts (now, after 10 minutes, and after 20): {reason}. "
-        "Action: fix the cause of that gh failure on this host. Argus keeps trying "
-        "on its own, and the issue returns to normal once a read succeeds."
-    )
+    return repair_round.load_record(path).get("notice")
 
 
 def cleared(path: Path) -> bool:
