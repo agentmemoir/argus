@@ -102,25 +102,31 @@ def test_unread_checks_fail_closed_and_record_nothing(
     assert list(tmp_path.iterdir()) == []
 
 
-def test_a_failed_base_check_is_named_when_the_budget_runs_out(
+def test_a_refused_launch_spends_no_round_and_is_named_when_refusals_run_out(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
     tmp_path: Path,
 ) -> None:
-    # Each round counts one attempt, even when its base check fails before the agent.
+    # A launch that the session refuses before any agent runs leaves a refusal file.
+    # The next call takes that round back, so three refusals spend no round.
     cause = "base-sync: configuration error: invalid value for key 'issues.task-dir'"
     for now in (1000.0, 1600.0, 2200.0):
         _rc, out = _run(monkeypatch, capsys, tmp_path, RED, now, attempts=3)
         assert out["action"] == "repair"
-    (tmp_path / "repair-7.base").write_text(cause + "\n", encoding="utf-8")
-    _rc, out = _run(monkeypatch, capsys, tmp_path, RED, 9999.0, attempts=3)
+        (tmp_path / "repair-7.refused").write_text(
+            f"{HEAD_A}\n{now}\nthe base check failed: {cause}\n", encoding="utf-8"
+        )
+    _rc, out = _run(
+        monkeypatch, capsys, tmp_path, RED, 2800.0, attempts=3, launched=False
+    )
     assert out["action"] == "escalate"
     assert out["message"] == (
-        f"Needs You. {PR} is still red after 3 repair round(s): lint failed. "
-        f"The base check failed on the last round: {cause}. "
+        f"Needs You. {PR} is still red after 0 repair round(s) counted and 3 launch(es) "
+        "refused: lint failed. "
+        f"The last refusal: the base check failed: {cause}. "
         "Action: fix the cause named above, push the branch, or close the pull request."
     )
-    assert _run(monkeypatch, capsys, tmp_path, RED, 9999.0, attempts=3)[1] == {
+    assert _run(monkeypatch, capsys, tmp_path, RED, 2800.0, attempts=3)[1] == {
         "action": "none"
     }
 

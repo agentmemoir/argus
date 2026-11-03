@@ -122,9 +122,47 @@ repair_worktree_add() {
   esac
 }
 
+# A launch that runs no agent is refused, and a refused launch uses no round. The
+# reason and the head the launch was made on go to the run folder. The next tick
+# takes the counted round back and counts the refusal (repair_cli.py, refused).
+# Refusals have their own cap, so a launch that keeps refusing ends in one Needs You.
+repair_refuse() {  # <key> <head> <reason>
+  local reason
+  reason="$(printf '%s' "${3:-no reason recorded}" | head -n 1)"
+  log "repair $1: the launch was refused and no agent ran: $reason"
+  printf '%s\n%s\n%s\n' "$2" "$(date +%s)" "$reason" >"$RUN_DIR/repair-$1.refused"
+}
+
+# The run folder's snapshot before a glide launch. A refused launch is proven only when
+# the folder shows that glide's startup failed before any stage (repair_refusal.py).
+repair_snapshot() {  # <run folder> <snapshot file>
+  "$PYTHON" - "$ARGUS" "$1" "$2" <<'PY'
+import sys
+from pathlib import Path
+sys.path.insert(0, sys.argv[1])
+import _bootstrap
+from argus.gitsync import repair_refusal
+repair_refusal.save_snapshot(Path(sys.argv[2]), Path(sys.argv[3]))
+PY
+}
+
+# Exit 0 only when the run folder proves no stage started. Any other result, including
+# an error, leaves the launch counted as a round.
+repair_proven_refusal() {  # <run folder> <snapshot file>
+  "$PYTHON" - "$ARGUS" "$1" "$2" <<'PY'
+import sys
+from pathlib import Path
+sys.path.insert(0, sys.argv[1])
+import _bootstrap
+from argus.gitsync import repair_refusal
+sys.exit(0 if repair_refusal.refused_by_proof(Path(sys.argv[2]), Path(sys.argv[3])) else 1)
+PY
+}
+
 repair_launch() {
-  local key="$1" task="$2" branch="$3" launch quoted setting
-  repair_worktree_add "$key" "$branch" || return 1
+  local key="$1" task="$2" branch="$3" head="$4" launch quoted setting
+  repair_worktree_add "$key" "$branch" \
+    || { repair_refuse "$key" "$head" "the worktree for $branch could not be added"; return 1; }
   printf -v launch 'bash %q' "$SELF"
   for setting in "${ARGUS_CONFIG_ARGS[@]}"; do
     printf -v quoted ' %q' "$setting"
@@ -133,10 +171,10 @@ repair_launch() {
   printf -v quoted ' --repair-session %q %q %q' "$key" "$task" "$branch"
   launch="$launch$quoted"
   9>&- tmux_session_ensure \
-    || { notify "repair $key failed to create tmux session '$SESSION'"; repair_worktree_remove "$(repair_worktree "$key")"; return 1; }
+    || { repair_refuse "$key" "$head" "the tmux session '$SESSION' could not be created"; repair_worktree_remove "$(repair_worktree "$key")"; return 1; }
   tmux_set_title "repair $key starting"
   9>&- tmux_phase_window_open "$launch" "$RUN_DIR/session-repair-$key.log" \
-    || { notify "repair $key failed to launch in tmux"; repair_worktree_remove "$(repair_worktree "$key")"; return 1; }
+    || { repair_refuse "$key" "$head" "the tmux window did not open"; repair_worktree_remove "$(repair_worktree "$key")"; return 1; }
   tmux_phase_window_select
   log "launched repair $key in tmux '$SESSION' window 'phase'"
 }
@@ -212,14 +250,14 @@ for row in json.load(sys.stdin).get("awaiting_review", []):
           log "repair $key waits: the phase window is running"
           continue
         fi
-        # The round is counted before it launches, so a launch that fails still
-        # uses one attempt. A round that cannot be counted never launches.
+        # The round is counted before it launches. A round that cannot be counted never
+        # launches. A launch refused before any agent runs is taken back on the next tick.
         "$PYTHON" "$ARGUS/gitsync/repair_cli.py" "${ARGUS_CONFIG_ARGS[@]}" \
           --pull-request "$pr" --run-dir "$RUN_DIR" --launched --head "$pr_head" \
           --attempts "$REPAIR_ATTEMPTS" --wait "$REPAIR_WAIT" </dev/null >/dev/null \
           || { log "repair $key: the round could not be counted; no round starts"; continue; }
-        repair_launch "$key" "$(selection_value task <<<"$out")" "$branch" </dev/null \
-          || { log "repair $key: the launch failed; the round used one attempt"; continue; }
+        repair_launch "$key" "$(selection_value task <<<"$out")" "$branch" "$pr_head" </dev/null \
+          || continue
         PENDING_PUBLISHED=$((PENDING_PUBLISHED + 1))
         return 0 ;;
     esac
@@ -308,33 +346,52 @@ base_sync_repair() {  # <key> <worktree> <branch>
 }
 
 run_repair_session() {
-  local key="$1" task="$2" branch="$3" wt saves start head rc=0
+  local key="$1" task="$2" branch="$3" wt saves start rc=0 prior_state fresh_args=() head base_line
+  local folder before_file after
   wt="$(repair_worktree "$key")"
+  # The head the launch was made on: the branch as the launch fetched it.
+  head="$("$CMD_GIT" -C "$REPO" rev-parse -q --verify "refs/remotes/origin/$branch" 2>/dev/null || true)"
   trap 'rm -f "$PIDFILE"; exit 130' HUP INT TERM
   printf '%s\n' "$$" >"$PIDFILE"
   tmux_set_title "repair $key running"
   if ! cd "$wt"; then
-    log "repair $key: its worktree is missing; the round ran nothing"
+    repair_refuse "$key" "$head" "its worktree is missing"
   else
     # The start of the round, before the agent launches (belief 10): the branch is
     # brought up to its base first, so the agent never starts on a stale branch.
     start="$("$CMD_GIT" -C "$wt" rev-parse HEAD 2>/dev/null)"
     base_sync_repair "$key" "$wt" "$branch"
     if [ "$BASE_SYNC_STATE" = failed ]; then
-      log "repair $key: the base check failed, so this round ran no agent"
+      base_line="$(head -n 1 "$RUN_DIR/repair-$key.base" 2>/dev/null || true)"
+      repair_refuse "$key" "$head" "the base check failed${base_line:+: $base_line}"
     else
+      # Every round of one pull request shares this run folder. glide refuses a finished
+      # run unless --fresh starts it over, so a later round restarts it as glide_run_once
+      # does for a phase. glide archives the folder first, so the earlier round's evidence stays.
+      prior_state="$(terminal_state_of_file "$RUN_DIR/repair-$key/run.json")"
+      if [ -n "$prior_state" ]; then
+        fresh_args=(--fresh)
+        log "repair $key run is terminal ($prior_state); restarting it with --fresh"
+      fi
+      folder="$RUN_DIR/repair-$key"
+      before_file="$RUN_DIR/repair-$key.before.json"
+      repair_snapshot "$folder" "$before_file" >/dev/null 2>&1 || true
       # The pipeline's hooks read the configuration file this driver loaded.
       ARGUS_CONFIG_FILE="$ARGUS_CONFIG_FILE" "$CMD_GLIDE" run --pipeline "$REPAIR_PIPELINE" \
+        "${fresh_args[@]+"${fresh_args[@]}"}" \
         --input "repair_id=$key" --input "repair_task=$BASE_SYNC_NOTE$task" || rc=$?
-      head="$("$CMD_GIT" -C "$wt" rev-parse HEAD 2>/dev/null)"
-      if [ "$rc" -ne 0 ]; then
-        log "repair $key: the run ended with rc=$rc and pushed nothing"
-      elif repair_pushed "$wt" "$head"; then
+      after="$("$CMD_GIT" -C "$wt" rev-parse HEAD 2>/dev/null)"
+      if [ "$rc" -ne 0 ] && repair_proven_refusal "$folder" "$before_file"; then
+        # glide's startup failed and the run folder shows no stage started: no agent ran.
+        repair_refuse "$key" "$head" "glide refused its startup with rc=$rc before any stage"
+      elif [ "$rc" -ne 0 ]; then
+        log "repair $key: the run ended with rc=$rc; the round is counted and this round pushes nothing"
+      elif repair_pushed "$wt" "$after"; then
         # The remote has HEAD. A HEAD that moved during the round was committed and pushed by it.
-        if [ "$head" = "$start" ]; then
+        if [ "$after" = "$start" ]; then
           log "repair $key: the run made no commit; nothing pushed to $branch"
         else
-          log "repair $key: the round pushed its commit ${head:0:7} to $branch; the next tick reads the new checks"
+          log "repair $key: the round pushed its commit ${after:0:7} to $branch; the next tick reads the new checks"
         fi
       elif "$CMD_GIT" -C "$wt" push --quiet origin "HEAD:refs/heads/$branch" >/dev/null 2>&1; then
         log "repair $key: pushed to $branch; the next tick reads the new checks"

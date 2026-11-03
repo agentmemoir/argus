@@ -101,11 +101,49 @@ def test_log_backticks_cannot_close_the_task_fence() -> None:
 
 
 def test_escalation_has_one_cause_and_one_action() -> None:
-    line = escalation_text("#7", 3, failing_checks(RED))
+    line = escalation_text("#7", 3, 0, failing_checks(RED))
     assert line == (
-        "Needs You. #7 is still red after 3 repair round(s): lint failed. "
+        "Needs You. #7 is still red after 3 repair round(s) counted and 0 launch(es) "
+        "refused: lint failed. "
         "Action: fix the failing check on the branch, or close the pull request."
     )
+
+
+def test_escalation_names_the_counts_and_the_last_refusal() -> None:
+    line = escalation_text(
+        "#7", 0, 2, failing_checks(RED), reason="the base check failed: x"
+    )
+    assert line == (
+        "Needs You. #7 is still red after 0 repair round(s) counted and 2 launch(es) "
+        "refused: lint failed. The last refusal: the base check failed: x. "
+        "Action: fix the cause named above, push the branch, or close the pull request."
+    )
+
+
+def test_a_refused_launch_is_taken_back_and_recorded() -> None:
+    from argus.gitsync.repair_round import refuse
+
+    record = refuse(
+        {"attempts": [1000.0, 1600.0]}, "the tmux window did not open", 1700.0
+    )
+    assert record["attempts"] == [1000.0]
+    assert record["refused"] == [
+        {"at": 1700.0, "reason": "the tmux window did not open"}
+    ]
+
+
+def test_refusals_wait_one_wait_and_escalate_at_the_budget() -> None:
+    one = {"attempts": [], "refused": [{"at": 1000.0, "reason": "r"}]}
+    assert decide(RED, one, now=1000.0 + WAIT - 1, attempts=3, wait=WAIT) == (
+        "wait",
+        1000.0 + WAIT,
+    )
+    assert decide(RED, one, now=1000.0 + WAIT, attempts=3, wait=WAIT) == (
+        "repair",
+        None,
+    )
+    spent = {"attempts": [], "refused": [{"at": 1000.0, "reason": "r"}] * 3}
+    assert decide(RED, spent, now=9999.0, attempts=3, wait=WAIT) == ("escalate", None)
 
 
 GREEN = [{"name": "test", "bucket": "pass", "link": "https://ci/2"}]
@@ -150,7 +188,8 @@ def test_a_conflict_task_names_its_cause() -> None:
 
 
 def test_a_conflict_escalation_names_its_cause() -> None:
-    assert escalation_text("#7", 3, [], conflict=True) == (
-        "Needs You. #7 still conflicts with its base after 3 repair round(s). "
+    assert escalation_text("#7", 3, 0, [], conflict=True) == (
+        "Needs You. #7 still conflicts with its base after 3 repair round(s) counted and "
+        "0 launch(es) refused. "
         "Action: resolve the conflict on the branch, or close the pull request."
     )

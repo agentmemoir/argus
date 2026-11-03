@@ -294,9 +294,9 @@ STOP_ALLOWLIST = r"""
     driver/lib-driver-repair.sh	return_nonzero	fn:repair_worktree_add||| { log "repair $key: could not fetch $branch; the next tick retries"; return 1; }#1
     driver/lib-driver-repair.sh	return_nonzero	fn:repair_worktree_add||| { log "repair $key: could not add a worktree for $branch; the next tick retries"; return 1; }#1
     driver/lib-driver-repair.sh	return_nonzero	fn:repair_worktree_add|return 1#1
-    driver/lib-driver-repair.sh	return_nonzero	fn:repair_launch|repair_worktree_add "$key" "$branch" || return 1#1
-    driver/lib-driver-repair.sh	return_nonzero	fn:repair_launch||| { notify "repair $key failed to create tmux session '$SESSION'"; repair_worktree_remove "$(repair_worktree "$key")"; return 1; }#1
-    driver/lib-driver-repair.sh	return_nonzero	fn:repair_launch||| { notify "repair $key failed to launch in tmux"; repair_worktree_remove "$(repair_worktree "$key")"; return 1; }#1
+    driver/lib-driver-repair.sh	return_nonzero	fn:repair_launch||| { repair_refuse "$key" "$head" "the worktree for $branch could not be added"; return 1; }#1
+    driver/lib-driver-repair.sh	return_nonzero	fn:repair_launch||| { repair_refuse "$key" "$head" "the tmux session '$SESSION' could not be created"; repair_worktree_remove "$(repair_worktree "$key")"; return 1; }#1
+    driver/lib-driver-repair.sh	return_nonzero	fn:repair_launch||| { repair_refuse "$key" "$head" "the tmux window did not open"; repair_worktree_remove "$(repair_worktree "$key")"; return 1; }#1
     driver/lib-driver-repair.sh	exit_nonzero	fn:run_repair_session|trap 'rm -f "$PIDFILE"; exit 130' HUP INT TERM#1
     driver/phase-driver.sh	exit_nonzero	fn:<top>|[ "$#" -eq 4 ] || { echo "usage: phase-driver.sh --repair-session <id> <task-file> <branch>" >&2; exit 2; }#1
     driver/lib-driver-checkout.sh	return_nonzero	fn:driver_checkout_lock|common="$(${CMD_GIT:-git} -C "$REPO" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" || return 1#1

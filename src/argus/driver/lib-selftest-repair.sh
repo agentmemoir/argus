@@ -61,23 +61,23 @@ PY
   PENDING_PUBLISHED=0
   repair_tick "$pending"
   if [ "$(selftest_repair_count)" = 1 ] && [ "$PENDING_PUBLISHED" = 0 ] && [ ! -e "$wt" ] \
-      && grep -q 'failed to launch' "$notes"; then
-    echo "ok: repair: a failed launch uses one attempt, is named, and leaves no worktree"
+      && [ -f "$RUN_DIR/repair-77.refused" ] && [ ! -s "$notes" ]; then
+    echo "ok: repair: a refused launch leaves a refusal for the next tick, sends no notice, and leaves no worktree"
   else
-    echo "FAIL: repair: a failed launch was not counted once, left a worktree, or sent no notice (count $(selftest_repair_count))"; bad=1
+    echo "FAIL: repair: a refused launch left a worktree, sent a notice, or left no refusal (count $(selftest_repair_count))"; bad=1
   fi
   : >"$notes"
 
   tmux_phase_window_open() { return 0; }
   PENDING_PUBLISHED=0
   repair_tick "$pending"
-  if [ "$(selftest_repair_count)" = 2 ] && [ "$PENDING_PUBLISHED" = 1 ] \
+  if [ "$(selftest_repair_count)" = 1 ] && [ "$PENDING_PUBLISHED" = 1 ] && [ ! -f "$RUN_DIR/repair-77.refused" ] \
       && [ "$(git -C "$wt" rev-parse HEAD 2>/dev/null)" = "$(git -C "$REPO" rev-parse "origin/$branch")" ] \
       && ! git -C "$wt" symbolic-ref -q HEAD >/dev/null \
       && [ "$(git -C "$REPO" symbolic-ref -q HEAD || echo detached)" = "$main_branch" ]; then
-    echo "ok: repair: a red pull request starts one counted round in a detached worktree"
+    echo "ok: repair: the refused launch is taken back, and a red pull request starts one counted round in a detached worktree"
   else
-    echo "FAIL: repair: the round was not counted after the failed launch, or its worktree is wrong (count $(selftest_repair_count), started $PENDING_PUBLISHED)"; cat "$notes"; bad=1
+    echo "FAIL: repair: the refused launch was not taken back, or the round was not counted once (count $(selftest_repair_count), started $PENDING_PUBLISHED)"; cat "$notes"; bad=1
   fi
 
   repair_tick "$pending"
@@ -90,6 +90,10 @@ PY
 
   selftest_repair_issue_pr || bad=1
   selftest_repair_backup || bad=1
+  selftest_repair_fresh_round || bad=1
+  selftest_repair_refused_budget base || bad=1
+  selftest_repair_refused_budget startup || bad=1
+  selftest_repair_refused_budget stage || bad=1
 
   git -C "$REPO" push -q origin --delete "$branch" || true
   rm -f "$stub" "$cfg" "$notes" "$REPAIR_PIPELINE" "$RUN_DIR"/repair-77.*
@@ -157,5 +161,126 @@ selftest_repair_backup() {
   [ -z "$ref" ] || git -C "$REPO" update-ref -d "$ref"
   git -C "$REPO" push -q origin --delete "$branch" || true
   rm -f "$glide" "$notes" "$RUN_DIR"/repair-79.* "$RUN_DIR/repair-pid"
+  return "$bad"
+}
+
+# Two rounds on one pull request. The first round's run folder is left completed.
+# The stub is glide's behavior: it refuses a finished run unless --fresh is passed,
+# and archives the folder on --fresh. A round that reaches the stub writes one line.
+selftest_repair_fresh_round() {
+  local bad=0 branch=issue/80-fresh glide agent round
+  export RUN_DIR
+  glide="$RUN_DIR/repair-glide-fresh"; agent="$RUN_DIR/repair-80-agent.log"
+  rm -rf "$RUN_DIR/repair-80" "$RUN_DIR"/repair-80.prev-* "$agent"
+  git -C "$REPO" push -q origin "HEAD:refs/heads/$branch" || return 1
+  cat >"$glide" <<'SH'
+#!/bin/sh
+folder="$RUN_DIR/repair-80"
+fresh=0
+for arg in "$@"; do [ "$arg" = --fresh ] && fresh=1; done
+if [ -f "$folder/run.json" ] && [ "$fresh" = 0 ]; then
+  echo "run already finished as completed; --fresh to start over" >&2
+  exit 2
+fi
+if [ "$fresh" = 1 ] && [ -d "$folder" ]; then mv "$folder" "$folder.prev-$$"; fi
+mkdir -p "$folder"
+printf '{"state": "completed"}\n' >"$folder/run.json"
+echo "agent ran" >>"$RUN_DIR/repair-80-agent.log"
+SH
+  chmod 700 "$glide"
+  for round in 1 2; do
+    repair_worktree_add 80 "$branch" || return 1
+    ( base_sync_repair() { BASE_SYNC_STATE=clean BASE_SYNC_NOTE=""; }
+      CMD_GLIDE="$glide"; PIDFILE="$RUN_DIR/repair-pid"
+      run_repair_session 80 "$RUN_DIR/repair-80.md" "$branch" ) >/dev/null 2>&1
+  done
+  if [ "$(wc -l <"$agent" 2>/dev/null | tr -d ' ')" = 2 ] && [ ! -e "$(repair_worktree 80)" ]; then
+    echo "ok: repair: a second round after a completed round reaches the agent launch"
+  else
+    echo "FAIL: repair: the second round did not reach the agent (agent runs: $(cat "$agent" 2>/dev/null | wc -l | tr -d ' '))"; bad=1
+  fi
+  git -C "$REPO" push -q origin --delete "$branch" || true
+  rm -rf "$RUN_DIR/repair-80" "$RUN_DIR"/repair-80.prev-* "$agent"
+  rm -f "$glide" "$RUN_DIR/repair-pid"
+  return "$bad"
+}
+
+# Launches the session refuses before any agent runs. Mode base: the base check fails.
+# Mode glide: glide exits 2 and writes no run marker. Neither spends a round. The third
+# tick sends one Needs You that gives both counts and the reason, and no more for this head.
+# Launches the session handles before any agent runs. Mode base: the base check fails,
+# so no glide run starts and the launch is refused. Mode startup: glide refuses its
+# startup and writes a failed record, so the launch is refused. Mode stage: glide starts
+# a stage, writes a file, and exits non-zero, so each launch counts as a round.
+# Refusals spend no round; rounds count. The third tick sends one Needs You for this head.
+selftest_repair_refused_budget() {
+  local mode="$1" bad=0 n pr branch glide reason pending tick expect
+  case "$mode" in
+    startup) n=82; reason="glide refused its startup with rc=2 before any stage" ;;
+    stage) n=83; reason="" ;;
+    *) n=81; reason="the base check failed: base-sync: configuration error: bad task dir" ;;
+  esac
+  pr=https://github.com/acme/widget/pull/$n; branch=issue/$n-refused
+  glide="$RUN_DIR/repair-$n-glide"
+  refused_notes="$RUN_DIR/repair-refused-notes"; : >"$refused_notes"
+  notify() { printf '%s\n' "$1" >>"$refused_notes"; }
+  tmux_phase_window_open() { return 0; }
+  rm -rf "$RUN_DIR/repair-$n" "$RUN_DIR"/repair-$n.* "$glide"
+  case "$mode" in
+    startup) cat >"$glide" <<SH
+#!/bin/sh
+mkdir -p "$RUN_DIR/repair-$n"
+printf '%s\n' '{"state": "failed", "reason": "run already finished as completed"}' >"$RUN_DIR/repair-$n/result.json"
+exit 2
+SH
+      ;;
+    stage) cat >"$glide" <<SH
+#!/bin/sh
+mkdir -p "$RUN_DIR/repair-$n"
+echo step >>"$RUN_DIR/repair-$n/stage.log"
+exit 2
+SH
+      ;;
+    *) printf '#!/bin/sh\nexit 2\n' >"$glide" ;;
+  esac
+  chmod 700 "$glide"
+  git -C "$REPO" push -q origin "HEAD:refs/heads/$branch" || return 1
+  pending="{\"awaiting_review\":[{\"phase\":\"100011\",\"branch\":\"$branch\",\"pull_request\":\"$pr\"}]}"
+  for tick in 1 2 3; do
+    PENDING_PUBLISHED=0
+    repair_tick "$pending"
+    if [ "$PENDING_PUBLISHED" = 1 ]; then
+      # The launched round's session runs here, and fails the way this mode says.
+      ( base_sync_repair() {
+          if [ "$mode" != base ]; then BASE_SYNC_STATE=clean BASE_SYNC_NOTE=""; return 0; fi
+          BASE_SYNC_STATE=failed BASE_SYNC_NOTE=""
+          echo "base-sync: configuration error: bad task dir" >"$RUN_DIR/repair-$n.base"
+        }
+        CMD_GLIDE="$glide"; PIDFILE="$RUN_DIR/repair-pid"
+        run_repair_session "$n" "$RUN_DIR/repair-$n.md" "$branch" ) >/dev/null 2>&1
+    fi
+  done
+  repair_tick "$pending"
+  if [ "$mode" = stage ]; then
+    expect="2 repair round(s) counted and 0 launch(es) refused"
+    grep -qF "$expect" "$refused_notes" \
+      && [ "$(wc -l <"$RUN_DIR/repair-$n/stage.log" | tr -d ' ')" = 2 ] \
+      && [ ! -f "$RUN_DIR/repair-$n.refused" ] \
+      && [ "$("$PYTHON" -c 'import json,sys; print(len(json.load(open(sys.argv[1])).get("attempts", [])))' "$RUN_DIR/repair-$n.json")" = 2 ] \
+      && [ "$(wc -l <"$refused_notes" | tr -d ' ')" = 1 ] && proved=1 || proved=0
+  else
+    expect="0 repair round(s) counted and 2 launch(es) refused"
+    grep -qF "$expect" "$refused_notes" \
+      && grep -qF "The last refusal: $reason." "$refused_notes" \
+      && [ "$(wc -l <"$refused_notes" | tr -d ' ')" = 1 ] \
+      && [ "$("$PYTHON" -c 'import json,sys; print(len(json.load(open(sys.argv[1])).get("attempts", [])))' "$RUN_DIR/repair-$n.json")" = 0 ] && proved=1 || proved=0
+  fi
+  if [ "$proved" = 1 ]; then
+    echo "ok: repair: $mode launches end in one Needs You with the counts and the reason"
+  else
+    echo "FAIL: repair: $mode launches did not end in one Needs You with the real counts and reason"; cat "$refused_notes"; bad=1
+  fi
+  git -C "$REPO" push -q origin --delete "$branch" || true
+  rm -rf "$refused_notes" "$glide" "$RUN_DIR/repair-$n" "$RUN_DIR"/repair-$n.* "$RUN_DIR/repair-pid"
   return "$bad"
 }

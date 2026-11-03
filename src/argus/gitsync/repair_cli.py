@@ -9,8 +9,10 @@ decides with ``repair_round.decide``, and prints one JSON object: ``action``
 ``message`` on escalate, and ``waiting`` while the pull request still needs the
 driver. A repair decision writes the task file but counts
 nothing. The driver runs the command again with ``--launched`` once the repair
-run has started, and only that call counts the round, so a launch that fails can
-never use up a round or lead to a false escalation.
+run has started, and only that call counts the round. A launch the session
+refuses before any agent runs leaves a refusal file in the run folder; the next
+call takes that round back and counts the refusal instead, so a refused launch
+never uses up a round.
 
 A checks read or a merge-state read that fails exits 3 and changes nothing: an
 unread pull request is not a green one.
@@ -37,7 +39,7 @@ if not __package__:
     )
 from argus import conventions
 from argus.board.core import CoordinationError
-from argus.gitsync import issue_read_fault, pending_limit, repair_round
+from argus.gitsync import issue_read_fault, pending_limit, repair_refusal, repair_round
 from argus.gitsync.gh_checks import gh_pull_request_checks
 from argus.gitsync.gh_read import gh_pull_requests_for_branch
 from argus.gitsync.git import GH_TIMEOUT_S, ConfigError, gh_binary
@@ -71,15 +73,6 @@ def _key(pull_request: str) -> str:
     if not tail.isdigit():
         raise ValueError(f"pull request {pull_request!r} has no number")
     return tail
-
-
-def _base_failure(run_dir: Path, key: str) -> str | None:
-    """The base check's failure line that the last round left, if one did."""
-    try:
-        text = (run_dir / f"repair-{key}.base").read_text(encoding="utf-8")
-    except FileNotFoundError:
-        return None
-    return text.strip() or None
 
 
 def save_failed_log(
@@ -277,6 +270,7 @@ def run(args: argparse.Namespace, now: float) -> tuple[int, dict[str, object]]:
             "for it. Action: move that file aside, then the next tick starts the count again."
         )
         return 0, {"action": "unreadable", "message": message}
+    record = repair_refusal.take(args.run_dir, record_path, key, args.head, record, now)
     action, due = repair_round.decide(
         rows,
         record,
@@ -303,12 +297,14 @@ def run(args: argparse.Namespace, now: float) -> tuple[int, dict[str, object]]:
     elif action == "escalate":
         record["escalated"] = True
         repair_round.save_record(record_path, record)
+        refusals = record.get("refused", [])
         out["message"] = repair_round.escalation_text(
             args.pull_request,
-            args.attempts,
+            len(record.get("attempts", [])),
+            len(refusals),
             failing,
             conflict=conflict,
-            base=_base_failure(args.run_dir, key),
+            reason=str(refusals[-1]["reason"]) if refusals else None,
         )
     pending_path = args.run_dir / f"pending-{key}.json"
     out.update(pending_limit.step(pending_path, args.pull_request, head, rows, now))

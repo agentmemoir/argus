@@ -60,12 +60,26 @@ def decide(
     ):
         return "none", None
     started: list[float] = [float(t) for t in record.get("attempts", [])]
-    if len(started) >= attempts:
+    refusals: list[float] = [float(r["at"]) for r in record.get("refused", [])]
+    if len(started) >= attempts or len(refusals) >= attempts:
         return ("none" if record.get("escalated") else "escalate"), None
+    if refusals and now < refusals[-1] + wait:
+        return "wait", refusals[-1] + wait
     if not started:
         return "repair", None
     due = started[0] + len(started) * wait
     return ("repair", None) if now >= due else ("wait", due)
+
+
+def refuse(record: dict[str, Any], reason: str, at: float) -> dict[str, Any]:
+    """Take back the last counted round, which ran no agent, and record the refusal.
+
+    A round is counted before its launch, so the last counted round is the refused
+    one. Refusals have their own cap, the same budget, so they cannot repeat for ever.
+    """
+    started = [*record.get("attempts", [])][:-1]
+    refused = [*record.get("refused", []), {"at": at, "reason": reason}]
+    return {**record, "attempts": started, "refused": refused}
 
 
 def for_head(record: dict[str, Any], head: str) -> dict[str, Any]:
@@ -173,30 +187,26 @@ def task_text(
 
 def escalation_text(
     pull_request: str,
-    attempts: int,
+    rounds: int,
+    refused: int,
     failing: list[dict[str, str]],
     conflict: bool = False,
-    base: str | None = None,
+    reason: str | None = None,
 ) -> str:
-    """The Needs You line: one cause and one action. ``base`` is the failure
-    the base check left on the last round, when that check failed."""
+    """The Needs You line: the rounds that ran, the launches refused, one cause
+    and one action. ``reason`` is the last refusal's reason, when one was recorded."""
+    tally = f"{rounds} repair round(s) counted and {refused} launch(es) refused"
     if conflict:
-        cause = (
-            f"{pull_request} still conflicts with its base after "
-            f"{attempts} repair round(s)."
-        )
-        action = "resolve the conflict on the branch, or close the pull request."
+        cause = f"{pull_request} still conflicts with its base after {tally}."
+        check = "resolve the conflict on the branch, or close the pull request."
     else:
         names = ", ".join(c["name"] for c in failing) or "a check"
-        cause = (
-            f"{pull_request} is still red after {attempts} repair "
-            f"round(s): {names} failed."
-        )
-        action = "fix the failing check on the branch, or close the pull request."
-    if base is None:
-        return f"Needs You. {cause} Action: {action}"
+        cause = f"{pull_request} is still red after {tally}: {names} failed."
+        check = "fix the failing check on the branch, or close the pull request."
+    if reason is None:
+        return f"Needs You. {cause} Action: {check}"
     return (
-        f"Needs You. {cause} The base check failed on the last round: {base}. "
+        f"Needs You. {cause} The last refusal: {reason}. "
         "Action: fix the cause named above, push the branch, or close the pull request."
     )
 
@@ -205,6 +215,7 @@ __all__ = [
     "decide",
     "escalation_text",
     "failing_checks",
+    "refuse",
     "for_head",
     "load_record",
     "save_record",
