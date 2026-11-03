@@ -10,10 +10,14 @@ Every git call is an argument list. The branch name is data: it must pass
 ``git check-ref-format`` and may not start with ``-``.
 """
 
+import unicodedata
 from pathlib import Path
 from typing import Any
 
 from argus.gitsync.git import FETCH_TIMEOUT_S, git, is_git_repo
+
+# The most characters of git's own output kept in a failure reason.
+DETAIL_LIMIT = 240
 
 NO_CONFLICT = "NO_CONFLICT"
 MERGED = "MERGED"
@@ -76,6 +80,16 @@ def _failed(result: dict[str, Any], reason: str) -> dict[str, Any]:
     return dict(result, state=FAILED, reason=reason)
 
 
+def _one_line(text: str) -> str:
+    """Git's output as one short line: control characters and line breaks become
+    spaces, and a text longer than DETAIL_LIMIT is cut with an ellipsis."""
+    clean = "".join(" " if unicodedata.category(c)[0] == "C" else c for c in text)
+    line = " ".join(clean.split())
+    if len(line) <= DETAIL_LIMIT:
+        return line
+    return line[: DETAIL_LIMIT - 3] + "..."
+
+
 def base_sync(repo: str | Path, branch: str) -> dict[str, Any]:
     """Check one checkout against its base, and merge when git can do it."""
     path = Path(repo).resolve()
@@ -112,16 +126,16 @@ def base_sync(repo: str | Path, branch: str) -> dict[str, Any]:
     why = _recorded_checkout(path, branch)  # re-read right before the write
     if why is not None:
         return _failed(result, why)
-    rc, _, _ = git(
+    rc, out, err = git(
         path, "merge", "--no-edit", f"origin/{base}", timeout=FETCH_TIMEOUT_S
     )
     if rc != 0:
         _, unmerged, _ = git(path, "diff", "--name-only", "--diff-filter=U")
         if unmerged:
             return dict(result, state=TEXT_CONFLICT, conflicted=unmerged.splitlines())
-        return _failed(
-            result, f"git merge of origin/{base} failed and left no conflict"
-        )
+        reason = f"git merge of origin/{base} failed and left no conflict"
+        detail = _one_line(err or out)
+        return _failed(result, f"{reason}: {detail}" if detail else reason)
     _, head, _ = git(path, "rev-parse", "HEAD")
     rc, _, _ = git(
         path, "push", "origin", f"HEAD:refs/heads/{branch}", timeout=FETCH_TIMEOUT_S

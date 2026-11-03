@@ -195,3 +195,25 @@ def test_config_check_ignores_the_checkout_flag(tmp_path: Path) -> None:
     assert "configuration error" not in done.stdout
     assert done.stdout.startswith("base-sync: failed:")
     assert done.returncode == 1
+
+
+def test_merge_refused_without_conflict_keeps_git_stderr(
+    repos: dict[str, Path],
+) -> None:
+    # The base adds a file that the checkout already holds untracked. git refuses
+    # the merge before it starts, so no conflict is left and stderr names the cause.
+    name = "untracked-" + "x" * 150 + ".txt"
+    _move_base(repos, name, "base side\n")
+    (repos["work"] / name).write_text("local side\n")
+    before = _git(repos["work"], "rev-parse", "HEAD")
+    out = bs.base_sync(repos["work"], BRANCH)
+    assert out["state"] == bs.FAILED
+    assert _git(repos["work"], "rev-parse", "HEAD") == before
+    assert not (repos["work"] / ".git" / "MERGE_HEAD").exists()
+    prefix = "git merge of origin/master failed and left no conflict: "
+    assert out["reason"].startswith(prefix)
+    detail = out["reason"].removeprefix(prefix)
+    assert "would be overwritten by merge" in detail
+    assert "\n" not in out["reason"]
+    assert len(detail) <= 240
+    assert detail.endswith("...")

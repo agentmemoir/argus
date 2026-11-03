@@ -1,0 +1,1 @@
+A base-sync merge that git refuses without a conflict now reports git's own reason in its failure line, in one short line. It no longer says only that the merge "left no conflict". ([#314](https://github.com/agentmemoir/argus/issues/314))
