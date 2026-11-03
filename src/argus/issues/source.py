@@ -16,7 +16,7 @@ from argus.board.reservations import (
 from argus.issues import claims
 from argus.issues.branches import fresh_task_path
 from argus.issues.client import IssueClient
-from argus.issues.evidence import Evidence, escalated, pending, signals
+from argus.issues.evidence import Evidence, escalated, left_out, pending, signals
 from argus.issues.filter import eligible, label_claimed
 from argus.issues.leftover import release_closed
 from argus.issues.order import PREFERENCES, ordering
@@ -195,8 +195,8 @@ class IssuesSource(_Reports, WorkSource):
         for row in self.rows or []:
             number = row["number"]
             record = self.records.get(f"{number:06d}")
-            if escalated(record):
-                self.skipped["escalated"] += 1
+            if left_out(self.repo, number, record):
+                self.skipped["escalated" if escalated(record) else "read_fault"] += 1
                 continue
             if record is not None and claims.held(record):
                 if record.get("machine_id") == machine:
@@ -291,7 +291,7 @@ class IssuesSource(_Reports, WorkSource):
             record = self.records.get(f"{row['number']:06d}")
             if (
                 claims.held(record)
-                or escalated(record)
+                or left_out(self.repo, row["number"], record)
                 or label_claimed(row, record, self.claim_label)
             ):
                 continue

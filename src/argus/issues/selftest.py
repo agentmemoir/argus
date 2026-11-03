@@ -73,6 +73,9 @@ def _checks(repo: Path) -> None:
         "issues.claim-label": "accepted",
         "issues.task-dir": repo / "tasks",
         "issues.max-text-bytes": 12,
+        # The selector reads the listing's count file from the driver state folder.
+        "driver.runs": repo / "runs",
+        "driver.state": "state",
     }
     conventions.override(settings)
     client = IssueClient()

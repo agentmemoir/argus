@@ -52,6 +52,7 @@ def settings(repo: Path, binary: Path) -> dict[str, Any]:
         "pipeline": None,
         "phases.directory": repo,
         "driver.runs": repo / "runs",
+        "driver.state": "state",
         "commands.gh": str(binary),
         "commands.git": "git",
         "board.repo": repo / "board",
