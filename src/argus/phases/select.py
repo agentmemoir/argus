@@ -32,7 +32,8 @@ def _awaiting_review(repo: str | Path, number: int) -> dict[str, Any] | None:
     work. The selector must not offer it for another run, and it must not skip
     past it either: the line waits until a person merges.
     """
-    return _gitsync(repo)(repo, number)
+    result: dict[str, Any] | None = _gitsync(repo)(repo, number)
+    return result
 
 
 def _reservation_result(

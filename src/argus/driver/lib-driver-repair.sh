@@ -15,8 +15,9 @@
 # The open pull requests of `issues` work, in the pending-review shape. Only
 # branches that an issue run folder records are read (gitsync/repair_cli.py).
 # "held" lists the issues whose read failed and that still have attempts left: the
-# tick holds new work while it is not empty. "notices" holds one Needs You text for
-# each issue whose third attempt just failed (gitsync/repair_cli.py).
+# tick holds new work while it is not empty. "notices" holds one {key, text} Needs
+# You notice for each issue whose third attempt failed, until the count clears
+# (gitsync/repair_cli.py).
 issue_review_snapshot() {
   "$PYTHON" - "$ARGUS" "$REPO" "${ARGUS_CONFIG_ARGS[@]}" <<'PY'
 import json
@@ -229,7 +230,7 @@ for row in json.load(sys.stdin).get("awaiting_review", []):
 # issue has attempts left; the other issues' repair checks still run. A listing that
 # cannot run at all stops the tick.
 repair_issue_reads() {
-  local issue_rows held text
+  local issue_rows held key text marker
   # A missing pipeline ends the step before the snapshot, which would spend one
   # gh read per issue run folder on a round that cannot start.
   if [ ! -r "$REPAIR_PIPELINE" ]; then
@@ -240,12 +241,18 @@ repair_issue_reads() {
     repair_stop "issue pull requests could not be listed"
     return 0
   fi
-  while IFS= read -r text; do
-    [ -n "$text" ] || continue
+  # A notice goes out once per key: its text is kept in the run folder after the send,
+  # so a tick that lists it again sends nothing. A crash before the send leaves the
+  # notice listed, so the next tick sends it.
+  while IFS=$'\t' read -r key text; do
+    [ -n "$key" ] || continue
+    marker="$RUN_DIR/log-last-notice-$key"
+    if [ "$(cat "$marker" 2>/dev/null)" = "$text" ]; then continue; fi
     notify "$text"
+    printf '%s' "$text" >"$marker"
   done < <(printf '%s' "$issue_rows" | "$PYTHON" -c 'import json, sys
-for text in json.load(sys.stdin).get("notices", []):
-    print(" ".join(str(text).split()))')
+for entry in json.load(sys.stdin).get("notices", []):
+    print("\t".join(" ".join(str(entry[k]).split()) for k in ("key", "text")))')
   repair_tick "$issue_rows"
   held="$(selection_value held <<<"$issue_rows")"
   if [ -n "$held" ] && [ "$held" != "[]" ]; then

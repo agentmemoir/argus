@@ -120,7 +120,7 @@ def save_failed_log(
 def issue_pull_requests(
     root: str | Path,
     unread: list[int] | None = None,
-    notices: list[str] | None = None,
+    notices: list[dict[str, str]] | None = None,
     *,
     now: float | None = None,
 ) -> list[dict[str, object]]:
@@ -134,8 +134,11 @@ def issue_pull_requests(
     ``now`` is given by the repair listing only. It turns on the attempt count
     (issue_read_fault): no read is made before an attempt is due, a failure is
     counted, and an issue still inside its attempts is appended to ``unread``, so
-    the caller holds new work. The third failure appends one Needs You text to
-    ``notices``. An issue whose attempts are spent is not in ``unread``. Without
+    the caller holds new work. The third failure appends one Needs You notice, a
+    ``{"key", "text"}`` pair, to ``notices``. A notice saved in the count file is
+    appended again on every tick until the count is cleared, so a crash before it
+    is sent does not lose it. The caller sends each key once. An issue whose
+    attempts are spent is not in ``unread``. Without
     ``now``, a failed read is only reported, and its number is appended to
     ``unread`` when that list is given.
     """
@@ -159,6 +162,9 @@ def issue_pull_requests(
                 file=sys.stderr,
             )
             issue_read_fault.reset(count)
+        owed = None if count is None else issue_read_fault.notice(count)
+        if owed is not None and notices is not None:
+            notices.append(owed)
         if (
             count is not None
             and now is not None

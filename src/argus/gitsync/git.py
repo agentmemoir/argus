@@ -55,12 +55,14 @@ class ConfigError(Exception):
 
 def git_binary() -> str:
     """The git command named in the loaded config."""
-    return setting("commands.git")
+    binary: str = setting("commands.git")
+    return binary
 
 
 def gh_binary() -> str:
     """The gh command named in the loaded config."""
-    return setting("commands.gh")
+    binary: str = setting("commands.gh")
+    return binary
 
 
 def git(

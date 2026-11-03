@@ -51,9 +51,11 @@ def listing(
     conventions.configure(previous)
 
 
-def _tick(listing: dict[str, Any], now: float) -> tuple[list[int], list[str]]:
+def _tick(
+    listing: dict[str, Any], now: float
+) -> tuple[list[int], list[dict[str, str]]]:
     unread: list[int] = []
-    notices: list[str] = []
+    notices: list[dict[str, str]] = []
     repair_cli.issue_pull_requests(listing["root"], unread, notices, now=now)
     return unread, notices
 
@@ -77,19 +79,36 @@ def test_no_read_is_made_before_the_attempt_is_due(listing: dict[str, Any]) -> N
 def test_the_third_failure_raises_one_notice_and_leaves_the_issue_out(
     listing: dict[str, Any],
 ) -> None:
-    notices: list[str] = []
+    notices: list[dict[str, str]] = []
     unread: list[int] = []
     for now in (0.0, WAIT, 2 * WAIT):
         unread, notices = [], []
         repair_cli.issue_pull_requests(listing["root"], unread, notices, now=now)
     assert unread == []
     assert len(notices) == 1
-    assert "issue 7" in notices[0] and "3 attempts" in notices[0]
-    assert "gh ran the list and failed (gh exited 1)" in notices[0]
+    text = notices[0]["text"]
+    assert "issue 7" in text and "3 attempts" in text
+    assert "gh ran the list and failed (gh exited 1)" in text
     assert evidence.left_out(listing["root"], 7, None)
+    # The notice stays listed while the count stands; the shell sends each key once.
     later, more = _tick(listing, 3 * WAIT)
-    assert later == [] and more == []
+    assert later == []
+    assert [n["key"] for n in more] == [notices[0]["key"]]
     assert listing["calls"] == 4
+
+
+def test_a_crash_after_the_third_failure_still_raises_the_notice(
+    listing: dict[str, Any],
+) -> None:
+    # The tick that saves the third failure dies before its notice is sent: the
+    # notices of that tick are never read. The next tick must still list the notice.
+    for now in (0.0, WAIT):
+        _tick(listing, now)
+    _tick(listing, 2 * WAIT)  # the crash: this tick's notices are lost
+    unread, notices = _tick(listing, 3 * WAIT)
+    assert unread == []
+    assert len(notices) == 1
+    assert "3 attempts" in notices[0]["text"]
 
 
 def test_a_success_clears_the_count_and_the_exclusion(listing: dict[str, Any]) -> None:

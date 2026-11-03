@@ -190,7 +190,7 @@ class _FixtureSource(WorkSource):
         return {"state": "NO_PHASE", "fixture": True}
 
 
-def _self_test_second_source():
+def _self_test_second_source() -> None:
     """A second registered source must be reachable, or the registry is prose.
 
     Only the phases source exists today, so every other way of exercising the

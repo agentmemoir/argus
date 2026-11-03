@@ -1,0 +1,1 @@
+A Needs You notice for the third failed pull request read of an issue is kept in the issue's read count, so a driver stop before it is sent does not lose it. The notice is sent once per failure episode.
