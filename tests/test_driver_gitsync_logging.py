@@ -239,7 +239,7 @@ def test_failed_sweep_log_line_holds_the_sweep_reason(tmp_path: Path) -> None:
 
 def test_a_skip_that_clears_is_logged_again_when_it_returns(tmp_path: Path) -> None:
     skip = {"ok": True, "mode": "clean", "state": "PARTIAL", "skipped": SKIPPED[:1]}
-    clean = {
+    clean: dict[str, object] = {
         "ok": True,
         "mode": "clean",
         "repos": [],
