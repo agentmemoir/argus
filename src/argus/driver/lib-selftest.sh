@@ -199,9 +199,10 @@ driver_self_test() {
     # failing command and `set -e` would stop the teardown on its first line,
     # which is the session leak this exists to stop. A status the run chose on
     # purpose, such as the skip code, is left alone.
-    if [ "$rc" -eq 0 ] && [ "$SELFTEST_REACHED_END" -eq 0 ]; then
-      rc=1
-      echo "FAIL: the self-test stopped before its last check" >&2
+    if [ "$SELFTEST_REACHED_END" -eq 0 ] && [ "$rc" -ne 77 ] && [ -z "${SELFTEST_STOP_REPORTED:-}" ]; then
+      SELFTEST_STOP_REPORTED=1
+      if [ "$rc" -eq 0 ]; then rc=1; fi
+      echo "FAIL: the self-test stopped before its last check (status $rc)" >&2
     fi
     # The tripwire, here rather than at the end of the body. A check at the end of
     # the body is not run at all by the run that needs it, and the run that needs

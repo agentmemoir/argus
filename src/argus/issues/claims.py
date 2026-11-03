@@ -162,3 +162,35 @@ def retry(
     )
     store.set_issue_receipt(reservation, None)
     store.release_group(reservation)
+
+
+def pending_refusal(
+    repo: Path,
+    store: Any,
+    client: IssueClient,
+    records: dict[str, Any],
+    machine: str,
+    reserve: bool,
+) -> tuple[int, dict[str, Any], str] | None:
+    """The first held record of this machine whose report write-back is pending.
+
+    With ``reserve``, the write-back is retried and its record is dropped once it
+    lands. A retry that fails is returned with its error. Without ``reserve``, the
+    first pending write-back is returned as it stands.
+    """
+    for key, record in list(records.items()):
+        if (
+            record.get("machine_id") != machine
+            or not held(record)
+            or not pending(record)
+        ):
+            continue
+        number = int(key)
+        if not reserve:
+            return number, record, "validated report write-back is pending"
+        try:
+            retry(repo, store, client, number, record)
+        except IssuesUnavailable as exc:
+            return number, record, str(exc)
+        records.pop(key, None)
+    return None

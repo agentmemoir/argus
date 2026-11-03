@@ -1,0 +1,1 @@
+An open issue that this machine holds, with a finished run and no pull request, no longer stops the queue. Argus skips it and raises its one Needs You line on the tick. A checked no-change run still closes first, as before. ([#317](https://github.com/agentmemoir/argus/issues/317))

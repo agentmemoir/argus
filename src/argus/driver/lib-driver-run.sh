@@ -214,13 +214,38 @@ gitsync_clean() {
 # closes that gap before the launch without carrying another phase's partial
 # records into this phase's commit. A failure is logged and never halts: the
 # publish that would have refused reports it instead.
+# The reason a failed leftover sweep gives: its top-level error, or else the first
+# repository's blocker. Prints nothing when the result file gives neither.
+sweep_failure_reason() {
+  "$PYTHON" -c 'import json,sys
+try:
+    with open(sys.argv[1], encoding="utf-8") as handle:
+        data = json.load(handle)
+except (OSError, ValueError):
+    data = None
+reason = ""
+if isinstance(data, dict):
+    if isinstance(data.get("error"), str):
+        reason = data["error"]
+    for one in data.get("repos") or []:
+        if not reason and isinstance(one, dict) and one.get("ok") is False:
+            blockers = one.get("blockers") or []
+            reason = str(blockers[-1]) if blockers else ""
+text = "".join(ch if ch.isprintable() else " " for ch in reason)
+print(" ".join(text.split()))' "$1" 2>/dev/null || true
+}
+
 gitsync_land_leftovers() {
-  local rc=0 warning=""
+  local rc=0 warning="" reason=""
   "$PYTHON" "$ARGUS/gitsync/main.py" "${ARGUS_CONFIG_ARGS[@]}" --root "$REPO" --mode clean \
     "${GITSYNC_KIND_ARGS[@]+"${GITSYNC_KIND_ARGS[@]}"}" \
     >"$RUN_DIR/run-state-leftovers.json" 2>/dev/null || rc=$?
   if [ "$rc" -ne 0 ]; then
-    log "could not land leftover run state before launch (rc=$rc; see $RUN_DIR/run-state-leftovers.json)"
+    reason="$(cap_length "$(sweep_failure_reason "$RUN_DIR/run-state-leftovers.json")" 500)"
+    if [ -n "$reason" ]; then
+      reason="; reason: $reason"
+    fi
+    log "could not land leftover run state before launch (rc=$rc$reason; see $RUN_DIR/run-state-leftovers.json)"
   else
     warning="$(run_state_warning "$RUN_DIR/run-state-leftovers.json")"
     if [ -n "$warning" ]; then
@@ -229,7 +254,13 @@ gitsync_land_leftovers() {
   fi
   # A whole-tree sweep lands some phases and skips others and still exits 0,
   # so the exit code cannot carry a skip. Say each one; never change the rc.
-  "$PYTHON" -c 'import json,sys
+  local seen=" " kind index phase state reason unreadable=0
+  while IFS=$'\t' read -r kind index phase state reason; do
+    case "$kind" in
+      skip) seen="$seen$index "; log_changed "leftovers-skipped-$index" "leftover run state skipped ${work_kind:-phase} $phase ($state): $(cap_length "$(flatten_one_line "$reason")" 500)" ;;
+      unreadable) unreadable=1; log_changed "leftovers-unreadable" "could not read the clean sweep result at $RUN_DIR/run-state-leftovers.json; skipped phases are unknown" ;;
+    esac
+  done < <("$PYTHON" -c 'import json,sys
 
 
 def clean(value):
@@ -255,18 +286,23 @@ if not unreadable:
                 unreadable = True
                 continue
             print("skip", index,
-                  clean(one.get("phase", "")) or "unknown",
+                  clean(one.get("phase") or one.get("folder") or "") or "unknown",
                   clean(one.get("state", "")) or "unknown",
                   clean(one.get("error", "")), sep="\t")
 if unreadable:
     print("unreadable")' \
-    "$RUN_DIR/run-state-leftovers.json" 2>/dev/null |
-    while IFS=$'\t' read -r kind index phase state reason; do
-      case "$kind" in
-        skip) log_changed "leftovers-skipped-$index" "leftover run state skipped phase $phase ($state): $(cap_length "$(flatten_one_line "$reason")" 500)" ;;
-        unreadable) log_changed "leftovers-unreadable" "could not read the clean sweep result at $RUN_DIR/run-state-leftovers.json; skipped phases are unknown" ;;
-      esac
-    done || true
+    "$RUN_DIR/run-state-leftovers.json" 2>/dev/null) || true
+  # A skip this sweep no longer lists is forgotten, so an identical skip that
+  # returns after a clean tick is logged again.
+  local remembered keep
+  for remembered in "$RUN_DIR"/log-last-leftovers-skipped-*; do
+    [ -e "$remembered" ] || continue
+    keep="${remembered##*-}"
+    case "$seen" in *" $keep "*) ;; *) rm -f "$remembered" ;; esac
+  done
+  # A readable sweep result forgets the unreadable line, so the next unreadable
+  # result is logged again.
+  [ "$unreadable" = 1 ] || rm -f "$RUN_DIR/log-last-leftovers-unreadable"
   return 0
 }
 

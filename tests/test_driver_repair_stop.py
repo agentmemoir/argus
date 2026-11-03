@@ -121,3 +121,37 @@ def test_an_unread_branch_head_ends_the_tick_before_selection(tmp_path: Path) ->
         e.startswith("repair: could not read the head of feature/fixture")
         for e in events
     )
+
+
+def _listing(held: str, notices: str) -> str:
+    return (
+        "issue_review_snapshot() { printf '%s' "
+        '\'{"awaiting_review":[{"issue":9,"branch":"issue/9-docs",'
+        '"pull_request":"https://example.test/pull/9"}],'
+        f'"held":{held},"notices":{notices}}}\'; }}\n'
+    )
+
+
+def test_a_held_issue_read_holds_new_work_and_other_issues_still_repair(
+    tmp_path: Path,
+) -> None:
+    events = _events(
+        tmp_path,
+        "WORK_SOURCE=issues\n"
+        + _listing("[7]", "[]")
+        + 'DECISION=\'{"action":"none"}\'\n_drive\n',
+    )
+    assert "CLI" in events
+    assert "SELECT" not in events
+    assert any("unread for [7]" in e for e in events)
+
+
+def test_a_third_failed_read_notifies_once_and_new_work_goes_on(tmp_path: Path) -> None:
+    no_rows = (
+        "issue_review_snapshot() { printf '%s' "
+        '\'{"awaiting_review":[],"held":[],"notices":'
+        '[{"key":"read-fault-9-1","text":"Needs You. x"}]}\'; }\n'
+    )
+    events = _events(tmp_path, "WORK_SOURCE=issues\n" + no_rows + "_drive\n_drive\n")
+    assert events.count("NOTIFY Needs You. x") == 1
+    assert "SELECT" in events

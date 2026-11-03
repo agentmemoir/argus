@@ -6,11 +6,13 @@ import subprocess
 import unicodedata
 from pathlib import Path
 
+from argus.board.files import reservation_file
 from argus.gitsync.issue_paths import issue_branch
 from argus.gitsync.pr_signal_reply import SECRET_PATTERN
 from argus.issues.client import IssueClient
 from argus.issues.evidence import Evidence
 from argus.issues.pulls import history
+from argus.phases.runstate import state_in
 
 
 def pull_request_verdict(number: int, task_name: str) -> str:
@@ -34,6 +36,12 @@ def owned(number: int) -> bool:
 
 NO_CHANGE_FILE = "no-change.txt"
 REASON_CAP = 200
+
+
+def finished_unchecked(repo: Path, number: int) -> bool:
+    """Whether the run completed with no checked no-change file, so no close waits."""
+    run = reservation_file(repo, number, kind="issue").parent
+    return state_in(run) == "completed" and not (run / NO_CHANGE_FILE).exists()
 
 
 def _git_text(repo: Path, *args: str) -> str | None:

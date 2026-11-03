@@ -16,7 +16,8 @@ from argus.board.reservations import (
 from argus.issues import claims
 from argus.issues.branches import fresh_task_path
 from argus.issues.client import IssueClient
-from argus.issues.evidence import Evidence, escalated, pending, signals
+from argus.issues.completed_run import finished_unchecked
+from argus.issues.evidence import Evidence, escalated, left_out, signals
 from argus.issues.filter import eligible, label_claimed
 from argus.issues.leftover import release_closed
 from argus.issues.order import PREFERENCES, ordering
@@ -137,33 +138,19 @@ class IssuesSource(_Reports, WorkSource):
         return bool(self.client.view(row["number"], row)["state"].lower() != "open")
 
     def _cleanup(self, machine: str, reserve: bool) -> dict[str, Any] | None:
-        for key, record in list(self.records.items()):
-            if record.get("machine_id") != machine or not claims.held(record):
-                continue
-            number = int(key)
-            if pending(record):
-                if reserve:
-                    try:
-                        claims.retry(self.repo, self.store, self.client, number, record)
-                    except IssuesUnavailable as exc:
-                        return self._base(
-                            "WAIT_FOR_CLAIM",
-                            record=record,
-                            issue=str(number),
-                            status="writeback_pending",
-                            error=str(exc),
-                        )
-                    self.records.pop(key, None)
-                else:
-                    return self._base(
-                        "WAIT_FOR_CLAIM",
-                        record=record,
-                        issue=str(number),
-                        status="writeback_pending",
-                        error="validated report write-back is pending",
-                    )
-                continue
-        return None
+        refusal = claims.pending_refusal(
+            self.repo, self.store, self.client, self.records, machine, reserve
+        )
+        if refusal is None:
+            return None
+        number, record, error = refusal
+        return self._base(
+            "WAIT_FOR_CLAIM",
+            record=record,
+            issue=str(number),
+            status="writeback_pending",
+            error=error,
+        )
 
     def select(
         self, machine_id: str | None = None, *, reserve: bool = True, store: Any = None
@@ -195,8 +182,8 @@ class IssuesSource(_Reports, WorkSource):
         for row in self.rows or []:
             number = row["number"]
             record = self.records.get(f"{number:06d}")
-            if escalated(record):
-                self.skipped["escalated"] += 1
+            if left_out(self.repo, number, record):
+                self.skipped["escalated" if escalated(record) else "read_fault"] += 1
                 continue
             if record is not None and claims.held(record):
                 if record.get("machine_id") == machine:
@@ -216,6 +203,11 @@ class IssuesSource(_Reports, WorkSource):
                         # continues to another issue while the claim waits to
                         # resume through its own windows.
                         self.skipped["failed"] += 1
+                        continue
+                    if finished_unchecked(self.repo, number):
+                        # The run finished with no checked close. Selection moves on,
+                        # and the tick raises the one Needs You line for this claim.
+                        self.skipped["claimed"] += 1
                         continue
                     frozen = claims.snapshot(self.repo, number, record)
                     if frozen is None:
@@ -248,10 +240,7 @@ class IssuesSource(_Reports, WorkSource):
                 self.store, machine, self.repo, number, self.records, self.evidence
             ):
                 continue
-            write(
-                path,
-                render(detail, self.client, self.trust, self.groups, self.preference),
-            )
+            text = render(detail, self.client, self.trust, self.groups, self.preference)
             attempts += 1
             try:
                 reservation = self.store.reserve(
@@ -265,6 +254,13 @@ class IssuesSource(_Reports, WorkSource):
                 if attempts >= conventions.setting("issues.claim-attempts", 3):
                     break
                 continue
+            try:
+                # Written only after the claim is ours, so a refused claim never
+                # changes the frozen snapshot of an earlier claim on this file.
+                write(path, text)
+            except OSError:
+                self.store.release_group(claims.token(number, reservation))
+                raise
             claims.save(self.repo, number, reservation, path)
             try:
                 self.client.add_label(number, self.claim_label)
@@ -291,7 +287,7 @@ class IssuesSource(_Reports, WorkSource):
             record = self.records.get(f"{row['number']:06d}")
             if (
                 claims.held(record)
-                or escalated(record)
+                or left_out(self.repo, row["number"], record)
                 or label_claimed(row, record, self.claim_label)
             ):
                 continue

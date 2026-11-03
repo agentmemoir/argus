@@ -1,0 +1,1 @@
+The published-folder identifier check no longer fails when a self-test folder is removed while the check walks the tree. The walk no longer enters the build tree, and it skips a folder that vanishes during the walk. Any other walk error still fails. ([#334](https://github.com/agentmemoir/argus/issues/334))
