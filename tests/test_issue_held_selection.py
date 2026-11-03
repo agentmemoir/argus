@@ -152,6 +152,42 @@ def test_a_checked_finished_claim_still_waits_so_the_driver_closes_it_first(
     assert source.notices == []
 
 
+def closed_pull(number: int, branch: str) -> dict[str, Any]:
+    return {
+        "number": number,
+        "html_url": f"https://github.com/example/project/pull/{number}",
+        "state": "closed",
+        "merged_at": None,
+        "draft": False,
+        "head": {
+            "ref": branch,
+            "repo": {"full_name": "example/project"},
+            "sha": "a" * 40,
+        },
+    }
+
+
+def test_a_finished_claim_whose_pull_request_closed_raises_one_closed_line(
+    repo: Path, board: Board
+) -> None:
+    # Given this machine's finished claim whose Argus pull request closed without
+    # merge, with its label. When two ticks run, then each tick carries one closed line
+    # for the issue with the same key, and nothing is reserved for this machine.
+    hold_own_claim(repo, board, "completed")
+    fixture_update(
+        repo,
+        rows=[issue(100001, labels=HELD)],
+        history=[closed_pull(70, "issue/100001-fix-the-input")],
+    )
+    first = IssuesSource(repo)
+    assert first.select()["state"] == "NO_PHASE"
+    second = IssuesSource(repo)
+    second.select()
+    assert [line["key"] for line in first.notices] == ["closed-100001"]
+    assert first.notices == second.notices
+    assert board.claims == []
+
+
 def test_the_driver_raises_one_needs_you_line_across_two_ticks(case: Case) -> None:
     # Given a finished claim with no checked no-change file, first in the queue. When
     # two ticks run, then the one Needs You line is shown once and nothing closes.

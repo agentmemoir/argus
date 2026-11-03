@@ -126,17 +126,12 @@ def tick_notices(
         on_branch = client.pull_requests_on(branch)
         urls = {str(p["url"]) for p in on_branch if p["state"] == "CLOSED"}
         urls |= {str(p["url"]) for p in past.get(number, []) if p["state"] == "closed"}
-        if mine:
-            # The completed-run line, the same one the driver's hold would raise.
-            if not on_branch and not past.get(number):
-                notice = _no_pull_notice(number, "completed")
-                if notice:
-                    notices.append(notice)
-            continue
         if urls:
             notices.append(_closed_notice(number, sorted(map(_one_line, urls))))
         elif not on_branch and not past.get(number):
-            notice = _no_pull_notice(number, record and record.get("status"))
+            # A finished claim of this machine gets the completed-run line.
+            status = "completed" if mine else (record and record.get("status"))
+            notice = _no_pull_notice(number, status)
             if notice:
                 notices.append(notice)
     owner, _, name = client.repo.partition("/")
