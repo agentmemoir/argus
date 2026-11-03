@@ -33,13 +33,13 @@ def _git_init(path: Path) -> None:
 def _layout(root: Path, attempts: list[float] | None) -> None:
     # The public checkout holds a nested private checkout, as publication requires.
     _git_init(root)
-    private = root / "private"
-    _git_init(private)
-    tasks = private / "tasks"
+    board = root / "board"
+    _git_init(board)
+    tasks = board / "tasks"
     tasks.mkdir()
     task = tasks / f"issue-{ISSUE}-fix.md"
     task.write_text("# fix\n", encoding="utf-8")
-    run = private / "runs" / f"issue-{ISSUE}"
+    run = board / "runs" / f"issue-{ISSUE}"
     run.mkdir(parents=True)
     token = {
         "issue": "7",
@@ -51,7 +51,7 @@ def _layout(root: Path, attempts: list[float] | None) -> None:
     manifest = {
         "reservation_id": "rsv-7",
         "generation": 1,
-        "path": f"private/tasks/issue-{ISSUE}-fix.md",
+        "path": f"board/tasks/issue-{ISSUE}-fix.md",
         "sha256": hashlib.sha256(task.read_bytes()).hexdigest(),
     }
     (run / "task-snapshot.json").write_text(json.dumps(manifest), encoding="utf-8")
@@ -66,7 +66,7 @@ def _layout(root: Path, attempts: list[float] | None) -> None:
     document["driver"].pop(
         "runs", None
     )  # unset: the run folder is in the private checkout
-    document["board"]["repo"] = str(private)
+    document["board"]["repo"] = str(board)
     document["issues"]["task-dir"] = str(tasks)
     (root / "fixture.json").write_text(json.dumps(document), encoding="utf-8")
     if attempts is not None:
