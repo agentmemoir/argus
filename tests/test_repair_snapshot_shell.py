@@ -70,8 +70,13 @@ def _layout(root: Path, attempts: list[float] | None) -> None:
     document["issues"]["task-dir"] = str(tasks)
     (root / "fixture.json").write_text(json.dumps(document), encoding="utf-8")
     if attempts is not None:
+        # The driver state folder is the run folder plus driver.state (runs/state).
         count = {"attempts": attempts, "reason": "gh is not installed"}
-        (run / "read-fault.json").write_text(json.dumps(count), encoding="utf-8")
+        state = board / "runs" / "state"
+        state.mkdir(parents=True, exist_ok=True)
+        (state / "read-fault-issue-7.json").write_text(
+            json.dumps(count), encoding="utf-8"
+        )
 
 
 def _run(root: Path, attempts: list[float] | None) -> list[str]:

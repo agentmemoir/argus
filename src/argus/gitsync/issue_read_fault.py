@@ -11,60 +11,81 @@ the same spacing. A successful read clears the count and the exclusion.
 
 The count is a CI repair attempt record (repair_round.load_record and
 save_record), so its schedule is the one CI repair rounds use. It sits in the
-issue's run folder under its own name, because an issue number and a pull request
-number can be equal, and the pull request record is repair-<n>.json.
+driver's own state folder, which is the driver's run folder plus driver.state.
+That folder is not an issue run folder, so the leftover sweep never stages it
+into the shared board. Its name is read-fault-issue-<n>.json, apart from the
+pull request record repair-<n>.json.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import cast
 
-from argus.board.files import reservation_file
+from argus import conventions
 from argus.gitsync import repair_round
 
 ATTEMPTS = 3
 WAIT_S = 10 * 60
-RECORD = "read-fault.json"
 
 
 def record_path(root: str | Path, number: int) -> Path:
-    """The count file for one issue: beside its reservation, in its run folder.
-
-    The reservation names the run folder, which is zero-padded (issue-000007), so
-    the count is never written to a folder that does not exist.
-    """
-    return reservation_file(root, number, kind="issue").with_name(RECORD)
+    """The count file for one issue, in the driver's own state folder."""
+    state = conventions.runs_dir(root) / conventions.setting("driver.state")
+    return state / f"read-fault-issue-{number}.json"
 
 
-def _attempts(path: Path) -> list[float]:
+def _number(value: object) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def _read(path: Path) -> tuple[list[float], bool]:
+    """The recorded attempt times, and whether the file is valid. Missing is valid."""
+    if not path.exists():
+        return [], True
     try:
-        record: dict[str, Any] = repair_round.load_record(path)
+        record = repair_round.load_record(path)
     except (OSError, ValueError):
-        # A damaged count reads as empty, so it cannot trap the next run.
-        return []
-    return [float(t) for t in record.get("attempts", [])]
+        return [], False
+    raw: object = record.get("attempts", [])
+    if not isinstance(raw, list):
+        return [], False
+    times = cast("list[object]", raw)
+    if not all(_number(t) for t in times):
+        return [], False
+    return [float(t) for t in cast("list[float]", times)], True
+
+
+def damaged(path: Path) -> bool:
+    """Whether the count file holds anything other than a list of attempt times."""
+    return not _read(path)[1]
+
+
+def reset(path: Path) -> None:
+    """Replace a damaged count with an empty one, so the damage is reported once."""
+    repair_round.save_record(path, {"attempts": []})
 
 
 def due(path: Path, now: float) -> bool:
     """Whether the next attempt is due: the first now, then WAIT_S after each one."""
-    started = _attempts(path)
+    started, _ok = _read(path)
     return not started or now >= started[0] + len(started) * WAIT_S
 
 
 def held(path: Path) -> bool:
     """Whether the count is inside its attempts, so the tick holds before new work."""
-    return 0 < len(_attempts(path)) < ATTEMPTS
+    return 0 < len(_read(path)[0]) < ATTEMPTS
 
 
 def excluded(path: Path) -> bool:
     """Whether the attempts are spent, so selection and the hold leave the issue out."""
-    return len(_attempts(path)) >= ATTEMPTS
+    return len(_read(path)[0]) >= ATTEMPTS
 
 
 def failed(path: Path, number: int, reason: str, now: float) -> str | None:
     """Count one failed attempt. The third one returns the one Needs You text."""
-    started = [*_attempts(path), now]
+    started = [*_read(path)[0], now]
+    path.parent.mkdir(parents=True, exist_ok=True)
     repair_round.save_record(path, {"attempts": started, "reason": reason})
     if len(started) != ATTEMPTS:
         return None
@@ -78,6 +99,6 @@ def failed(path: Path, number: int, reason: str, now: float) -> str | None:
 
 def cleared(path: Path) -> bool:
     """Drop the count after a good read. True when the issue had failed attempts."""
-    had = bool(_attempts(path))
+    had = bool(_read(path)[0])
     path.unlink(missing_ok=True)
     return had

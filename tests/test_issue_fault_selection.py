@@ -16,14 +16,20 @@ EASY, FREE = 100001, 100002
 WAIT_S = 600
 
 
+def _board(*_args: object, **_kwargs: object) -> Board:
+    return Board()
+
+
 @pytest.fixture
 def repo(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureRequest
 ) -> Iterator[Path]:
     binary = fake_gh(tmp_path, [issue()], add_cleanup=request.addfinalizer)
-    previous = conventions.override(settings(tmp_path, binary))
-    board = Board()
-    monkeypatch.setattr("argus.issues.source.ReservationStore", lambda *_a, **_k: board)
+    values = settings(tmp_path, binary)
+    # The driver's own state folder, which the listing's count file is kept in.
+    values["driver.state"] = "state"
+    previous = conventions.override(values)
+    monkeypatch.setattr("argus.issues.source.ReservationStore", _board)
     hard = issue(
         FREE, labels=[{"name": n} for n in ("bug", "area:store", "difficulty:hard")]
     )
@@ -35,8 +41,8 @@ def repo(
 
 def _three_failed_reads(repo: Path) -> None:
     # The count file the repair listing writes after its third failed attempt:
-    # issue-<number>/read-fault.json under the driver's runs folder.
-    path = conventions.runs_dir(repo) / f"issue-{EASY}" / "read-fault.json"
+    # read-fault-issue-<number>.json in the driver's state folder.
+    path = conventions.runs_dir(repo) / "state" / f"read-fault-issue-{EASY}.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     attempts = [0.0, float(WAIT_S), float(2 * WAIT_S)]
     path.write_text(json.dumps({"attempts": attempts}), encoding="utf-8")

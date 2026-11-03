@@ -150,6 +150,15 @@ def issue_pull_requests(
         except (ConfigError, CoordinationError):
             continue
         count = None if now is None else issue_read_fault.record_path(root, number)
+        if count is not None and issue_read_fault.damaged(count):
+            # Content that is not a list of attempt times counts as no record. It is
+            # reset here, so this line is printed once, not on every tick.
+            print(
+                f"repair: issue {number}: the read count file is not valid; "
+                "it counts as no record",
+                file=sys.stderr,
+            )
+            issue_read_fault.reset(count)
         if (
             count is not None
             and now is not None

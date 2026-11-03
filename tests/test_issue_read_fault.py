@@ -2,35 +2,53 @@
 # SPDX-License-Identifier: Apache-2.0
 """A failed issue listing: three spaced attempts, one Needs You, then a clear reset."""
 
+import json
+import subprocess
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
 import pytest
 
-from argus.gitsync import repair_cli
+from argus import conventions
+from argus.gitsync import issue_read_fault, repair_cli
 from argus.issues import evidence
 
 WAIT = 10 * 60  # the spacing that PHILOSOPHY.md section 3 names: 10 minutes
-FAIL = (None, "gh ran the list and failed (gh exited 1)")
+FAIL: tuple[None, str] = (None, "gh ran the list and failed (gh exited 1)")
 OK: tuple[list[dict[str, Any]], str] = ([], "")
 
 
+def _scope(_root: object, _number: int) -> tuple[None, tuple[None, str]]:
+    return None, (None, "t")
+
+
+def _branch(_number: int, _task: object) -> str:
+    return "issue/7-x"
+
+
 @pytest.fixture
-def listing(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> dict[str, Any]:
+def listing(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> Iterator[dict[str, Any]]:
     runs = tmp_path / "runs"
     (runs / "issue-000007").mkdir(parents=True)
-    monkeypatch.setattr("argus.board.files.runs_dir", lambda _root: runs)
-    state: dict[str, Any] = {"gh": FAIL, "calls": 0, "root": tmp_path}
+    state: dict[str, Any] = {"gh": FAIL, "calls": 0, "root": tmp_path, "runs": runs}
 
     def gh(_root: Path, _branch: str) -> tuple[Any, str]:
         state["calls"] += 1
         return state["gh"]
 
-    monkeypatch.setattr(repair_cli.conventions, "runs_dir", lambda _root: runs)
-    monkeypatch.setattr(repair_cli, "issue_scope", lambda _r, _n: (None, (None, "t")))
-    monkeypatch.setattr(repair_cli, "issue_branch", lambda _n, _t: "issue/7-x")
+    def runs_dir(_root: object) -> Path:
+        return runs
+
+    previous = conventions.override({"driver.state": "state"})
+    monkeypatch.setattr(repair_cli.conventions, "runs_dir", runs_dir)
+    monkeypatch.setattr(repair_cli, "issue_scope", _scope)
+    monkeypatch.setattr(repair_cli, "issue_branch", _branch)
     monkeypatch.setattr(repair_cli, "gh_pull_requests_for_branch", gh)
-    return state
+    yield state
+    conventions.configure(previous)
 
 
 def _tick(listing: dict[str, Any], now: float) -> tuple[list[int], list[str]]:
@@ -82,10 +100,56 @@ def test_a_success_clears_the_count_and_the_exclusion(listing: dict[str, Any]) -
     unread, _ = _tick(listing, 3 * WAIT)
     assert unread == []
     assert not evidence.left_out(listing["root"], 7, None)
-    from argus.gitsync import issue_read_fault
-
     assert not issue_read_fault.record_path(listing["root"], 7).exists()
     listing["gh"] = FAIL
     unread, notices = _tick(listing, 4 * WAIT)
     assert unread == [7]
     assert notices == []
+
+
+def test_wrong_value_types_in_the_count_file_count_as_no_record(
+    listing: dict[str, Any], capsys: pytest.CaptureFixture[str]
+) -> None:
+    # Valid JSON with the wrong types used to raise outside the read, so every tick
+    # stopped. It now counts as no record, and the damage is reported once.
+    path = issue_read_fault.record_path(listing["root"], 7)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"attempts": "soon"}), encoding="utf-8")
+    unread, _ = _tick(listing, 0.0)
+    assert unread == [7]
+    assert "not valid" in capsys.readouterr().err
+    _tick(listing, 300.0)
+    assert "not valid" not in capsys.readouterr().err
+
+
+def test_the_leftover_sweep_does_not_stage_the_count(
+    listing: dict[str, Any], tmp_path: Path
+) -> None:
+    # The sweep stages the issue's scope with git add -A -- <run folder>
+    # (gitsync/issue_runstate.py). The count sits in the driver state folder, which is
+    # outside that scope, so the sweep never stages it.
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    run_folder = listing["runs"] / "issue-000007"
+    (run_folder / "task.md").write_text("# fix\n", encoding="utf-8")
+    _tick(listing, 0.0)
+    assert issue_read_fault.record_path(listing["root"], 7).exists()
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(tmp_path),
+            "--literal-pathspecs",
+            "add",
+            "-A",
+            "--",
+            "runs/issue-000007",
+        ],
+        check=True,
+    )
+    staged = subprocess.run(
+        ["git", "-C", str(tmp_path), "diff", "--cached", "--name-only"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.split()
+    assert staged == ["runs/issue-000007/task.md"]
