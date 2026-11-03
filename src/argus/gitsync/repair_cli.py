@@ -125,7 +125,7 @@ def issue_pull_requests(
     The branch comes from the issue run folder: the claim's reservation and
     the frozen task it names, the same proof the issue checkpoint uses. A
     folder without that proof is skipped. A gh read that fails is named on
-    stderr by issue number only and skipped. Its number is also appended to
+    stderr by issue number and reason, and skipped. Its number is also appended to
     ``unread`` when that list is given, so the caller can stop the tick.
     """
     rows: list[dict[str, object]] = []
@@ -138,9 +138,14 @@ def issue_pull_requests(
             branch = issue_branch(number, issue_scope(root, number)[1][1])
         except (ConfigError, CoordinationError):
             continue
-        found, _why = gh_pull_requests_for_branch(Path(root), branch)
+        found, why = gh_pull_requests_for_branch(Path(root), branch)
         if found is None:
-            print(f"repair: issue {number}: pull requests unread", file=sys.stderr)
+            # gh_read gives fixed words for the failure, never gh's own message.
+            reason = " ".join(why.split())[:200]
+            print(
+                f"repair: issue {number}: pull requests unread: {reason}",
+                file=sys.stderr,
+            )
             if unread is not None:
                 unread.append(number)
             continue
@@ -152,7 +157,11 @@ def issue_pull_requests(
                 continue
             if pr["isDraft"] is None:
                 # gh gave no draft flag, so the tick cannot tell whether to wait.
-                print(f"repair: issue {number}: draft state unread", file=sys.stderr)
+                print(
+                    f"repair: issue {number}: draft state unread: "
+                    "gh gave no draft flag",
+                    file=sys.stderr,
+                )
                 if unread is not None:
                     unread.append(number)
                 break

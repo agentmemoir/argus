@@ -1,0 +1,1 @@
+A failed pull request read for an issue run now names its reason in the driver log, beside the issue number, for example 'gh exited 1'. Before, the line named the issue number only, so the cause of the failure could not be read from the log.
