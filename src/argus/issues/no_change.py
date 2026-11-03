@@ -85,62 +85,105 @@ def _give_up(number: int, cause: str) -> str:
     )
 
 
+def _failed(number: int, attempts: Path, record: dict[str, Any], cause: str) -> str:
+    """Count one failed attempt. Returns WAITS, or the Needs You line at the limit."""
+    record["attempts"].append(time.time())
+    record["cause"] = cause
+    try:
+        save_record(attempts, record)
+    except OSError:
+        return _give_up(number, "the attempt record cannot be written")
+    if len(record["attempts"]) >= ATTEMPT_LIMIT:
+        return _give_up(number, cause)
+    return WAITS
+
+
+def _clear(attempts: Path) -> None:
+    """Drop the count after a close that worked."""
+    try:
+        attempts.unlink(missing_ok=True)
+    except OSError as exc:
+        print(f"close count not cleared: {exc}", file=sys.stderr)
+
+
+def _read_count(path: Path) -> dict[str, Any] | None:
+    """The attempt record, or None when it cannot be read or holds no attempt list."""
+    try:
+        record = load_record(path)
+    except (OSError, ValueError):
+        return None
+    return record if isinstance(record.get("attempts"), list) else None
+
+
+def spent(root: Path, number: int) -> list[dict[str, str]]:
+    """The Needs You line that stops selection for a claim with no attempts left.
+
+    The count is spent after its third attempt. An unreadable count counts as spent
+    too, so the queue moves on. The text is the one the close sends, and the notice
+    marker in the run folder keeps it to one send. Empty while the close may still try.
+    """
+    run = reservation_file(root, number, kind="issue").parent
+    record = _read_count(run / ATTEMPTS_FILE)
+    if record is None:
+        text = _give_up(number, "the attempt record is unreadable")
+    elif len(record["attempts"]) < ATTEMPT_LIMIT:
+        return []
+    else:
+        text = _give_up(number, str(record.get("cause", "unknown")))
+    return [{"key": f"completed-{number}", "text": text}]
+
+
 def close_no_change(
     repo: Path, run_dir: Path, number: int, reason: str, machine: str
 ) -> str:
     """Close the issue once, and answer ``closed``, ``waits``, or a Needs You line.
 
-    The caller has checked the reason and the pull request verdict. The issue must
-    still be open and recorded by this machine. A failed read writes nothing and
-    raises nothing new. A failed close counts one attempt. ``gh issue close`` posts
-    its comment before it closes, so a close that failed can leave the comment, and
-    the retry finds it by its marker and posts no second one.
+    The caller passes the checked reason, or nothing when the checks refused. The
+    issue must still be open and recorded by this machine. Each attempt that does not
+    close the issue counts one. The third answers the one Needs You line, and
+    selection then leaves the claim out. A close that works clears the count.
+    ``gh issue close`` posts its comment before it closes, so a close that failed can
+    leave the comment, and the retry finds it by its marker and posts no second one.
     """
     if (run_dir / CLOSED_FILE).exists():
         return CLOSED
     attempts = run_dir / ATTEMPTS_FILE
-    try:
-        record = load_record(attempts)
-    except (OSError, ValueError):
+    record = _read_count(attempts)
+    if record is None:
         # A lost count must not look like zero attempts.
         return _give_up(number, "the attempt record is unreadable")
     if len(record["attempts"]) >= ATTEMPT_LIMIT:
         return _give_up(number, str(record.get("cause", "unknown")))
+    if not reason:
+        return _failed(number, attempts, record, "the no-change checks did not pass")
     try:
         client = IssueClient()
         state, _ = ReservationStore(repo, issues=True).read()
         held: dict[str, Any] | None = state["phases"].get(f"{number:06d}")
-        if (
-            held is None
-            or held.get("machine_id") != machine
-            or held.get("status") not in RECORDED
-        ):
+        if held is None or held.get("status") not in RECORDED:
+            return _failed(number, attempts, record, "the claim is not recorded")
+        if held.get("machine_id") != machine:
             return WAITS
         issue_state = client.view(number)["state"].lower()
         if issue_state == CLOSED:
             return CLOSED
         if issue_state != "open":
-            return WAITS
+            return _failed(number, attempts, record, "the issue is not open")
         digest = hashlib.sha256(str(held["reservation_id"]).encode()).hexdigest()
         marker = f"<!-- argus-no-change:issue={number}:sha256={digest} -->"
         posted = any(
             str(c.get("body", "")).endswith(marker) for c in client.comments(number)
         )
-    except (IssuesUnavailable, CoordinationError, ValueError, KeyError, TypeError):
-        return WAITS
+    except IssuesUnavailable as exc:
+        return _failed(number, attempts, record, exc.reason)
+    except (CoordinationError, ValueError, KeyError, TypeError):
+        return _failed(number, attempts, record, "the claim could not be read")
     comment = closing_comment(reason, marker, show_reason=publishable(reason, machine))
     try:
         client.close(number, CLOSE_REASON, None if posted else comment)
     except IssuesUnavailable as exc:
-        record["attempts"].append(time.time())
-        record["cause"] = exc.reason
-        try:
-            save_record(attempts, record)
-        except OSError:
-            return _give_up(number, "the attempt record cannot be written")
-        if len(record["attempts"]) >= ATTEMPT_LIMIT:
-            return _give_up(number, exc.reason)
-        return WAITS
+        return _failed(number, attempts, record, exc.reason)
+    _clear(attempts)
     try:
         (run_dir / CLOSED_FILE).write_text("closed\n", encoding="utf-8")
     except OSError as exc:

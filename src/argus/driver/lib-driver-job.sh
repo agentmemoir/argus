@@ -129,6 +129,11 @@ issue_completed_hold() {   # <number> <rel>
     esac
   else
     text="Needs You. Issue #$number finished its run with no pull request. Argus starts no new run for it. Action: remove the claim label to retry."
+    # A checked run whose checks refused counts one attempt. The third gives its line.
+    if [ -n "$run_dir" ] && [ -e "$run_dir/no-change.txt" ]; then
+      outcome="$(issue_no_change_close "$number" "$run_dir" "" 2>/dev/null)" || outcome=""
+      case "$outcome" in "Needs You."*) text="$outcome" ;; esac
+    fi
   fi
   marker="$RUN_DIR/log-last-notice-completed-$number"
   if [ "$(cat "$marker" 2>/dev/null)" != "$text" ]; then

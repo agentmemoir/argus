@@ -181,7 +181,9 @@ def test_a_failed_close_retries_then_raises_one_notice_and_one_comment(
     # The person closes it, and the release path needs nothing else.
     fixture_update(case.github, mode=None)
     case.github_says("CLOSED")
-    assert case.tick() == str(NEXT)
+    # The next issue was reserved on the skip tick, so this tick launches nothing new.
+    assert case.tick() == ""
+    assert case.board()[f"{NEXT:06d}"]["status"] == "claimed"
     assert KEY not in case.board()
 
 
