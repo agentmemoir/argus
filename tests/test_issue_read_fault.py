@@ -128,8 +128,9 @@ def test_wrong_value_types_in_the_count_file_count_as_no_record(
         '{"attempts": [NaN]}',
         '{"attempts": [Infinity]}',
         '{"attempts": [' + "1" + "0" * 400 + "]}",
+        '{"attempts": [1000000000000]}',
     ],
-    ids=["nan", "infinity", "integer-too-large-for-a-float"],
+    ids=["nan", "infinity", "integer-too-large-for-a-float", "far-future"],
 )
 def test_a_count_that_is_not_a_finite_time_counts_as_no_record(
     listing: dict[str, Any], capsys: pytest.CaptureFixture[str], text: str

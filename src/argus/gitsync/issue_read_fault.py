@@ -20,6 +20,7 @@ pull request record repair-<n>.json.
 from __future__ import annotations
 
 import math
+import time
 from pathlib import Path
 from typing import cast
 
@@ -61,6 +62,9 @@ def _read(path: Path) -> tuple[list[float], bool]:
     except (OSError, ValueError, OverflowError):
         return [], False
     if not all(math.isfinite(t) for t in times):
+        return [], False
+    # An attempt is recorded when it happens, so a time well after the clock is wrong.
+    if any(t > time.time() + ATTEMPTS * WAIT_S for t in times):
         return [], False
     return times, True
 
