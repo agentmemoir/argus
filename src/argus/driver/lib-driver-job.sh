@@ -124,7 +124,7 @@ issue_completed_hold() {   # <number> <rel>
         return 0 ;;
       "Needs You."*) text="$outcome" ;;
       *)
-        log "issue $number: the no-change close waits; the next tick tries again"
+        log "issue $number: the no-change close waits; Argus tries again when its next attempt is due"
         return 0 ;;
     esac
   else

@@ -38,6 +38,7 @@ def test_the_third_refusal_raises_one_notice_and_the_queue_moves_on(
     # the cause and the attempts, the claim is kept, and the next issue is reserved.
     _refuse(case)
     for _ in range(3):
+        case.pass_time(600)
         case.tick()
     assert case.tick() == str(NEXT)
     assert case.closes() == []
@@ -55,6 +56,7 @@ def test_a_spent_claim_starts_no_second_run_and_raises_nothing_more(
     # for a second run, and the Needs You line is not sent again.
     _refuse(case)
     for _ in range(3):
+        case.pass_time(600)
         case.tick()
     assert case.tick() == str(NEXT)
     assert case.tick() != str(DONE)
@@ -67,6 +69,7 @@ def test_a_failed_close_skips_the_claim_after_the_third_attempt(case: Case) -> N
     # reserves the next issue and one notice names the attempts.
     fixture_update(case.github, mode="close-failure")
     for _ in range(3):
+        case.pass_time(600)
         case.tick()
     assert len(case.closes()) == 3
     assert case.tick() == str(NEXT)
@@ -81,6 +84,7 @@ def test_a_later_good_close_clears_the_count(case: Case) -> None:
     case.tick()
     assert (case.run_folder() / ATTEMPTS_FILE).exists()
     fixture_update(case.github, mode=None)
+    case.pass_time(600)
     case.tick()
     assert len(case.closes()) == 2
     assert (case.run_folder() / CLOSED_FILE).exists()

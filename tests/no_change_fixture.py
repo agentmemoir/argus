@@ -19,6 +19,7 @@ from argus import conventions
 from argus.board.reservations import ReservationStore
 from argus.gitsync.selftest_fixture import _init_remote
 from argus.issues.claims import save
+from argus.issues.no_change import ATTEMPTS_FILE
 from config_fixture import BASE
 from issues_fixture import GROUPS, argv, fake_gh, fixture_update, issue
 
@@ -79,6 +80,14 @@ class Case:
 
     def run_folder(self) -> Path:
         return self.vault / "runs" / f"issue-{KEY}"
+
+    def pass_time(self, seconds: int) -> None:
+        """Let seconds pass for the attempt record: its recorded times move back by it."""
+        count = self.run_folder() / ATTEMPTS_FILE
+        if count.exists():
+            record = json.loads(count.read_text("utf-8"))
+            record["attempts"] = [t - seconds for t in record["attempts"]]
+            count.write_text(json.dumps(record, sort_keys=True) + "\n", "utf-8")
 
     def github_says(self, state: str, labels: list[dict[str, str]] = HELD) -> None:
         done = issue(DONE, state=state, labels=labels)
