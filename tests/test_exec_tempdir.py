@@ -19,26 +19,7 @@ from pathlib import Path
 import pytest
 
 from argus import exec_tempdir
-from argus.exec_tempdir import (
-    can_execute,
-    candidate_states,
-    make_exec_dir,
-    refuses_execution,
-)
-
-
-def test_candidate_states_names_a_missing_parent_as_unprobed() -> None:
-    """A candidate whose directory cannot be made is unprobed, never refused."""
-    states = candidate_states(parents=["/nonexistent-argus-parent/for-a-test"])
-    assert len(states) == 1
-    assert states[0].startswith("/nonexistent-argus-parent/for-a-test: unprobed")
-
-
-def test_candidate_states_probes_a_writable_directory(tmp_path: Path) -> None:
-    """A writable directory is probed: its state is runs or refused, not unprobed."""
-    states = candidate_states(parents=[str(tmp_path)])
-    assert len(states) == 1
-    assert states[0].endswith(": runs") or states[0].endswith(": refused")
+from argus.exec_tempdir import can_execute, make_exec_dir, refuses_execution
 
 
 def test_make_exec_dir_returns_a_directory_this_host_runs() -> None:

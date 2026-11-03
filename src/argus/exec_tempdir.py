@@ -77,7 +77,7 @@ def _expand(parent: str | None) -> str | None:
     return os.path.expanduser(parent) if parent is not None else None
 
 
-def candidate_bases(parents: Sequence[str | None] | None = None) -> list[str]:
+def candidate_bases() -> list[str]:
     """Where a scratch directory may be made, as absolute paths, in the order tried.
 
     The same candidates `_executable_candidates` walks, so a caller looking for a
@@ -87,7 +87,7 @@ def candidate_bases(parents: Sequence[str | None] | None = None) -> list[str]:
     macOS, and a sweep that named `/tmp` alone never found it there.
     """
     bases: list[str] = []
-    for parent in CANDIDATE_PARENTS if parents is None else parents:
+    for parent in CANDIDATE_PARENTS:
         base = _expand(parent)
         bases.append(tempfile.gettempdir() if base is None else base)
     return bases
@@ -308,27 +308,6 @@ def make_exec_dir(
     runners, and they report the condition themselves.
     """
     return next(_executable_candidates(probe, parents), "")
-
-
-def candidate_states(parents: Sequence[str | None] | None = None) -> list[str]:
-    """What each candidate's probe found, for a caller that got no directory.
-
-    Walks the candidates as make_exec_dir does, with a probe that keeps the outcome
-    it sees. A candidate whose directory cannot be made is reported as unprobed.
-    """
-    found: dict[str, str] = {}
-
-    def record(directory: str) -> bool:
-        outcome = _run_probe(directory)
-        found[os.path.dirname(directory)] = outcome.value
-        return outcome is _ProbeOutcome.RUNS
-
-    for usable in _executable_candidates(record, parents):
-        shutil.rmtree(usable, ignore_errors=True)
-    return [
-        f"{base}: {found.get(base, 'unprobed, no directory could be made')}"
-        for base in candidate_bases(parents)
-    ]
 
 
 def exec_tempdir(
