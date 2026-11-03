@@ -25,6 +25,7 @@ from argus.board.core import (
     _Mutation,
     _safe_detail,
 )
+from argus.board.fetch_lock import fetch_serialized
 from argus.board.git import _git, _head, _is_git_repo
 from argus.board.seed import ensure_board_branch
 from argus.board.state import (
@@ -245,13 +246,14 @@ def _transaction(
             new_commit = _commit_state(checkout.path, message, issues=issues)
             if new_commit is None:
                 return mutation.value
-            rc, out, err = _git(
-                checkout.path,
-                "push",
-                remote,
-                f"HEAD:refs/heads/{branch}",
-                timeout=FETCH_TIMEOUT_S,
-            )
+            with fetch_serialized(private):
+                rc, out, err = _git(
+                    checkout.path,
+                    "push",
+                    remote,
+                    f"HEAD:refs/heads/{branch}",
+                    timeout=FETCH_TIMEOUT_S,
+                )
             # The backup ref is advanced only after the board push succeeds, so
             # a rejected board push cannot move the backup. The backup push is
             # not forced and its failure is only a warning, so a foreign ref or

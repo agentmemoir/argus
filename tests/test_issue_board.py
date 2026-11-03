@@ -159,7 +159,7 @@ def test_push_retry_keeps_a_concurrent_phase_write(
 
     def race(repo: str | Path, *args: str, **kwargs: Any) -> tuple[int, str, str]:
         nonlocal intercepted
-        if args[0] == "push" and not intercepted:
+        if args[0] == "commit" and not intercepted:
             intercepted = True
             phases.reserve(42, "machine-phase")
         return original(repo, *args, **kwargs)
@@ -181,7 +181,7 @@ def test_racing_issue_claim_cannot_overwrite_a_winner(
 
     def race(repo: str | Path, *args: str, **kwargs: Any) -> tuple[int, str, str]:
         nonlocal intercepted
-        if args[0] == "push" and not intercepted:
+        if args[0] == "commit" and not intercepted:
             intercepted = True
             rival.reserve(1234567, "machine-winner")
         return original(repo, *args, **kwargs)
